@@ -1,0 +1,14 @@
+pytest>=7.0.0
+pytest-html>=3.2.0
+allure-pytest>=2.9.0
+PyYAML>=6.0
+requests>=2.28.0
+openpyxl>=3.0.0
+faker>=15.0.0
+ddddocr>=1.0.6
+pillow==9.5.0
+Appium-Python-Client>=2.0.0
+PyQt6
+qt-material
+qdarkstyle
+psutil>=5.9.0

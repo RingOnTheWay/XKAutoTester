@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XKAutoTester - 自动化测试工具</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 标题栏 -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="header-left">
+                    <span class="material-icons app-icon">bug_report</span>
+                    <h1 class="app-title">XKAutoTester</h1>
+                </div>
+                <div class="header-right">
+                    <span class="app-version">v1.0.0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <div class="content-splitter">
+                <!-- 左侧面板 -->
+                <div class="left-panel">
+                    <!-- 测试计划管理 -->
+                    <div id="test-plan-section" class="material-card elevation-1 hidden">
+                        <div class="card-header">
+                            <span class="material-icons">assignment</span>
+                            <h3>测试计划</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="test-plan-controls">
+                    <button id="new-plan-btn" class="material-button outlined">
+                        <span class="material-icons">add</span>
+                        新建计划
+                    </button>
+                    <button id="edit-plan-btn" class="material-button outlined">
+                        <span class="material-icons">edit</span>
+                        编辑计划
+                    </button>
+                    <button id="delete-plan-btn" class="material-button error">
+                        <span class="material-icons">delete</span>
+                        删除计划
+                    </button>
+                </div>
+                            <div id="test-plans-list" class="test-plans-list">
+                                <div class="placeholder-message">
+                                    <span class="material-icons">info</span>
+                                    <span>请先选择测试目录</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 测试目录选择 -->
+                    <div class="material-card elevation-1">
+                        <div class="card-header">
+                            <span class="material-icons">folder_open</span>
+                            <h3>测试目录</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="directory-selector">
+                                <button id="select-directory-btn" class="material-button primary">
+                                    <span class="material-icons">folder_open</span>
+                                    选择测试目录
+                                </button>
+                                <div id="selected-directory" class="selected-path">未选择目录</div>
+                            </div>
+                            <div id="test-files-list" class="test-files-list">
+                                <!-- 测试文件列表将在这里动态生成 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 测试类型选择 -->
+                    <div class="material-card elevation-1">
+                        <div class="card-header">
+                            <span class="material-icons">category</span>
+                            <h3>测试类型</h3>
+                        </div>
+                        <div class="card-content">
+                            <div id="test-type-selector" class="test-type-selector">
+                                <div class="placeholder-message">
+                                    <span class="material-icons">info</span>
+                                    <span>请先选择测试目录</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧面板 -->
+                <div class="right-panel">
+                    <!-- 测试输出 -->
+                    <div class="material-card elevation-2">
+                        <div class="card-header">
+                            <span class="material-icons">terminal</span>
+                            <h3>测试输出</h3>
+                            <div class="card-actions">
+                                <button id="clear-output-btn" class="icon-button">
+                                    <span class="material-icons">clear_all</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-content">
+                            <div id="test-output" class="test-output">
+                                <div class="welcome-message">
+                                    <span class="material-icons">rocket_launch</span>
+                                    <h3>欢迎使用 XKAutoTester</h3>
+                                    <p>选择测试目录和类型，然后点击运行测试开始自动化测试。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 进度条和控制按钮 -->
+                    <div class="material-card elevation-1">
+                        <div class="card-content">
+                            <div class="progress-section">
+                                <div class="progress-info">
+                                    <span id="progress-status">准备就绪</span>
+                                    <span id="progress-percentage">0%</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div id="progress-bar" class="progress-bar">
+                                        <div class="progress-fill"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="control-buttons">
+                                <button id="run-tests-btn" class="material-button primary large">
+                                    <span class="material-icons">play_arrow</span>
+                                    运行测试
+                                </button>
+                                <button id="stop-tests-btn" class="material-button secondary large" disabled>
+                                    <span class="material-icons">stop</span>
+                                    停止测试
+                                </button>
+                                <button id="view-report-btn" class="material-button outlined large" disabled>
+                                    <span class="material-icons">assessment</span>
+                                    查看报告
+                                </button>
+                                <button id="stop-allure-btn" class="material-button error large" disabled>
+                                    <span class="material-icons">power_settings_new</span>
+                                    停止服务器
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 模态框 -->
+        <div id="modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 id="modal-title">新建测试计划</h3>
+                    <button id="modal-close-btn" class="icon-button">
+                        <span class="material-icons">close</span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <form id="test-plan-form">
+                        <div class="form-group">
+                            <label for="plan-name">计划名称</label>
+                            <input type="text" id="plan-name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="plan-description">计划描述</label>
+                            <textarea id="plan-description" rows="3"></textarea>
+                        </div>
+                        
+                        <!-- 测试文件选择 -->
+                        <div class="form-group">
+                            <label>测试文件</label>
+                            <div id="modal-test-files" class="checkbox-list">
+                                <!-- 测试文件列表将在这里动态生成 -->
+                            </div>
+                        </div>
+                        
+                        <!-- 测试类型选择 -->
+                        <div class="form-group">
+                            <label>测试类型</label>
+                            <div id="modal-test-types" class="checkbox-list">
+                                <!-- 测试类型将在这里动态生成 -->
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="button" id="modal-cancel-btn" class="material-button outlined">取消</button>
+                            <button type="submit" id="save-plan-btn" class="material-button primary">保存</button>
+                            <button type="button" id="update-plan-btn" class="material-button primary hidden">更新计划</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
