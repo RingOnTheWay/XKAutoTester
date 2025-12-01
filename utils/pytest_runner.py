@@ -73,16 +73,59 @@ class PytestRunner:
         
         logger.info(f"开始运行Pytest测试，测试计划: {test_plan_name}，参数: {pytest_args}")
         
-        # 运行测试
-        exit_code = pytest.main(pytest_args)
+        # 运行测试并捕获详细输出
+        import io
+        import sys
+        from contextlib import redirect_stdout, redirect_stderr
+        
+        # 创建字符串缓冲区来捕获输出
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        
+        # 重定向标准输出和错误输出
+        with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+            exit_code = pytest.main(pytest_args)
+        
+        # 获取捕获的输出
+        stdout_content = stdout_capture.getvalue()
+        stderr_content = stderr_capture.getvalue()
+        
+        # 清理ANSI转义字符
+        def clean_ansi_escape(text):
+            """清理ANSI转义字符"""
+            import re
+            # 匹配ANSI转义序列的正则表达式
+            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+            return ansi_escape.sub('', text)
+        
+        # 清理输出内容中的ANSI转义字符
+        stdout_content = clean_ansi_escape(stdout_content)
+        stderr_content = clean_ansi_escape(stderr_content)
+        
+        # 记录详细的测试输出到日志
+        if stdout_content:
+            logger.info("=== Pytest标准输出 ===")
+            for line in stdout_content.strip().split('\n'):
+                if line.strip():  # 只记录非空行
+                    logger.info(f"Pytest: {line}")
+        
+        if stderr_content:
+            logger.error("=== Pytest错误输出 ===")
+            for line in stderr_content.strip().split('\n'):
+                if line.strip():  # 只记录非空行
+                    logger.error(f"Pytest Error: {line}")
         
         # 生成Allure报告
         allure_report_path = None
         if generate_allure and self.allure_results_dir.exists():
+            # 无论测试成功还是失败，都生成Allure报告，但不记录测试计划
             allure_report_path = self._generate_allure_report(test_plan_name)
             
-            # 记录测试计划信息
-            self._record_test_plan(test_plan_name, test_paths, markers, allure_report_path)
+            # 记录日志信息
+            if exit_code == 0:
+                logger.info("✅ 测试成功，已生成Allure报告")
+            else:
+                logger.warning(f"测试失败 (退出码: {exit_code})，但已生成Allure报告供分析")
         
         return {
             "exit_code": exit_code,

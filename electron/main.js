@@ -571,14 +571,19 @@ class ElectronApp {
 
   async stopAllureServer() {
     try {
-      // 添加详细日志到test.log
+      // 使用独立的Electron日志文件，避免与Python日志文件冲突
       const fs = require('fs');
-      const logPath = path.join(this.projectRoot, 'logs', 'test.log');
+      const electronLogPath = path.join(this.projectRoot, 'logs', 'electron.log');
       const logMessage = (message) => {
         const timestamp = new Date().toISOString();
         const logEntry = `[${timestamp}] [Electron] ${message}\n`;
         console.log(logEntry);
-        fs.appendFileSync(logPath, logEntry, 'utf8');
+        // 使用异步写入，避免阻塞和文件锁定问题
+        fs.appendFile(electronLogPath, logEntry, 'utf8', (err) => {
+          if (err) {
+            console.error('写入Electron日志失败:', err);
+          }
+        });
       };
       
       logMessage('开始停止Allure服务器进程');
@@ -672,14 +677,19 @@ class ElectronApp {
 
   async openAllureReportDirectly(testPlanName) {
     try {
-      // 添加详细日志到test.log
+      // 使用独立的Electron日志文件，避免与Python日志文件冲突
       const fs = require('fs');
-      const logPath = path.join(this.projectRoot, 'logs', 'test.log');
+      const electronLogPath = path.join(this.projectRoot, 'logs', 'electron.log');
       const logMessage = (message) => {
         const timestamp = new Date().toISOString();
         const logEntry = `[${timestamp}] [Electron] ${message}\n`;
         console.log(logEntry);
-        fs.appendFileSync(logPath, logEntry, 'utf8');
+        // 使用异步写入，避免阻塞和文件锁定问题
+        fs.appendFile(electronLogPath, logEntry, 'utf8', (err) => {
+          if (err) {
+            console.error('写入Electron日志失败:', err);
+          }
+        });
       };
       
       logMessage(`Starting to open Allure report with allure open: ${testPlanName}`);

@@ -9,6 +9,12 @@ from appium.webdriver.common.appiumby import AppiumBy
 from appium.options.android import UiAutomator2Options
 import time
 import os
+import logging
+
+# 导入Appium服务器启动器
+from utils.appium_server import AppiumServer
+
+logger = logging.getLogger(__name__)
 
 
 class TestXKMedicalFollowup:
@@ -28,7 +34,28 @@ class TestXKMedicalFollowup:
         cls.options.no_reset = True  # 改为True避免重置应用
         cls.options.new_command_timeout = 300
         cls.options.auto_grant_permissions = True
-        cls.appium_server_url = 'http://192.168.2.211:5555'
+        
+        # Appium服务器配置
+        cls.appium_server_host = '127.0.0.1'
+        cls.appium_server_port = 4723
+        cls.appium_server_url = f'http://{cls.appium_server_host}:{cls.appium_server_port}'
+        
+        # 启动Appium服务器
+        cls.appium_server = AppiumServer(
+            host=cls.appium_server_host,
+            port=cls.appium_server_port
+        )
+        
+        if not cls.appium_server.start():
+            logger.error("Appium服务器启动失败，测试将无法进行")
+            pytest.skip("Appium服务器启动失败")
+    
+    @classmethod
+    def teardown_class(cls):
+        """测试类清理"""
+        if hasattr(cls, 'appium_server') and cls.appium_server:
+            cls.appium_server.stop()
+            logger.info("Appium服务器已停止")
 
     def setup_method(self):
         """每个测试方法前的初始化"""

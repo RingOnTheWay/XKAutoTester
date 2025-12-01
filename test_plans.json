@@ -1,18 +1,18 @@
 [
   {
-    "name": "Test",
-    "description": "",
-    "created": "2025-10-28T08:39:21.981Z",
+    "id": "Bioland蓝牙体温枪Mock测试",
+    "name": "Bioland蓝牙体温枪Mock测试",
+    "description": "-",
+    "created": "2025-11-17T03:26:16.386Z",
     "testFiles": [
       {
-        "name": "test_playwright.py",
-        "path": "tests\\test_playwright.py",
+        "name": "test_temperature_bio.py",
+        "path": "tests\\test_temperature_bio.py",
         "type": "python"
       }
     ],
     "testTypes": [
-      "smoke",
-      "critical"
+      "smoke"
     ]
   }
 ]
