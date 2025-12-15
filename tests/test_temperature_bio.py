@@ -18,6 +18,7 @@ import os
 from utils.mock_ble_device import BLEDevice
 from utils.appium_server import AppiumServer
 from utils.temp_hex_gen import generate_temperature_hex
+from utils.adb_manager import ADBManager
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -26,11 +27,11 @@ APP_PACKAGE = 'com.xiekang.idoctorcloudhealthcarehub'  # APP包名
 APP_ACTIVITY = '.activity.SplashActivity'  # APP启动Activity
 
 # 设备配置常量
-DEVICE_NAME = '192.168.2.207'  # 设备名称
+DEVICE_NAME = '192.168.2.141'  # 设备名称
 APPIUM_SERVER_HOST = '127.0.0.1'  # Appium服务器主机
 APPIUM_SERVER_PORT = 4723  # Appium服务器端口
 PLATFORM_NAME = 'Android'        # 测试平台名称
-PLATFORM_VERSION = '13'          # Android平台版本号
+PLATFORM_VERSION = '14'          # Android平台版本号
 AUTOMATION_NAME = 'UiAutomator2' # 自动化引擎名称
 
 # 蓝牙设备配置常量
@@ -89,27 +90,28 @@ class TestTemperatureMeasurement:
         
         # ADB连接
         try:
-            result = subprocess.run(['adb', 'version'], capture_output=True, text=True, timeout=5)
-            if result.returncode != 0:
+            # 创建ADB管理器实例
+            adb_manager = ADBManager(DEVICE_NAME, APP_PACKAGE)
+            
+            # 检查ADB服务
+            if not adb_manager.check_adb_service():
                 logger.warning("ADB服务异常，跳过Appium相关测试")
                 pytest.skip("ADB服务异常")
             
-            logger.info(f"尝试连接设备: {DEVICE_NAME}")
-            connect_result = subprocess.run(['adb', 'connect', f'{DEVICE_NAME}:5555'], 
-                                           capture_output=True, text=True, timeout=10)
-            
-            if 'connected' in connect_result.stdout or 'already' in connect_result.stdout:
-                logger.info(f"设备连接成功: {DEVICE_NAME}")
-            else:
-                logger.warning(f"设备连接失败: {DEVICE_NAME}，跳过Appium相关测试")
+            # 连接设备
+            connect_success, connect_status = adb_manager.connect_device()
+            if not connect_success:
+                logger.warning(f"设备连接失败: {DEVICE_NAME} - {connect_status}，跳过Appium相关测试")
                 pytest.skip(f"设备连接失败: {DEVICE_NAME}")
+            
+            # 确保蓝牙已开启
+            if not adb_manager.ensure_bluetooth_enabled():
+                logger.warning("蓝牙开启失败，跳过Appium相关测试")
+                pytest.skip("蓝牙开启失败")
                 
-        except subprocess.TimeoutExpired:
-            logger.warning("ADB设备检测超时，跳过Appium相关测试")
-            pytest.skip("ADB设备检测超时")
         except Exception as e:
-            logger.warning(f"设备检测失败: {e}，跳过Appium相关测试")
-            pytest.skip("设备检测失败")
+            logger.warning(f"ADB设备检测失败: {e}，检查设备网络或端口情况，跳过Appium相关测试")
+            pytest.skip("ADB设备检测失败")
         
         # Appium配置
         cls.options.app_package = APP_PACKAGE
@@ -202,24 +204,12 @@ class TestTemperatureMeasurement:
         确保APP处于关闭状态，如果APP正在运行则强制关闭
         """
         try:
-            result = subprocess.run(
-                ['adb', '-s', DEVICE_NAME, 'shell', 'dumpsys', 'window', 'windows'], 
-                capture_output=True, text=True, timeout=10
-            )
+            # 创建ADB管理器实例
+            adb_manager = ADBManager(DEVICE_NAME, APP_PACKAGE)
             
-            if result.returncode == 0:
-                if APP_PACKAGE in result.stdout:
-                    logger.info("检测到APP正在前台运行，强制关闭APP")
-                    subprocess.run(
-                        ['adb', '-s', DEVICE_NAME, 'shell', 'am', 'force-stop', APP_PACKAGE],
-                        capture_output=True, timeout=5
-                    )
-                    logger.info("APP已强制关闭")
-                    time.sleep(APP_CLOSE_WAIT_TIME)
-                else:
-                    logger.info("APP未在前台运行，无需关闭")
-            else:
-                logger.warning("无法检查APP状态，继续执行")
+            # 确保APP关闭
+            if not adb_manager.ensure_app_closed(APP_CLOSE_WAIT_TIME):
+                logger.warning("确保APP关闭操作失败，继续执行")
                 
         except Exception as e:
             logger.warning(f"检查APP状态时出错: {e}，继续执行")
@@ -281,7 +271,7 @@ class TestTemperatureMeasurement:
                 socket.setdefaulttimeout(APPIUM_SESSION_TIMEOUT)
                 subprocess.run(
                     ['adb', '-s', DEVICE_NAME, 'shell', 'am', 'force-stop', 'com.xiekang.idoctorcloudhealthcarehub'],
-                    capture_output=True, timeout=5
+                    capture_output=True, timeout=10
                 )
                 time.sleep(2)
                 
@@ -302,9 +292,9 @@ class TestTemperatureMeasurement:
                 )
                 
             except Exception as e:
-                logger.error(f"Appium会话创建失败: {str(e)}")
+                logger.error(f"Appium会话创建失败: {str(e)}，请检查安卓SDK环境及在手机确认安装Appium Settings")
                 allure.attach(
-                    f"Appium会话创建失败: {str(e)}",
+                    f"Appium会话创建失败: {str(e)}，请检查安卓SDK环境及在手机确认安装Appium Settings",
                     name="会话创建错误",
                     attachment_type=allure.attachment_type.TEXT
                 )
@@ -314,9 +304,9 @@ class TestTemperatureMeasurement:
                                           capture_output=True, text=True, timeout=10)
                     logger.info(f"设备窗口状态: {result.stdout[:500]}...")
                 except Exception as adb_error:
-                    logger.error(f"设备状态检查失败: {adb_error}")
+                    logger.error(f"设备状态检查失败: {adb_error}，请尝试使用Android13及以上版本进行测试")
                 
-                pytest.fail(f"Appium会话创建失败: {str(e)}")
+                pytest.fail(f"Appium会话创建失败: {str(e)}，请检查安卓SDK环境")
 
         with allure.step("等待APP加载完成"):
             time.sleep(APP_LOAD_WAIT_TIME)

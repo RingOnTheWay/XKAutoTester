@@ -1,18 +1,15 @@
 [
   {
-    "id": "Bioland蓝牙体温枪Mock测试",
-    "name": "Bioland蓝牙体温枪Mock测试",
-    "description": "-",
-    "created": "2025-11-17T03:26:16.386Z",
+    "name": "BLEMOCK",
+    "description": "",
+    "created": "2025-12-15T03:52:34.971Z",
     "testFiles": [
       {
         "name": "test_temperature_bio.py",
-        "path": "tests\\test_temperature_bio.py",
+        "path": "D:\\WorkSpaces\\Pycharm Space\\XKAutoTester\\tests\\test_temperature_bio.py",
         "type": "python"
       }
     ],
-    "testTypes": [
-      "smoke"
-    ]
+    "testTypes": []
   }
 ]

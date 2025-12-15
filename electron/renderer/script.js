@@ -136,6 +136,12 @@ class XKAutoTesterApp {
 
     async loadProjectInfo() {
         try {
+            // 安全检查：确保electronAPI已加载
+            if (!window.electronAPI || !window.electronAPI.getProjectInfo) {
+                console.error('electronAPI未定义，无法加载项目信息:', window.electronAPI);
+                return;
+            }
+            
             const info = await window.electronAPI.getProjectInfo();
             console.log('项目信息:', info);
         } catch (error) {
@@ -145,6 +151,13 @@ class XKAutoTesterApp {
 
     async selectDirectory() {
         try {
+            // 安全检查：确保electronAPI已加载
+            if (!window.electronAPI || !window.electronAPI.selectDirectory) {
+                this.showError('Electron API未正确加载，请重启应用');
+                console.error('electronAPI未定义:', window.electronAPI);
+                return;
+            }
+            
             const result = await window.electronAPI.selectDirectory();
             if (!result.canceled && result.filePaths.length > 0) {
                 this.selectedDirectory = result.filePaths[0];
@@ -219,6 +232,13 @@ class XKAutoTesterApp {
         }
 
         try {
+            // 安全检查：确保electronAPI已加载
+            if (!window.electronAPI || !window.electronAPI.scanTestFiles) {
+                this.showError('Electron API未正确加载，无法扫描测试文件');
+                console.error('electronAPI未定义:', window.electronAPI);
+                return;
+            }
+            
             // 调用后端API实时扫描tests文件夹
             const testFiles = await window.electronAPI.scanTestFiles(this.selectedDirectory);
 
@@ -1451,9 +1471,9 @@ class XKAutoTesterApp {
             return;
         }
 
+        // 如果没有选择测试类型，显示提示信息（但不阻止保存）
         if (selectedTestTypes.length === 0) {
-            this.showError('请至少选择一个测试类型');
-            return;
+            this.appendOutput('⚠️ 没有选择测试类型，将默认执行所有测试');
         }
 
         try {
@@ -1571,9 +1591,9 @@ class XKAutoTesterApp {
             return;
         }
 
+        // 如果没有选择测试类型，显示提示信息（但不阻止保存）
         if (selectedTestTypes.length === 0) {
-            this.showError('请至少选择一个测试类型');
-            return;
+            this.appendOutput('⚠️ 没有选择测试类型，将默认执行所有测试');
         }
 
         try {

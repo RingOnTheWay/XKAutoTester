@@ -27,7 +27,19 @@ class ElectronApp {
   constructor() {
     this.mainWindow = null;
     this.isDev = process.argv.includes('--dev');
-    this.projectRoot = path.join(__dirname, '..'); // Python项目根目录
+    this.isPackaged = require('electron').app.isPackaged || false;
+    
+    // 根据打包状态设置项目根目录
+    if (this.isPackaged) {
+      // 打包后，Python文件位于exe文件同级目录的resources/app.asar.unpacked/../
+      this.projectRoot = path.join(process.resourcesPath, '..');
+      console.log('打包环境检测到，项目根目录设置为:', this.projectRoot);
+    } else {
+      // 开发环境，使用原来的路径
+      this.projectRoot = path.join(__dirname, '..');
+      console.log('开发环境，项目根目录设置为:', this.projectRoot);
+    }
+    
     this.allureServerProcess = null;
     this.allureServerPort = null;
     this.allureServerTestPlan = null;
@@ -45,20 +57,21 @@ class ElectronApp {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        preload: path.join(__dirname, 'preload.js'),
+        preload: this.isPackaged ? path.join(process.resourcesPath, 'app', 'preload.js') : path.join(__dirname, 'preload.js'),
         webSecurity: false // 允许加载本地文件
       },
       titleBarStyle: 'default', // 恢复默认标题栏
       frame: true, // 确保有窗口边框
       autoHideMenuBar: true, // 自动隐藏菜单栏
       show: false,
-      icon: path.join(__dirname, 'assets', 'icon.png'),
+      icon: this.isPackaged ? path.join(process.resourcesPath, 'app', 'assets', 'icon.png') : path.join(__dirname, 'assets', 'icon.png'),
       x: 100, // 设置窗口位置
       y: 100
     });
 
     // 加载应用的index.html
-    this.mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+    const htmlPath = this.isPackaged ? path.join(process.resourcesPath, 'app', 'renderer', 'index.html') : path.join(__dirname, 'renderer', 'index.html');
+    this.mainWindow.loadFile(htmlPath);
 
     // 窗口准备好后显示
     this.mainWindow.once('ready-to-show', () => {
@@ -938,7 +951,51 @@ class ElectronApp {
 
   async scanTestFiles(directoryPath) {
     try {
-      let projectRoot = directoryPath || this.projectRoot;
+      // 如果用户指定了目录路径，直接扫描该目录
+      if (directoryPath && fs.existsSync(directoryPath) && fs.statSync(directoryPath).isDirectory()) {
+        console.log('扫描用户选择的目录:', directoryPath);
+        
+        const files = fs.readdirSync(directoryPath);
+        console.log('目录中的文件:', files);
+        
+        const testFiles = [];
+
+        for (const file of files) {
+          // 只处理.py文件，排除__pycache__目录
+          if (file.endsWith('.py') && file !== '__pycache__') {
+            const filePath = path.join(directoryPath, file);
+            const stats = fs.statSync(filePath);
+            
+            if (stats.isFile()) {
+              // 根据文件名推断测试类型
+              let type = 'unit';
+              if (file.includes('appium')) {
+                type = 'appium';
+              } else if (file.includes('playwright')) {
+                type = 'playwright';
+              } else if (file.includes('check_app_status')) {
+                type = 'status';
+              }
+
+              testFiles.push({
+                name: file,
+                path: filePath, // 使用绝对路径而不是相对路径
+                type: type
+              });
+            }
+          }
+        }
+
+        console.log('找到的测试文件:', testFiles);
+        
+        // 如果用户选择的目录中有测试文件，直接返回
+        if (testFiles.length > 0) {
+          return testFiles;
+        }
+      }
+      
+      // 如果没有指定目录或选择的目录中没有测试文件，使用默认逻辑
+      let projectRoot = this.projectRoot;
       
       // 检查用户是否选择了tests目录本身
       const testsPath = path.join(projectRoot, 'tests');
@@ -955,7 +1012,22 @@ class ElectronApp {
         }
       }
       
-      const finalTestsPath = path.join(projectRoot, 'tests');
+      // 在打包环境中，Python项目文件位于应用根目录，需要调整路径逻辑
+      let finalTestsPath = path.join(projectRoot, 'tests');
+      
+      // 如果当前路径不存在tests目录，尝试在应用根目录查找
+      if (!fs.existsSync(finalTestsPath)) {
+        // 在打包环境中，Python项目文件位于与exe同级的目录
+        const appRoot = process.cwd();
+        const alternativeTestsPath = path.join(appRoot, 'tests');
+        
+        if (fs.existsSync(alternativeTestsPath)) {
+          finalTestsPath = alternativeTestsPath;
+          projectRoot = appRoot;
+          console.log('使用打包环境路径:', finalTestsPath);
+        }
+      }
+      
       console.log('最终项目根目录:', projectRoot);
       console.log('扫描测试文件路径:', finalTestsPath);
       console.log('目录是否存在:', fs.existsSync(finalTestsPath));
@@ -988,10 +1060,10 @@ class ElectronApp {
             }
 
             testFiles.push({
-              name: file,
-              path: path.relative(projectRoot, filePath),
-              type: type
-            });
+                name: file,
+                path: filePath, // 使用绝对路径而不是相对路径
+                type: type
+              });
           }
         }
       }

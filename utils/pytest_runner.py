@@ -123,9 +123,15 @@ class PytestRunner:
             
             # 记录日志信息
             if exit_code == 0:
-                logger.info("✅ 测试成功，已生成Allure报告")
+                if allure_report_path:
+                    logger.info("✅ 测试成功，已生成Allure报告")
+                else:
+                    logger.info("✅ 测试成功，但Allure报告生成失败")
             else:
-                logger.warning(f"测试失败 (退出码: {exit_code})，但已生成Allure报告供分析")
+                if allure_report_path:
+                    logger.warning(f"测试失败 (退出码: {exit_code})，但已生成Allure报告供分析")
+                else:
+                    logger.warning(f"测试失败 (退出码: {exit_code})，且Allure报告生成失败")
         
         return {
             "exit_code": exit_code,
@@ -273,7 +279,7 @@ class PytestRunner:
                     logger.error("Allure报告生成失败，index.html文件不存在")
                     return None
             else:
-                logger.error(f"Allure命令执行失败: {result.stderr}")
+                logger.error(f"Allure命令执行失败: {result.stderr}，请检查JAVA环境")
                 
                 # 检查Allure是否可用
                 if project_allure_bat.exists() or project_allure.exists():
@@ -634,15 +640,55 @@ class PytestRunner:
             测试结果字典
         """
         logger.info(f"开始运行自定义路径测试: {test_paths}")
+        logger.info(f"项目根目录: {self.project_root}")
         
         # 验证测试路径是否存在
         valid_paths = []
         for path in test_paths:
-            full_path = self.project_root / path.rstrip('/')
-            if full_path.exists():
-                valid_paths.append(path)
+            # 处理多种可能的路径格式
+            full_path = None
+            
+            # 1. 尝试直接使用路径（可能是相对路径或绝对路径）
+            if os.path.exists(path):
+                full_path = Path(path)
+            else:
+                # 2. 尝试相对于项目根目录的路径
+                relative_path = self.project_root / path.rstrip('/')
+                if relative_path.exists():
+                    full_path = relative_path
+                else:
+                    # 3. 尝试在tests目录下查找
+                    tests_path = self.project_root / "tests" / path.rstrip('/')
+                    if tests_path.exists():
+                        full_path = tests_path
+                    else:
+                        # 4. 尝试直接使用文件名（在tests目录中查找）
+                        filename_path = self.project_root / "tests" / path
+                        if filename_path.exists():
+                            full_path = filename_path
+            
+            if full_path and full_path.exists():
+                # 安全地转换为相对于项目根目录的路径
+                try:
+                    relative_path = full_path.relative_to(self.project_root)
+                    valid_paths.append(str(relative_path))
+                    logger.info(f"找到测试路径: {path} -> {full_path}")
+                except ValueError:
+                    # 如果路径不在项目根目录的子路径中，直接使用绝对路径
+                    logger.debug(f"测试路径不在项目根目录下: {full_path}")
+                    # 记录详细信息用于调试
+                    logger.debug(f"项目根目录: {self.project_root}")
+                    logger.debug(f"测试文件路径: {full_path}")
+                    # 直接使用绝对路径
+                    valid_paths.append(str(full_path))
+                    logger.info(f"使用绝对路径: {full_path}")
             else:
                 logger.warning(f"测试路径不存在: {path}")
+                # 记录详细的路径信息用于调试
+                logger.debug(f"尝试的路径: {path}")
+                logger.debug(f"项目根目录: {self.project_root}")
+                logger.debug(f"tests目录: {self.project_root / 'tests'}")
+                logger.debug(f"tests目录内容: {list((self.project_root / 'tests').glob('*.py')) if (self.project_root / 'tests').exists() else '目录不存在'}")
         
         if not valid_paths:
             logger.error("没有有效的测试路径")

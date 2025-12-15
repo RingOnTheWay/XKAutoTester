@@ -33,9 +33,31 @@
     },
     "files": [
       "main.js",
+      "preload.js",
       "renderer/**/*",
       "assets/**/*",
       "node_modules/**/*"
+    ],
+    "asar": false,
+    "extraResources": [
+      {
+        "from": "../",
+        "to": "../",
+        "filter": [
+          "**/*.py",
+          "**/*.txt",
+          "**/*.ini",
+          "tests/**",
+          "utils/**",
+          "config/**",
+          "env/**",
+          "!electron/**",
+          "!node_modules/**",
+          "!dist/**",
+          "!test_plans.json",
+          "!allure-results/**"
+        ]
+      }
     ],
     "win": {
       "target": "nsis",
