@@ -534,6 +534,8 @@ class XKAutoTesterApp {
             if (result.success) {
                 this.appendOutput('>>> 测试运行完成！');
                 this.enableViewReportButton();
+            } else if (result === null) {
+                this.appendError('>>> 已手动停止测试');
             } else {
                 this.appendError(`>>> 测试运行失败 (退出码: ${result.exitCode})`);
             }
@@ -546,12 +548,22 @@ class XKAutoTesterApp {
         }
     }
 
-    stopTests() {
-        // 这里应该实现停止测试的逻辑
-        // 目前Electron主进程还没有实现停止功能
-        this.isRunning = false;
-        this.updateUIForStopped();
-        this.appendOutput('>>> 测试已停止');
+    async stopTests() {
+        try {
+            // 调用Electron主进程的停止测试功能
+            const result = await window.electronAPI.stopPythonTests();
+            
+            if (result.success) {
+                this.isRunning = false;
+                this.updateUIForStopped();
+                this.appendOutput('>>> ' + result.message);
+            } else {
+                this.appendError('>>> ' + result.message);
+            }
+        } catch (error) {
+            console.error('停止测试失败:', error);
+            this.appendError('>>> 停止测试失败: ' + error.message);
+        }
     }
 
     updateUIForRunning() {
@@ -862,65 +874,34 @@ class XKAutoTesterApp {
     }
 
     selectTestPlanDirectory(testFiles) {
-        // 根据测试计划中的文件路径自动推断并设置测试目录
+        // 根据测试计划中的文件路径设置测试目录
         if (testFiles.length === 0) {
             return;
         }
         
-        // 从第一个文件的路径推断目录
+        // 使用第一个文件的路径设置测试目录
         const firstFile = testFiles[0];
         if (firstFile && firstFile.path) {
-            // 从文件路径中提取目录路径
-            // 例如："tests\\test_playwright.py" -> 推断项目根目录
+            // 获取文件所在目录（去掉文件名部分）
             const pathParts = firstFile.path.split(/[\\/]/);
+            const directoryPath = pathParts.slice(0, -1).join('/');
             
-            // 如果路径包含"tests"目录，则推断项目根目录
-            if (pathParts.includes('tests')) {
-                // 找到"tests"目录的索引
-                const testsIndex = pathParts.indexOf('tests');
-                // 项目根目录是"tests"目录的父目录
-                const projectRoot = pathParts.slice(0, testsIndex).join('/');
-                
-                // 如果项目根目录为空（即tests在根目录下），则使用项目根目录
-                if (projectRoot === '') {
-                    // 使用项目根目录（当前目录）
-                    this.selectedDirectory = '.';
-                } else {
-                    this.selectedDirectory = projectRoot;
-                }
-                
-                // 使用绝对路径：将相对路径转换为绝对路径
-                // 假设项目根目录是Electron应用所在目录的父目录
-                const absolutePath = this.getAbsolutePath(this.selectedDirectory);
-                this.selectedDirectory = absolutePath;
-                
-                // 从测试计划路径中提取文件夹名称用于显示
-                // 例如：从"tests\\test_playwright.py"中提取"tests"作为显示名称
-                this.selectedDirectoryDisplayName = 'tests';
-                
-                this.updateSelectedDirectory();
-                this.appendOutput(`📁 已自动设置测试目录: ${this.selectedDirectory}`);
-                
-                // 调试信息：显示推断的路径详情
-                console.log('路径推断详情:', {
-                    originalPath: firstFile.path,
-                    pathParts: pathParts,
-                    testsIndex: testsIndex,
-                    projectRoot: projectRoot,
-                    selectedDirectory: this.selectedDirectory,
-                    displayName: this.selectedDirectoryDisplayName
-                });
-            } else {
-                // 如果路径不包含tests目录，直接使用文件所在目录
-                const fileDir = pathParts.slice(0, -1).join('/');
-                if (fileDir) {
-                    this.selectedDirectory = fileDir;
-                    // 使用文件所在目录的最后一个部分作为显示名称
-                    this.selectedDirectoryDisplayName = pathParts[pathParts.length - 2] || fileDir.split(/[\\/]/).pop();
-                    this.updateSelectedDirectory();
-                    this.appendOutput(`📁 已自动设置测试目录: ${fileDir}`);
-                }
-            }
+            // 设置目录路径
+            this.selectedDirectory = directoryPath;
+            
+            // 使用目录名称作为显示名称
+            this.selectedDirectoryDisplayName = pathParts[pathParts.length - 2] || directoryPath.split(/[\\/]/).pop() || directoryPath;
+            
+            this.updateSelectedDirectory();
+            this.appendOutput(`📁 已设置测试目录: ${this.selectedDirectory}`);
+            
+            // 调试信息：显示设置的路径详情
+            console.log('设置测试目录:', {
+                originalPath: firstFile.path,
+                directoryPath: directoryPath,
+                selectedDirectory: this.selectedDirectory,
+                displayName: this.selectedDirectoryDisplayName
+            });
         }
     }
 
@@ -1209,28 +1190,20 @@ class XKAutoTesterApp {
         this.selectTestPlanTypes(plan.testTypes || []);
         this.selectTestPlanFiles(plan.testFiles || []);
         
-        // 如果是"什么都没有选择"的场景，确保目录、文件、类型都被正确选中
+        // 如果是"什么都没有选择"的场景，确保文件被正确选中
         if (wasNothingSelected) {
-            // 确保目录被正确设置
-            if (plan.testFiles && plan.testFiles.length > 0) {
-                // 重新调用目录选择以确保目录被正确设置
-                setTimeout(() => {
-                    this.selectTestPlanDirectory(plan.testFiles);
-                }, 100);
-            }
-            
             // 确保文件被正确选中
             if (plan.testFiles && plan.testFiles.length > 0) {
                 setTimeout(() => {
                     this.selectTestPlanFiles(plan.testFiles);
-                }, 200);
+                }, 100);
             }
             
             // 确保测试类型被正确选中
             if (plan.testTypes && plan.testTypes.length > 0) {
                 setTimeout(() => {
                     this.selectTestPlanTypes(plan.testTypes);
-                }, 300);
+                }, 200);
             }
         }
         

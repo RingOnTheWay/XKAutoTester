@@ -41,6 +41,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopAllureServer: () => ipcRenderer.invoke('stop-allure-server'),
   getAllureServerStatus: () => ipcRenderer.invoke('get-allure-server-status'),
   
+  // 弹窗功能
+  showDialog: (options) => ipcRenderer.invoke('show-dialog', options),
+  
+  // 停止Python测试
+  stopPythonTests: () => ipcRenderer.invoke('stop-python-tests'),
+  
   // 移除监听器
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
 });

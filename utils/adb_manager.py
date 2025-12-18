@@ -56,13 +56,94 @@ class ADBManager:
             stdout = connect_result.stdout
             stderr = connect_result.stderr
             
+            # 完整输出命令执行结果到日志
+            logger.info(f"ADB连接命令执行结果 - 标准输出: {stdout}")
+            if stderr:
+                logger.info(f"ADB连接命令执行结果 - 标准错误: {stderr}")
+            logger.info(f"ADB连接命令执行结果 - 返回码: {connect_result.returncode}")
+            
             # 检查连接结果
             if 'connected' in stdout or 'already' in stdout:
                 logger.info(f"设备连接成功: {self.device_name}")
-                return True, "设备连接成功"
-            elif 'unauthorized' in stdout or 'unauthorized' in stderr:
-                logger.warning(f"设备未授权: {self.device_name}")
-                return False, "设备未授权"
+                
+                # 连接成功后，使用adb devices检查设备授权状态
+                devices_result = subprocess.run(
+                    ['adb', 'devices'], 
+                    capture_output=True, text=True, timeout=5
+                )
+                
+                logger.info(f"ADB设备列表检查结果 - 标准输出: {devices_result.stdout}")
+                if devices_result.stderr:
+                    logger.info(f"ADB设备列表检查结果 - 标准错误: {devices_result.stderr}")
+                
+                # 检查设备授权状态
+                device_line = f"{self.device_name}:5555"
+                if device_line in devices_result.stdout:
+                    if 'unauthorized' in devices_result.stdout:
+                        logger.warning(f"设备未授权: {self.device_name}")
+                        
+                        # 先断开连接，然后重新连接以便用户收到授权提示
+                        logger.info("断开设备连接以重新触发授权提示...")
+                        disconnect_result = subprocess.run(
+                            ['adb', 'disconnect', f'{self.device_name}:5555'], 
+                            capture_output=True, text=True, timeout=5
+                        )
+                        logger.info(f"断开连接结果: {disconnect_result.stdout}")
+                        
+                        # 等待1秒后重新连接
+                        time.sleep(1)
+                        
+                        logger.info("重新连接设备以触发授权提示...")
+                        reconnect_result = subprocess.run(
+                            ['adb', 'connect', f'{self.device_name}:5555'], 
+                            capture_output=True, text=True, timeout=10
+                        )
+                        logger.info(f"重新连接结果: {reconnect_result.stdout}")
+                        
+                        logger.info("请在设备上点击'同意'授权此电脑连接，系统将每2秒检查一次授权状态")
+                        
+                        # 尝试调用Electron弹窗提醒用户
+                        self._show_unauthorized_dialog()
+                        
+                        # 等待用户授权，最多等待1分钟
+                        max_wait_time = 60  # 60秒超时
+                        check_interval = 2  # 每2秒检查一次
+                        waited_time = 0
+                        
+                        while waited_time < max_wait_time:
+                            logger.info(f"等待授权中... 已等待{waited_time}秒")
+                            time.sleep(check_interval)
+                            waited_time += check_interval
+                            
+                            # 重新检查设备授权状态
+                            devices_result = subprocess.run(
+                                ['adb', 'devices'], 
+                                capture_output=True, text=True, timeout=5
+                            )
+                            
+                            logger.info(f"授权检查结果 - 标准输出: {devices_result.stdout}")
+                            
+                            if device_line in devices_result.stdout:
+                                if 'unauthorized' not in devices_result.stdout:
+                                    logger.info(f"设备已授权: {self.device_name}")
+                                    return True, "设备连接成功并已授权"
+                                else:
+                                    logger.info(f"设备仍处于未授权状态，继续等待...")
+                            else:
+                                logger.warning(f"设备未在设备列表中: {self.device_name}")
+                                return False, "设备未在设备列表中"
+                        
+                        # 超时处理
+                        logger.error(f"设备授权超时: 等待{max_wait_time}秒后设备仍未授权")
+                        return False, "设备授权超时"
+                        
+                    else:
+                        logger.info(f"设备已授权: {self.device_name}")
+                        return True, "设备连接成功并已授权"
+                else:
+                    logger.warning(f"设备未在设备列表中: {self.device_name}")
+                    return False, "设备未在设备列表中"
+                    
             elif 'cannot connect' in stdout or '目标计算机积极拒绝' in stdout or '10061' in stdout:
                 logger.warning(f"设备连接被拒绝: {self.device_name}")
                 return False, "设备连接被拒绝"
@@ -73,6 +154,57 @@ class ADBManager:
         except Exception as e:
             logger.warning(f"ADB设备连接异常: {e}")
             return False, f"ADB设备连接异常: {e}"
+    
+    def _show_unauthorized_dialog(self):
+        """
+        显示设备未授权弹窗提醒
+        通过多种方式尝试与Electron前端通信
+        """
+        try:
+            # 方法1: 通过环境变量或文件标记触发Electron弹窗
+            import os
+            import json
+            from pathlib import Path
+            
+            # 创建弹窗触发文件
+            dialog_trigger_file = Path(__file__).parent.parent / "logs" / "unauthorized_dialog.json"
+            dialog_trigger_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            dialog_data = {
+                "device_name": self.device_name,
+                "timestamp": time.time(),
+                "message": f"设备 {self.device_name} 未授权，请在设备上点击'同意'授权此电脑连接"
+            }
+            
+            with open(dialog_trigger_file, 'w', encoding='utf-8') as f:
+                json.dump(dialog_data, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"已创建未授权弹窗触发文件: {dialog_trigger_file}")
+            
+            # 方法2: 尝试通过标准输出发送消息给Electron进程
+            print(f"[ELECTRON_DIALOG] device_unauthorized:{self.device_name}")
+            
+            # 方法3: 如果可能，尝试直接调用Electron IPC
+            # 这里需要检查是否在Electron环境中运行
+            if os.environ.get('ELECTRON_RUN_AS_NODE'):
+                # 在Electron环境中，尝试通过IPC发送消息
+                try:
+                    import socket
+                    # 尝试连接到Electron IPC服务器（如果存在）
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(1)
+                    sock.connect(('localhost', 8080))
+                    sock.send(json.dumps({
+                        "type": "device_unauthorized",
+                        "device_name": self.device_name
+                    }).encode('utf-8'))
+                    sock.close()
+                except:
+                    pass  # IPC连接失败，使用其他方法
+            
+        except Exception as e:
+            logger.warning(f"显示未授权弹窗失败: {e}")
+            # 即使弹窗失败，也不影响主要逻辑，继续等待授权
     
     def check_app_status(self) -> Tuple[bool, Optional[str]]:
         """

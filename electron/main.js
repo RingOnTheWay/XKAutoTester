@@ -45,6 +45,7 @@ class ElectronApp {
     this.allureServerTestPlan = null;
     this.allureServerStartTime = null;
     this.allureOpenProcess = null;  // 新增：存储allure open进程
+    this.currentPythonProcess = null; // 存储当前运行的Python进程
   }
 
   createWindow() {
@@ -78,9 +79,6 @@ class ElectronApp {
       this.mainWindow.show();
       this.mainWindow.focus();
       this.mainWindow.center(); // 居中显示窗口
-      
-      // 添加调试信息
-      console.log('Electron window displayed and focused');
     });
 
     // 处理窗口关闭
@@ -188,11 +186,49 @@ class ElectronApp {
     ipcMain.handle('get-allure-server-status', async () => {
       return this.getAllureServerStatus();
     });
+
+    // 显示弹窗消息
+    ipcMain.handle('show-dialog', async (event, options) => {
+      const { type, title, message, buttons } = options;
+      const result = await dialog.showMessageBox(this.mainWindow, {
+        type: type || 'info',
+        title: title || '提示',
+        message: message,
+        buttons: buttons || ['确定'],
+        defaultId: 0,
+        cancelId: 0
+      });
+      return result;
+    });
+
+    // 停止Python测试
+    ipcMain.handle('stop-python-tests', async () => {
+      try {
+        if (this.currentPythonProcess) {
+          // 杀死Python进程
+          this.currentPythonProcess.kill();
+          this.currentPythonProcess = null;
+          
+          // 停止未授权弹窗监控
+          this.stopUnauthorizedDialogMonitor();
+          
+          return { success: true, message: '测试已停止' };
+        } else {
+          return { success: false, message: '没有正在运行的测试' };
+        }
+      } catch (error) {
+        console.error('停止测试失败:', error);
+        return { success: false, message: '停止测试失败: ' + error.message };
+      }
+    });
   }
 
   async runPythonTests(testConfig) {
     return new Promise((resolve, reject) => {
       const { testPaths, markers, testPlanName } = testConfig;
+      
+      // 启动未授权弹窗监控
+      this.startUnauthorizedDialogMonitor();
       
       // 构建Python命令 - 使用新的Electron专用运行器
       const pythonArgs = [
@@ -218,6 +254,9 @@ class ElectronApp {
           PYTHONUTF8: '1'  // 启用Python UTF-8模式
         }
       });
+      
+      // 存储当前Python进程引用
+      this.currentPythonProcess = pythonProcess;
 
       let output = '';
       let errorOutput = '';
@@ -237,6 +276,12 @@ class ElectronApp {
       });
 
       pythonProcess.on('close', (code) => {
+        // 停止未授权弹窗监控
+        this.stopUnauthorizedDialogMonitor();
+        
+        // 清除Python进程引用
+        this.currentPythonProcess = null;
+        
         const result = {
           success: code === 0,
           exitCode: code,
@@ -250,6 +295,60 @@ class ElectronApp {
       pythonProcess.on('error', (error) => {
         reject(error);
       });
+    });
+  }
+
+  startUnauthorizedDialogMonitor() {
+    // 监控未授权弹窗触发文件
+    const fs = require('fs');
+    const path = require('path');
+    
+    const dialogTriggerFile = path.join(this.projectRoot, 'logs', 'unauthorized_dialog.json');
+    
+    // 创建文件监控器
+    const checkDialogTrigger = () => {
+      try {
+        if (fs.existsSync(dialogTriggerFile)) {
+          const data = fs.readFileSync(dialogTriggerFile, 'utf8');
+          const dialogData = JSON.parse(data);
+          
+          // 显示弹窗
+          this.showUnauthorizedDialog(dialogData);
+          
+          // 删除触发文件
+          fs.unlinkSync(dialogTriggerFile);
+        }
+      } catch (error) {
+        console.error('检查未授权弹窗触发文件失败:', error);
+      }
+    };
+    
+    // 每2秒检查一次
+    this.unauthorizedDialogInterval = setInterval(checkDialogTrigger, 2000);
+    
+    // 初始检查
+    checkDialogTrigger();
+  }
+
+  stopUnauthorizedDialogMonitor() {
+    if (this.unauthorizedDialogInterval) {
+      clearInterval(this.unauthorizedDialogInterval);
+      this.unauthorizedDialogInterval = null;
+    }
+  }
+
+  async showUnauthorizedDialog(dialogData) {
+    const { device_name, message } = dialogData;
+    
+    // 使用之前添加的show-dialog IPC处理程序显示弹窗
+    await dialog.showMessageBox(this.mainWindow, {
+      type: 'warning',
+      title: '设备未授权',
+      message: message || `设备 ${device_name} 未授权`,
+      detail: '请在Android设备上点击"同意"授权此电脑连接。\n\n系统将自动等待授权，最多等待60秒。',
+      buttons: ['确定'],
+      defaultId: 0,
+      cancelId: 0
     });
   }
 

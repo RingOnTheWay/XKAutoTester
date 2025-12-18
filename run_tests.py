@@ -31,8 +31,6 @@ class TestRunner:
     def set_current_test_paths(self, test_paths: List[str]) -> None:
         """设置当前选定的测试路径"""
         self.current_test_paths = test_paths
-        if test_paths:
-            print(f"✅ 已设置测试路径: {', '.join(test_paths)}")
     
     def get_current_test_paths(self) -> List[str]:
         """获取当前选定的测试路径"""

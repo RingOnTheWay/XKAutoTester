@@ -86,6 +86,9 @@ allure-results/
 # Test data (可选，如果不想提交测试数据)
 test_data/
 
+# Test files (可选，如果不想提交测试文件)
+tests/
+
 # Local configuration files
 local_settings.py
 
