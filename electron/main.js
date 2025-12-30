@@ -1183,7 +1183,12 @@ class ElectronApp {
       const markers = new Set();
       
       for (const filePath of filePaths) {
-        const fullPath = path.join(this.projectRoot, filePath);
+        // 检查filePath是否已经是绝对路径
+        let fullPath = filePath;
+        if (!path.isAbsolute(filePath)) {
+          // 如果是相对路径，才需要拼接项目根目录
+          fullPath = path.join(this.projectRoot, filePath);
+        }
         
         if (!fs.existsSync(fullPath)) {
           console.warn('文件不存在:', fullPath);
