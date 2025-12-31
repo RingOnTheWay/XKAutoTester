@@ -99,3 +99,4 @@ local_settings.py
 # Temporary files
 *.tmp
 *.temp
+test_plans.json
