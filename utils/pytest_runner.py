@@ -258,8 +258,24 @@ class PytestRunner:
                 "--clean"
             ])
             
-            # 执行命令
-            result = subprocess.run(allure_cmd, capture_output=True, text=True)
+            # 执行命令 - 使用二进制模式，避免UTF-8解码错误
+            result = subprocess.run(allure_cmd, capture_output=True)
+            
+            # 手动处理输出编码
+            def decode_output(output):
+                """安全解码输出，处理不同编码"""
+                if not output:
+                    return ""
+                try:
+                    return output.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        return output.decode('gbk')  # Windows系统常用GBK编码
+                    except UnicodeDecodeError:
+                        return output.decode('utf-8', errors='replace')  # 最后使用replace模式
+            
+            stdout = decode_output(result.stdout)
+            stderr = decode_output(result.stderr)
             
             if result.returncode == 0:
                 allure_index = allure_report_dir / "index.html"
@@ -390,12 +406,12 @@ class PytestRunner:
             import subprocess
             import threading
             
-            # 启动allure服务器进程
+            # 启动allure服务器进程 - 使用二进制模式，避免UTF-8解码错误
             allure_process = subprocess.Popen(
                 allure_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                # 不使用text=True，避免UnicodeDecodeError
             )
             
             # 存储服务器进程信息

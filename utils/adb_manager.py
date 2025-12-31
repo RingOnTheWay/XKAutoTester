@@ -63,10 +63,10 @@ class ADBManager:
             logger.info(f"ADB连接命令执行结果 - 返回码: {connect_result.returncode}")
             
             # 检查连接结果
-            if 'connected' in stdout or 'already' in stdout:
-                logger.info(f"设备连接成功: {self.device_name}")
+            if 'connected' in stdout or 'already' in stdout or 'failed to authenticate' in stdout:
+                logger.info(f"设备连接尝试结果: {stdout.strip()}")
                 
-                # 连接成功后，使用adb devices检查设备授权状态
+                # 无论连接命令返回什么，都检查设备列表状态
                 devices_result = subprocess.run(
                     ['adb', 'devices'], 
                     capture_output=True, text=True, timeout=5
@@ -78,27 +78,35 @@ class ADBManager:
                 
                 # 检查设备授权状态
                 device_line = f"{self.device_name}:5555"
+                
+                # 无论设备是否在列表中，都尝试断开并重新连接以触发授权
+                logger.info("断开设备连接以重新触发授权提示...")
+                disconnect_result = subprocess.run(
+                    ['adb', 'disconnect', f'{self.device_name}:5555'], 
+                    capture_output=True, text=True, timeout=5
+                )
+                logger.info(f"断开连接结果: {disconnect_result.stdout}")
+                
+                # 等待1秒后重新连接
+                time.sleep(1)
+                
+                logger.info("重新连接设备以触发授权提示...")
+                reconnect_result = subprocess.run(
+                    ['adb', 'connect', f'{self.device_name}:5555'], 
+                    capture_output=True, text=True, timeout=10
+                )
+                logger.info(f"重新连接结果: {reconnect_result.stdout}")
+                
+                # 再次检查设备列表
+                devices_result = subprocess.run(
+                    ['adb', 'devices'], 
+                    capture_output=True, text=True, timeout=5
+                )
+                logger.info(f"重新连接后设备列表 - 标准输出: {devices_result.stdout}")
+                
                 if device_line in devices_result.stdout:
-                    if 'unauthorized' in devices_result.stdout:
+                    if 'unauthorized' in devices_result.stdout or 'failed to authenticate' in stdout:
                         logger.warning(f"设备未授权: {self.device_name}")
-                        
-                        # 先断开连接，然后重新连接以便用户收到授权提示
-                        logger.info("断开设备连接以重新触发授权提示...")
-                        disconnect_result = subprocess.run(
-                            ['adb', 'disconnect', f'{self.device_name}:5555'], 
-                            capture_output=True, text=True, timeout=5
-                        )
-                        logger.info(f"断开连接结果: {disconnect_result.stdout}")
-                        
-                        # 等待1秒后重新连接
-                        time.sleep(1)
-                        
-                        logger.info("重新连接设备以触发授权提示...")
-                        reconnect_result = subprocess.run(
-                            ['adb', 'connect', f'{self.device_name}:5555'], 
-                            capture_output=True, text=True, timeout=10
-                        )
-                        logger.info(f"重新连接结果: {reconnect_result.stdout}")
                         
                         logger.info("请在设备上点击'同意'授权此电脑连接，系统将每2秒检查一次授权状态")
                         
@@ -131,7 +139,13 @@ class ADBManager:
                                     logger.info(f"设备仍处于未授权状态，继续等待...")
                             else:
                                 logger.warning(f"设备未在设备列表中: {self.device_name}")
-                                return False, "设备未在设备列表中"
+                                # 设备不在列表中，再次尝试连接
+                                logger.info("设备未在列表中，再次尝试连接...")
+                                reconnect_result = subprocess.run(
+                                    ['adb', 'connect', f'{self.device_name}:5555'], 
+                                    capture_output=True, text=True, timeout=10
+                                )
+                                logger.info(f"再次连接结果: {reconnect_result.stdout}")
                         
                         # 超时处理
                         logger.error(f"设备授权超时: 等待{max_wait_time}秒后设备仍未授权")

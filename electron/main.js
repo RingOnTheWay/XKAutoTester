@@ -456,6 +456,16 @@ class ElectronApp {
 
   async openAllureReport(testPlanName = null) {
     try {
+      // 检查是否已经有Allure服务器在运行
+      const serverStatus = await this.getAllureServerStatus();
+      if (serverStatus.running || serverStatus.allureOpenRunning) {
+        const serverInfo = this.allureServerPort ? `当前服务地址: http://127.0.0.1:${this.allureServerPort}` : '';
+        return { 
+          success: false, 
+          error: `已有Allure服务器在运行，请先关闭现有服务器再尝试打开新报告。${serverInfo ? ' ' + serverInfo : ''}`
+        };
+      }
+
       // 如果没有指定测试计划名称，使用最新的测试计划
       if (!testPlanName) {
         const testPlans = await this.getTestPlans();
@@ -515,6 +525,16 @@ class ElectronApp {
 
   async startAllureServer(testPlanName) {
     try {
+      // 检查是否已经有Allure服务器在运行
+      const serverStatus = await this.getAllureServerStatus();
+      if (serverStatus.running || serverStatus.allureOpenRunning) {
+        const serverInfo = this.allureServerPort ? `当前服务地址: http://127.0.0.1:${this.allureServerPort}` : '';
+        return { 
+          success: false, 
+          error: `已有Allure服务器在运行，请先关闭现有服务器再尝试启动新服务器。${serverInfo ? ' ' + serverInfo : ''}`
+        };
+      }
+
       const allureReportDir = path.join(this.projectRoot, 'allure-reports', testPlanName);
       
       if (!fs.existsSync(allureReportDir)) {
@@ -600,13 +620,25 @@ class ElectronApp {
       // "Report successfully generated to /path/to/report"
       // "Starting web server..."
       // "Server started at <http://localhost:4040>"
+      // "http://127.0.0.1:4040"
+      // "Server is started at http://localhost:4040"
       
       const lines = stdoutData.split('\n');
       for (const line of lines) {
-        // 匹配端口号模式
-        const portMatch = line.match(/http:\/\/localhost:(\d+)/) || line.match(/Server started at.*:(\d+)/);
-        if (portMatch && portMatch[1]) {
-          return parseInt(portMatch[1]);
+        // 匹配多种端口号模式
+        const patterns = [
+          /http:\/\/(?:localhost|127\.0\.0\.1):(\d+)/i,  // 匹配http://localhost:端口或http://127.0.0.1:端口
+          /Server started at.*:(\d+)/i,  // 匹配Server started at...:端口
+          /Server is started at.*:(\d+)/i,  // 匹配Server is started at...:端口
+          /Listening on port (\d+)/i,  // 匹配Listening on port 端口
+          /Port (\d+) is used/i  // 匹配Port 端口 is used
+        ];
+        
+        for (const pattern of patterns) {
+          const portMatch = line.match(pattern);
+          if (portMatch && portMatch[1]) {
+            return parseInt(portMatch[1]);
+          }
         }
       }
       return null;
