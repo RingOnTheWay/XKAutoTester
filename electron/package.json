@@ -1,6 +1,6 @@
 {
   "name": "xkautotester-electron",
-  "version": "1.0.0",
+  "version": "0.1.0-dev.1",
   "description": "XKAutoTester - 基于Electron的自动化测试工具",
   "main": "main.js",
   "scripts": {
@@ -28,6 +28,7 @@
   "build": {
     "appId": "com.xkmedical.xkautotester",
     "productName": "XKAutoTester",
+    "artifactName": "${productName} Setup v${version}.${ext}",
     "directories": {
       "output": "dist"
     },

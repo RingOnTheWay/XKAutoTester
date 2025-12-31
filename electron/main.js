@@ -147,7 +147,7 @@ class ElectronApp {
     ipcMain.handle('get-project-info', async () => {
       return {
         root: this.projectRoot,
-        version: '1.0.0',
+        version: 'v0.1.0-dev.1',
         name: 'XKAutoTester'
       };
     });
