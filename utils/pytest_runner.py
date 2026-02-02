@@ -73,47 +73,64 @@ class PytestRunner:
         
         logger.info(f"开始运行Pytest测试，测试计划: {test_plan_name}，参数: {pytest_args}")
         
-        # 运行测试并捕获详细输出
-        import io
+        # 运行测试并实时捕获输出
+        import subprocess
         import sys
-        from contextlib import redirect_stdout, redirect_stderr
+        import re
         
-        # 创建字符串缓冲区来捕获输出
-        stdout_capture = io.StringIO()
-        stderr_capture = io.StringIO()
-        
-        # 重定向标准输出和错误输出
-        with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-            exit_code = pytest.main(pytest_args)
-        
-        # 获取捕获的输出
-        stdout_content = stdout_capture.getvalue()
-        stderr_content = stderr_capture.getvalue()
-        
-        # 清理ANSI转义字符
+        # 清理ANSI转义字符的函数
         def clean_ansi_escape(text):
             """清理ANSI转义字符"""
-            import re
             # 匹配ANSI转义序列的正则表达式
             ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
             return ansi_escape.sub('', text)
         
-        # 清理输出内容中的ANSI转义字符
-        stdout_content = clean_ansi_escape(stdout_content)
-        stderr_content = clean_ansi_escape(stderr_content)
+        # 构建完整的pytest命令
+        pytest_command = [sys.executable, "-m", "pytest"] + pytest_args
+        logger.info(f"执行Pytest命令: {' '.join(pytest_command)}")
         
-        # 记录详细的测试输出到日志
-        if stdout_content:
-            logger.info("=== Pytest标准输出 ===")
-            for line in stdout_content.strip().split('\n'):
-                if line.strip():  # 只记录非空行
-                    logger.info(f"Pytest: {line}")
+        # 使用subprocess.Popen实现实时输出捕获
+        process = subprocess.Popen(
+            pytest_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,  # 直接输出文本而不是字节
+            bufsize=1,  # 行缓冲，确保实时输出
+            universal_newlines=True  # 启用通用换行符支持
+        )
         
-        if stderr_content:
-            logger.error("=== Pytest错误输出 ===")
-            for line in stderr_content.strip().split('\n'):
-                if line.strip():  # 只记录非空行
-                    logger.error(f"Pytest Error: {line}")
+        # 实时读取并处理stdout
+        stdout_content = []
+        while True:
+            line = process.stdout.readline()
+            if not line and process.poll() is not None:
+                break
+            if line:
+                # 清理ANSI转义字符
+                clean_line = clean_ansi_escape(line).rstrip()
+                stdout_content.append(clean_line)
+                if clean_line.strip():
+                    logger.info(f"Pytest: {clean_line}")
+        
+        # 实时读取并处理stderr
+        stderr_content = []
+        while True:
+            line = process.stderr.readline()
+            if not line and process.poll() is not None:
+                break
+            if line:
+                # 清理ANSI转义字符
+                clean_line = clean_ansi_escape(line).rstrip()
+                stderr_content.append(clean_line)
+                if clean_line.strip():
+                    logger.error(f"Pytest Error: {clean_line}")
+        
+        # 获取最终的退出码
+        exit_code = process.wait()
+        
+        # 合并输出内容，用于后续处理
+        stdout_content = '\n'.join(stdout_content)
+        stderr_content = '\n'.join(stderr_content)
         
         # 生成Allure报告
         allure_report_path = None

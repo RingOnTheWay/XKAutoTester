@@ -48,8 +48,17 @@ class ADBManager:
         """
         try:
             logger.info(f"尝试连接设备: {self.device_name}")
+            
+            # 检查设备名称是否已包含端口号
+            if ':' in self.device_name:
+                # 如果已包含端口号，直接使用
+                device_address = self.device_name
+            else:
+                # 如果没有端口号，添加默认端口5555
+                device_address = f'{self.device_name}:5555'
+            
             connect_result = subprocess.run(
-                ['adb', 'connect', f'{self.device_name}:5555'], 
+                ['adb', 'connect', device_address], 
                 capture_output=True, text=True, timeout=10
             )
             
@@ -77,12 +86,12 @@ class ADBManager:
                     logger.info(f"ADB设备列表检查结果 - 标准错误: {devices_result.stderr}")
                 
                 # 检查设备授权状态
-                device_line = f"{self.device_name}:5555"
+                device_line = device_address
                 
                 # 无论设备是否在列表中，都尝试断开并重新连接以触发授权
                 logger.info("断开设备连接以重新触发授权提示...")
                 disconnect_result = subprocess.run(
-                    ['adb', 'disconnect', f'{self.device_name}:5555'], 
+                    ['adb', 'disconnect', device_address], 
                     capture_output=True, text=True, timeout=5
                 )
                 logger.info(f"断开连接结果: {disconnect_result.stdout}")
@@ -92,7 +101,7 @@ class ADBManager:
                 
                 logger.info("重新连接设备以触发授权提示...")
                 reconnect_result = subprocess.run(
-                    ['adb', 'connect', f'{self.device_name}:5555'], 
+                    ['adb', 'connect', device_address], 
                     capture_output=True, text=True, timeout=10
                 )
                 logger.info(f"重新连接结果: {reconnect_result.stdout}")
@@ -142,7 +151,7 @@ class ADBManager:
                                 # 设备不在列表中，再次尝试连接
                                 logger.info("设备未在列表中，再次尝试连接...")
                                 reconnect_result = subprocess.run(
-                                    ['adb', 'connect', f'{self.device_name}:5555'], 
+                                    ['adb', 'connect', device_address], 
                                     capture_output=True, text=True, timeout=10
                                 )
                                 logger.info(f"再次连接结果: {reconnect_result.stdout}")
@@ -390,6 +399,64 @@ class ADBManager:
         except Exception as e:
             logger.warning(f"确保蓝牙开启时出错: {e}")
             return False
+    
+    def get_app_pid(self) -> Optional[int]:
+        """
+        获取应用的PID
+        
+        Returns:
+            Optional[int]: 应用PID，如果应用未运行则返回None
+        """
+        try:
+            result = subprocess.run(
+                ['adb', '-s', self.device_name, 'shell', 'pidof', self.app_package],
+                capture_output=True, text=True, timeout=10
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                pid = int(result.stdout.strip())
+                logger.info(f"获取到应用PID: {pid}")
+                return pid
+            else:
+                logger.warning(f"应用未运行或无法获取PID: {self.app_package}")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"获取应用PID时出错: {e}")
+            return None
+    
+    def check_crash_logs(self, pid: int) -> list:
+        """
+        检查应用的崩溃日志
+        
+        Args:
+            pid: 应用进程ID
+            
+        Returns:
+            list: 崩溃日志列表
+        """
+        try:
+            # 使用logcat -d命令获取缓存的日志，并通过PID过滤
+            # 同时支持Windows的findstr和Linux的grep命令
+            result = subprocess.run(
+                ['adb', '-s', self.device_name, 'shell', f'logcat -d'],
+                capture_output=True, text=True, timeout=15
+            )
+            
+            crash_logs = []
+            if result.returncode == 0:
+                for line in result.stdout.strip().split('\n'):
+                    if line.strip() and f"{pid}" in line and "E" in line and "AndroidRuntime" in line:
+                        crash_logs.append(line.strip())
+            
+            logger.info(f"检查到{len(crash_logs)}条崩溃日志")
+            return crash_logs
+            
+        except Exception as e:
+            logger.warning(f"检查崩溃日志时出错: {e}")
+            return []
+    
+
 
 
 def create_adb_manager(device_name: str, app_package: str) -> ADBManager:
@@ -404,3 +471,43 @@ def create_adb_manager(device_name: str, app_package: str) -> ADBManager:
         ADBManager: ADB管理器实例
     """
     return ADBManager(device_name, app_package)
+
+
+def get_connected_devices() -> list:
+    """
+    获取所有连接的设备列表
+    
+    Returns:
+        list: 设备ID列表
+    """
+    try:
+        logger.info("获取连接的设备列表")
+        
+        # 执行adb devices命令
+        result = subprocess.run(
+            ['adb', 'devices'], 
+            capture_output=True, text=True, timeout=10
+        )
+        
+        logger.info(f"ADB设备列表命令执行结果 - 标准输出: {result.stdout}")
+        if result.stderr:
+            logger.info(f"ADB设备列表命令执行结果 - 标准错误: {result.stderr}")
+        logger.info(f"ADB设备列表命令执行结果 - 返回码: {result.returncode}")
+        
+        # 解析设备列表
+        devices = []
+        lines = result.stdout.split('\n')
+        
+        import re
+        
+        for line in lines:
+            # 匹配设备行，格式如："设备ID    device"
+            match = re.match(r'^([^\s]+)\s+device$', line.strip())
+            if match:
+                devices.append(match.group(1))
+        
+        logger.info(f"解析到的设备列表: {devices}")
+        return devices
+    except Exception as e:
+        logger.error(f"获取设备列表失败: {e}")
+        return []

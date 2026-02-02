@@ -1,3 +1,13 @@
+# 运行平台
+
+## 操作系统
+
+### 控制端：Windows 10
+
+### 被控端：Windows 10、Android 13及其以上
+
+# 环境配置
+
 ## 一、配置Python环境
 
 ### 安装
@@ -12,7 +22,6 @@
   7.安装成功后点击Disable path length limit
   8.完成安装
   ```
-  
 
 ### 配置阿里源
 
@@ -128,3 +137,86 @@
   3.默认安装
   4.完成安装
   ```
+
+# 操作指引
+
+## 用例编辑流程
+
+#### 1.编辑示例用例文件内容
+
+#### ![PixPin_2025-12-30_19-40-09](D:\Downloads\env\img\PixPin_2025-12-30_19-40-09.png)
+
+#### 1.1.关于包名与activity的补充
+
+- 获取包名和activity名称（命令行）（需启动过app）
+
+  - ```shell
+    adb shell dumpsys activity activities | findstr "xiekang" | findstr "ActivityRecord"
+    ```
+
+  - ![PixPin_2025-12-31_15-14-22](D:\Downloads\env\img\PixPin_2025-12-31_15-14-22.png)
+
+  - 一般activity名称取第一个，或带splash名称的
+
+#### 1.1.关于设备名称的补充
+
+- 有线连接模式（命令行）
+
+  - 需用数据线连接电脑
+
+  - ```shell
+    adb shell getprop ro.product.model
+    ```
+
+    
+
+  - ![PixPin_2025-12-30_19-59-07](D:\Downloads\env\img\PixPin_2025-12-30_19-59-07.png)
+
+- 无线连接模式（命令行）
+
+  - 需用数据线连接电脑，开放端口后即可断开USB连接
+
+  - ```shell
+    adb tcpip 5555
+    ```
+
+  - ![PixPin_2025-12-31_15-20-00](D:\Downloads\env\img\PixPin_2025-12-31_15-20-00.png)
+
+  - 设备名称填入IP即可（无需填入端口）
+
+  - 设备重启需要重新开放端口
+
+- 无线连接模式（无线调试）
+
+  - 通过开发者选项的无线调试功能进行连接（需填入端口）
+  - ![PixPin_2025-12-31_15-21-59](D:\Downloads\env\img\PixPin_2025-12-31_15-21-59.png)
+  - 无线调试端口可能会自己变化
+
+
+## 软件使用流程
+
+#### 1.点击“选择测试目录”按钮
+
+### ![PixPin_2025-12-30_17-25-34](D:\Downloads\env\img\PixPin_2025-12-30_17-25-34.png)
+
+#### 2.选择用例文件所在的文件夹![PixPin_2025-12-30_17-28-09](D:\Downloads\env\img\PixPin_2025-12-30_17-28-09.png)
+
+#### 3.点击“新建计划”
+
+![PixPin_2025-12-30_17-31-44](D:\Downloads\env\img\PixPin_2025-12-30_17-31-44.png)
+
+#### 4.输入计划信息
+
+![PixPin_2025-12-30_19-42-38](D:\Downloads\env\img\PixPin_2025-12-30_19-42-38.png)
+
+#### 5.执行测试（首次连接设备需要在手机上授权）
+
+![PixPin_2025-12-30_19-43-23](D:\Downloads\env\img\PixPin_2025-12-30_19-43-23.png)
+
+#### 6.查看报告
+
+![PixPin_2025-12-30_20-18-09](D:\Downloads\env\img\PixPin_2025-12-30_20-18-09.png)
+
+#### 7.停止报告服务器
+
+![PixPin_2025-12-30_20-21-07](.\img\PixPin_2025-12-30_20-21-07.png)

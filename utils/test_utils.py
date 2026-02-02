@@ -33,34 +33,6 @@ class TestMarker:
         return pytest.mark.critical(func)
 
 
-class TestDataProvider:
-    """测试数据提供器"""
-    
-    @staticmethod
-    def parametrize_from_yaml(test_type: str):
-        """从YAML文件参数化测试用例"""
-        def decorator(func: Callable) -> Callable:
-            from utils.data_loader import data_loader
-            
-            test_cases = data_loader.get_test_cases(test_type)
-            
-            if not test_cases:
-                logger.warning(f"未找到 {test_type} 类型的测试用例数据")
-                return func
-            
-            # 提取测试数据
-            ids = []
-            argvalues = []
-            
-            for case in test_cases:
-                ids.append(case.get("case_id", "unknown"))
-                argvalues.append((case["data"], case["expected"], case))
-            
-            return pytest.mark.parametrize("test_data,expected,case_info", argvalues, ids=ids)(func)
-        
-        return decorator
-
-
 class AssertionUtils:
     """断言工具类"""
     
@@ -86,5 +58,4 @@ class AssertionUtils:
 
 # 创建全局实例
 test_marker = TestMarker()
-data_provider = TestDataProvider()
 assertion_utils = AssertionUtils()
