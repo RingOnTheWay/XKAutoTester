@@ -2131,9 +2131,18 @@ class XKAutoTesterApp {
 
     clearOutput() {
         const output = document.getElementById('test-output');
-        output.innerHTML = '<div class="welcome-message"><span class="material-icons">rocket_launch</span><h3>欢迎使用 XKAutoTester</h3><p>选择测试目录和类型，然后点击运行测试开始自动化测试。</p></div>';
+        output.innerHTML = '<div class="welcome-message"><div class="welcome-text-container"><span class="welcome-text">欢迎使用</span><span class="welcome-app-name">XKAutoTester</span></div><p>创建你的测试计划，然后开始运行自动化测试。</p></div>';
         // 移除有内容时的滚动条样式
         output.classList.remove('has-content');
+        
+        // 重新应用主题色到新创建的welcome-app-name元素
+        const welcomeAppName = document.querySelector('.welcome-app-name');
+        if (welcomeAppName) {
+            // 获取当前主题色
+            const style = getComputedStyle(document.documentElement);
+            const primaryColor = style.getPropertyValue('--primary');
+            welcomeAppName.style.color = primaryColor;
+        }
     }
 
     async loadPytestMarkers() {
