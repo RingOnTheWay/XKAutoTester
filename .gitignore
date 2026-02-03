@@ -81,9 +81,13 @@ build/
 
 # Allure reports (可选，如果不想提交生成的报告)
 allure-reports/
+allure-results/
 
 # Test data (可选，如果不想提交测试数据)
 test_data/
+
+# Test files (可选，如果不想提交测试文件)
+tests/
 
 # Local configuration files
 local_settings.py
@@ -95,3 +99,4 @@ local_settings.py
 # Temporary files
 *.tmp
 *.temp
+test_plans.json

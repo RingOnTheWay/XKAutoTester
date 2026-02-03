@@ -5,7 +5,8 @@
 import logging
 import logging.handlers
 from pathlib import Path
-from config.config import LOG_CONFIG
+import datetime
+from utils.config import config_manager
 
 
 class Logger:
@@ -18,20 +19,36 @@ class Logger:
     
     def _setup_logger(self):
         """配置日志记录器"""
+        # 从配置管理器获取日志配置
+        log_config = config_manager.get("LOG_CONFIG", {})
+        
         # 设置日志级别
-        self.logger.setLevel(getattr(logging, LOG_CONFIG["level"]))
+        log_level = log_config.get("level", "INFO")
+        self.logger.setLevel(getattr(logging, log_level))
         
         # 清除已有的处理器
         self.logger.handlers.clear()
         
         # 创建UTF-8格式化器
-        formatter = logging.Formatter(LOG_CONFIG["format"])
+        log_format = log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter(log_format)
+        
+        # 处理日志文件路径
+        base_path = Path(log_config.get("file_path", ".")).resolve()
+        logs_dir = base_path / "logs" / "XKAT"
+        
+        # 确保logs/XKAT文件夹存在
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 生成当前时间格式化的日志文件名（前缀加上XKAT-，时间单位之间加上"-"）
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        log_file_path = logs_dir / f"XKAT-{current_time}.log"
         
         # 文件处理器 - 按文件大小轮转，设置UTF-8编码
         file_handler = logging.handlers.RotatingFileHandler(
-            LOG_CONFIG["file_path"],
-            maxBytes=LOG_CONFIG["max_bytes"],
-            backupCount=LOG_CONFIG["backup_count"],
+            log_file_path,
+            maxBytes=log_config.get("max_bytes", 10485760),  # 默认10MB
+            backupCount=log_config.get("backup_count", 5),  # 默认保留5个备份
             encoding='utf-8'  # 设置UTF-8编码
         )
         file_handler.setFormatter(formatter)

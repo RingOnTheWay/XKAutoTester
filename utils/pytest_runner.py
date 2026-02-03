@@ -73,47 +73,64 @@ class PytestRunner:
         
         logger.info(f"开始运行Pytest测试，测试计划: {test_plan_name}，参数: {pytest_args}")
         
-        # 运行测试并捕获详细输出
-        import io
+        # 运行测试并实时捕获输出
+        import subprocess
         import sys
-        from contextlib import redirect_stdout, redirect_stderr
+        import re
         
-        # 创建字符串缓冲区来捕获输出
-        stdout_capture = io.StringIO()
-        stderr_capture = io.StringIO()
-        
-        # 重定向标准输出和错误输出
-        with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-            exit_code = pytest.main(pytest_args)
-        
-        # 获取捕获的输出
-        stdout_content = stdout_capture.getvalue()
-        stderr_content = stderr_capture.getvalue()
-        
-        # 清理ANSI转义字符
+        # 清理ANSI转义字符的函数
         def clean_ansi_escape(text):
             """清理ANSI转义字符"""
-            import re
             # 匹配ANSI转义序列的正则表达式
             ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
             return ansi_escape.sub('', text)
         
-        # 清理输出内容中的ANSI转义字符
-        stdout_content = clean_ansi_escape(stdout_content)
-        stderr_content = clean_ansi_escape(stderr_content)
+        # 构建完整的pytest命令
+        pytest_command = [sys.executable, "-m", "pytest"] + pytest_args
+        logger.info(f"执行Pytest命令: {' '.join(pytest_command)}")
         
-        # 记录详细的测试输出到日志
-        if stdout_content:
-            logger.info("=== Pytest标准输出 ===")
-            for line in stdout_content.strip().split('\n'):
-                if line.strip():  # 只记录非空行
-                    logger.info(f"Pytest: {line}")
+        # 使用subprocess.Popen实现实时输出捕获
+        process = subprocess.Popen(
+            pytest_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,  # 直接输出文本而不是字节
+            bufsize=1,  # 行缓冲，确保实时输出
+            universal_newlines=True  # 启用通用换行符支持
+        )
         
-        if stderr_content:
-            logger.error("=== Pytest错误输出 ===")
-            for line in stderr_content.strip().split('\n'):
-                if line.strip():  # 只记录非空行
-                    logger.error(f"Pytest Error: {line}")
+        # 实时读取并处理stdout
+        stdout_content = []
+        while True:
+            line = process.stdout.readline()
+            if not line and process.poll() is not None:
+                break
+            if line:
+                # 清理ANSI转义字符
+                clean_line = clean_ansi_escape(line).rstrip()
+                stdout_content.append(clean_line)
+                if clean_line.strip():
+                    logger.info(f"Pytest: {clean_line}")
+        
+        # 实时读取并处理stderr
+        stderr_content = []
+        while True:
+            line = process.stderr.readline()
+            if not line and process.poll() is not None:
+                break
+            if line:
+                # 清理ANSI转义字符
+                clean_line = clean_ansi_escape(line).rstrip()
+                stderr_content.append(clean_line)
+                if clean_line.strip():
+                    logger.error(f"Pytest Error: {clean_line}")
+        
+        # 获取最终的退出码
+        exit_code = process.wait()
+        
+        # 合并输出内容，用于后续处理
+        stdout_content = '\n'.join(stdout_content)
+        stderr_content = '\n'.join(stderr_content)
         
         # 生成Allure报告
         allure_report_path = None
@@ -123,9 +140,15 @@ class PytestRunner:
             
             # 记录日志信息
             if exit_code == 0:
-                logger.info("✅ 测试成功，已生成Allure报告")
+                if allure_report_path:
+                    logger.info("✅ 测试成功，已生成Allure报告")
+                else:
+                    logger.info("✅ 测试成功，但Allure报告生成失败")
             else:
-                logger.warning(f"测试失败 (退出码: {exit_code})，但已生成Allure报告供分析")
+                if allure_report_path:
+                    logger.warning(f"测试失败 (退出码: {exit_code})，但已生成Allure报告供分析")
+                else:
+                    logger.warning(f"测试失败 (退出码: {exit_code})，且Allure报告生成失败")
         
         return {
             "exit_code": exit_code,
@@ -252,8 +275,24 @@ class PytestRunner:
                 "--clean"
             ])
             
-            # 执行命令
-            result = subprocess.run(allure_cmd, capture_output=True, text=True)
+            # 执行命令 - 使用二进制模式，避免UTF-8解码错误
+            result = subprocess.run(allure_cmd, capture_output=True)
+            
+            # 手动处理输出编码
+            def decode_output(output):
+                """安全解码输出，处理不同编码"""
+                if not output:
+                    return ""
+                try:
+                    return output.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        return output.decode('gbk')  # Windows系统常用GBK编码
+                    except UnicodeDecodeError:
+                        return output.decode('utf-8', errors='replace')  # 最后使用replace模式
+            
+            stdout = decode_output(result.stdout)
+            stderr = decode_output(result.stderr)
             
             if result.returncode == 0:
                 allure_index = allure_report_dir / "index.html"
@@ -273,7 +312,7 @@ class PytestRunner:
                     logger.error("Allure报告生成失败，index.html文件不存在")
                     return None
             else:
-                logger.error(f"Allure命令执行失败: {result.stderr}")
+                logger.error(f"Allure命令执行失败: {result.stderr}，请检查JAVA环境")
                 
                 # 检查Allure是否可用
                 if project_allure_bat.exists() or project_allure.exists():
@@ -384,12 +423,12 @@ class PytestRunner:
             import subprocess
             import threading
             
-            # 启动allure服务器进程
+            # 启动allure服务器进程 - 使用二进制模式，避免UTF-8解码错误
             allure_process = subprocess.Popen(
                 allure_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                # 不使用text=True，避免UnicodeDecodeError
             )
             
             # 存储服务器进程信息
@@ -634,15 +673,55 @@ class PytestRunner:
             测试结果字典
         """
         logger.info(f"开始运行自定义路径测试: {test_paths}")
+        logger.info(f"项目根目录: {self.project_root}")
         
         # 验证测试路径是否存在
         valid_paths = []
         for path in test_paths:
-            full_path = self.project_root / path.rstrip('/')
-            if full_path.exists():
-                valid_paths.append(path)
+            # 处理多种可能的路径格式
+            full_path = None
+            
+            # 1. 尝试直接使用路径（可能是相对路径或绝对路径）
+            if os.path.exists(path):
+                full_path = Path(path)
+            else:
+                # 2. 尝试相对于项目根目录的路径
+                relative_path = self.project_root / path.rstrip('/')
+                if relative_path.exists():
+                    full_path = relative_path
+                else:
+                    # 3. 尝试在tests目录下查找
+                    tests_path = self.project_root / "tests" / path.rstrip('/')
+                    if tests_path.exists():
+                        full_path = tests_path
+                    else:
+                        # 4. 尝试直接使用文件名（在tests目录中查找）
+                        filename_path = self.project_root / "tests" / path
+                        if filename_path.exists():
+                            full_path = filename_path
+            
+            if full_path and full_path.exists():
+                # 安全地转换为相对于项目根目录的路径
+                try:
+                    relative_path = full_path.relative_to(self.project_root)
+                    valid_paths.append(str(relative_path))
+                    logger.info(f"找到测试路径: {path} -> {full_path}")
+                except ValueError:
+                    # 如果路径不在项目根目录的子路径中，直接使用绝对路径
+                    logger.debug(f"测试路径不在项目根目录下: {full_path}")
+                    # 记录详细信息用于调试
+                    logger.debug(f"项目根目录: {self.project_root}")
+                    logger.debug(f"测试文件路径: {full_path}")
+                    # 直接使用绝对路径
+                    valid_paths.append(str(full_path))
+                    logger.info(f"使用绝对路径: {full_path}")
             else:
                 logger.warning(f"测试路径不存在: {path}")
+                # 记录详细的路径信息用于调试
+                logger.debug(f"尝试的路径: {path}")
+                logger.debug(f"项目根目录: {self.project_root}")
+                logger.debug(f"tests目录: {self.project_root / 'tests'}")
+                logger.debug(f"tests目录内容: {list((self.project_root / 'tests').glob('*.py')) if (self.project_root / 'tests').exists() else '目录不存在'}")
         
         if not valid_paths:
             logger.error("没有有效的测试路径")

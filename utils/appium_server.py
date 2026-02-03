@@ -9,6 +9,9 @@ import requests
 import logging
 import os
 from pathlib import Path
+import datetime
+
+from utils.config import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +38,16 @@ class AppiumServer:
         # 查找Appium可执行文件路径
         self.appium_executable = self._find_appium_executable()
         
-        # 日志文件路径 - 使用独立的appium.log文件
-        self.log_dir = Path(__file__).parent.parent / "logs"
-        self.log_dir.mkdir(exist_ok=True)
-        self.log_file = self.log_dir / "appium.log"  # 使用独立的Appium日志文件
+        # 从配置文件获取logs文件夹路径
+        base_path = Path(config_manager.get("LOG_CONFIG.file_path", ".")).resolve()
+        
+        # 在logs文件夹下建立Appium子文件夹
+        self.log_dir = base_path / "logs" / "Appium"
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 生成与XKAT日志格式一致的日志文件名
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        self.log_file = self.log_dir / f"Appium-{current_time}.log"
     
     def _find_appium_executable(self):
         """

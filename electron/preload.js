@@ -1,5 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// 调试信息：确认preload.js已加载
+
+
 // 暴露安全的API给渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
   // 文件操作
@@ -37,6 +40,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Allure服务器管理
   stopAllureServer: () => ipcRenderer.invoke('stop-allure-server'),
   getAllureServerStatus: () => ipcRenderer.invoke('get-allure-server-status'),
+  
+  // 弹窗功能
+  showDialog: (options) => ipcRenderer.invoke('show-dialog', options),
+  
+  // 停止Python测试
+  stopPythonTests: () => ipcRenderer.invoke('stop-python-tests'),
+  
+  // 获取连接的设备列表
+  getConnectedDevices: () => ipcRenderer.invoke('getConnectedDevices'),
+  
+  // 配置管理
+  getConfig: () => ipcRenderer.invoke('get-config'),
+  saveConfig: (config) => ipcRenderer.invoke('save-config', config),
+  
+  // 屏幕控制
+  startScrcpy: (deviceId, scrcpyParams) => ipcRenderer.invoke('start-scrcpy', deviceId, scrcpyParams),
+  
+  // 文件管理器相关
+  executeAdbCommand: (cmd, deviceId) => ipcRenderer.invoke('executeAdbCommand', cmd, deviceId),
+  selectFiles: () => ipcRenderer.invoke('selectFiles'),
+  uploadFile: (localPath, remotePath, deviceId) => ipcRenderer.invoke('uploadFile', localPath, remotePath, deviceId),
+  downloadFile: (remotePath, localPath, deviceId) => ipcRenderer.invoke('downloadFile', remotePath, localPath, deviceId),
+  onDownloadProgress: (callback) => ipcRenderer.on('download-progress', callback),
+  
+  // 路径检查
+  checkPathExists: (path) => ipcRenderer.invoke('checkPathExists', path),
   
   // 移除监听器
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
