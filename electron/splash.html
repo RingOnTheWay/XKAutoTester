@@ -6,7 +6,6 @@
     <title>XKAutoTester - 启动中</title>
 
     <style>
-        /* 引入HarmonyOS Sans SC Regular字体 */
         @font-face {
             font-family: 'HarmonyOS Sans';
             src: url('assets/fonts/HarmonyOS_Sans_SC_Regular.ttf') format('truetype');
@@ -15,434 +14,565 @@
             font-display: swap;
         }
         
-        html, body {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'HarmonyOS Sans', sans-serif;
-            background: transparent;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            height: 100%;
-            color: #333;
-            overflow: hidden;
-            user-select: none; /* 禁止选择页面文字 */
-            transition: background-color 0.3s ease, color 0.3s ease;
-            -webkit-app-region: drag;
+        :root {
+            --primary-color: #4CAF50;
+            --primary-light: #81C784;
+            --primary-dark: #388E3C;
+            --glass-bg: rgba(255, 255, 255, 0.08);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --glass-shadow: rgba(0, 0, 0, 0.1);
+            --text-primary: #FFFFFF;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --success-color: #4CAF50;
+            --warning-color: #FF9800;
+            --error-color: #F44336;
+            --blur-amount: 20px;
         }
         
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            -webkit-app-region: no-drag;
         }
         
-        /* 深色主题 */
-        body.dark-theme {
-            background: transparent;
-            color: #FFFFFF;
-        }
-        
-        .splash-container {
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 6px 12px rgba(128, 128, 128, 0.12), 0 3px 6px rgba(128, 128, 128, 0.08);
-            padding: 40px;
+        html, body {
             width: 100%;
-            max-width: 600px;
-            text-align: center;
-            animation: fadeIn 0.5s ease-in-out;
-            min-height: 350px;
-            overflow-y: auto;
-            position: relative;
-            user-select: none; /* 禁止选择容器内文字 */
-            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'HarmonyOS Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            -webkit-app-region: drag;
+            user-select: none;
+            background: transparent !important;
         }
         
-        /* 深色主题下的容器样式 */
-        body.dark-theme .splash-container {
-            background: #1E1E1E;
-            box-shadow: 0 6px 12px rgba(128, 128, 128, 0.12), 0 3px 6px rgba(128, 128, 128, 0.08);
-        }
-        
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .logo-container {
-            margin-bottom: 20px;
+        body {
+            color: var(--text-primary);
             display: flex;
             justify-content: center;
             align-items: center;
-            background: transparent;
+            position: relative;
+        }
+        
+        .splash-container {
+            position: relative;
+            z-index: 10;
+            background: linear-gradient(135deg, #0F0F23 0%, #1A1A2E 25%, #16213E 50%, #0F0F23 100%);
+            border: none;
+            border-radius: 24px;
+            padding: 40px 40px 10px 40px;
+            width: 90%;
+            max-width: 520px;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            animation: containerFadeIn 0.6s ease-out;
+            -webkit-app-region: no-drag;
+            overflow: hidden;
+        }
+        
+        .splash-container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(76, 175, 80, 0.2) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(33, 150, 243, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(156, 39, 176, 0.1) 0%, transparent 40%);
+            animation: bgPulse 15s ease-in-out infinite;
+            pointer-events: none;
+        }
+        
+        body.light-mode .splash-container::before {
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(76, 175, 80, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(33, 150, 243, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(156, 39, 176, 0.08) 0%, transparent 40%);
+        }
+        
+        body.light-mode .logo-glow {
+            opacity: 0.2;
+        }
+        
+        body.light-mode .logo {
+            background: linear-gradient(135deg, rgba(76, 175, 80, 0.1), rgba(76, 175, 80, 0.05));
+            box-shadow: 
+                0 8px 24px rgba(0, 0, 0, 0.1),
+                0 0 0 1px rgba(76, 175, 80, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+        
+        @keyframes bgPulse {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(-2%, 2%) scale(1.02); }
+            66% { transform: translate(2%, -2%) scale(0.98); }
+        }
+        
+        .splash-container > * {
+            position: relative;
+            z-index: 1;
+        }
+        
+        @keyframes containerFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        
+        .logo-section {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        
+        .logo-wrapper {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 20px;
         }
         
         .logo {
-            width: 80px;
-            height: 80px;
+            width: 88px;
+            height: 88px;
             object-fit: cover;
-            filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.15)) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1));
-            transition: all 0.3s ease;
-            background: transparent;
+            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+            padding: 12px;
+            box-shadow: 
+                0 8px 24px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
         
         .logo:hover {
-            filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.2)) drop-shadow(0 6px 16px rgba(0, 0, 0, 0.15));
-            transform: translateY(-2px);
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 
+                0 12px 32px rgba(0, 0, 0, 0.25),
+                inset 0 1px 0 rgba(255, 255, 255, 0.15);
         }
         
-        h1 {
+        .logo-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 120px;
+            height: 120px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            filter: blur(30px);
+            opacity: 0.3;
+            z-index: -1;
+            animation: logoGlow 3s ease-in-out infinite;
+        }
+        
+        @keyframes logoGlow {
+            0%, 100% { opacity: 0.3; transform: translate(-50%, -50%) scale(1); }
+            50% { opacity: 0.5; transform: translate(-50%, -50%) scale(1.1); }
+        }
+        
+        .app-title {
             font-size: 28px;
-            font-weight: 500;
-            margin-bottom: 10px;
-            color: #333;
-            user-select: none; /* 禁止选择标题文字 */
-            transition: color 0.3s ease;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            margin-bottom: 6px;
+            background: linear-gradient(135deg, #FFFFFF 0%, rgba(255, 255, 255, 0.8) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         
-        .subtitle {
+        .app-subtitle {
             font-size: 14px;
-            color: #666;
-            margin-bottom: 30px;
-            user-select: none; /* 禁止选择副标题文字 */
-            transition: color 0.3s ease;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
         }
         
-        .progress-container {
-            margin: 30px 0;
+        .progress-section {
+            margin-bottom: 20px;
         }
         
-        .progress-bar {
-            width: 100%;
+        .progress-bar-container {
+            position: relative;
             height: 6px;
-            background: #e0e0e0;
+            background: rgba(255, 255, 255, 0.1);
             border-radius: 3px;
             overflow: hidden;
-            margin-bottom: 10px;
-            transition: background-color 0.3s ease;
+            margin-bottom: 12px;
+        }
+        
+        .progress-bar-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(255, 255, 255, 0.1) 50%, 
+                transparent 100%);
+            animation: shimmer 2s ease-in-out infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
         }
         
         .progress-fill {
             height: 100%;
             border-radius: 3px;
+            background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
             width: 0%;
-            transition: width 0.3s ease;
+            transition: width 0.4s ease;
+            position: relative;
+        }
+        
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(255, 255, 255, 0.3) 50%, 
+                transparent 100%);
+            animation: progressShine 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes progressShine {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
         }
         
         .progress-text {
-            font-size: 14px;
-            color: #666;
-            user-select: none; /* 禁止选择进度文字 */
-            transition: color 0.3s ease;
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-align: center;
         }
         
-        /* 深色主题下的文本和进度条样式 */
-        body.dark-theme h1 {
-            color: #FFFFFF;
-        }
-        
-        body.dark-theme .subtitle {
-            color: #B0B0B0;
-        }
-        
-        body.dark-theme .progress-bar {
-            background: #333333;
-        }
-        
-        body.dark-theme .progress-text {
-            color: #B0B0B0;
-        }
-        
-        /* 深色主题下的检查项样式 */
-        body.dark-theme .check-text {
-            color: #FFFFFF;
-        }
-        
-        body.dark-theme .check-status {
-            color: #B0B0B0;
-        }
-        
-        /* 深色主题下的检查项状态颜色 */
-        body.dark-theme .check-icon.success {
-            color: #4caf50;
-        }
-        
-        body.dark-theme .check-icon.warning {
-            color: #ff9800;
-        }
-        
-        body.dark-theme .check-icon.error {
-            color: #f44336;
-        }
-        
-        body.dark-theme .check-status.success {
-            color: #4caf50;
-        }
-        
-        body.dark-theme .check-status.warning {
-            color: #ff9800;
-        }
-        
-        body.dark-theme .check-status.error {
-            color: #f44336;
-        }
-        
-
-        
-        .checks-container {
-            margin-top: 30px;
-            text-align: left;
+        .checks-section {
+            margin-bottom: 8px;
         }
         
         .check-item {
             display: flex;
             align-items: center;
-            margin-bottom: 12px;
-            font-size: 14px;
-            user-select: none; /* 禁止选择检查项文字 */
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.2s ease;
+        }
+        
+        .check-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.1);
         }
         
         .check-icon {
-            width: 20px;
-            height: 20px;
+            width: 22px;
+            height: 22px;
             margin-right: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
         }
         
-        .check-icon.success {
-            color: #4caf50;
+        .check-icon svg {
+            width: 18px;
+            height: 18px;
         }
         
-        .check-icon.warning {
-            color: #ff9800;
+        .check-icon.success svg {
+            color: var(--success-color);
+            filter: drop-shadow(0 0 6px rgba(76, 175, 80, 0.5));
         }
         
-        .check-icon.error {
-            color: #f44336;
+        .check-icon.warning svg {
+            color: var(--warning-color);
+            filter: drop-shadow(0 0 6px rgba(255, 152, 0, 0.5));
+        }
+        
+        .check-icon.error svg {
+            color: var(--error-color);
+            filter: drop-shadow(0 0 6px rgba(244, 67, 54, 0.5));
         }
         
         .check-text {
             flex: 1;
+            font-size: 13px;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .check-status-wrapper {
+            position: static;
+            flex-shrink: 0;
+            max-width: 180px;
         }
         
         .check-status {
+            font-size: 12px;
             font-weight: 500;
-            max-width: 300px;
+            padding: 4px 10px;
+            border-radius: 6px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             display: inline-block;
-            vertical-align: middle;
+            max-width: 100%;
+            position: relative;
         }
         
         .check-status.success {
-            color: #4caf50;
+            color: var(--success-color);
+            background: rgba(76, 175, 80, 0.15);
         }
         
         .check-status.warning {
-            color: #ff9800;
+            color: var(--warning-color);
+            background: rgba(255, 152, 0, 0.15);
         }
         
         .check-status.error {
-            color: #f44336;
+            color: var(--error-color);
+            background: rgba(244, 67, 54, 0.15);
         }
         
-        /* 禁止所有元素被选择 */
-        * {
-            user-select: none;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-        }
-        
-        /* 允许title属性正常显示 */
-        .check-status {
-            user-select: none;
-            pointer-events: auto;
-        }
-        
-        .error-modal {
+        .check-status-tooltip {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        
-        .error-content {
-            background: white;
+            background: linear-gradient(135deg, rgba(26, 26, 46, 0.95) 0%, rgba(22, 33, 62, 0.95) 100%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: var(--text-primary);
+            padding: 10px 14px;
             border-radius: 12px;
-            padding: 30px;
-            width: 90%;
-            max-width: 500px;
-            text-align: left;
+            font-size: 12px;
+            z-index: 10000;
+            max-width: 300px;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            pointer-events: none;
+            word-wrap: break-word;
+            white-space: normal;
+            line-height: 1.5;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
         }
         
-        .error-content h2 {
-            color: #f44336;
-            margin-bottom: 15px;
-            font-size: 20px;
+        .actions-section {
+            display: none;
+            margin-top: 20px;
+            gap: 10px;
         }
         
-        .error-content p {
-            margin-bottom: 20px;
-            color: #666;
-        }
-        
-        .error-content ul {
-            margin-bottom: 20px;
-            padding-left: 20px;
-        }
-        
-        .error-content li {
-            margin-bottom: 8px;
-            color: #666;
-        }
-        
-        .button {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
+        .action-btn {
+            flex: 1;
+            padding: 12px 16px;
             border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
+            border-radius: 12px;
             font-size: 14px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
+            font-family: inherit;
         }
         
-        .button:hover {
+        .action-btn.primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            box-shadow: 0 4px 16px rgba(76, 175, 80, 0.3);
+        }
+        
+        .action-btn.primary:hover {
             transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(76, 175, 80, 0.4);
         }
         
-        .button:active {
+        .action-btn.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        
+        .action-btn.secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+        
+        .action-btn:active {
             transform: translateY(0);
         }
         
-        @media (max-width: 768px) {
-            .splash-container {
-                padding: 30px 20px;
-            }
-            
-            h1 {
-                font-size: 24px;
+        .version-info {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 11px;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+        }
+        
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
             }
         }
     </style>
 </head>
 <body>
     <div class="splash-container">
-        <div class="logo-container">
-            <img src="assets/icon.png" alt="Logo" class="logo">
+        <div class="logo-section">
+            <div class="logo-wrapper">
+                <div class="logo-glow"></div>
+                <img src="assets/icon.png" alt="Logo" class="logo">
+            </div>
+            <h1 class="app-title">XKAutoTester</h1>
+            <p class="app-subtitle" data-i18n="splash.subtitle">自动化测试工具</p>
         </div>
-        <h1>XKAutoTester</h1>
-        <p class="subtitle">自动化测试工具</p>
         
-        <div class="progress-container">
-            <div class="progress-bar">
+        <div class="progress-section">
+            <div class="progress-bar-container">
+                <div class="progress-bar-bg"></div>
                 <div class="progress-fill" id="progressFill"></div>
             </div>
-            <div class="progress-text" id="progressText">准备中...</div>
+            <div class="progress-text" id="progressText" data-i18n="splash.preparing">准备中...</div>
         </div>
         
-        <div class="checks-container" id="checksContainer">
-            <!-- 检查项将通过JavaScript动态添加 -->
+        <div class="checks-section" id="checksContainer">
         </div>
         
-        <div class="actions-container" id="actionsContainer" style="display: none; margin-top: 30px; text-align: center;">
-            <button class="button" id="enterButton" onclick="enterMainApp()" style="margin-right: 12px;">进入程序</button>
-            <button class="button" id="exitButton" onclick="exitApp()">退出程序</button>
+        <div class="actions-section" id="actionsContainer">
+            <button class="action-btn primary" id="enterButton" onclick="enterMainApp()" data-i18n="splash.enterApp">进入程序</button>
+            <button class="action-btn secondary" id="exitButton" onclick="exitApp()" data-i18n="splash.exitApp">退出程序</button>
         </div>
+        
+        <div class="version-info" id="versionInfo"></div>
     </div>
     
     <script>
-        const { ipcRenderer } = require('electron');
+        const SVG_ICONS = {
+            success: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z" clip-rule="evenodd"/></svg>`,
+            warning: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.2 4.5-2.599 4.5H4.645c-2.4 0-3.753-2.5-2.599-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a1.125 1.125 0 1 0 0-2.25 1.125 1.125 0 0 0 0 2.25Z" clip-rule="evenodd"/></svg>`,
+            error: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-1.72 6.97a.75.75 0 1 0-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 1 0 1.06 1.06L12 13.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L13.06 12l1.72-1.72a.75.75 0 1 0-1.06-1.06L12 10.94l-1.72-1.72Z" clip-rule="evenodd"/></svg>`
+        };
         
-        // 环境检查结果
+        let i18n;
+        
+        async function initI18n() {
+            try {
+                if (window.electronAPI && window.electronAPI.i18n) {
+                    i18n = window.electronAPI.i18n;
+                    updateTranslations();
+                }
+            } catch (error) {
+                console.error('初始化 i18n 失败:', error);
+            }
+        }
+        
+        function updateTranslations() {
+            if (!i18n) return;
+            const elements = document.querySelectorAll('[data-i18n]');
+            elements.forEach(element => {
+                const key = element.getAttribute('data-i18n');
+                if (key) {
+                    const translation = i18n.t(key);
+                    if (translation) {
+                        element.textContent = translation;
+                    }
+                }
+            });
+        }
+        
+        function t(key, defaultValue) {
+            if (i18n) {
+                return i18n.t(key) || defaultValue;
+            }
+            return defaultValue;
+        }
+        
         let checkResults = {
             required: [],
             warnings: []
         };
         
-        // 更新进度条
         function updateProgress(percentage, text) {
             document.getElementById('progressFill').style.width = `${percentage}%`;
             document.getElementById('progressText').textContent = text;
         }
         
-        // 添加检查项
         function addCheckItem(name, status, message) {
             const container = document.getElementById('checksContainer');
             const checkItem = document.createElement('div');
             checkItem.className = 'check-item';
             
-            let icon, statusClass;
-            switch (status) {
-                case 'success':
-                    icon = '✓';
-                    statusClass = 'success';
-                    break;
-                case 'warning':
-                    icon = '⚠';
-                    statusClass = 'warning';
-                    break;
-                case 'error':
-                    icon = '✗';
-                    statusClass = 'error';
-                    break;
-            }
+            const iconSvg = SVG_ICONS[status] || SVG_ICONS.success;
             
-            // 创建状态元素并添加title属性
-            const statusElement = document.createElement('div');
-            statusElement.className = `check-status ${statusClass}`;
-            statusElement.textContent = message;
-            statusElement.title = message; // 添加title属性以显示完整内容
-            
-            // 创建其他元素
-            const iconElement = document.createElement('div');
-            iconElement.className = `check-icon ${statusClass}`;
-            iconElement.textContent = icon;
-            
-            const textElement = document.createElement('div');
-            textElement.className = 'check-text';
-            textElement.textContent = name;
-            
-            // 组装checkItem
-            checkItem.appendChild(iconElement);
-            checkItem.appendChild(textElement);
-            checkItem.appendChild(statusElement);
+            checkItem.innerHTML = `
+                <div class="check-icon ${status}">${iconSvg}</div>
+                <div class="check-text">${name}</div>
+                <div class="check-status-wrapper">
+                    <div class="check-status ${status}">${message}</div>
+                </div>
+            `;
             
             container.appendChild(checkItem);
+            
+            const wrapper = checkItem.querySelector('.check-status-wrapper');
+            const statusEl = wrapper.querySelector('.check-status');
+            
+            let tooltip = null;
+            
+            wrapper.addEventListener('mouseenter', () => {
+                if (!tooltip) {
+                    tooltip = document.createElement('div');
+                    tooltip.className = 'check-status-tooltip';
+                    tooltip.textContent = message;
+                    document.body.appendChild(tooltip);
+                }
+                const rect = statusEl.getBoundingClientRect();
+                tooltip.style.left = rect.left + 'px';
+                tooltip.style.top = (rect.bottom + 8) + 'px';
+                tooltip.style.maxWidth = Math.min(300, window.innerWidth - rect.left - 20) + 'px';
+                tooltip.style.opacity = '1';
+                tooltip.style.visibility = 'visible';
+            });
+            
+            wrapper.addEventListener('mouseleave', () => {
+                if (tooltip) {
+                    tooltip.style.opacity = '0';
+                    tooltip.style.visibility = 'hidden';
+                }
+            });
         }
         
-        // 进入主程序
         function enterMainApp() {
-            ipcRenderer.send('splash-ready');
+            window.electronAPI.send('splash-ready');
         }
         
-        // 退出程序
         function exitApp() {
             window.close();
         }
         
-        // 显示操作按钮
         function showActionButtons(canEnter) {
             const actionsContainer = document.getElementById('actionsContainer');
             const enterButton = document.getElementById('enterButton');
@@ -457,154 +587,182 @@
             }
             
             actionsContainer.style.display = 'flex';
-            actionsContainer.style.justifyContent = 'center';
-            actionsContainer.style.gap = '12px';
-            actionsContainer.style.marginTop = '20px';
         }
         
-        // 应用黑暗模式
         function applyDarkMode(isDark) {
-            if (isDark) {
-                document.body.classList.add('dark-theme');
+            const container = document.querySelector('.splash-container');
+            const logoGlow = document.querySelector('.logo-glow');
+            const appTitle = document.querySelector('.app-title');
+            const tooltipStyle = document.querySelector('.tooltip-light-style');
+            
+            if (!isDark) {
+                document.body.classList.add('light-mode');
+                document.body.style.background = 'transparent';
+                document.documentElement.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.85)');
+                document.documentElement.style.setProperty('--glass-border', 'rgba(200, 200, 200, 0.3)');
+                document.documentElement.style.setProperty('--glass-shadow', 'rgba(0, 0, 0, 0.15)');
+                document.documentElement.style.setProperty('--text-primary', '#1A1A2E');
+                document.documentElement.style.setProperty('--text-secondary', 'rgba(26, 26, 46, 0.7)');
+                document.documentElement.style.setProperty('--text-muted', 'rgba(26, 26, 46, 0.5)');
+                
+                if (container) {
+                    const themeColor = getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() || '#4CAF50';
+                    container.style.background = `linear-gradient(135deg, 
+                        rgba(255, 255, 255, 0.98) 0%, 
+                        rgba(245, 250, 245, 0.98) 25%, 
+                        rgba(240, 248, 240, 0.98) 50%, 
+                        rgba(250, 255, 250, 0.98) 100%)`;
+                    container.style.borderColor = 'rgba(76, 175, 80, 0.2)';
+                    container.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(76, 175, 80, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9)';
+                }
+                
+                if (appTitle) {
+                    appTitle.style.background = 'linear-gradient(135deg, #1A1A2E 0%, #2A2A3E 100%)';
+                    appTitle.style.webkitBackgroundClip = 'text';
+                    appTitle.style.webkitTextFillColor = 'transparent';
+                    appTitle.style.backgroundClip = 'text';
+                }
+                
+                document.querySelectorAll('.check-item').forEach(item => {
+                    item.style.background = 'rgba(76, 175, 80, 0.05)';
+                    item.style.borderColor = 'rgba(76, 175, 80, 0.1)';
+                });
+                
+                document.querySelectorAll('.check-text').forEach(el => {
+                    el.style.color = '#1A1A2E';
+                });
+                
+                document.querySelectorAll('.progress-bar-container').forEach(el => {
+                    el.style.background = 'rgba(76, 175, 80, 0.1)';
+                });
+                
+                document.querySelectorAll('.progress-text').forEach(el => {
+                    el.style.color = 'rgba(26, 26, 46, 0.7)';
+                });
+                
+                document.querySelectorAll('.app-subtitle').forEach(el => {
+                    el.style.color = 'rgba(26, 26, 46, 0.7)';
+                });
+                
+                document.querySelectorAll('.version-info').forEach(el => {
+                    el.style.color = 'rgba(26, 26, 46, 0.5)';
+                });
+                
+                document.querySelectorAll('.action-btn.secondary').forEach(el => {
+                    el.style.background = 'rgba(76, 175, 80, 0.1)';
+                    el.style.color = '#1A1A2E';
+                    el.style.borderColor = 'rgba(76, 175, 80, 0.2)';
+                });
+                
+                if (!tooltipStyle) {
+                    const style = document.createElement('style');
+                    style.className = 'tooltip-light-style';
+                    style.textContent = `
+                        .check-status-tooltip {
+                            background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 250, 245, 0.98) 100%) !important;
+                            border-color: rgba(76, 175, 80, 0.2) !important;
+                            color: #1A1A2E !important;
+                            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(76, 175, 80, 0.1) !important;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
             } else {
-                document.body.classList.remove('dark-theme');
+                document.body.classList.remove('light-mode');
+                document.body.style.background = 'transparent';
+                
+                if (container) {
+                    container.style.background = 'linear-gradient(135deg, #0F0F23 0%, #1A1A2E 25%, #16213E 50%, #0F0F23 100%)';
+                    container.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                    container.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1)';
+                }
+                
+                if (appTitle) {
+                    appTitle.style.background = 'linear-gradient(135deg, #FFFFFF 0%, rgba(255, 255, 255, 0.8) 100%)';
+                    appTitle.style.webkitBackgroundClip = 'text';
+                    appTitle.style.webkitTextFillColor = 'transparent';
+                    appTitle.style.backgroundClip = 'text';
+                }
+                
+                if (tooltipStyle) {
+                    tooltipStyle.remove();
+                }
             }
         }
         
-        // 加载配置并应用主题
         async function loadConfigAndApplyTheme() {
             try {
-                // 发送获取配置的请求（使用invoke而不是send）
-                const config = await ipcRenderer.invoke('get-config');
-                
-                // 应用黑暗模式
-                const isDark = config?.APP_SETTINGS?.dark_mode || false;
+                const config = await window.electronAPI.getConfig();
+                const isDark = config?.APP_SETTINGS?.dark_mode !== false;
                 applyDarkMode(isDark);
-                
-                // 应用主题色
                 const themeColor = config?.APP_SETTINGS?.theme_color || '#4CAF50';
                 applyThemeColor(themeColor);
             } catch (error) {
                 console.error('加载配置失败:', error);
-                // 默认为亮色主题和默认主题色
-                applyDarkMode(false);
+                applyDarkMode(true);
                 applyThemeColor('#4CAF50');
             }
         }
         
-        // 应用主题色到UI元素
         function applyThemeColor(color) {
-            // 应用到进度条
-            const progressFill = document.getElementById('progressFill');
-            if (progressFill) {
-                // 计算亮色作为渐变的另一部分
-                const lightColor = lightenColor(color, 0.3);
-                progressFill.style.background = `linear-gradient(90deg, ${color}, ${lightColor})`;
-            }
+            document.documentElement.style.setProperty('--primary-color', color);
             
-            // 应用到按钮
-            const buttons = document.querySelectorAll('.button');
-            buttons.forEach(button => {
-                // 计算暗色作为渐变的另一部分
-                const darkColor = darkenColor(color, 0.2);
-                button.style.background = `linear-gradient(135deg, ${color}, ${darkColor})`;
-                button.style.boxShadow = `0 4px 14px rgba(${hexToRgb(color)}, 0.4)`;
-            });
+            const lightColor = lightenColor(color, 0.2);
+            const darkColor = darkenColor(color, 0.15);
+            document.documentElement.style.setProperty('--primary-light', lightColor);
+            document.documentElement.style.setProperty('--primary-dark', darkColor);
             
-            // 应用到卡片阴影
-            const splashContainer = document.querySelector('.splash-container');
-            if (splashContainer) {
-                const isDarkMode = document.body.classList.contains('dark-theme');
-                if (isDarkMode) {
-                    // 暗黑模式下使用主题色
-                    splashContainer.style.boxShadow = `0 6px 12px rgba(${hexToRgb(color)}, 0.12), 0 3px 6px rgba(${hexToRgb(color)}, 0.08)`;
-                } else {
-                    // 普通模式下使用#808080
-                    splashContainer.style.boxShadow = `0 6px 12px rgba(128, 128, 128, 0.12), 0 3px 6px rgba(128, 128, 128, 0.08)`;
-                }
+            const logoGlow = document.querySelector('.logo-glow');
+            if (logoGlow) {
+                logoGlow.style.background = color;
             }
         }
         
-        // 计算亮色
-        function lightenColor(color, amount) {
-            color = color.replace('#', '');
-            let r = parseInt(color.substring(0, 2), 16);
-            let g = parseInt(color.substring(2, 4), 16);
-            let b = parseInt(color.substring(4, 6), 16);
-            
-            r = Math.min(255, Math.floor(r + (255 - r) * amount));
-            g = Math.min(255, Math.floor(g + (255 - g) * amount));
-            b = Math.min(255, Math.floor(b + (255 - b) * amount));
-            
-            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+        function lightenColor(hex, percent) {
+            const num = parseInt(hex.replace('#', ''), 16);
+            const amt = Math.round(2.55 * percent * 100);
+            const R = Math.min(255, (num >> 16) + amt);
+            const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
+            const B = Math.min(255, (num & 0x0000FF) + amt);
+            return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
         }
         
-        // 计算暗色
-        function darkenColor(color, amount) {
-            color = color.replace('#', '');
-            let r = parseInt(color.substring(0, 2), 16);
-            let g = parseInt(color.substring(2, 4), 16);
-            let b = parseInt(color.substring(4, 6), 16);
-            
-            r = Math.max(0, Math.floor(r * (1 - amount)));
-            g = Math.max(0, Math.floor(g * (1 - amount)));
-            b = Math.max(0, Math.floor(b * (1 - amount)));
-            
-            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+        function darkenColor(hex, percent) {
+            const num = parseInt(hex.replace('#', ''), 16);
+            const amt = Math.round(2.55 * percent * 100);
+            const R = Math.max(0, (num >> 16) - amt);
+            const G = Math.max(0, ((num >> 8) & 0x00FF) - amt);
+            const B = Math.max(0, (num & 0x0000FF) - amt);
+            return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
         }
         
-        // HEX颜色转RGB
         function hexToRgb(hex) {
-            hex = hex.replace('#', '');
-            const r = parseInt(hex.substring(0, 2), 16);
-            const g = parseInt(hex.substring(2, 4), 16);
-            const b = parseInt(hex.substring(4, 6), 16);
-            return `${r}, ${g}, ${b}`;
+            const num = parseInt(hex.replace('#', ''), 16);
+            return `${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}`;
         }
         
-        // 初始化检查
-        async function initChecks() {
-            // 先加载配置并应用主题
-            await loadConfigAndApplyTheme();
-            
-            updateProgress(0, '开始环境检查...');
-            
-            // 监听主进程的检查结果
-            ipcRenderer.on('check-result', (event, data) => {
-                const { name, status, message, isRequired } = data;
-                
-                addCheckItem(name, status, message);
-                
-                if (status === 'error') {
-                    if (isRequired) {
-                        checkResults.required.push(`${name}: ${message}`);
-                    } else {
-                        checkResults.warnings.push(`${name}: ${message}`);
-                    }
-                } else if (status === 'warning') {
-                    checkResults.warnings.push(`${name}: ${message}`);
-                }
-            });
-            
-            ipcRenderer.on('check-progress', (event, data) => {
-                updateProgress(data.percentage, data.message);
-            });
-            
-            ipcRenderer.on('check-complete', (event, data) => {
-                const { requiredErrors, warnings } = data;
-                updateProgress(100, '环境检查完成');
-                
-                // 显示操作按钮
-                const canEnter = requiredErrors.length === 0;
-                showActionButtons(canEnter);
-            });
-            
-            // 开始检查
-            ipcRenderer.send('start-checks');
-        }
+        window.electronAPI.on('check-progress', (data) => {
+            updateProgress(data.percentage, data.message);
+        });
         
-        // 页面加载完成后开始检查
-        window.onload = initChecks;
+        window.electronAPI.on('check-result', (data) => {
+            addCheckItem(data.name, data.status, data.message);
+        });
+        
+        window.electronAPI.on('check-complete', (data) => {
+            updateProgress(100, window.electronAPI.i18n.t('splash.checkComplete'));
+            const canEnter = data.requiredErrors.length === 0;
+            showActionButtons(canEnter);
+        });
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            initI18n();
+            loadConfigAndApplyTheme();
+            // 触发环境检查
+            setTimeout(() => {
+                window.electronAPI.send('start-checks');
+            }, 500);
+        });
     </script>
 </body>
 </html>

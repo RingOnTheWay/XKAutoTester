@@ -1,6 +1,6 @@
 {
   "name": "xkautotester-electron",
-  "version": "0.1.1-dev.2",
+  "version": "0.1.2-dev.1",
   "description": "XKAutoTester - 基于Electron+Python的自动化测试平台",
   "main": "main.js",
   "scripts": {
@@ -24,7 +24,9 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "i18next": "^25.8.0",
+    "i18next-browser-languagedetector": "^8.2.0"
   },
   "build": {
     "appId": "com.ring.xkautotester",

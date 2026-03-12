@@ -4,6 +4,7 @@
 """
 import serial
 import logging
+import time
 
 # 获取logger实例，避免重复配置
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ class BLEDevice:
     基于MB026A_BLE模块的实际串口通信实现
     支持蓝牙设备的初始化和数据发送
     """
-    def __init__(self, port, baudrate=9600, uuidw=None, uuidn=None, uuids=None, ble_name=None, adv_data=None):
+    def __init__(self, port, baudrate=9600, uuidw=None, uuidn=None, uuids=None, ble_name=None, adv_data=None, response_timeout=5):
         """
         初始化蓝牙设备
         
@@ -27,6 +28,7 @@ class BLEDevice:
             uuids: 主服务UUID (可选)
             ble_name: 蓝牙设备名称 (可选)
             adv_data: 自定义广播数据 (可选)
+            response_timeout: 响应超时时间（秒），默认5秒
         """
         if not port:
             raise ValueError("必须提供串口端口号")
@@ -35,6 +37,7 @@ class BLEDevice:
         self.baudrate = baudrate
         self.ser = None
         self.is_initialized = False
+        self.response_timeout = response_timeout
         # UUID参数，初始为None，需要通过AT指令设置
         self.uuidw = uuidw  # 写服务UUID
         self.uuidn = uuidn  # 读服务UUID
@@ -42,7 +45,23 @@ class BLEDevice:
         # 蓝牙名称和广播数据参数
         self.ble_name = ble_name  # 蓝牙设备名称
         self.adv_data = adv_data  # 自定义广播数据
-        logger.info(f"初始化蓝牙设备，端口: {port}")
+        logger.info(f"初始化蓝牙设备，端口: {port}，超时设置: {response_timeout}秒")
+    
+    def _read_response(self):
+        """
+        响应读取
+        
+        Returns:
+            str: 响应内容，超时返回None
+        """
+        start_time = time.time()
+        while time.time() - start_time < self.response_timeout:
+            if self.ser and self.ser.in_waiting > 0:
+                response = self.ser.readline().decode().strip()
+                if response:
+                    return response
+            time.sleep(0.1)
+        return None
     
     def initialize(self):
         """
@@ -122,16 +141,18 @@ class BLEDevice:
             bool: 设置是否成功
         """
         try:
-            # 构建AT指令 (假设指令格式为 AT+NAME=<name>)
             at_command = f"AT+NAME={ble_name}\r\n"
-            
-            # 发送AT指令
             self.ser.write(at_command.encode())
-            response = self.ser.readline().decode().strip()
-            logger.info(f"发送AT指令设置蓝牙名称: {at_command.strip()}, 响应: {response}")
+            logger.info(f"发送AT指令设置蓝牙名称: {at_command.strip()}")
+            
+            response = self._read_response()
+            if response is None:
+                logger.error(f"设置蓝牙名称超时（{self.response_timeout}秒内未收到响应）")
+                return False
+            
+            logger.info(f"响应: {response}")
             success = response == "OK"
             
-            # 更新蓝牙名称属性
             if success:
                 self.ble_name = ble_name
             
@@ -151,16 +172,18 @@ class BLEDevice:
             bool: 设置是否成功
         """
         try:
-            # 构建AT指令 (指令格式为 AT+AMDATA=<hex_data>)
             at_command = f"AT+AMDATA={adv_data}\r\n"
-            
-            # 发送AT指令
             self.ser.write(at_command.encode())
-            response = self.ser.readline().decode().strip()
-            logger.info(f"发送AT指令设置广播数据: {at_command.strip()}, 响应: {response}")
+            logger.info(f"发送AT指令设置广播数据: {at_command.strip()}")
+            
+            response = self._read_response()
+            if response is None:
+                logger.error(f"设置广播数据超时（{self.response_timeout}秒内未收到响应）")
+                return False
+            
+            logger.info(f"响应: {response}")
             success = response == "OK"
             
-            # 更新广播数据属性
             if success:
                 self.adv_data = adv_data
             
@@ -181,23 +204,22 @@ class BLEDevice:
             bool: 设置是否成功
         """
         try:
-            # 根据规格说明书，AT指令格式为 AT+UUIDX=<UUID>
-
-            # 检查UUID类型有效性
             valid_types = ["UUIDS", "UUIDN", "UUIDW"]
             if uuid_type not in valid_types:
                 logger.error(f"无效的UUID类型: {uuid_type}，支持的类型: {valid_types}")
                 return False
             
-            # 构建AT指令
             at_command = f"AT+{uuid_type}={uuid_value}\r\n"
-            
-            # 发送AT指令
             self.ser.write(at_command.encode())
-            response = self.ser.readline().decode().strip()
-            logger.info(f"发送AT指令: {at_command.strip()}, 响应: {response}")
+            logger.info(f"发送AT指令: {at_command.strip()}")
             
-            # 更新相应的UUID属性
+            response = self._read_response()
+            if response is None:
+                logger.error(f"设置{uuid_type}超时（{self.response_timeout}秒内未收到响应）")
+                return False
+            
+            logger.info(f"响应: {response}")
+            
             if response == "OK":
                 if uuid_type == "UUIDS":
                     self.uuids = uuid_value
@@ -223,23 +245,22 @@ class BLEDevice:
             str: UUID值，如果获取失败返回None
         """
         try:
-            # 检查UUID类型有效性
             valid_types = ["UUIDS", "UUIDN", "UUIDW"]
             if uuid_type not in valid_types:
                 logger.error(f"无效的UUID类型: {uuid_type}，支持的类型: {valid_types}")
                 return None
             
-            # 构建AT指令
             at_command = f"AT+{uuid_type}?\r\n"
-            
-            # 发送AT指令
             self.ser.write(at_command.encode())
-            response = self.ser.readline().decode().strip()
-            logger.info(f"发送AT指令: {at_command.strip()}, 响应: {response}")
+            logger.info(f"发送AT指令: {at_command.strip()}")
             
-            # 解析响应格式: +UUIDX:<UUID>
-
-            # 检查响应格式并提取UUID
+            response = self._read_response()
+            if response is None:
+                logger.error(f"查询{uuid_type}超时（{self.response_timeout}秒内未收到响应）")
+                return None
+            
+            logger.info(f"响应: {response}")
+            
             if response.startswith(f"+{uuid_type}:"):
                 return response[len(f"+{uuid_type}:"):]
             return None
@@ -280,16 +301,17 @@ class BLEDevice:
             bool: 广播开启是否成功
         """
         try:
-            # 发送开启广播指令 AT+ADV=1
             adv_command = "AT+ADV=1\r\n"
             self.ser.write(adv_command.encode())
             logger.info(f"发送开启广播指令: {adv_command.strip()}")
             
-            # 读取响应
-            response = self.ser.readline().decode().strip()
-            logger.info(f"广播开启指令响应: {response}")
+            response = self._read_response()
+            if response is None:
+                logger.error(f"开启广播超时（{self.response_timeout}秒内未收到响应）")
+                return False
             
-            # 检查响应是否为OK
+            logger.info(f"响应: {response}")
+            
             if response == "OK":
                 logger.info("蓝牙广播开启成功")
                 return True
@@ -308,21 +330,24 @@ class BLEDevice:
             bool: 重启是否成功
         """
         try:
-            # 发送重启指令 AT+REBOOT=1
             reboot_command = "AT+REBOOT=1\r\n"
             self.ser.write(reboot_command.encode())
             logger.info(f"发送设备重启指令: {reboot_command.strip()}")
             
-            # 根据规格说明书，成功响应为 "OK<CR><LF>+READY<CR><LF>"
             # 读取第一行响应（OK）
-            response1 = self.ser.readline().decode().strip()
+            response1 = self._read_response()
+            if response1 is None:
+                logger.error(f"设备重启超时（{self.response_timeout}秒内未收到第一行响应）")
+                return False
             logger.info(f"重启指令第一行响应: {response1}")
             
             # 读取第二行响应（+READY）
-            response2 = self.ser.readline().decode().strip()
+            response2 = self._read_response()
+            if response2 is None:
+                logger.error(f"设备重启超时（{self.response_timeout}秒内未收到第二行响应）")
+                return False
             logger.info(f"重启指令第二行响应: {response2}")
             
-            # 检查响应格式是否正确
             if response1 == "OK" and response2 == "+READY":
                 logger.info("设备重启成功")
                 return True

@@ -19,6 +19,19 @@ logger = logging.getLogger(__name__)
 class AppiumServer:
     """Appium服务器管理器"""
     
+    DEFAULT_HOST = '127.0.0.1'
+    DEFAULT_PORT = 4723
+    DEFAULT_AUTOMATION_NAME = 'UiAutomator2'
+    DEFAULT_SETTINGS_TIMEOUT = 10000
+    DEFAULT_SESSION_TIMEOUT = 60
+    
+    DEFAULT_CAPABILITIES = {
+        'ensure_webviews_have_pages': True,
+        'native_web_screenshot': True,
+        'new_command_timeout': 3600,
+        'connect_hardware_keyboard': True,
+    }
+    
     def __init__(self, host='127.0.0.1', port=4723, log_level='info'):
         """
         初始化Appium服务器配置
@@ -48,6 +61,26 @@ class AppiumServer:
         # 生成与XKAT日志格式一致的日志文件名
         current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         self.log_file = self.log_dir / f"Appium-{current_time}.log"
+    
+    @staticmethod
+    def apply_default_capabilities(options):
+        """
+        将默认的Appium高级配置应用到options对象
+        
+        Args:
+            options: UiAutomator2Options对象
+            
+        Returns:
+            options: 应用了默认配置的options对象
+        """
+        options.automation_name = AppiumServer.DEFAULT_AUTOMATION_NAME
+        options.ensureWebviewsHavePages = AppiumServer.DEFAULT_CAPABILITIES['ensure_webviews_have_pages']
+        options.nativeWebScreenshot = AppiumServer.DEFAULT_CAPABILITIES['native_web_screenshot']
+        options.newCommandTimeout = AppiumServer.DEFAULT_CAPABILITIES['new_command_timeout']
+        options.connectHardwareKeyboard = AppiumServer.DEFAULT_CAPABILITIES['connect_hardware_keyboard']
+        options.androidInstallTimeout = AppiumServer.DEFAULT_SETTINGS_TIMEOUT
+        options.appWaitDuration = AppiumServer.DEFAULT_SETTINGS_TIMEOUT
+        return options
     
     def _find_appium_executable(self):
         """

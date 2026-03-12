@@ -50,11 +50,15 @@ class ElectronTestRunner:
             summary = self.pytest_runner.get_test_summary(result)
             print(summary)
             
-            # 返回成功结果
+            # 根据测试结果的退出码决定success值
+            success = result.get("exit_code", 0) == 0
+            
+            # 返回结果
             return {
-                "success": True,
+                "success": success,
                 "summary": summary,
-                "test_plan_name": test_plan_name
+                "test_plan_name": test_plan_name,
+                "exit_code": result.get("exit_code", 0)
             }
             
         except Exception as e:

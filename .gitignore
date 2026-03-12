@@ -100,3 +100,6 @@ local_settings.py
 *.tmp
 *.temp
 test_plans.json
+
+# Trae IDE
+.trae/

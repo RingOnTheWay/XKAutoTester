@@ -135,10 +135,8 @@ class PytestRunner:
         # 生成Allure报告
         allure_report_path = None
         if generate_allure and self.allure_results_dir.exists():
-            # 无论测试成功还是失败，都生成Allure报告，但不记录测试计划
             allure_report_path = self._generate_allure_report(test_plan_name)
             
-            # 记录日志信息
             if exit_code == 0:
                 if allure_report_path:
                     logger.info("✅ 测试成功，已生成Allure报告")
@@ -149,6 +147,9 @@ class PytestRunner:
                     logger.warning(f"测试失败 (退出码: {exit_code})，但已生成Allure报告供分析")
                 else:
                     logger.warning(f"测试失败 (退出码: {exit_code})，且Allure报告生成失败")
+        
+        # 记录测试计划运行信息
+        self._record_test_plan(test_plan_name, test_paths, markers, allure_report_path)
         
         return {
             "exit_code": exit_code,
@@ -235,19 +236,19 @@ class PytestRunner:
     def _generate_allure_report(self, test_plan_name: str) -> Optional[Path]:
         """生成Allure报告"""
         try:
+            from datetime import datetime
+            
             logger.info(f"开始生成Allure报告，测试计划: {test_plan_name}")
             
-            # 创建测试计划特定的报告目录
-            allure_report_dir = self.allure_report_base_dir / test_plan_name
+            # 使用时间戳创建唯一的报告目录，支持同一测试计划多次运行
+            run_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             
-            # 检查是否已存在报告，如果存在则直接覆盖
-            if allure_report_dir.exists():
-                logger.info(f"测试计划 '{test_plan_name}' 的报告已存在，直接覆盖")
-                print(f"⚠️  测试计划 '{test_plan_name}' 的报告已存在，正在覆盖...")
+            # 创建测试计划特定的报告目录：test_plan_name/run_timestamp
+            test_plan_dir = self.allure_report_base_dir / test_plan_name
+            allure_report_dir = test_plan_dir / run_timestamp
             
-            # 清理旧的报告
-            if allure_report_dir.exists():
-                shutil.rmtree(allure_report_dir)
+            # 确保测试计划目录存在
+            test_plan_dir.mkdir(parents=True, exist_ok=True)
             
             # 使用命令行执行Allure报告生成
             import subprocess
@@ -329,21 +330,51 @@ class PytestRunner:
     
     def _record_test_plan(self, test_plan_name: str, test_paths: List[str], 
                          markers: List[str], allure_report_path: Optional[Path]) -> None:
-        """记录测试计划信息"""
+        """记录测试计划信息，支持一个测试计划关联多个报告"""
         from datetime import datetime
         
-        test_plan = {
-            "name": test_plan_name,
-            "test_paths": test_paths,
-            "markers": markers,
+        # 创建本次运行记录
+        run_record = {
             "report_path": str(allure_report_path) if allure_report_path else None,
             "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
-        self.test_plans.append(test_plan)
         
-        # 保持最近10个测试计划
-        if len(self.test_plans) > 10:
-            self.test_plans = self.test_plans[-10:]
+        # 查找是否已存在同名测试计划
+        existing_plan = None
+        for plan in self.test_plans:
+            if plan.get("name") == test_plan_name:
+                existing_plan = plan
+                break
+        
+        if existing_plan:
+            # 已存在测试计划，添加新的运行记录
+            if "runs" not in existing_plan:
+                existing_plan["runs"] = []
+            existing_plan["runs"].append(run_record)
+            
+            # 保持每个测试计划最多100个运行记录
+            if len(existing_plan["runs"]) > 100:
+                existing_plan["runs"] = existing_plan["runs"][-100:]
+            
+            # 更新最后运行时间
+            existing_plan["last_run"] = run_record["timestamp"]
+            logger.info(f"测试计划 '{test_plan_name}' 添加新的运行记录，共 {len(existing_plan['runs'])} 次运行")
+        else:
+            # 创建新的测试计划
+            test_plan = {
+                "name": test_plan_name,
+                "test_paths": test_paths,
+                "markers": markers,
+                "created": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "last_run": run_record["timestamp"],
+                "runs": [run_record]
+            }
+            self.test_plans.append(test_plan)
+            logger.info(f"创建新的测试计划 '{test_plan_name}'")
+        
+        # 保持最近100个测试计划
+        if len(self.test_plans) > 100:
+            self.test_plans = self.test_plans[-100:]
         
         # 保存到文件
         self._save_test_plans()
@@ -374,32 +405,68 @@ class PytestRunner:
         """获取测试计划历史记录"""
         return self.test_plans.copy()
     
-    def open_allure_report(self, test_plan_name: str = None) -> bool:
-        """打开Allure报告"""
-        # 如果没有指定测试计划名称，使用最新的报告
+    def get_test_plan_runs(self, test_plan_name: str) -> List[Dict[str, Any]]:
+        """获取指定测试计划的所有运行记录"""
+        for plan in self.test_plans:
+            if plan.get("name") == test_plan_name:
+                return plan.get("runs", [])
+        return []
+    
+    def open_allure_report(self, test_plan_name: str = None, run_index: int = -1) -> bool:
+        """
+        打开Allure报告
+        
+        Args:
+            test_plan_name: 测试计划名称，如果为None则使用最新的测试计划
+            run_index: 运行记录索引，-1表示最新一次运行，0表示第一次运行
+        """
+        # 如果没有指定测试计划名称，使用最新的测试计划
         if not test_plan_name:
             if self.test_plans:
                 test_plan_name = self.test_plans[-1]["name"]
             else:
-                # 检查是否有任何报告目录存在
-                report_dirs = []
-                if self.allure_report_base_dir.exists():
-                    for item in self.allure_report_base_dir.iterdir():
-                        if item.is_dir():
-                            report_dirs.append(item.name)
-                
-                if report_dirs:
-                    # 使用最新的报告目录
-                    test_plan_name = report_dirs[-1]
-                else:
-                    logger.error("没有可用的Allure报告，请先生成报告")
-                    return False
+                logger.error("没有可用的测试计划，请先运行测试")
+                return False
         
-        allure_report_dir = self.allure_report_base_dir / test_plan_name
+        # 查找测试计划
+        test_plan = None
+        for plan in self.test_plans:
+            if plan.get("name") == test_plan_name:
+                test_plan = plan
+                break
+        
+        if not test_plan:
+            logger.error(f"测试计划 '{test_plan_name}' 不存在")
+            return False
+        
+        # 获取运行记录
+        runs = test_plan.get("runs", [])
+        if not runs:
+            logger.error(f"测试计划 '{test_plan_name}' 没有运行记录")
+            return False
+        
+        # 处理索引
+        if run_index < 0:
+            run_index = len(runs) + run_index
+        if run_index < 0 or run_index >= len(runs):
+            logger.error(f"运行记录索引 {run_index} 超出范围 (0-{len(runs)-1})")
+            return False
+        
+        # 获取指定的运行记录
+        run_record = runs[run_index]
+        report_path = run_record.get("report_path")
+        
+        if not report_path:
+            logger.error(f"运行记录没有关联的报告路径")
+            return False
+        
+        allure_report_dir = Path(report_path)
         
         if not allure_report_dir.exists():
-            logger.error(f"测试计划 '{test_plan_name}' 的Allure报告不存在")
+            logger.error(f"报告目录不存在: {allure_report_dir}")
             return False
+        
+        logger.info(f"正在打开测试计划 '{test_plan_name}' 的第 {run_index + 1} 次运行报告")
         
         try:
             # 优先使用项目内的allure命令

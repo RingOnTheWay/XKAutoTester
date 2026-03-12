@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XKAutoTester - 自动化测试工具</title>
+    <title>XKAutoTester</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <style>
+        html, body {
+            background: transparent !important;
+        }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -25,20 +27,36 @@
                 </div>
                 <div class="nav-tabs">
                     <div class="nav-tab active" data-tab="test-execution">
-                        <span class="material-icons">play_circle</span>
-                        <span>测试执行</span>
+                        <span class="svg-icon" data-icon="play_circle"></span>
+                        <span data-i18n="tabs.testExecution">测试执行</span>
                     </div>
                     <div class="nav-tab" data-tab="android-connection">
-                        <span class="material-icons">devices</span>
-                        <span>安卓连接</span>
+                        <span class="svg-icon" data-icon="devices"></span>
+                        <span data-i18n="tabs.androidConnection">安卓连接</span>
                     </div>
                     <div class="nav-tab" data-tab="settings">
-                        <span class="material-icons">settings</span>
-                        <span>设置</span>
+                        <span class="svg-icon" data-icon="settings"></span>
+                        <span data-i18n="tabs.settings">设置</span>
                     </div>
                 </div>
                 <div class="nav-right">
-                    <span class="app-version">v0.1.1-dev.2</span>
+                    <div class="window-controls">
+                        <button class="window-control-btn minimize" id="window-minimize" title="最小化">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M5 12h14"/>
+                            </svg>
+                        </button>
+                        <button class="window-control-btn maximize" id="window-maximize" title="最大化">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="4" y="4" width="16" height="16" rx="2"/>
+                            </svg>
+                        </button>
+                        <button class="window-control-btn close" id="window-close" title="关闭">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 6l12 12M6 18L18 6"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
         </nav>
@@ -51,18 +69,18 @@
                     <!-- 左侧面板 -->
                     <div class="left-panel">
                         <!-- 测试目录选择 -->
-                        <div class="material-card elevation-1">
+                        <div class="material-card elevation-1 glass-card">
                             <div class="card-header">
-                                <span class="material-icons">folder_open</span>
-                                <h3>测试目录</h3>
+                                <span class="svg-icon" data-icon="folder_open"></span>
+                                <h3 data-i18n="testExecution.testDirectory">测试目录</h3>
                             </div>
                             <div class="card-content">
                                 <div class="directory-selector">
                                     <button id="select-directory-btn" class="material-button primary">
-                                        <span class="material-icons">folder_open</span>
-                                        选择测试目录
+                                        <span class="svg-icon" data-icon="folder_open"></span>
+                                        <span data-i18n="testExecution.selectTestDirectory">选择测试目录</span>
                                     </button>
-                                    <div id="selected-directory" class="selected-path">未选择目录</div>
+                                    <div id="selected-directory" class="selected-path" data-i18n="testExecution.noDirectorySelected">未选择目录</div>
                                 </div>
                                 <div id="test-files-list" class="test-files-list">
                                     <!-- 测试文件列表将在这里动态生成 -->
@@ -71,46 +89,76 @@
                         </div>
 
                         <!-- 测试计划管理 -->
-                        <div id="test-plan-section" class="material-card elevation-1 hidden">
+                        <div id="test-plan-section" class="material-card elevation-1 glass-card hidden">
                             <div class="card-header">
-                                <span class="material-icons">assignment</span>
-                                <h3>测试计划</h3>
+                                <span class="svg-icon" data-icon="assignment"></span>
+                                <h3 data-i18n="testExecution.testPlan">测试计划</h3>
                             </div>
                             <div class="card-content">
                                 <div class="test-plan-controls">
                         <button id="new-plan-btn" class="material-button outlined">
-                            <span class="material-icons">add</span>
-                            新建计划
+                            <span class="svg-icon" data-icon="add"></span>
+                            <span data-i18n="testExecution.newPlan">新建计划</span>
                         </button>
                         <button id="edit-plan-btn" class="material-button outlined">
-                            <span class="material-icons">edit</span>
-                            编辑计划
+                            <span class="svg-icon" data-icon="edit"></span>
+                            <span data-i18n="testExecution.editPlan">编辑计划</span>
                         </button>
                         <button id="delete-plan-btn" class="material-button error">
-                            <span class="material-icons">delete</span>
-                            删除计划
+                            <span class="svg-icon" data-icon="delete"></span>
+                            <span data-i18n="testExecution.deletePlan">删除计划</span>
                         </button>
                     </div>
                                 <div id="test-plans-list" class="test-plans-list">
                                     <div class="placeholder-message">
-                                        <span class="material-icons">info</span>
-                                        <span>请先选择测试目录</span>
+                                        <span class="svg-icon" data-icon="info"></span>
+                                        <span data-i18n="testExecution.selectTestDirectoryFirstPlaceholder">请先选择测试目录</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- 测试类型选择 -->
-                        <div class="material-card elevation-1">
+                        <div class="material-card elevation-1 glass-card">
                             <div class="card-header">
-                                <span class="material-icons">category</span>
-                                <h3>测试类型</h3>
+                                <span class="svg-icon" data-icon="category"></span>
+                                <h3 data-i18n="testExecution.testType">测试类型</h3>
                             </div>
                             <div class="card-content">
                                 <div id="test-type-selector" class="test-type-selector">
                                     <div class="placeholder-message">
-                                        <span class="material-icons">info</span>
-                                        <span>请先选择测试目录</span>
+                                        <span class="svg-icon" data-icon="info"></span>
+                                        <span data-i18n="testExecution.selectTestDirectoryFirstPlaceholder">请先选择测试目录</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 定时计划管理 -->
+                        <div id="scheduled-plan-section" class="material-card elevation-1 glass-card hidden">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="schedule"></span>
+                                <h3 data-i18n="testExecution.scheduledPlan">定时计划</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="scheduled-plan-controls">
+                        <button id="new-scheduled-plan-btn" class="material-button outlined">
+                            <span class="svg-icon" data-icon="add"></span>
+                            <span data-i18n="testExecution.newScheduledPlan">新建定时</span>
+                        </button>
+                        <button id="edit-scheduled-plan-btn" class="material-button outlined">
+                            <span class="svg-icon" data-icon="edit"></span>
+                            <span data-i18n="testExecution.editScheduledPlan">编辑定时</span>
+                        </button>
+                        <button id="delete-scheduled-plan-btn" class="material-button error">
+                            <span class="svg-icon" data-icon="delete"></span>
+                            <span data-i18n="testExecution.deleteScheduledPlan">删除定时</span>
+                        </button>
+                    </div>
+                                <div id="scheduled-plans-list" class="scheduled-plans-list">
+                                    <div class="placeholder-message">
+                                        <span class="svg-icon" data-icon="info"></span>
+                                        <span data-i18n="testExecution.noScheduledPlans">暂无定时计划</span>
                                     </div>
                                 </div>
                             </div>
@@ -120,13 +168,13 @@
                     <!-- 右侧面板 -->
                     <div class="right-panel">
                         <!-- 测试输出 -->
-                        <div class="material-card elevation-2">
+                        <div class="material-card elevation-2 glass-card">
                             <div class="card-header">
-                                <span class="material-icons">terminal</span>
-                                <h3>测试输出</h3>
+                                <span class="svg-icon" data-icon="terminal"></span>
+                                <h3 data-i18n="testExecution.testOutput">测试输出</h3>
                                 <div class="card-actions">
                                     <button id="clear-output-btn" class="icon-button">
-                                        <span class="material-icons">clear_all</span>
+                                        <span class="svg-icon" data-icon="delete"></span>
                                     </button>
                                 </div>
                             </div>
@@ -134,21 +182,21 @@
                                 <div id="test-output" class="test-output">
                                     <div class="welcome-message">
                                         <div class="welcome-text-container">
-                                            <span class="welcome-text">欢迎使用</span>
+                                            <span class="welcome-text" data-i18n="testExecution.welcome">欢迎使用</span>
                                             <span class="welcome-app-name">XKAutoTester</span>
                                         </div>
-                                        <p>创建你的测试计划，然后开始运行自动化测试。</p>
+                                        <p data-i18n="testExecution.createTestPlan">创建你的测试计划，然后开始运行自动化测试。</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- 进度条和控制按钮 -->
-                        <div class="material-card elevation-1">
+                        <div class="material-card elevation-1 glass-card">
                             <div class="card-content">
                                 <div class="progress-section">
                                     <div class="progress-info">
-                                        <span id="progress-status">准备就绪</span>
+                                        <span id="progress-status" data-i18n="testExecution.ready">准备就绪</span>
                                         <span id="progress-percentage">0%</span>
                                     </div>
                                     <div class="progress-bar-container">
@@ -159,20 +207,20 @@
                                 </div>
                                 <div class="control-buttons">
                                     <button id="run-tests-btn" class="material-button primary large">
-                                        <span class="material-icons">play_arrow</span>
-                                        运行测试
+                                        <span class="svg-icon" data-icon="play_arrow"></span>
+                                        <span data-i18n="testExecution.runTests">运行测试</span>
                                     </button>
                                     <button id="stop-tests-btn" class="material-button secondary large" disabled>
-                                        <span class="material-icons">stop</span>
-                                        停止测试
+                                        <span class="svg-icon" data-icon="stop"></span>
+                                        <span data-i18n="testExecution.stopTests">停止测试</span>
                                     </button>
                                     <button id="view-report-btn" class="material-button outlined large" disabled>
-                                        <span class="material-icons">assessment</span>
-                                        查看报告
+                                        <span class="svg-icon" data-icon="assessment"></span>
+                                        <span data-i18n="testExecution.viewReport">查看报告</span>
                                     </button>
                                     <button id="stop-allure-btn" class="material-button error large" disabled>
-                                        <span class="material-icons">power_settings_new</span>
-                                        停止服务器
+                                        <span class="svg-icon" data-icon="power_settings_new"></span>
+                                        <span data-i18n="testExecution.stopServer">停止服务器</span>
                                     </button>
                                 </div>
                             </div>
@@ -189,28 +237,28 @@
                         <!-- 安卓连接 -->
                         <div class="material-card elevation-1">
                             <div class="card-header">
-                                <span class="material-icons">devices</span>
-                                <h3>设备选择</h3>
+                                <span class="svg-icon" data-icon="devices"></span>
+                                <h3 data-i18n="android.deviceSelection">设备选择</h3>
                             </div>
                             <div class="card-content">
                                 <div class="device-management-controls">
                                     <button id="device-management-btn" class="material-button primary">
-                                        <span class="material-icons">settings</span>
-                                        设备管理
+                                        <span class="svg-icon" data-icon="settings"></span>
+                                        <span data-i18n="android.deviceManagement">设备管理</span>
                                     </button>
                                     <div id="selected-device-info" class="selected-device-info">
-                                        <span class="material-icons">devices_other</span>
-                                        <span id="selected-device-name">未选择设备</span>
+                                        <span class="svg-icon" data-icon="devices_other"></span>
+                                        <span id="selected-device-name" data-i18n="android.noDeviceSelected">未选择设备</span>
                                     </div>
                                 </div>
                                 <div class="screen-control-controls" style="margin-top: 12px; display: flex; gap: 12px; width: 100%;">
                     <button id="screen-control-btn" class="material-button primary" style="flex: 1; justify-content: center;">
-                        <span class="material-icons">smartphone</span>
-                        屏幕控制
+                        <span class="svg-icon" data-icon="smartphone"></span>
+                        <span data-i18n="android.screenControl">屏幕控制</span>
                     </button>
                     <button id="control-params-btn" class="material-button secondary" style="flex: 1; justify-content: center;">
-                        <span class="material-icons">tune</span>
-                        控制参数
+                        <span class="svg-icon" data-icon="tune"></span>
+                        <span data-i18n="android.controlParams">控制参数</span>
                     </button>
                 </div>
                             </div>
@@ -219,8 +267,8 @@
                         <!-- 设备信息卡片 -->
                         <div id="device-info-card" class="material-card elevation-1 hidden">
                             <div class="card-header">
-                                <span class="material-icons">info</span>
-                                <h3>设备信息</h3>
+                                <span class="svg-icon" data-icon="info"></span>
+                                <h3 data-i18n="android.deviceInfo">设备信息</h3>
                             </div>
                             <div class="card-content">
                                 <!-- 加载动画 -->
@@ -230,31 +278,31 @@
                                 <!-- 设备信息内容 -->
                                 <div id="device-info-content" class="device-info-content-grid">
                                     <div class="status-item">
-                                        <span class="status-item-label">制造商</span>
+                                        <span class="status-item-label" data-i18n="android.manufacturer">制造商</span>
                                         <div id="device-manufacturer" class="status-item-value">-</div>
                                     </div>
                                     <div class="status-item">
-                                        <span class="status-item-label">型号</span>
+                                        <span class="status-item-label" data-i18n="android.model">型号</span>
                                         <div id="device-model" class="status-item-value">-</div>
                                     </div>
                                     <div class="status-item">
-                                        <span class="status-item-label">Android版本</span>
+                                        <span class="status-item-label" data-i18n="android.androidVersion">Android版本</span>
                                         <div id="device-android-version" class="status-item-value">-</div>
                                     </div>
                                     <div class="status-item">
-                                        <span class="status-item-label">连接WiFi</span>
+                                        <span class="status-item-label" data-i18n="android.connectedWifi">连接WiFi</span>
                                         <div id="device-wifi" class="status-item-value">-</div>
                                     </div>
                                     <div class="status-item">
-                                        <span class="status-item-label">电池电量</span>
+                                        <span class="status-item-label" data-i18n="android.batteryLevel">电池电量</span>
                                         <div id="device-battery" class="status-item-value">-</div>
                                     </div>
                                     <div class="status-item">
-                                        <span class="status-item-label">存储使用</span>
+                                        <span class="status-item-label" data-i18n="android.storageUsage">存储使用</span>
                                         <div id="device-storage" class="status-item-value">-</div>
                                     </div>
                                     <div class="status-item">
-                                        <span class="status-item-label">内存使用</span>
+                                        <span class="status-item-label" data-i18n="android.memoryUsage">内存使用</span>
                                         <div id="device-memory" class="status-item-value">-</div>
                                     </div>
                                 </div>
@@ -267,37 +315,37 @@
                         <!-- 文件管理器 -->
                         <div class="material-card elevation-2">
                             <div class="card-header">
-                                <span class="material-icons">folder</span>
-                                <h3>文件管理器</h3>
+                                <span class="svg-icon" data-icon="folder"></span>
+                                <h3 data-i18n="fileManager.title">文件管理器</h3>
                                 <div class="card-actions file-manager-actions">
                                     <button id="back-btn" class="file-manager-btn" title="返回上一级">
                                         <div class="btn-content">
-                                            <span class="material-icons">arrow_back</span>
-                                            <span class="btn-text">返回</span>
+                                            <span class="svg-icon" data-icon="arrow_back"></span>
+                                            <span class="btn-text" data-i18n="fileManager.back">返回</span>
                                         </div>
                                     </button>
                                     <button id="refresh-btn" class="file-manager-btn" title="刷新">
                                         <div class="btn-content">
-                                            <span class="material-icons">refresh</span>
-                                            <span class="btn-text">刷新</span>
+                                            <span class="svg-icon" data-icon="refresh"></span>
+                                            <span class="btn-text" data-i18n="fileManager.refresh">刷新</span>
                                         </div>
                                     </button>
                                     <button id="delete-btn" class="file-manager-btn" title="删除">
                                         <div class="btn-content">
-                                            <span class="material-icons">delete</span>
-                                            <span class="btn-text">删除</span>
+                                            <span class="svg-icon" data-icon="delete"></span>
+                                            <span class="btn-text" data-i18n="fileManager.delete">删除</span>
                                         </div>
                                     </button>
                                     <button id="upload-btn" class="file-manager-btn" title="上传文件">
                                         <div class="btn-content">
-                                            <span class="material-icons">upload_file</span>
-                                            <span class="btn-text">上传</span>
+                                            <span class="svg-icon" data-icon="upload_file"></span>
+                                            <span class="btn-text" data-i18n="fileManager.upload">上传</span>
                                         </div>
                                     </button>
                                     <button id="download-btn" class="file-manager-btn" title="下载">
                                         <div class="btn-content">
-                                            <span class="material-icons">download_file</span>
-                                            <span class="btn-text">下载</span>
+                                            <span class="svg-icon" data-icon="download_file"></span>
+                                            <span class="btn-text" data-i18n="fileManager.download">下载</span>
                                         </div>
                                     </button>
                                 </div>
@@ -305,7 +353,7 @@
                             <div class="card-content file-manager-content">
                                 <!-- 完全重写的路径显示，包含省略号和下拉菜单 -->
                                 <div id="current-path" class="current-path">
-                                    <span class="material-icons">location_on</span>
+                                    <span class="svg-icon" data-icon="location_on"></span>
                                     <div class="path-display" id="path-display"></div>
                                     <!-- 简化的下拉菜单结构 -->
                                     <span id="ellipsis-button" class="path-ellipsis">...</span>
@@ -317,13 +365,13 @@
                                         <thead>
                                             <tr>
                                                 <th>
-                                                    <input type="checkbox" id="select-all" class="select-all-checkbox">
+                                                    <input type="checkbox" id="select-all" class="select-all-checkbox" data-i18n="fileManager.selectAll">
                                                 </th>
-                                                <th>名称</th>
-                                                <th>大小</th>
-                                                <th>修改时间</th>
-                                                <th>创建时间</th>
-                                                <th>操作</th>
+                                                <th data-i18n="fileManager.name">名称</th>
+                                                <th data-i18n="fileManager.size">大小</th>
+                                                <th data-i18n="fileManager.modifyTime">修改时间</th>
+                                                <th data-i18n="fileManager.createTime">创建时间</th>
+                                                <th data-i18n="fileManager.actions">操作</th>
                                             </tr>
                                         </thead>
                                         <tbody id="file-list">
@@ -335,13 +383,13 @@
                                 <!-- 下载进度条 -->
                                 <div id="download-progress-container" class="download-progress-container hidden">
                                     <div class="progress-header">
-                                        <span class="material-icons">download</span>
-                                        <span id="download-filename">正在下载...</span>
+                                        <span class="svg-icon" data-icon="download"></span>
+                                        <span id="download-filename" data-i18n="fileManager.downloading">正在下载...</span>
                                         <div class="countdown-container">
-                                            <span id="download-countdown" class="download-countdown">5秒后自动关闭</span>
+                                            <span id="download-countdown" class="download-countdown" data-i18n="fileManager.autoCloseIn">5秒后自动关闭</span>
                                         </div>
                                         <button id="download-progress-close" class="progress-close-btn" title="关闭">
-                                            <span class="material-icons">close</span>
+                                            <span class="svg-icon" data-icon="close"></span>
                                         </button>
                                     </div>
                                     <div class="progress-bar-wrapper">
@@ -354,9 +402,9 @@
                                     <!-- 报错信息显示 -->
                                     <div id="download-error" class="download-error hidden">
                                         <div class="error-content">
-                                            <span class="material-icons">error</span>
+                                            <span class="svg-icon" data-icon="error"></span>
                                             <div class="error-text">
-                                                <span class="error-title">下载失败</span>
+                                                <span class="error-title" data-i18n="fileManager.downloadFailed">下载失败</span>
                                                 <span id="download-error-message" class="error-message"></span>
                                                 <!-- 完整错误信息悬浮窗 -->
                                                 <div id="download-error-tooltip" class="error-tooltip"></div>
@@ -368,16 +416,16 @@
                                 <!-- 上下文菜单 -->
                                 <div id="context-menu" class="context-menu hidden">
                                     <div class="context-menu-item" data-action="download">
-                                        <span class="material-icons">download</span>
-                                        <span>下载</span>
+                                        <span class="svg-icon" data-icon="download"></span>
+                                        <span data-i18n="fileManager.download">下载</span>
                                     </div>
                                     <div class="context-menu-item" data-action="rename">
-                                        <span class="material-icons">edit</span>
-                                        <span>重命名</span>
+                                        <span class="svg-icon" data-icon="edit"></span>
+                                        <span data-i18n="fileManager.rename">重命名</span>
                                     </div>
                                     <div class="context-menu-item" data-action="delete">
-                                        <span class="material-icons">delete</span>
-                                        <span>删除</span>
+                                        <span class="svg-icon" data-icon="delete"></span>
+                                        <span data-i18n="fileManager.delete">删除</span>
                                     </div>
                                 </div>
                             </div>
@@ -389,17 +437,47 @@
             <!-- 设置页面 -->
             <div id="settings" class="page">
                 <div class="settings-container">
-                    <!-- 显示设置 -->
-                    <div class="material-card elevation-2">
+                    <!-- 目录设置 -->
+                    <div class="material-card elevation-2" data-card-type="directory">
                         <div class="card-header">
-                            <span class="material-icons">palette</span>
-                            <h3>显示</h3>
+                            <span class="svg-icon" data-icon="folder"></span>
+                            <h3 data-i18n="settings.directory">目录</h3>
                         </div>
                         <div class="card-content">
                             <div class="setting-item">
                                 <div class="setting-label">
-                                    <span class="material-icons">dark_mode</span>
-                                    <span>黑暗模式</span>
+                                    <span class="svg-icon" data-icon="folder_open"></span>
+                                    <span data-i18n="settings.defaultDownloadPath">默认下载路径</span>
+                                </div>
+                                <div class="setting-control">
+                                    <div class="directory-input-group">
+                                        <div class="directory-input-wrapper">
+                                            <input type="text" id="default-test-directory" class="directory-input" placeholder="请选择默认下载路径" data-i18n-placeholder="placeholders.defaultDownloadPath" readonly>
+                                            <div class="directory-tooltip"></div>
+                                        </div>
+                                        <button id="browse-default-directory" class="material-button primary small">
+                                            <span class="svg-icon" data-icon="folder_open"></span>
+                                        </button>
+                                        <button id="clear-default-directory" class="material-button error small">
+                                            <span class="svg-icon" data-icon="clear"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 显示设置 -->
+                    <div class="material-card elevation-2" data-card-type="display">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="visibility"></span>
+                            <h3 data-i18n="settings.display">显示</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="dark_mode"></span>
+                                    <span data-i18n="settings.darkMode">黑暗模式</span>
                                 </div>
                                 <div class="setting-control">
                                     <label class="switch">
@@ -410,8 +488,8 @@
                             </div>
                             <div class="setting-item">
                                 <div class="setting-label">
-                                    <span class="material-icons">color_lens</span>
-                                    <span>主题色</span>
+                                    <span class="svg-icon" data-icon="palette"></span>
+                                    <span data-i18n="settings.themeColor">主题色</span>
                                 </div>
                                 <div class="setting-control">
                                     <div class="theme-color-picker">
@@ -430,57 +508,117 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- 目录设置 -->
-                    <div class="material-card elevation-2">
-                        <div class="card-header">
-                            <span class="material-icons">folder</span>
-                            <h3>目录设置</h3>
-                        </div>
-                        <div class="card-content">
                             <div class="setting-item">
                                 <div class="setting-label">
-                                    <span class="material-icons">folder_open</span>
-                                    <span>默认下载路径</span>
+                                    <span class="svg-icon" data-icon="language"></span>
+                                    <span data-i18n="settings.language">语言</span>
                                 </div>
                                 <div class="setting-control">
-                                    <div class="directory-input-group">
-                                        <input type="text" id="default-test-directory" class="directory-input" placeholder="请选择默认下载路径">
-                                        <button id="browse-default-directory" class="material-button primary small">
-                                            <span class="material-icons">folder_open</span>
-                                        </button>
-                                        <button id="clear-default-directory" class="material-button error small" title="清空目录路径">
-                                            <span class="material-icons">clear</span>
-                                        </button>
+                                    <div class="custom-select-wrapper">
+                                        <div class="custom-select" id="custom-language-select">
+                                            <div class="custom-select__selected" id="custom-language-selected">
+                                                <span class="custom-select__text">简体中文</span>
+                                            </div>
+                                            <div class="custom-select__options" id="custom-language-options">
+                                                <div class="custom-select__option" data-value="zh-CN"><span>简体中文</span></div>
+                                                <div class="custom-select__option" data-value="en-US"><span>English</span></div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- 版本信息 -->
-                    <div class="material-card elevation-2">
+                    <!-- 通知设置 -->
+                    <div class="material-card elevation-2" data-card-type="notification">
                         <div class="card-header">
-                            <span class="material-icons">info</span>
-                            <h3>版本信息</h3>
+                            <span class="svg-icon" data-icon="notifications"></span>
+                            <h3 data-i18n="settings.notification">通知</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="platform"></span>
+                                    <span data-i18n="settings.notificationPlatform">notification_platform</span>
+                                </div>
+                                <div class="setting-control">
+                                    <div class="custom-select-wrapper">
+                                        <div class="custom-select" id="custom-notification-platform-select">
+                                            <div class="custom-select__selected" id="custom-notification-platform-selected">
+                                                <span class="custom-select__text">无</span>
+                                            </div>
+                                            <div class="custom-select__options" id="custom-notification-platform-options">
+                                                <div class="custom-select__option" data-value="none"><span>无</span></div>
+                                                <div class="custom-select__option" data-value="dingtalk"><span>钉钉</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="setting-item notification-config-item hidden" id="notification-access-token-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="access_token"></span>
+                                    <span data-i18n="settings.accessToken">access_token</span>
+                                </div>
+                                <div class="setting-control notification-input-control">
+                                    <input type="text" id="notification-access-token" class="glass-input notification-input" placeholder="access_token">
+                                </div>
+                            </div>
+                            <div class="setting-item notification-config-item hidden" id="notification-secret-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="secret"></span>
+                                    <span data-i18n="settings.secret">secret</span>
+                                </div>
+                                <div class="setting-control notification-input-control">
+                                    <input type="text" id="notification-secret" class="glass-input notification-input" placeholder="secret">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 数据设置 -->
+                    <div class="material-card elevation-2" data-card-type="data">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="storage"></span>
+                            <h3 data-i18n="settings.data">数据</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="delete_sweep"></span>
+                                    <span data-i18n="settings.clearAllureReports">清空Allure报告数据</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="clear-allure-reports-btn" class="material-button error small">
+                                        <span data-i18n="settings.clear">清空</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 版本信息 -->
+                    <div class="material-card elevation-2" data-card-type="version">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="info"></span>
+                            <h3 data-i18n="settings.version">版本</h3>
                         </div>
                         <div class="card-content">
                             <div class="version-info">
                                 <div class="version-item">
-                                    <span class="material-icons">code</span>
-                                    <span class="version-label">版本号</span>
-                                    <span id="app-version-info" class="version-value">v0.1.1-dev.2</span>
+                                    <span class="svg-icon" data-icon="code"></span>
+                                    <span class="version-label" data-i18n="labels.version">版本号</span>
+                                    <span id="app-version-info" class="version-value">v0.1.2-dev.1</span>
                                 </div>
                                 <div class="version-item">
-                                    <span class="material-icons">build</span>
-                                    <span class="version-label">构建日期</span>
+                                    <span class="svg-icon" data-icon="build"></span>
+                                    <span class="version-label" data-i18n="labels.buildDate">构建日期</span>
                                     <span class="version-value">2026-02-02</span>
                                 </div>
                                 <div class="version-item">
-                                    <span class="material-icons">copyright</span>
-                                    <span class="version-label">版权信息</span>
+                                    <span class="svg-icon" data-icon="copyright"></span>
+                                    <span class="version-label" data-i18n="labels.copyright">版权信息</span>
                                     <span class="version-value">XKAutoTester © RiNG 2025 | MIT License</span>
                                 </div>
                             </div>
@@ -496,52 +634,76 @@
         <div id="modal-overlay" class="modal-overlay hidden">
             <div class="modal-container">
                 <div class="modal-header">
-                    <h3 id="modal-title">新建测试计划</h3>
+                    <h3 id="modal-title" data-i18n="modal.newTestPlan">新建测试计划</h3>
                     <button id="modal-close-btn" class="icon-button">
-                        <span class="material-icons">close</span>
+                        <span class="svg-icon" data-icon="close"></span>
                     </button>
                 </div>
-                <div class="modal-content">
+                <div class="modal-content no-scrollbar">
                     <form id="test-plan-form">
-                        <div class="form-group">
-                            <label for="plan-name">计划名称</label>
-                            <div class="input-container">
-                                <input type="text" id="plan-name" required>
-                                <div id="plan-name-error" class="input-error error-hidden">
-                                <span class="material-icons">error</span>
-                                <span>请输入计划名称</span>
+                        <div class="modal-form-container">
+                            <!-- 左边容器：计划名称、计划描述 -->
+                            <div class="modal-left-panel">
+                                <div class="form-group">
+                                    <label for="plan-name" data-i18n="modal.planName">计划名称</label>
+                                    <div class="input-container">
+                                        <input type="text" id="plan-name" required>
+                                        <div id="plan-name-error" class="input-error error-hidden">
+                                        <span class="svg-icon" data-icon="error"></span>
+                                        <span data-i18n="modal.enterPlanName">请输入计划名称</span>
+                                    </div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="plan-description" data-i18n="modal.planDescription">计划描述</label>
+                                    <textarea id="plan-description" rows="3" class="no-scrollbar"></textarea>
+                                </div>
                             </div>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="plan-description">计划描述</label>
-                            <textarea id="plan-description" rows="3"></textarea>
-                        </div>
-                        
-                        <!-- 测试文件选择 -->
-                        <div class="form-group">
-                            <label>测试文件</label>
-                            <div id="modal-test-files" class="checkbox-list">
-                                <!-- 测试文件列表将在这里动态生成 -->
-                            </div>
-                        </div>
-                        
-                        <!-- 测试类型选择 -->
-                        <div class="form-group">
-                            <label>测试类型</label>
-                            <div id="modal-test-types" class="checkbox-list">
-                                <!-- 测试类型将在这里动态生成 -->
-                            </div>
-                            <div id="test-type-warning" class="warning-message warning-hidden">
-                                <span class="material-icons">warning</span>
-                                <span>没有选择测试类型，将默认执行所有测试</span>
+                            
+                            <!-- 右边容器：测试文件、测试类型、循环执行设置 -->
+                            <div class="modal-right-panel">
+                                <!-- 测试文件选择 -->
+                                <div class="form-group">
+                                    <label data-i18n="modal.testFiles">测试文件</label>
+                                    <div id="modal-test-files" class="checkbox-list">
+                                        <!-- 测试文件列表将在这里动态生成 -->
+                                    </div>
+                                </div>
+                                
+                                <!-- 测试类型选择 -->
+                                <div class="form-group">
+                                    <label data-i18n="testExecution.testType">测试类型</label>
+                                    <div id="modal-test-types" class="checkbox-list">
+                                        <!-- 测试类型将在这里动态生成 -->
+                                    </div>
+                                    <div id="test-type-warning" class="warning-message warning-hidden">
+                                        <span class="svg-icon" data-icon="warning"></span>
+                                        <span data-i18n="testExecution.noTestTypeSelected">没有选择测试类型，将默认执行所有测试</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- 循环执行设置 -->
+                                <div class="form-group loop-settings-group">
+                                    <label data-i18n="modal.loopSettings">循环执行设置</label>
+                                    <div class="loop-settings-container">
+                                        <div class="loop-setting-item">
+                                            <label for="loop-count" data-i18n="modal.loopCount">循环次数</label>
+                                            <input type="number" id="loop-count" class="glass-input no-spinner" 
+                                                   min="1" max="999" value="1" placeholder="1">
+                                        </div>
+                                        <div class="loop-setting-item checkbox-item">
+                                            <input type="checkbox" id="continue-on-failure" checked>
+                                            <label for="continue-on-failure" data-i18n="modal.continueOnFailure">测试失败后继续执行后续循环</label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
                         <div class="form-actions">
-                            <button type="button" id="modal-cancel-btn" class="material-button outlined">取消</button>
-                            <button type="submit" id="save-plan-btn" class="material-button primary">保存</button>
-                            <button type="button" id="update-plan-btn" class="material-button primary hidden">更新计划</button>
+                            <button type="button" id="modal-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                            <button type="submit" id="save-plan-btn" class="material-button primary" data-i18n="modal.save">保存</button>
+                            <button type="button" id="update-plan-btn" class="material-button primary hidden" data-i18n="modal.updatePlan">更新计划</button>
                         </div>
                     </form>
                 </div>
@@ -552,26 +714,26 @@
         <div id="rename-modal-overlay" class="modal-overlay hidden">
             <div class="modal-container">
                 <div class="modal-header">
-                    <h3 id="rename-modal-title">重命名</h3>
+                    <h3 id="rename-modal-title" data-i18n="modal.rename">重命名</h3>
                     <button id="rename-modal-close-btn" class="icon-button">
-                        <span class="material-icons">close</span>
+                        <span class="svg-icon" data-icon="close"></span>
                     </button>
                 </div>
                 <div class="modal-content">
                     <form id="rename-modal-form">
                         <div class="form-group">
-                            <label for="rename-input">名称</label>
+                            <label for="rename-input" data-i18n="modal.name">名称</label>
                             <div class="input-container">
-                                <input type="text" id="rename-input" name="name" placeholder="请输入新名称" required>
+                                <input type="text" id="rename-input" name="name" placeholder="请输入新名称" data-i18n-placeholder="modal.enterNewName" required>
                                 <div id="rename-input-error" class="input-error error-hidden">
-                                    <span class="material-icons">error</span>
-                                    <span>请输入新名称</span>
+                                    <span class="svg-icon" data-icon="error"></span>
+                                    <span data-i18n="modal.enterNewName">请输入新名称</span>
                                 </div>
                             </div>
                         </div>
                         <div class="form-actions">
-                            <button type="button" id="rename-modal-cancel-btn" class="material-button outlined">取消</button>
-                            <button type="submit" id="rename-modal-save-btn" class="material-button primary">保存</button>
+                            <button type="button" id="rename-modal-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                            <button type="submit" id="rename-modal-save-btn" class="material-button primary" data-i18n="modal.save">保存</button>
                         </div>
                     </form>
                 </div>
@@ -582,9 +744,9 @@
         <div id="device-modal-overlay" class="modal-overlay hidden">
             <div class="modal-container">
                 <div class="modal-header">
-                    <h3 id="device-modal-title">设备管理</h3>
+                    <h3 id="device-modal-title" data-i18n="modal.deviceManagement">设备管理</h3>
                     <button id="device-modal-close-btn" class="icon-button">
-                        <span class="material-icons">close</span>
+                        <span class="svg-icon" data-icon="close"></span>
                     </button>
                 </div>
                 <div class="modal-content">
@@ -592,38 +754,38 @@
                             <!-- 左侧：设备列表和扫描状态 -->
                             <div style="flex: 1;">
                                 <div id="device-scanning" class="device-scanning" style="display: flex; align-items: center; gap: 8px; padding: 16px;">
-                                    <span class="material-icons" style="vertical-align: middle;">sync</span>
-                                    <span style="vertical-align: middle;">正在扫描设备...</span>
+                                    <span class="svg-icon" data-icon="sync"></span>
+                                    <span style="vertical-align: middle;" data-i18n="modal.scanningDevices">正在扫描设备...</span>
                                 </div>
                                 <div id="device-list" class="device-list hidden">
                                     <!-- 设备列表将在这里动态生成 -->
                                     <!-- 新增设备按钮 -->
                                     <div id="add-device-btn" class="device-item add-device-btn" style="padding: 8px 12px; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; display: flex; align-items: center; justify-content: space-between;">
                                         <div style="display: flex; align-items: center;">
-                                            <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">add</span>
-                                            <span style="vertical-align: middle;">按IP新增设备</span>
+                                            <span class="svg-icon" data-icon="add" style="vertical-align: middle; margin-right: 8px;"></span>
+                                            <span style="vertical-align: middle;" data-i18n="modal.addDeviceByIp">按IP新增设备</span>
                                         </div>
-                                        <span class="material-icons" style="vertical-align: middle;">keyboard_arrow_right</span>
+                                        <span class="svg-icon" data-icon="keyboard_arrow_right" style="vertical-align: middle;"></span>
                                     </div>
                                 </div>
                                 <!-- 新增设备输入框 -->
-                                <div id="add-device-input-container" class="add-device-input-container hidden" style="padding: 16px;">
-                                    <div style="display: flex; align-items: center; gap: 8px;">
-                                        <input type="text" id="add-device-input" placeholder="输入IP地址或IP:端口" style="flex: 1; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 4px; font-family: inherit; font-size: 14px;">
-                                        <button id="add-device-cancel-btn" class="material-button outlined small" style="padding: 6px 12px;">
-                                            <span class="material-icons">close</span>
+                                <div id="add-device-input-container" class="add-device-input-container hidden">
+                                    <div class="add-device-input-row">
+                                        <input type="text" id="add-device-input" class="glass-input" placeholder="输入IP地址或IP:端口" data-i18n-placeholder="modal.enterIpOrPort">
+                                        <button id="add-device-cancel-btn" class="material-button outlined small icon-btn">
+                                            <span class="svg-icon" data-icon="close"></span>
                                         </button>
-                                        <button id="add-device-confirm-btn" class="material-button primary small" style="padding: 6px 12px;">
-                                            <span class="material-icons">check</span>
+                                        <button id="add-device-confirm-btn" class="material-button primary small icon-btn">
+                                            <span class="svg-icon" data-icon="check"></span>
                                         </button>
                                     </div>
-                                    <div id="add-device-result" class="add-device-result hidden" style="margin-top: 8px; padding: 8px 12px; border-radius: 4px; font-size: 12px;"></div>
+                                    <div id="add-device-result" class="add-device-result hidden"></div>
                                 </div>
                             </div>
                             
                             <!-- 右侧：设备信息卡片 -->
                             <div id="modal-device-status-card" class="device-status-card hidden">
-                                <h4 class="device-status-title">设备信息</h4>
+                                <h4 class="device-status-title" data-i18n="modal.deviceInfo">设备信息</h4>
                                 <!-- 加载动画 -->
                                 <div id="modal-device-loading" class="modal-device-loading">
                                     <div class="modal-device-spinner"></div>
@@ -631,15 +793,15 @@
                                 <!-- 设备信息内容 -->
                                 <div id="modal-device-info-content" class="modal-device-info-content">
                                     <div class="status-item">
-                                        <span class="status-item-label">制造商</span>
+                                        <span class="status-item-label" data-i18n="modal.manufacturer">制造商</span>
                                         <div id="modal-device-manufacturer" class="status-item-value">-</div>
                                     </div>
                                     <div class="status-item">
-                                        <span class="status-item-label">型号</span>
+                                        <span class="status-item-label" data-i18n="modal.model">型号</span>
                                         <div id="modal-device-model" class="status-item-value">-</div>
                                     </div>
                                     <div class="status-item">
-                                        <span class="status-item-label">Android版本</span>
+                                        <span class="status-item-label" data-i18n="modal.androidVersion">Android版本</span>
                                         <div id="modal-device-android-version" class="status-item-value">-</div>
                                     </div>
                                 </div>
@@ -648,12 +810,55 @@
                 </div>
                 <div class="modal-footer">
                     <div style="padding: 16px; display: flex; justify-content: space-between; align-items: center;">
-                        <button id="open-port-btn" class="material-button outlined" disabled>开放5555端口</button>
+                        <button id="open-port-btn" class="material-button outlined" disabled data-i18n="modal.openPort5555">开放5555端口</button>
                         <div style="display: flex; gap: 16px;">
-                            <button id="device-modal-confirm-btn" class="material-button primary" disabled>确认选择</button>
-                            <button id="device-modal-cancel-btn" class="material-button outlined">取消</button>
+                            <button id="device-modal-confirm-btn" class="material-button primary" disabled data-i18n="modal.confirmSelection">确认选择</button>
+                            <button id="device-modal-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 组件容器 - 确认弹窗 -->
+        <div id="confirm-modal-container"></div>
+
+        <!-- 查看报告模态框 -->
+        <div id="report-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container report-modal">
+                <div class="modal-header">
+                    <h3 data-i18n="reportModal.title">查看报告</h3>
+                    <button id="report-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <div class="report-modal-body">
+                        <div class="report-plan-info">
+                            <span class="svg-icon" data-icon="assignment"></span>
+                            <span id="report-plan-name" class="report-plan-name"></span>
+                        </div>
+                        <div class="report-runs-section">
+                            <div class="report-runs-header">
+                                <span class="svg-icon" data-icon="history"></span>
+                                <span data-i18n="reportModal.runHistory">运行历史</span>
+                            </div>
+                            <div id="report-runs-list" class="report-runs-list">
+                                <div class="report-loading">
+                                    <div class="report-loading-spinner"></div>
+                                    <span data-i18n="reportModal.loading">正在加载报告...</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="report-no-runs" class="report-no-runs hidden">
+                            <span class="svg-icon" data-icon="info"></span>
+                            <span data-i18n="reportModal.noReports">该测试计划暂无运行记录</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="report-modal-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                    <button id="report-modal-open-btn" class="material-button primary" disabled data-i18n="reportModal.openReport">打开报告</button>
                 </div>
             </div>
         </div>
@@ -662,60 +867,104 @@
         <div id="control-params-overlay" class="modal-overlay hidden">
             <div class="modal-container">
                 <div class="modal-header">
-                    <h3>控制参数</h3>
+                    <h3 data-i18n="modal.controlParams">控制参数</h3>
                     <button id="control-params-close-btn" class="icon-button">
-                        <span class="material-icons">close</span>
+                        <span class="svg-icon" data-icon="close"></span>
                     </button>
                 </div>
-                <div class="modal-content">
+                <div class="modal-content no-scrollbar">
                     <form id="control-params-form">
                         <div class="form-group">
-                            <label for="max-size">最大分辨率</label>
-                            <input type="number" id="max-size" placeholder="例如: 1920" min="320" max="6000">
+                            <label for="max-size" data-i18n="modal.maxResolution">最大分辨率</label>
+                            <input type="number" id="max-size" class="glass-input no-spinner" placeholder="例如: 1920" min="320" max="6000">
                         </div>
                         
                         <div class="form-group">
-                            <label for="video-bit-rate">视频比特率</label>
-                            <input type="number" id="video-bit-rate" placeholder="例如: 8" min="1" max="50">
-                            <small>单位: Mbps</small>
+                            <label for="video-bit-rate" data-i18n="modal.videoBitRate">视频比特率</label>
+                            <input type="number" id="video-bit-rate" class="glass-input no-spinner" placeholder="例如: 8" min="1" max="50">
+                            <small data-i18n="controlParams.mbps">单位: Mbps</small>
                         </div>
                         
                         <div class="form-group">
-                            <label for="max-fps">最大帧率</label>
-                            <input type="number" id="max-fps" placeholder="例如: 60" min="1" max="600">
+                            <label for="max-fps" data-i18n="modal.maxFps">最大帧率</label>
+                            <input type="number" id="max-fps" class="glass-input no-spinner" placeholder="例如: 60" min="1" max="600">
                         </div>
                         
                         <div class="form-group">
-                            <label for="video-codec">视频编解码器</label>
-                            <select id="video-codec" style="width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--outline); border-radius: 4px; font-family: inherit; font-size: 14px; transition: border-color 0.2s ease;">
-                                <option value="h264" selected>H264 (低延迟)</option>
-                                <option value="h265">H265 (高质量)</option>
-                                <option value="av1">AV1</option>
-                            </select>
+                            <label data-i18n="modal.videoCodec">视频编解码器</label>
+                            <div class="custom-select-wrapper" id="video-codec" data-options='[{"value":"h264","label":"controlParams.h264","default":true},{"value":"h265","label":"controlParams.h265"},{"value":"av1","label":"controlParams.av1"}]'>
+                            </div>
                         </div>
                         
                         <div class="form-group">
                             <div class="checkbox-container" style="align-items: center; padding: 8px 0;">
                                 <input type="checkbox" id="always-on-top" name="always-on-top" style="margin: 0; width: 18px; height: 18px; vertical-align: middle;">
                                 <div class="checkmark"></div>
-                                <label for="always-on-top" style="margin: 0; vertical-align: middle;">始终置顶</label>
+                                <label for="always-on-top" style="margin: 0; vertical-align: middle;" data-i18n="modal.alwaysOnTop">始终置顶</label>
                             </div>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
                     <div style="padding: 16px; display: flex; justify-content: flex-end; gap: 12px;">
-                        <button id="control-params-cancel-btn" class="material-button outlined">取消</button>
-                        <button id="control-params-save-btn" class="material-button primary">保存参数</button>
+                        <button id="control-params-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                        <button id="control-params-save-btn" class="material-button primary" data-i18n="modal.saveParams">保存参数</button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 定时计划模态框 -->
+        <div id="scheduled-plan-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 id="scheduled-plan-modal-title" data-i18n="scheduledPlan.title">定时计划</h3>
+                    <button id="scheduled-plan-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content no-scrollbar">
+                    <form id="scheduled-plan-form">
+                        <div class="modal-form-container">
+                            <!-- 左边容器：名称、执行时间 -->
+                            <div class="modal-left-panel">
+                                <div class="form-group">
+                                    <label for="scheduled-plan-name" data-i18n="modal.planName">计划名称</label>
+                                    <input type="text" id="scheduled-plan-name">
+                                </div>
+                                <div class="form-group">
+                                    <label for="scheduled-plan-time" data-i18n="testExecution.scheduledTime">执行时间</label>
+                                    <div class="datetime-picker-container">
+                                        <input type="text" id="scheduled-plan-time" class="glass-input" readonly placeholder="选择日期时间">
+                                        <span class="svg-icon datetime-picker-icon" data-icon="schedule"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 右边容器：测试计划选择 -->
+                            <div class="modal-right-panel">
+                                <div class="form-group">
+                                    <label data-i18n="scheduledPlan.selectPlans">选择测试计划</label>
+                                    <div id="scheduled-test-plans-list" class="checkbox-list scheduled-test-plans-list">
+                                        <!-- 测试计划列表将在这里动态生成 -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="button" id="scheduled-plan-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                            <button type="submit" id="save-scheduled-plan-btn" class="material-button primary" data-i18n="modal.save">保存</button>
+                            <button type="button" id="update-scheduled-plan-btn" class="material-button primary hidden" data-i18n="modal.updatePlan">更新计划</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- Toast 提示组件 -->
-    <div id="toast-container" class="toast-container"></div>
-    
+    <script src="components/toast.js"></script>
+    <script src="icons.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

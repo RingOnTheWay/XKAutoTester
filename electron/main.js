@@ -3,8 +3,481 @@ const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const axios = require('axios');
+const crypto = require('crypto');
 
-// 移除了控制台编码设置，避免终端输出乱码
+// 初始化i18next
+const i18next = require('i18next');
+
+class I18nService {
+  constructor() {
+    this.i18n = i18next.createInstance();
+    this.initI18n();
+  }
+
+  async initI18n() {
+    try {
+      // 构建语言文件路径
+      const localesPath = path.join(__dirname, 'locales');
+      
+      // 加载语言文件
+      const resources = {};
+      
+      // 加载中文翻译
+      const zhCNPath = path.join(localesPath, 'zh-CN', 'translation.json');
+      if (fs.existsSync(zhCNPath)) {
+        const zhCNData = JSON.parse(fs.readFileSync(zhCNPath, 'utf8'));
+        resources['zh-CN'] = {
+          translation: zhCNData
+        };
+      }
+      
+      // 加载英文翻译
+      const enUSPath = path.join(localesPath, 'en-US', 'translation.json');
+      if (fs.existsSync(enUSPath)) {
+        const enUSData = JSON.parse(fs.readFileSync(enUSPath, 'utf8'));
+        resources['en-US'] = {
+          translation: enUSData
+        };
+      }
+      
+      // 获取用户配置的语言
+      let savedLanguage = 'zh-CN';
+      try {
+        const configPath = path.join(__dirname, '..', 'config', 'config.json');
+        if (fs.existsSync(configPath)) {
+          const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          if (configData.APP_SETTINGS && configData.APP_SETTINGS.language) {
+            savedLanguage = configData.APP_SETTINGS.language;
+          }
+        }
+      } catch (error) {
+        console.error('读取配置文件失败:', error);
+      }
+      
+      // 初始化i18next
+      await this.i18n.init({
+        lng: savedLanguage,
+        fallbackLng: 'zh-CN',
+        resources: resources,
+        interpolation: {
+          escapeValue: false
+        }
+      });
+    } catch (error) {
+      console.error('i18next初始化失败:', error);
+    }
+  }
+
+  t(key, options) {
+    return this.i18n.t(key, options);
+  }
+
+  changeLanguage(lng) {
+    return this.i18n.changeLanguage(lng);
+  }
+}
+
+const i18nService = new I18nService();
+
+class ScheduledPlanQueue {
+  constructor() {
+    this.heap = [];
+  }
+
+  enqueue(plan) {
+    this.heap.push(plan);
+    this.bubbleUp(this.heap.length - 1);
+  }
+
+  dequeue() {
+    if (this.heap.length === 0) return null;
+    const min = this.heap[0];
+    const last = this.heap.pop();
+    if (this.heap.length > 0) {
+      this.heap[0] = last;
+      this.bubbleDown(0);
+    }
+    return min;
+  }
+
+  peek() {
+    return this.heap.length > 0 ? this.heap[0] : null;
+  }
+
+  remove(planId) {
+    const index = this.heap.findIndex(p => p.id === planId);
+    if (index !== -1) {
+      this.heap.splice(index, 1);
+      this.rebuild();
+      return true;
+    }
+    return false;
+  }
+
+  rebuild() {
+    const plans = [...this.heap];
+    this.heap = [];
+    plans.forEach(p => this.enqueue(p));
+  }
+
+  size() {
+    return this.heap.length;
+  }
+
+  getAll() {
+    return [...this.heap];
+  }
+
+  bubbleUp(index) {
+    while (index > 0) {
+      const parentIndex = Math.floor((index - 1) / 2);
+      if (this.compare(this.heap[index], this.heap[parentIndex]) < 0) {
+        [this.heap[index], this.heap[parentIndex]] = [this.heap[parentIndex], this.heap[index]];
+        index = parentIndex;
+      } else {
+        break;
+      }
+    }
+  }
+
+  bubbleDown(index) {
+    const length = this.heap.length;
+    while (true) {
+      let smallest = index;
+      const left = 2 * index + 1;
+      const right = 2 * index + 2;
+
+      if (left < length && this.compare(this.heap[left], this.heap[smallest]) < 0) {
+        smallest = left;
+      }
+      if (right < length && this.compare(this.heap[right], this.heap[smallest]) < 0) {
+        smallest = right;
+      }
+
+      if (smallest !== index) {
+        [this.heap[index], this.heap[smallest]] = [this.heap[smallest], this.heap[index]];
+        index = smallest;
+      } else {
+        break;
+      }
+    }
+  }
+
+  compare(a, b) {
+    return new Date(a.scheduledTime) - new Date(b.scheduledTime);
+  }
+}
+
+const SCHEDULE_STRATEGY = {
+  PRECISE: { threshold: 60 * 60 * 1000 },
+  MEDIUM: { threshold: 24 * 60 * 60 * 1000 },
+  LONG_TERM: { threshold: Infinity }
+};
+
+class SmartScheduler {
+  constructor(electronApp) {
+    this.electronApp = electronApp;
+    this.planQueue = new ScheduledPlanQueue();
+    this.currentTimer = null;
+    this.checkInterval = null;
+    this.isExecuting = false;
+    this.fileWatcher = null;
+    this.mainWindow = null;
+    this.state = {
+      mode: 'idle',
+      nextCheckTime: null,
+      activePlanCount: 0
+    };
+  }
+
+  setMainWindow(window) {
+    this.mainWindow = window;
+  }
+
+  async initialize() {
+    await this.loadPlansToQueue();
+    this.setupFileWatcher();
+    await this.startSmartScheduling();
+  }
+
+  async loadPlansToQueue() {
+    try {
+      const plans = await this.electronApp.getScheduledPlans();
+      const now = new Date();
+
+      plans.forEach(plan => {
+        if (plan.status === 'pending') {
+          const planTime = new Date(plan.scheduledTime);
+          if (planTime > now) {
+            this.planQueue.enqueue(plan);
+          } else {
+            this.markAsExpired(plan);
+          }
+        }
+      });
+
+      this.state.activePlanCount = this.planQueue.size();
+    } catch (error) {
+      console.error('加载计划到队列失败:', error);
+    }
+  }
+
+  async startSmartScheduling() {
+    const nextPlan = this.planQueue.peek();
+
+    if (!nextPlan) {
+      this.enterIdleMode();
+      return;
+    }
+
+    const now = Date.now();
+    const planTime = new Date(nextPlan.scheduledTime).getTime();
+    const timeUntilPlan = planTime - now;
+
+    if (timeUntilPlan <= 0) {
+      await this.markAsExpired(nextPlan);
+      this.planQueue.dequeue();
+      await this.startSmartScheduling();
+      return;
+    }
+
+    if (timeUntilPlan <= SCHEDULE_STRATEGY.PRECISE.threshold) {
+      this.enterPreciseMode(nextPlan, timeUntilPlan);
+    } else if (timeUntilPlan <= SCHEDULE_STRATEGY.MEDIUM.threshold) {
+      this.enterMediumMode(nextPlan, timeUntilPlan);
+    } else {
+      this.enterLongTermMode(nextPlan, timeUntilPlan);
+    }
+  }
+
+  enterIdleMode() {
+    this.state.mode = 'idle';
+    this.clearAllTimers();
+
+    this.checkInterval = setInterval(() => {
+      if (this.planQueue.size() > 0) {
+        clearInterval(this.checkInterval);
+        this.checkInterval = null;
+        this.startSmartScheduling();
+      }
+    }, 30 * 60 * 1000);
+  }
+
+  enterPreciseMode(plan, delay) {
+    this.state.mode = 'precise';
+    this.clearAllTimers();
+
+    const SAFETY_THRESHOLD = 100;
+    const adjustedDelay = Math.max(0, delay - SAFETY_THRESHOLD);
+
+    this.currentTimer = setTimeout(() => {
+      this.finalCountdown(plan);
+    }, adjustedDelay);
+
+    this.state.nextCheckTime = Date.now() + adjustedDelay;
+  }
+
+  enterMediumMode(plan, timeUntilPlan) {
+    this.state.mode = 'medium';
+    this.clearAllTimers();
+
+    const checkInterval = this.calculateMediumCheckInterval(timeUntilPlan);
+
+    this.checkInterval = setInterval(() => {
+      const remaining = new Date(plan.scheduledTime) - Date.now();
+
+      if (remaining <= SCHEDULE_STRATEGY.PRECISE.threshold) {
+        clearInterval(this.checkInterval);
+        this.checkInterval = null;
+        this.enterPreciseMode(plan, remaining);
+      }
+    }, checkInterval);
+
+    this.state.nextCheckTime = Date.now() + checkInterval;
+  }
+
+  enterLongTermMode(plan, timeUntilPlan) {
+    this.state.mode = 'long_term';
+    this.clearAllTimers();
+
+    const firstCheckDelay = timeUntilPlan - SCHEDULE_STRATEGY.MEDIUM.threshold;
+
+    this.currentTimer = setTimeout(() => {
+      const remaining = new Date(plan.scheduledTime) - Date.now();
+      this.enterMediumMode(plan, remaining);
+    }, firstCheckDelay);
+
+    this.checkInterval = setInterval(() => {
+      this.refreshSchedule();
+    }, 24 * 60 * 60 * 1000);
+
+    this.state.nextCheckTime = Date.now() + firstCheckDelay;
+  }
+
+  calculateMediumCheckInterval(timeUntilPlan) {
+    if (timeUntilPlan < 2 * 60 * 60 * 1000) {
+      return 10 * 60 * 1000;
+    } else if (timeUntilPlan < 6 * 60 * 60 * 1000) {
+      return 30 * 60 * 1000;
+    } else {
+      return 60 * 60 * 1000;
+    }
+  }
+
+  finalCountdown(plan) {
+    const now = Date.now();
+    const planTime = new Date(plan.scheduledTime).getTime();
+    const remaining = planTime - now;
+
+    if (remaining <= 0) {
+      this.executePlan(plan);
+    } else if (remaining <= 100) {
+      setImmediate(() => this.finalCountdown(plan));
+    } else {
+      this.currentTimer = setTimeout(() => {
+        this.finalCountdown(plan);
+      }, remaining);
+    }
+  }
+
+  async executePlan(plan) {
+    if (this.isExecuting) return;
+
+    this.isExecuting = true;
+
+    try {
+      this.planQueue.dequeue();
+      this.state.activePlanCount = this.planQueue.size();
+
+      await this.electronApp.updateScheduledPlan({
+        id: plan.id,
+        status: 'running',
+        lastRun: new Date().toISOString()
+      });
+
+      if (this.mainWindow) {
+        this.mainWindow.webContents.send('scheduled-test-start', {
+          planId: plan.id,
+          planName: plan.name,
+          testPlans: plan.testPlans,
+          scheduledTime: plan.scheduledTime,
+          executionTime: new Date().toLocaleString()
+        });
+      }
+    } catch (error) {
+      console.error('执行定时计划失败:', error);
+      await this.electronApp.updateScheduledPlan({
+        id: plan.id,
+        status: 'completed',
+        lastRun: new Date().toISOString()
+      });
+    } finally {
+      this.isExecuting = false;
+      await this.startSmartScheduling();
+    }
+  }
+
+  setupFileWatcher() {
+    try {
+      const plansPath = this.electronApp.scheduledPlansPath;
+      if (fs.existsSync(plansPath)) {
+        this.fileWatcher = fs.watch(plansPath, (eventType) => {
+          if (eventType === 'change') {
+            this.handlePlansFileChange();
+          }
+        });
+      }
+    } catch (error) {
+      console.error('设置文件监听失败:', error);
+    }
+  }
+
+  async handlePlansFileChange() {
+    this.planQueue = new ScheduledPlanQueue();
+    await this.loadPlansToQueue();
+    await this.refreshSchedule();
+  }
+
+  async refreshSchedule() {
+    this.clearAllTimers();
+    await this.startSmartScheduling();
+  }
+
+  addPlan(plan) {
+    this.planQueue.enqueue(plan);
+    this.state.activePlanCount = this.planQueue.size();
+
+    const nextPlan = this.planQueue.peek();
+    if (nextPlan && nextPlan.id === plan.id) {
+      this.refreshSchedule();
+    }
+  }
+
+  removePlan(planId) {
+    const nextPlan = this.planQueue.peek();
+    this.planQueue.remove(planId);
+    this.state.activePlanCount = this.planQueue.size();
+
+    if (nextPlan && nextPlan.id === planId) {
+      this.refreshSchedule();
+    }
+  }
+
+  updatePlan(planId, updates) {
+    this.removePlan(planId);
+
+    if (updates.status === 'pending') {
+      const plans = this.electronApp.getScheduledPlansSync ? 
+                    this.electronApp.getScheduledPlansSync() : [];
+      const originalPlan = plans.find(p => p.id === planId);
+      if (originalPlan) {
+        const updatedPlan = { ...originalPlan, ...updates };
+        this.addPlan(updatedPlan);
+      }
+    }
+  }
+
+  async markAsExpired(plan) {
+    await this.electronApp.updateScheduledPlan({
+      id: plan.id,
+      status: 'expired'
+    });
+
+    if (this.mainWindow) {
+      this.mainWindow.webContents.send('scheduled-plan-expired', {
+        planId: plan.id,
+        planName: plan.name
+      });
+    }
+  }
+
+  clearAllTimers() {
+    if (this.currentTimer) {
+      clearTimeout(this.currentTimer);
+      this.currentTimer = null;
+    }
+    if (this.checkInterval) {
+      clearInterval(this.checkInterval);
+      this.checkInterval = null;
+    }
+  }
+
+  destroy() {
+    this.clearAllTimers();
+    if (this.fileWatcher) {
+      this.fileWatcher.close();
+      this.fileWatcher = null;
+    }
+  }
+
+  getStatus() {
+    return {
+      ...this.state,
+      nextPlan: this.planQueue.peek(),
+      queueSize: this.planQueue.size()
+    };
+  }
+}
 
 class ElectronApp {
   constructor() {
@@ -28,13 +501,41 @@ class ElectronApp {
     this.allureServerStartTime = null;
     this.allureOpenProcess = null;  // 新增：存储allure open进程
     this.currentPythonProcess = null; // 存储当前运行的Python进程
+    
+    this.scheduledPlansPath = path.join(this.projectRoot, 'scheduled_plans.json');
+    this.smartScheduler = null;
+  }
+  
+  // 获取Python执行路径（必须使用UV虚拟环境）
+  getPythonCommand() {
+    const venvPython = path.resolve(this.projectRoot, '.venv', 'Scripts', 'python.exe');
+    if (fs.existsSync(venvPython)) {
+      return { command: venvPython, args: [], useVenv: true };
+    }
+    return { command: null, args: [], useVenv: false, error: i18nService.t('splash.checks.uvVenvNotFound') };
+  }
+  
+  // 获取pip命令（使用UV）
+  getPipCommand() {
+    // UV虚拟环境使用 uv pip 命令
+    return { command: 'uv', args: ['pip'] };
+  }
+  
+  // 检查UV是否可用
+  async checkUvAvailable() {
+    try {
+      const result = await this.executeCommand('uv', ['--version']);
+      return result.code === 0;
+    } catch {
+      return false;
+    }
   }
   
   createSplashWindow() {
     // 创建启动页面窗口
     this.splashWindow = new BrowserWindow({
       width: 700,
-      height: 550,
+      height: 740,
       frame: false,
       resizable: false,
       show: false,
@@ -45,8 +546,11 @@ class ElectronApp {
       roundedCorners: true,
       titleBarStyle: 'hidden',
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: false,
+        preload: this.isPackaged ? path.join(process.resourcesPath, 'app', 'preload.js') : path.join(__dirname, 'preload.js'),
+        webSecurity: false // 允许加载本地文件
       }
     });
     
@@ -122,12 +626,12 @@ class ElectronApp {
       if (result.code === 0 && result.stdout.includes('CP210')) {
         return {
           status: 'success',
-          message: '已找到CP210x驱动'
+          message: i18nService.t('splash.checks.cp210Found')
         };
       } else {
         return {
           status: 'error',
-          message: '未找到CP210x串口驱动'
+          message: i18nService.t('splash.checks.cp210NotFound')
         };
       }
     } catch (error) {
@@ -170,18 +674,18 @@ class ElectronApp {
       if (missingComponents.length === 0) {
         return {
           status: 'success',
-          message: 'Android SDK组件完整'
+          message: i18nService.t('splash.checks.androidSdkComplete')
         };
       } else {
         return {
           status: 'error',
-          message: `缺少Android SDK组件: ${missingComponents.join(', ')}`
+          message: i18nService.t('splash.checks.missingAndroidSdkComponents', { components: missingComponents.join(', ') })
         };
       }
     } catch (error) {
       return {
         status: 'error',
-        message: `检查Android SDK失败: ${error.message}`
+        message: i18nService.t('splash.checks.checkAndroidSdkFailed', { error: error.message })
       };
     }
   }
@@ -201,24 +705,24 @@ class ElectronApp {
         if (version === '17.0.15') {
           return {
             status: 'success',
-            message: `Java版本: ${version}`
+            message: i18nService.t('splash.checks.javaVersion', { version: version })
           };
         } else {
           return {
             status: 'warning',
-            message: `Java版本: ${version} (推荐: 17.0.15)`
+            message: i18nService.t('splash.checks.javaVersionRecommended', { version: version, recommended: '17.0.15' })
           };
         }
       } else {
         return {
           status: 'error',
-          message: '无法获取Java版本'
+          message: i18nService.t('splash.checks.cannotGetJavaVersion')
         };
       }
     } catch (error) {
       return {
         status: 'error',
-        message: `检查Java版本失败: ${error.message}`
+        message: i18nService.t('splash.checks.checkJavaVersionFailed', { error: error.message })
       };
     }
   }
@@ -226,12 +730,23 @@ class ElectronApp {
   // 检查Python版本和依赖
   async checkPythonEnvironment() {
     try {
-      // 检查Python版本
-      const result = await this.executeCommand('python', ['--version']);
+      // 检查UV虚拟环境是否存在
+      const pythonCmd = this.getPythonCommand();
+      
+      if (!pythonCmd.command) {
+        return {
+          status: 'error',
+          message: pythonCmd.error || 'UV虚拟环境不存在，请运行 "uv sync" 创建虚拟环境'
+        };
+      }
+      
+      // 使用虚拟环境Python检查版本
+      const result = await this.executeCommand(pythonCmd.command, ['--version']);
+      
       if (result.code !== 0) {
         return {
           status: 'error',
-          message: '未找到Python'
+          message: i18nService.t('splash.checks.pythonNotFound')
         };
       }
       
@@ -239,24 +754,27 @@ class ElectronApp {
       if (!versionMatch) {
         return {
           status: 'error',
-          message: '无法获取Python版本'
+          message: i18nService.t('splash.checks.cannotGetPythonVersion')
         };
       }
       
       const version = versionMatch[1];
       let versionStatus = 'success';
-      let versionMessage = `Python版本: ${version}`;
+      let versionMessage;
       
-      // 检查是否为3.12.4
+      // 检查是否为3.12.4，使用UV虚拟环境的国际化文本
       if (version !== '3.12.4') {
         versionStatus = 'warning';
-        versionMessage = `Python版本: ${version} (推荐: 3.12.4)`;
+        versionMessage = i18nService.t('splash.checks.pythonVersionRecommendedUv', { version: version, recommended: '3.12.4' });
+      } else {
+        versionMessage = i18nService.t('splash.checks.pythonVersionUv', { version: version });
       }
       
       // 检查依赖包
       const requirementsPath = path.join(this.projectRoot, 'requirements.txt');
       if (fs.existsSync(requirementsPath)) {
-        const pipResult = await this.executeCommand('pip', ['list', '--format=freeze']);
+        const pipCmd = this.getPipCommand();
+        const pipResult = await this.executeCommand(pipCmd.command, [...pipCmd.args, 'list', '--format=freeze']);
         const installedPackages = new Set(pipResult.stdout.split('\n').map(pkg => pkg.toLowerCase()));
         
         const requirements = fs.readFileSync(requirementsPath, 'utf8')
@@ -283,7 +801,7 @@ class ElectronApp {
         if (missingPackages.length > 0) {
           return {
             status: 'warning',
-            message: `${versionMessage}，缺少依赖包: ${missingPackages.join(', ')}`
+            message: i18nService.t('splash.checks.missingPackages', { versionMessage: versionMessage, packages: missingPackages.join(', ') })
           };
         }
       }
@@ -295,7 +813,7 @@ class ElectronApp {
     } catch (error) {
       return {
         status: 'error',
-        message: `检查Python环境失败: ${error.message}`
+        message: i18nService.t('splash.checks.checkPythonEnvironmentFailed', { error: error.message })
       };
     }
   }
@@ -307,7 +825,7 @@ class ElectronApp {
       if (result.code !== 0) {
         return {
           status: 'error',
-          message: '未找到Node.js'
+          message: i18nService.t('splash.checks.nodejsNotFound')
         };
       }
       
@@ -315,18 +833,18 @@ class ElectronApp {
       if (version === '22.19.0') {
         return {
           status: 'success',
-          message: `Node.js版本: ${version}`
+          message: i18nService.t('splash.checks.nodejsVersion', { version: version })
         };
       } else {
         return {
           status: 'warning',
-          message: `Node.js版本: ${version} (推荐: 22.19.0)`
+          message: i18nService.t('splash.checks.nodejsVersionRecommended', { version: version, recommended: '22.19.0' })
         };
       }
     } catch (error) {
       return {
         status: 'error',
-        message: `检查Node.js版本失败: ${error.message}`
+        message: i18nService.t('splash.checks.checkNodejsVersionFailed', { error: error.message })
       };
     }
   }
@@ -335,7 +853,7 @@ class ElectronApp {
   async runEnvironmentChecks() {
     const checks = [
       {
-        name: 'CP210x串口驱动',
+        name: i18nService.t('splash.checks.cp210DriverCheck'),
         check: () => this.checkCP210xDriver(),
         isRequired: true
       },
@@ -345,17 +863,17 @@ class ElectronApp {
         isRequired: true
       },
       {
-        name: 'Java版本',
+        name: i18nService.t('splash.checks.javaVersionCheck'),
         check: () => this.checkJavaVersion(),
         isRequired: false
       },
       {
-        name: 'Python环境',
+        name: i18nService.t('splash.checks.pythonEnvironment'),
         check: () => this.checkPythonEnvironment(),
         isRequired: true
       },
       {
-        name: 'Node.js版本',
+        name: i18nService.t('splash.checks.nodejsVersionCheck'),
         check: () => this.checkNodeVersion(),
         isRequired: false
       }
@@ -374,7 +892,7 @@ class ElectronApp {
       if (this.splashWindow) {
         this.splashWindow.webContents.send('check-progress', {
           percentage: progress,
-          message: `正在检查 ${check.name}...`
+          message: i18nService.t('splash.checks.checking', { name: check.name })
         });
       }
       
@@ -407,16 +925,16 @@ class ElectronApp {
           this.splashWindow.webContents.send('check-result', {
             name: check.name,
             status: 'error',
-            message: `检查失败: ${error.message}`,
+            message: i18nService.t('splash.checks.checkFailed', { error: error.message }),
             isRequired: check.isRequired
           });
         }
         
         // 收集结果
         if (check.isRequired) {
-          results.required.push(`${check.name}: 检查失败`);
+          results.required.push(`${check.name}: ${i18nService.t('splash.checks.checkFailedShort')}`);
         } else {
-          results.warnings.push(`${check.name}: 检查失败`);
+          results.warnings.push(`${check.name}: ${i18nService.t('splash.checks.checkFailedShort')}`);
         }
       }
       
@@ -437,16 +955,21 @@ class ElectronApp {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
+        sandbox: false,
         preload: this.isPackaged ? path.join(process.resourcesPath, 'app', 'preload.js') : path.join(__dirname, 'preload.js'),
         webSecurity: false // 允许加载本地文件
       },
-      titleBarStyle: 'default', // 恢复默认标题栏
-      frame: true, // 确保有窗口边框
-      autoHideMenuBar: false, // 不自动隐藏菜单栏
+      frame: false, // 隐藏原生标题栏
+      transparent: true, // 透明窗口以实现圆角
+      backgroundColor: '#00000000', // 完全透明背景
+      hasShadow: true,
+      roundedCorners: true,
       show: false,
       icon: this.isPackaged ? path.join(process.resourcesPath, 'app', 'assets', 'icon.png') : path.join(__dirname, 'assets', 'icon.png'),
       x: 100, // 设置窗口位置
-      y: 100
+      y: 100,
+      autoHideMenuBar: true, // 自动隐藏菜单栏
+      thickFrame: false // 禁用粗边框
     });
     
     // 完全禁用菜单栏
@@ -461,11 +984,27 @@ class ElectronApp {
       this.mainWindow.show();
       this.mainWindow.focus();
       this.mainWindow.center(); // 居中显示窗口
+      this.mainWindow.webContents.openDevTools(); // 打开开发者工具
     });
 
     // 处理窗口关闭
     this.mainWindow.on('closed', () => {
       this.mainWindow = null;
+    });
+
+    // 设置 SmartScheduler 的 mainWindow 引用
+    if (this.smartScheduler) {
+      this.smartScheduler.setMainWindow(this.mainWindow);
+    }
+
+    // 监听窗口最大化事件
+    this.mainWindow.on('maximize', () => {
+      this.mainWindow.webContents.send('window-maximized', true);
+    });
+
+    // 监听窗口还原事件
+    this.mainWindow.on('unmaximize', () => {
+      this.mainWindow.webContents.send('window-maximized', false);
     });
 
     // 阻止新窗口打开
@@ -491,7 +1030,7 @@ class ElectronApp {
         console.error('环境检查失败:', error);
         if (this.splashWindow) {
           this.splashWindow.webContents.send('check-complete', {
-            requiredErrors: [`环境检查失败: ${error.message}`],
+            requiredErrors: [i18nService.t('splash.checks.environmentCheckFailed', { error: error.message })],
             warnings: []
           });
         }
@@ -506,6 +1045,38 @@ class ElectronApp {
       }
       
       this.createWindow();
+    });
+    
+    // 窗口控制
+    ipcMain.handle('window-minimize', () => {
+      if (this.mainWindow) {
+        this.mainWindow.minimize();
+      }
+    });
+    
+    ipcMain.handle('window-maximize', () => {
+      if (this.mainWindow) {
+        if (this.mainWindow.isMaximized()) {
+          this.mainWindow.unmaximize();
+        } else {
+          this.mainWindow.maximize();
+        }
+        return this.mainWindow.isMaximized();
+      }
+      return false;
+    });
+    
+    ipcMain.handle('window-close', () => {
+      if (this.mainWindow) {
+        this.mainWindow.close();
+      }
+    });
+    
+    ipcMain.handle('window-is-maximized', () => {
+      if (this.mainWindow) {
+        return this.mainWindow.isMaximized();
+      }
+      return false;
     });
     
     // 处理启动页获取配置
@@ -573,7 +1144,7 @@ class ElectronApp {
     ipcMain.handle('get-project-info', async () => {
       return {
         root: this.projectRoot,
-        version: 'v0.1.1-dev.2',
+        version: 'v0.1.2-dev.1',
         name: 'XKAutoTester'
       };
     });
@@ -662,7 +1233,7 @@ class ElectronApp {
             } else {
               // 其他命令使用退出码判断
               if (code !== 0) {
-                resolve({ success: false, error: stderr || `命令执行失败，退出码: ${code}`, output: stdout });
+                resolve({ success: false, error: stderr || i18nService.t('main.commandFailed', { code }), output: stdout });
               } else {
                 resolve({ success: true, output: stdout, error: stderr });
               }
@@ -676,7 +1247,7 @@ class ElectronApp {
           // 设置超时
           setTimeout(() => {
             adbProcess.kill();
-            resolve({ success: false, error: '命令执行超时', output: stdout });
+            resolve({ success: false, error: i18nService.t('main.commandTimeout'), output: stdout });
           }, 5000);
         });
       } catch (error) {
@@ -967,7 +1538,7 @@ class ElectronApp {
                     });
                   });
                 } catch (error) {
-                  throw new Error(`解压tar文件失败: ${error.message}`);
+                  throw new Error(i18nService.t('main.tarExtractFailed', { error: error.message }));
                 }
                 
                 // 调试：检查解压后的目录结构
@@ -1027,7 +1598,7 @@ class ElectronApp {
                   fileName: path.basename(finalLocalPath)
                 });
                 
-                return { success: true, output: `文件已成功下载到: ${finalLocalPath}`, localPath: finalLocalPath };
+                return { success: true, output: i18nService.t('main.fileDownloaded', { path: finalLocalPath }), localPath: finalLocalPath };
               } catch (error) {
                 // 清理临时文件和目录
                 if (fs.existsSync(tempTarPath)) {
@@ -1036,7 +1607,7 @@ class ElectronApp {
                 fs.rmSync(tempDir, { recursive: true, force: true });
                 
                 // 构建详细的错误信息
-                let detailedError = `创建zip文件失败: ${error.message}`;
+                let detailedError = i18nService.t('main.zipCreationFailed', { error: error.message });
                 detailedError += `\n执行的ADB命令: ${adbExecOutCmd}`;
                 detailedError += `\n临时目录: ${tempDir}`;
                 detailedError += `\n目标路径: ${finalLocalPath}`;
@@ -1191,6 +1762,16 @@ class ElectronApp {
       return this.checkReportExists(testPlanName);
     });
 
+    // 获取测试计划运行记录
+    ipcMain.handle('get-test-plan-runs', async (event, testPlanName) => {
+      return this.getTestPlanRuns(testPlanName);
+    });
+
+    // 通过路径打开报告
+    ipcMain.handle('open-report-by-path', async (event, reportPath) => {
+      return this.openReportByPath(reportPath);
+    });
+
     // 停止Allure服务器
     ipcMain.handle('stop-allure-server', async () => {
       return this.stopAllureServer();
@@ -1199,6 +1780,11 @@ class ElectronApp {
     // 获取Allure服务器状态
     ipcMain.handle('get-allure-server-status', async () => {
       return this.getAllureServerStatus();
+    });
+
+    // 清空Allure报告数据
+    ipcMain.handle('clear-allure-reports', async () => {
+      return this.clearAllureReports();
     });
 
     // 显示弹窗消息
@@ -1289,16 +1875,13 @@ class ElectronApp {
     // 启动scrcpy
     ipcMain.handle('start-scrcpy', async (event, deviceId, scrcpyParams) => {
       try {
-        // 构建scrcpy命令
         const scrcpyPath = path.join(this.projectRoot, 'env', 'scrcpy', 'scrcpy.exe');
         const args = ['-s', deviceId];
         
-        // 添加配置参数
         if (scrcpyParams.max_size) {
           args.push('--max-size', scrcpyParams.max_size);
         }
         if (scrcpyParams.video_bit_rate) {
-          // 为视频比特率参数添加M单位
           const bitRate = scrcpyParams.video_bit_rate;
           const bitRateWithUnit = typeof bitRate === 'string' && bitRate.endsWith('M') ? bitRate : `${bitRate}M`;
           args.push('--video-bit-rate', bitRateWithUnit);
@@ -1313,21 +1896,16 @@ class ElectronApp {
           args.push('--always-on-top');
         }
         
-        // 检查scrcpy路径是否存在
         if (!fs.existsSync(scrcpyPath)) {
-          return { success: false, error: `scrcpy不存在: ${scrcpyPath}` };
+          return { success: false, error: i18nService.t('main.scrcpyNotFound', { path: scrcpyPath }) };
         }
         
-        // 使用execFile启动scrcpy，适合执行可执行文件
         const { execFile } = require('child_process');
         
-        // 在Windows上，使用更可靠的方法隐藏cmd窗口启动scrcpy
         if (process.platform === 'win32') {
-          // 使用PowerShell命令来隐藏窗口启动scrcpy
           const argsStr = args.map(arg => `'${arg}'`).join(' ');
           const command = `powershell.exe -WindowStyle Hidden -Command "& '${scrcpyPath}' ${argsStr}"`;
           
-          // 使用exec执行PowerShell命令
           require('child_process').exec(command, {
             cwd: path.dirname(scrcpyPath),
             windowsHide: true
@@ -1337,7 +1915,6 @@ class ElectronApp {
             }
           });
         } else {
-          // Linux/macOS系统使用execFile
           execFile(scrcpyPath, args, {
             cwd: path.dirname(scrcpyPath),
             detached: true,
@@ -1354,11 +1931,69 @@ class ElectronApp {
         return { success: false, error: error.message };
       }
     });
+
+    ipcMain.handle('get-scheduled-plans', async () => {
+      return this.getScheduledPlans();
+    });
+
+    ipcMain.handle('save-scheduled-plan', async (event, planData) => {
+      const result = await this.saveScheduledPlan(planData);
+      if (result.success && this.smartScheduler) {
+        this.smartScheduler.addPlan(result.plan);
+      }
+      return result;
+    });
+
+    ipcMain.handle('update-scheduled-plan', async (event, planData) => {
+      const result = await this.updateScheduledPlan(planData);
+      if (result.success && this.smartScheduler) {
+        this.smartScheduler.updatePlan(planData.id, planData);
+      }
+      return result;
+    });
+
+    ipcMain.handle('delete-scheduled-plan', async (event, planId) => {
+      const result = await this.deleteScheduledPlan(planId);
+      if (result.success && this.smartScheduler) {
+        this.smartScheduler.removePlan(planId);
+      }
+      return result;
+    });
+
+    ipcMain.handle('check-time-conflict', async (event, data) => {
+      const { scheduledTime, excludeId } = data || {};
+      return this.checkTimeConflict(scheduledTime, excludeId);
+    });
+
+    ipcMain.handle('send-dingtalk-notification', async (event, notificationData) => {
+      return this.sendDingTalkNotification(notificationData);
+    });
+    
+    ipcMain.handle('scheduled-test-complete', async (event, planId) => {
+      return this.handleScheduledTestComplete(planId);
+    });
+
+    ipcMain.handle('get-scheduler-status', async () => {
+      if (this.smartScheduler) {
+        return this.smartScheduler.getStatus();
+      }
+      return null;
+    });
   }
 
   async runPythonTests(testConfig) {
     return new Promise((resolve, reject) => {
       const { testPaths, markers, testPlanName } = testConfig;
+      
+      // 检查UV虚拟环境是否存在
+      const pythonCmd = this.getPythonCommand();
+      if (!pythonCmd.command) {
+        resolve({
+          success: false,
+          error: pythonCmd.error || i18nService.t('splash.checks.uvVenvNotFound')
+        });
+        return;
+      }
       
       // 启动未授权弹窗监控
       this.startUnauthorizedDialogMonitor();
@@ -1377,8 +2012,8 @@ class ElectronApp {
         pythonArgs.push('--test-plan', testPlanName);
       }
 
-      // 运行Python进程，设置UTF-8编码环境
-      const pythonProcess = spawn('python', pythonArgs, {
+      // 使用虚拟环境Python运行测试
+      const pythonProcess = spawn(pythonCmd.command, pythonArgs, {
         cwd: this.projectRoot,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
@@ -1503,6 +2138,148 @@ class ElectronApp {
     }
   }
 
+  async getTestPlanRuns(testPlanName) {
+    try {
+      const plansPath = path.join(this.projectRoot, 'test_plans.json');
+      
+      if (!fs.existsSync(plansPath)) {
+        return { success: false, error: '测试计划文件不存在', runs: [] };
+      }
+      
+      const data = fs.readFileSync(plansPath, 'utf8');
+      const plans = JSON.parse(data);
+      
+      const plan = plans.find(p => p.name === testPlanName);
+      if (!plan) {
+        return { success: false, error: '未找到指定测试计划', runs: [] };
+      }
+      
+      const runs = plan.runs || [];
+      
+      // 按时间降序排序
+      const sortedRuns = runs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      
+      const processedRuns = sortedRuns.map((run, index) => {
+        const reportExists = run.report_path && fs.existsSync(run.report_path);
+        return {
+          index: index + 1,
+          timestamp: run.timestamp,
+          reportPath: run.report_path,
+          available: reportExists,
+          isLatest: index === 0
+        };
+      });
+      
+      return { success: true, runs: processedRuns };
+    } catch (error) {
+      console.error('获取测试计划运行记录失败:', error);
+      return { success: false, error: error.message, runs: [] };
+    }
+  }
+
+  async openReportByPath(reportPath) {
+    try {
+      const serverStatus = await this.getAllureServerStatus();
+      if (serverStatus.running || serverStatus.allureOpenRunning) {
+        const serverInfo = this.allureServerPort ? `当前服务地址: http://127.0.0.1:${this.allureServerPort}` : '';
+        return { 
+          success: false, 
+          error: `已有Allure服务器在运行，请先关闭现有服务器再尝试打开新报告。${serverInfo ? ' ' + serverInfo : ''}`
+        };
+      }
+
+      if (!reportPath || !fs.existsSync(reportPath)) {
+        return { success: false, error: '报告路径不存在' };
+      }
+
+      return await this.openAllureReportDirectlyByPath(reportPath);
+    } catch (error) {
+      console.error('打开报告失败:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async openAllureReportDirectlyByPath(reportPath) {
+    try {
+      const fs = require('fs');
+      const logsDir = path.join(this.projectRoot, 'logs', 'XKAT');
+      
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+      }
+
+      const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const logPath = path.join(logsDir, `XKAT-${currentTime}.log`);
+      const timestamp = new Date().toISOString();
+      const logMessage = `[${timestamp}] 开始打开报告: ${reportPath}\n`;
+      fs.appendFileSync(logPath, logMessage, 'utf8');
+
+      const { spawn } = require('child_process');
+      
+      // 优先使用项目内的allure命令
+      const projectAllureBat = path.join(this.projectRoot, 'env', 'allure', 'bin', 'allure.bat');
+      const projectAllure = path.join(this.projectRoot, 'env', 'allure', 'bin', 'allure');
+      
+      let command;
+      
+      if (fs.existsSync(projectAllureBat)) {
+        // Windows系统：使用完整的命令行字符串，确保空格被正确处理
+        command = `"${projectAllureBat}" open "${reportPath}"`;
+        fs.appendFileSync(logPath, `[${new Date().toISOString()}] Using project allure.bat\n`, 'utf8');
+      } else if (fs.existsSync(projectAllure)) {
+        command = `"${projectAllure}" open "${reportPath}"`;
+        fs.appendFileSync(logPath, `[${new Date().toISOString()}] Using project allure\n`, 'utf8');
+      } else {
+        command = `allure open "${reportPath}"`;
+        fs.appendFileSync(logPath, `[${new Date().toISOString()}] Using system allure\n`, 'utf8');
+      }
+      
+      fs.appendFileSync(logPath, `[${new Date().toISOString()}] Command: ${command}\n`, 'utf8');
+
+      this.allureOpenProcess = spawn(command, {
+        cwd: this.projectRoot,
+        stdio: 'pipe',
+        detached: false,
+        shell: true,
+        windowsHide: true
+      });
+
+      this.allureOpenProcess.stdout.on('data', (data) => {
+        const output = data.toString();
+        fs.appendFileSync(logPath, `[${new Date().toISOString()}] STDOUT: ${output}`, 'utf8');
+        
+        const portMatch = output.match(/http:\/\/[0-9.]+:(\d+)/);
+        if (portMatch) {
+          this.allureServerPort = parseInt(portMatch[1]);
+        }
+      });
+
+      this.allureOpenProcess.stderr.on('data', (data) => {
+        fs.appendFileSync(logPath, `[${new Date().toISOString()}] STDERR: ${data.toString()}`, 'utf8');
+      });
+
+      this.allureOpenProcess.on('close', (code) => {
+        fs.appendFileSync(logPath, `[${new Date().toISOString()}] 进程退出，代码: ${code}\n`, 'utf8');
+        this.allureOpenProcess = null;
+        this.allureServerPort = null;
+      });
+
+      this.allureOpenProcess.on('error', (error) => {
+        fs.appendFileSync(logPath, `[${new Date().toISOString()}] 进程错误: ${error.message}\n`, 'utf8');
+        this.allureOpenProcess = null;
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const message = `正在打开Allure报告...`;
+      return { success: true, message };
+    } catch (error) {
+      const errorMessage = `打开报告失败: ${error.message}`;
+      console.error(errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }
+
   async saveTestPlan(planData) {
     try {
       const plansPath = path.join(this.projectRoot, 'test_plans.json');
@@ -1555,7 +2332,7 @@ class ElectronApp {
         fs.writeFileSync(plansPath, JSON.stringify(existingPlans, null, 2));
         return { success: true };
       } else {
-        return { success: false, error: '未找到指定的测试计划' };
+        return { success: false, error: i18nService.t('main.testPlanNotFound') };
       }
     } catch (error) {
       console.error('更新测试计划失败:', error);
@@ -1580,7 +2357,7 @@ class ElectronApp {
         fs.writeFileSync(plansPath, JSON.stringify(existingPlans, null, 2));
         return { success: true };
       } else {
-        return { success: false, error: '未找到指定的测试计划' };
+        return { success: false, error: i18nService.t('main.testPlanNotFound') };
       }
     } catch (error) {
       console.error('删除测试计划失败:', error);
@@ -1738,7 +2515,7 @@ class ElectronApp {
         
         return { success: true, port: port };
       } else {
-        return { success: false, error: 'Allure服务器启动失败' };
+        return { success: false, error: i18nService.t('main.allureServerStartFailed') };
       }
 
     } catch (error) {
@@ -1787,16 +2564,16 @@ class ElectronApp {
   async killProcessByPort(port, processName = 'allure open进程') {
     const fs = require('fs');
     const path = require('path');
-    const logsDir = path.join(this.projectRoot, 'logs', 'Electron');
+    const logsDir = path.join(this.projectRoot, 'logs', 'XKAT');
     
-    // 确保Electron日志文件夹存在
+    // 确保XKAT日志文件夹存在
     if (!fs.existsSync(logsDir)) {
       fs.mkdirSync(logsDir, { recursive: true });
     }
     
     // 生成当前时间格式化的日志文件名
     const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const logPath = path.join(logsDir, `Electron-${currentTime}.log`);
+    const logPath = path.join(logsDir, `XKAT-${currentTime}.log`);
     
     const logMessage = (message) => {
       const timestamp = new Date().toISOString();
@@ -1846,14 +2623,14 @@ class ElectronApp {
           return { success: true, killedProcesses };
         } else {
           logMessage(`未找到监听端口 ${port} 的进程`);
-          return { success: false, error: '未找到进程' };
+          return { success: false, error: i18nService.t('main.processNotFound') };
         }
       } else {
         logMessage(`未找到监听端口 ${port} 的进程`);
-        return { success: false, error: '未找到进程' };
+        return { success: false, error: i18nService.t('main.processNotFound') };
       }
     } catch (error) {
-      const errorMessage = `按端口停止${processName}失败: ${error.message}`;
+      const errorMessage = i18nService.t('main.stopProcessFailed', { processName, error: error.message });
       logMessage(errorMessage);
       return { success: false, error: error.message };
     }
@@ -1861,18 +2638,18 @@ class ElectronApp {
 
   async stopAllureServer() {
     try {
-      // 使用独立的Electron日志文件，避免与Python日志文件冲突
+      // 使用独立的XKAT日志文件，避免与Python日志文件冲突
       const fs = require('fs');
-      const logsDir = path.join(this.projectRoot, 'logs', 'Electron');
+      const logsDir = path.join(this.projectRoot, 'logs', 'XKAT');
       
-      // 确保Electron日志文件夹存在
+      // 确保XKAT日志文件夹存在
       if (!fs.existsSync(logsDir)) {
         fs.mkdirSync(logsDir, { recursive: true });
       }
       
       // 生成当前时间格式化的日志文件名
       const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      const electronLogPath = path.join(logsDir, `Electron-${currentTime}.log`);
+      const electronLogPath = path.join(logsDir, `XKAT-${currentTime}.log`);
       
       const logMessage = (message) => {
         const timestamp = new Date().toISOString();
@@ -1975,20 +2752,52 @@ class ElectronApp {
     }
   }
 
+  async clearAllureReports() {
+    try {
+      const allureReportsDir = path.join(this.projectRoot, 'allure-reports');
+      
+      if (!fs.existsSync(allureReportsDir)) {
+        return { success: true, message: 'Allure报告目录不存在' };
+      }
+      
+      const items = fs.readdirSync(allureReportsDir);
+      let deletedCount = 0;
+      
+      for (const item of items) {
+        const itemPath = path.join(allureReportsDir, item);
+        try {
+          if (fs.statSync(itemPath).isDirectory()) {
+            fs.rmSync(itemPath, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(itemPath);
+          }
+          deletedCount++;
+        } catch (e) {
+          console.error(`删除 ${itemPath} 失败:`, e);
+        }
+      }
+      
+      return { success: true, message: `已清空 ${deletedCount} 个报告` };
+    } catch (error) {
+      console.error('清空Allure报告数据失败:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   async openAllureReportDirectly(testPlanName) {
     try {
-      // 使用独立的Electron日志文件，避免与Python日志文件冲突
+      // 使用独立的XKAT日志文件，避免与Python日志文件冲突
       const fs = require('fs');
-      const logsDir = path.join(this.projectRoot, 'logs', 'Electron');
+      const logsDir = path.join(this.projectRoot, 'logs', 'XKAT');
       
-      // 确保Electron日志文件夹存在
+      // 确保XKAT日志文件夹存在
       if (!fs.existsSync(logsDir)) {
         fs.mkdirSync(logsDir, { recursive: true });
       }
       
       // 生成当前时间格式化的日志文件名
       const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      const electronLogPath = path.join(logsDir, `Electron-${currentTime}.log`);
+      const electronLogPath = path.join(logsDir, `XKAT-${currentTime}.log`);
       
       const logMessage = (message) => {
         const timestamp = new Date().toISOString();
@@ -2106,7 +2915,7 @@ class ElectronApp {
       return { success: true };
 
     } catch (error) {
-      const errorMessage = `使用allure open打开报告失败: ${error.message}`;
+      const errorMessage = i18nService.t('main.openReportFailed', { error: error.message });
       console.error(errorMessage);
       
       // 记录错误到日志文件
@@ -2414,7 +3223,223 @@ class ElectronApp {
     }
   }
 
+  async getScheduledPlans() {
+    try {
+      if (fs.existsSync(this.scheduledPlansPath)) {
+        const data = fs.readFileSync(this.scheduledPlansPath, 'utf8');
+        return JSON.parse(data);
+      }
+      return [];
+    } catch (error) {
+      console.error('读取定时计划失败:', error);
+      return [];
+    }
+  }
+
+  getScheduledPlansSync() {
+    try {
+      if (fs.existsSync(this.scheduledPlansPath)) {
+        const data = fs.readFileSync(this.scheduledPlansPath, 'utf8');
+        return JSON.parse(data);
+      }
+      return [];
+    } catch (error) {
+      console.error('读取定时计划失败:', error);
+      return [];
+    }
+  }
+
+  async saveScheduledPlan(planData) {
+    try {
+      let existingPlans = await this.getScheduledPlans();
+      
+      const newPlan = {
+        id: planData.id || `scheduled-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: planData.name,
+        testPlans: planData.testPlans || [],
+        scheduledTime: planData.scheduledTime,
+        status: 'pending',
+        created: planData.created || new Date().toISOString(),
+        lastRun: null
+      };
+      
+      existingPlans.push(newPlan);
+      fs.writeFileSync(this.scheduledPlansPath, JSON.stringify(existingPlans, null, 2));
+      
+      return { success: true, plan: newPlan };
+    } catch (error) {
+      console.error('保存定时计划失败:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateScheduledPlan(planData) {
+    try {
+      let existingPlans = await this.getScheduledPlans();
+      
+      const index = existingPlans.findIndex(p => p.id === planData.id);
+      
+      if (index >= 0) {
+        const originalPlan = existingPlans[index];
+        existingPlans[index] = {
+          ...originalPlan,
+          ...planData,
+          id: originalPlan.id,
+          created: originalPlan.created
+        };
+        
+        fs.writeFileSync(this.scheduledPlansPath, JSON.stringify(existingPlans, null, 2));
+        return { success: true };
+      } else {
+        return { success: false, error: '未找到指定的定时计划' };
+      }
+    } catch (error) {
+      console.error('更新定时计划失败:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteScheduledPlan(planId) {
+    try {
+      let existingPlans = await this.getScheduledPlans();
+      
+      const index = existingPlans.findIndex(p => p.id === planId);
+      
+      if (index >= 0) {
+        existingPlans.splice(index, 1);
+        fs.writeFileSync(this.scheduledPlansPath, JSON.stringify(existingPlans, null, 2));
+        return { success: true };
+      } else {
+        return { success: false, error: '未找到指定的定时计划' };
+      }
+    } catch (error) {
+      console.error('删除定时计划失败:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async checkTimeConflict(scheduledTime, excludeId = null) {
+    try {
+      const existingPlans = await this.getScheduledPlans();
+      
+      const newTime = new Date(scheduledTime);
+      const newTimeMinutes = newTime.getFullYear() + '-' + 
+                            String(newTime.getMonth() + 1).padStart(2, '0') + '-' +
+                            String(newTime.getDate()).padStart(2, '0') + 'T' +
+                            String(newTime.getHours()).padStart(2, '0') + ':' +
+                            String(newTime.getMinutes()).padStart(2, '0');
+      
+      for (const plan of existingPlans) {
+        if (excludeId && plan.id === excludeId) {
+          continue;
+        }
+        
+        if (plan.status === 'cancelled') {
+          continue;
+        }
+        
+        const planTime = new Date(plan.scheduledTime);
+        const planTimeMinutes = planTime.getFullYear() + '-' + 
+                               String(planTime.getMonth() + 1).padStart(2, '0') + '-' +
+                               String(planTime.getDate()).padStart(2, '0') + 'T' +
+                               String(planTime.getHours()).padStart(2, '0') + ':' +
+                               String(planTime.getMinutes()).padStart(2, '0');
+        
+        if (newTimeMinutes === planTimeMinutes) {
+          return { 
+            hasConflict: true, 
+            conflictingPlan: plan 
+          };
+        }
+      }
+      
+      return { hasConflict: false };
+    } catch (error) {
+      console.error('检查时间冲突失败:', error);
+      return { hasConflict: false };
+    }
+  }
+
+  async sendDingTalkNotification(notificationData) {
+    try {
+      const { accessToken, secret, message } = notificationData;
+      
+      if (!accessToken || !secret) {
+        return { success: false, error: '钉钉配置不完整，请检查 access_token 和 secret' };
+      }
+      
+      const timestamp = Date.now().toString();
+      const stringToSign = `${timestamp}\n${secret}`;
+      
+      const hmac = crypto.createHmac('sha256', secret);
+      hmac.update(stringToSign);
+      const hmacCode = hmac.digest();
+      const sign = encodeURIComponent(hmacCode.toString('base64'));
+      
+      const url = `https://oapi.dingtalk.com/robot/send?access_token=${accessToken}&timestamp=${timestamp}&sign=${sign}`;
+      
+      const body = {
+        at: {
+          isAtAll: 'false',
+          atUserIds: [],
+          atMobiles: []
+        },
+        text: {
+          content: message
+        },
+        msgtype: 'text'
+      };
+      
+      const response = await axios.post(url, body, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('钉钉通知发送响应:', response.data);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('发送钉钉通知失败:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  startScheduleChecker() {
+    if (this.smartScheduler) {
+      return;
+    }
+    
+    this.smartScheduler = new SmartScheduler(this);
+    this.smartScheduler.initialize();
+  }
+
+  stopScheduleChecker() {
+    if (this.smartScheduler) {
+      this.smartScheduler.destroy();
+      this.smartScheduler = null;
+    }
+  }
+
+  async handleScheduledTestComplete(planId) {
+    try {
+      await this.updateScheduledPlan({
+        id: planId,
+        status: 'completed',
+        lastRun: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('更新定时计划状态失败:', error);
+    }
+  }
+
   initialize() {
+    // 禁用Windows上的透明窗口透明度限制
+    if (process.platform === 'win32') {
+      app.disableHardwareAcceleration();
+      // 禁用Windows系统上透明窗口最大化时的边框
+      app.commandLine.appendSwitch('enable-transparent-visuals');
+    }
+    
     // 当所有窗口被关闭时退出应用
     app.on('window-all-closed', () => {
       if (process.platform !== 'darwin') {
@@ -2428,18 +3453,21 @@ class ElectronApp {
       }
     });
 
-    // 应用准备就绪
     app.whenReady().then(() => {
       this.createSplashWindow();
       this.setupIPC();
+      this.startScheduleChecker();
     });
 
-    // 阻止默认行为
     app.on('web-contents-created', (event, contents) => {
       contents.on('new-window', (event, navigationUrl) => {
         event.preventDefault();
         shell.openExternal(navigationUrl);
       });
+    });
+
+    app.on('before-quit', () => {
+      this.stopScheduleChecker();
     });
   }
 }
