@@ -6,11 +6,7 @@ import base64
 import sys
 import os
 
-# 添加项目根目录到Python路径
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
-
-from utils.logger import get_logger
+from main.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

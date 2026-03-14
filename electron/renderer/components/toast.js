@@ -5,6 +5,7 @@
 class ToastManager {
     constructor() {
         this.containers = new Map();
+        this.activeToasts = new Set();
         this.defaultOptions = {
             type: 'info',
             duration: 3000,
@@ -31,21 +32,79 @@ class ToastManager {
         toast.textContent = message;
         
         container.appendChild(toast);
+        this.activeToasts.add(toast);
         
-        setTimeout(() => {
-            toast.classList.add('fade-out');
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.parentNode.removeChild(toast);
-                }
-                if (container.children.length === 0 && container.dataset.container !== 'default') {
-                    container.remove();
-                    this.containers.delete(this.getContainerKey(config.container));
-                }
-            }, 300);
+        const timeoutId = setTimeout(() => {
+            this.removeToast(toast, config.container);
         }, config.duration);
         
+        toast.dataset.timeoutId = timeoutId;
+        
         return toast;
+    }
+    
+    removeToast(toast, container) {
+        if (!toast.parentNode) {
+            this.activeToasts.delete(toast);
+            return;
+        }
+        
+        toast.classList.add('fade-out');
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+            this.activeToasts.delete(toast);
+            
+            const containerKey = this.getContainerKey(container);
+            const toastContainer = this.containers.get(containerKey);
+            if (toastContainer && toastContainer.children.length === 0 && toastContainer.dataset.container !== 'default') {
+                toastContainer.remove();
+                this.containers.delete(containerKey);
+            }
+        }, 300);
+    }
+
+    /**
+     * 清除所有Toast消息
+     */
+    clearAll() {
+        this.activeToasts.forEach(toast => {
+            const timeoutId = toast.dataset.timeoutId;
+            if (timeoutId) {
+                clearTimeout(parseInt(timeoutId));
+            }
+            if (toast.parentNode) {
+                toast.classList.add('fade-out');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300);
+            }
+        });
+        this.activeToasts.clear();
+        
+        // 收集需要删除的key，避免在遍历中修改Map
+        const keysToDelete = [];
+        this.containers.forEach((container, key) => {
+            if (container.dataset.container !== 'default') {
+                container.remove();
+                keysToDelete.push(key);
+            } else {
+                container.innerHTML = '';
+            }
+        });
+        
+        // 删除已移除的容器引用
+        keysToDelete.forEach(key => {
+            this.containers.delete(key);
+        });
+        
+        const defaultContainer = document.getElementById('toast-container');
+        if (defaultContainer) {
+            defaultContainer.innerHTML = '';
+        }
     }
 
     getOrCreateContainer(parentContainer, position) {
@@ -56,7 +115,7 @@ class ToastManager {
                 defaultContainer.id = 'toast-container';
                 defaultContainer.className = `toast-container ${position}`;
                 defaultContainer.dataset.container = 'default';
-                const appContainer = document.querySelector('main.main-content') || document.querySelector('.left-panel') || document.getElementById('app') || document.body;
+                const appContainer = document.getElementById('app');
                 appContainer.appendChild(defaultContainer);
             }
             return defaultContainer;

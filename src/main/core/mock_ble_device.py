@@ -6,7 +6,6 @@ import serial
 import logging
 import time
 
-# 获取logger实例，避免重复配置
 logger = logging.getLogger(__name__)
 
 

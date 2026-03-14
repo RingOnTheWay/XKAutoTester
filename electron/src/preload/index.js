@@ -8,8 +8,8 @@ const i18next = require('i18next');
 // 初始化i18next
 async function initializeI18next() {
   try {
-    // 构建语言文件路径
-    const localesPath = path.join(__dirname, 'locales');
+    // 构建语言文件路径 - locales 在 electron/ 目录下
+    const localesPath = path.join(__dirname, '..', '..', 'locales');
     
     // 加载语言文件
     const resources = {};
@@ -32,10 +32,10 @@ async function initializeI18next() {
       };
     }
     
-    // 获取用户配置的语言
+    // 获取用户配置的语言 - config 在项目根目录下
     let savedLanguage = 'zh-CN';
     try {
-      const configPath = path.join(__dirname, '..', 'config', 'config.json');
+      const configPath = path.join(__dirname, '..', '..', '..', 'config', 'config.json');
       if (fs.existsSync(configPath)) {
         const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         if (configData.APP_SETTINGS && configData.APP_SETTINGS.language) {

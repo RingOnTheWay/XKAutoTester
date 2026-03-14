@@ -10,7 +10,7 @@ import shutil
 import time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from utils.logger import get_logger
+from main.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -19,15 +19,17 @@ class PytestRunner:
     """Pytest测试运行器类"""
     
     def __init__(self, project_root: Optional[Path] = None):
-        self.project_root = project_root or Path(__file__).parent.parent
-        self.allure_results_dir = self.project_root / "allure-results"
-        self.allure_report_base_dir = self.project_root / "allure-reports"
+        self.project_root = project_root or Path(__file__).parent.parent.parent.parent
+        # Allure相关目录统一放在 logs/Allure/ 下
+        self.allure_base_dir = self.project_root / "logs" / "Allure"
+        self.allure_results_dir = self.allure_base_dir / "allure-results"
+        self.allure_report_base_dir = self.allure_base_dir / "allure-reports"
         
         # 不自动创建报告目录，只在需要时创建
         
-        # 存储测试计划历史
+        # 存储测试计划历史 - 移动到 config 目录
         self.test_plans = []
-        self.test_plans_file = self.project_root / "test_plans.json"
+        self.test_plans_file = self.project_root / "config" / "test_plans.json"
         
         # Allure服务器相关属性
         self.allure_server_process = None
@@ -206,7 +208,7 @@ class PytestRunner:
         """构建Pytest命令行参数"""
         args = []
         
-        # 添加测试路径
+        # 添加测试路径（用户在文件选择器中选择的路径）
         args.extend(test_paths)
         
         # 添加详细输出
@@ -228,8 +230,8 @@ class PytestRunner:
         # 添加Allure结果目录
         args.extend(["--alluredir", str(self.allure_results_dir)])
         
-        # 添加配置文件
-        args.extend(["-c", str(self.project_root / "pytest.ini")])
+        # 添加配置文件 - pytest.ini 移动到 config 目录
+        args.extend(["-c", str(self.project_root / "config" / "pytest.ini")])
         
         return args
     

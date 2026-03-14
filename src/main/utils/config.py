@@ -24,7 +24,7 @@ class ConfigManager:
         Returns:
             默认配置文件路径
         """
-        return Path(__file__).parent.parent / "config" / "config.json"
+        return Path(__file__).parent.parent.parent.parent / "config" / "config.json"
     
     def _load_config(self) -> dict:
         """加载JSON配置文件

@@ -15,9 +15,9 @@ from appium import webdriver
 from appium.options.android import UiAutomator2Options
 from faker import Faker
 
-from utils.adb_manager import ADBManager
-from utils.appium_server import AppiumServer
-from utils.mock_ble_device import BLEDevice
+from main.core.adb_manager import ADBManager
+from main.core.appium_server import AppiumServer
+from main.core.mock_ble_device import BLEDevice
 
 
 @dataclass

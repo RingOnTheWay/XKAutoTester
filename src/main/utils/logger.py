@@ -6,7 +6,9 @@ import logging
 import logging.handlers
 from pathlib import Path
 import datetime
-from utils.config import config_manager
+from main.utils.config import config_manager
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
 
 class Logger:
@@ -33,9 +35,8 @@ class Logger:
         log_format = log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         formatter = logging.Formatter(log_format)
         
-        # 处理日志文件路径
-        base_path = Path(log_config.get("file_path", ".")).resolve()
-        logs_dir = base_path / "logs" / "XKAT"
+        # 日志文件路径固定为项目根目录下的logs/XKAT
+        logs_dir = PROJECT_ROOT / "logs" / "XKAT"
         
         # 确保logs/XKAT文件夹存在
         logs_dir.mkdir(parents=True, exist_ok=True)

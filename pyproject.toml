@@ -1,7 +1,7 @@
 [project]
 name = "xkauto-tester"
 version = "0.1.2"
-description = "XKAutoTester"
+description = "XKAutoTester - 基于Electron+Python的自动化测试平台"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -36,3 +36,9 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]
 ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

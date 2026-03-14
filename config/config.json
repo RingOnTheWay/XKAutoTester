@@ -14,7 +14,7 @@
     "always_on_top": true
   },
   "APP_SETTINGS": {
-    "default_download_directory": "",
+    "default_download_directory": "D:\\Downloads",
     "dark_mode": false,
     "theme_color": "#4CAF50",
     "language": "zh-CN",

@@ -22,6 +22,9 @@ class XKAutoTesterApp {
         this.contextMenu = null; // 上下文菜单引用
         this.contextMenuTarget = null; // 上下文菜单的目标元素
         
+        // 预绑定方法，避免重复创建函数引用
+        this.boundOpenPort5555 = this.openPort5555.bind(this);
+        
         // 延迟初始化，确保DOM完全加载
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
@@ -1525,7 +1528,13 @@ class XKAutoTesterApp {
             const defaultTestDirectory = document.getElementById('default-test-directory');
             const directoryTooltip = document.querySelector('.directory-tooltip');
             if (defaultTestDirectory && directoryTooltip) {
-                directoryTooltip.textContent = defaultTestDirectory.value;
+                const value = defaultTestDirectory.value;
+                directoryTooltip.textContent = value;
+                if (value && value.trim()) {
+                    directoryTooltip.classList.remove('empty');
+                } else {
+                    directoryTooltip.classList.add('empty');
+                }
             }
         };
 
@@ -2221,6 +2230,9 @@ class XKAutoTesterApp {
 
     // 显示设备管理模态框
     async showDeviceManagementModal() {
+        // 清除所有Toast消息，避免弹窗显示时能看到未消失的toast
+        Toast.clearAll();
+        
         // 显示模态框
         const modalOverlay = document.getElementById('device-modal-overlay');
         if (modalOverlay) {
@@ -2248,37 +2260,33 @@ class XKAutoTesterApp {
         const openPortBtn = document.getElementById('open-port-btn');
         if (openPortBtn) {
             // 移除旧的事件监听，避免重复绑定
-            openPortBtn.removeEventListener('click', this.openPort5555.bind(this));
+            openPortBtn.removeEventListener('click', this.boundOpenPort5555);
             // 添加新的事件监听
-            openPortBtn.addEventListener('click', this.openPort5555.bind(this));
+            openPortBtn.addEventListener('click', this.boundOpenPort5555);
         }
     }
     
     // 开放5555端口
     async openPort5555() {
+        // 获取设备管理弹窗容器
+        const modalContainer = document.querySelector('#device-modal-overlay .modal-container');
+        
         // 获取选中的USB设备
         const selectedDeviceElement = document.querySelector('.device-item.selected');
         if (!selectedDeviceElement) {
-            this.showError(window.i18n.t('deviceModal.selectUsbDevice'));
+            Toast.error(window.i18n.t('deviceModal.selectUsbDevice'), { container: modalContainer });
             return;
         }
         
         const deviceId = selectedDeviceElement.getAttribute('data-device-id');
         if (!deviceId || deviceId.includes(':')) {
-            this.showError(window.i18n.t('deviceModal.selectUsbDevice'));
-            return;
-        }
-        
-        // 获取开放端口按钮元素
-        const openPortBtn = document.getElementById('open-port-btn');
-        if (!openPortBtn) {
-            this.showError(window.i18n.t('deviceModal.openPortBtnNotFound'));
+            Toast.error(window.i18n.t('deviceModal.selectUsbDevice'), { container: modalContainer });
             return;
         }
         
         try {
             // 显示操作中提示
-            this.showFloatingTooltip(openPortBtn, window.i18n.t('deviceModal.openingPort'), 'info');
+            Toast.info(window.i18n.t('deviceModal.openingPort'), { container: modalContainer });
             
             // 执行adb命令开放5555端口
             // 使用tcpip命令开启TCP/IP模式
@@ -2286,17 +2294,17 @@ class XKAutoTesterApp {
             
             // 检查结果
             if (result.success) {
-                this.showFloatingTooltip(openPortBtn, window.i18n.t('deviceModal.portOpenSuccess'), 'success');
+                Toast.success(window.i18n.t('deviceModal.portOpenSuccess'), { container: modalContainer });
                 
                 // 重新扫描设备，查看是否出现IP连接
                 setTimeout(async () => {
                     await this.scanDevices();
                 }, 1000);
             } else {
-                this.showFloatingTooltip(openPortBtn, `${window.i18n.t('deviceModal.portOpenFailed')}: ${result.error}`, 'error');
+                Toast.error(`${window.i18n.t('deviceModal.portOpenFailed')}: ${result.error}`, { container: modalContainer });
             }
         } catch (error) {
-            this.showFloatingTooltip(openPortBtn, `${window.i18n.t('deviceModal.portOpenFailed')}: ${error.message}`, 'error');
+            Toast.error(`${window.i18n.t('deviceModal.portOpenFailed')}: ${error.message}`, { container: modalContainer });
         }
     }
 
@@ -2355,7 +2363,10 @@ class XKAutoTesterApp {
         // 隐藏设备信息卡片
         if (deviceStatusCard) deviceStatusCard.classList.add('hidden');
         
-        // 初始禁用开放5555端口按钮
+        // 初始禁用确认按钮和开放5555端口按钮
+        if (confirmButton) {
+            confirmButton.disabled = true;
+        }
         if (openPortBtn) {
             openPortBtn.disabled = true;
         }
@@ -2805,35 +2816,71 @@ class XKAutoTesterApp {
             let memory = '-';
             
             if (!isModal) {
-                // WiFi连接
-                const wifiResult = await this.executeAdbCommand('dumpsys wifi | grep -E "SSID|ssid" | head -n 2', deviceId);
+                // WiFi连接 - 尝试多种方法获取SSID
+                // 方法1: dumpsys wifi (适用于大多数Android版本)
+                const wifiResult = await this.executeAdbCommand('dumpsys wifi', deviceId);
                 if (wifiResult.success) {
                     const wifiInfo = wifiResult.output.trim();
                     if (wifiInfo) {
-                        // 尝试多种方式提取SSID
-                        const lines = wifiInfo.split('\n');
-                        for (const line of lines) {
-                            const ssidMatch = line.match(/SSID:\s*"([^"]+)"/i);
-                            if (ssidMatch) {
-                                wifi = ssidMatch[1];
-                                break;
+                        // 尝试匹配 SSID: "xxx" 格式
+                        const ssidMatch1 = wifiInfo.match(/SSID:\s*"([^"]+)"/i);
+                        if (ssidMatch1) {
+                            wifi = ssidMatch1[1];
+                        }
+                        
+                        // 尝试匹配 ssid: "xxx" 或 ssid=xxx 格式
+                        if (wifi === '-') {
+                            const ssidMatch2 = wifiInfo.match(/ssid[=:\s]+"?([^"\n]+)"?/i);
+                            if (ssidMatch2) {
+                                wifi = ssidMatch2[1].replace(/"/g, '');
                             }
                         }
                         
-                        // 如果上面的方法失败，尝试另一种方式
-                        if (wifi === '-' && wifiInfo.includes('SSID:')) {
-                            const ssidStart = wifiInfo.indexOf('SSID:') + 5;
-                            const ssidEnd = wifiInfo.indexOf('"', ssidStart + 1);
-                            if (ssidStart > 4 && ssidEnd > ssidStart) {
-                                wifi = wifiInfo.substring(ssidStart + 1, ssidEnd);
+                        // 尝试匹配 mWifiInfo 中的 SSID (Android 9+)
+                        if (wifi === '-') {
+                            const ssidMatch3 = wifiInfo.match(/mWifiInfo\s*\{[^}]*SSID:\s*"?([^",}\n]+)"?/i);
+                            if (ssidMatch3) {
+                                wifi = ssidMatch3[1].replace(/"/g, '');
                             }
                         }
                     }
                 }
                 
-                // 如果上面的方法失败，尝试另一个命令
+                // 方法2: dumpsys connectivity (适用于Android 8+)
                 if (wifi === '-') {
-                    const wifiResult2 = await this.executeAdbCommand('iwconfig wlan0 | grep "ESSID"', deviceId);
+                    const connectivityResult = await this.executeAdbCommand('dumpsys connectivity', deviceId);
+                    if (connectivityResult.success) {
+                        const connectivityInfo = connectivityResult.output.trim();
+                        if (connectivityInfo) {
+                            // 匹配 NetworkAgentInfo 中的 SSID
+                            const ssidMatch = connectivityInfo.match(/NetworkAgentInfo[^}]*ssid[=:\s]+"?([^",}\n]+)"?/i);
+                            if (ssidMatch) {
+                                wifi = ssidMatch[1].replace(/"/g, '').replace(/\s*$/, '');
+                            }
+                        }
+                    }
+                }
+                
+                // 方法3: 使用 cmd wifi (Android 7+)
+                if (wifi === '-') {
+                    const cmdWifiResult = await this.executeAdbCommand('cmd wifi list-connections', deviceId);
+                    if (cmdWifiResult.success && cmdWifiResult.output.trim()) {
+                        const lines = cmdWifiResult.output.trim().split('\n');
+                        for (const line of lines) {
+                            if (line.includes('connected') || line.includes('COMPLETED')) {
+                                const ssidMatch = line.match(/(\S+)\s+(?:connected|COMPLETED)/i);
+                                if (ssidMatch) {
+                                    wifi = ssidMatch[1];
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // 方法4: 使用 iwconfig (需要 root 或特定权限)
+                if (wifi === '-') {
+                    const wifiResult2 = await this.executeAdbCommand('iwconfig wlan0', deviceId);
                     if (wifiResult2.success) {
                         const wifiInfo2 = wifiResult2.output.trim();
                         if (wifiInfo2) {
@@ -2842,6 +2889,15 @@ class XKAutoTesterApp {
                                 wifi = ssidMatch2[1];
                             }
                         }
+                    }
+                }
+                
+                // 方法5: 读取 /proc/net/wireless (获取信号强度，间接确认WiFi连接)
+                if (wifi === '-') {
+                    const wirelessResult = await this.executeAdbCommand('cat /proc/net/wireless', deviceId);
+                    if (wirelessResult.success && wirelessResult.output.includes('wlan0')) {
+                        // WiFi已连接但无法获取SSID
+                        wifi = '(已连接)';
                     }
                 }
                 
@@ -4089,7 +4145,7 @@ class XKAutoTesterApp {
         if (this.contextMenu) {
             // 点击菜单外部关闭上下文菜单
             document.addEventListener('click', (e) => {
-                if (!this.contextMenu.contains(e.target) && e.target.className !== 'file-actions-btn') {
+                if (!this.contextMenu.contains(e.target) && !e.target.closest('.file-actions-btn')) {
                     this.hideContextMenu();
                 }
             });
@@ -4694,7 +4750,14 @@ class XKAutoTesterApp {
             if (actionsBtn) {
                 actionsBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    this.showContextMenu(e, file);
+                    // 如果菜单已显示且当前目标是同一个文件，则关闭菜单
+                    if (!this.contextMenu.classList.contains('hidden') && 
+                        this.contextMenuTarget && 
+                        this.contextMenuTarget.path === file.path) {
+                        this.hideContextMenu();
+                    } else {
+                        this.showContextMenu(e, file, actionsBtn);
+                    }
                 });
             }
             
@@ -5121,33 +5184,52 @@ class XKAutoTesterApp {
     }
     
     // 显示上下文菜单
-    showContextMenu(event, file) {
+    showContextMenu(event, file, triggerElement = null) {
         this.contextMenuTarget = file;
         const menu = this.contextMenu;
         if (!menu) return;
         
-        // 计算菜单位置，确保不会超出窗口边缘
-        const menuWidth = menu.offsetWidth || 180; // 使用默认宽度作为备选
-        const menuHeight = menu.offsetHeight || 120; // 使用默认高度作为备选
+        // 先显示菜单以获取其尺寸
+        menu.classList.remove('hidden');
+        
+        const menuWidth = menu.offsetWidth || 180;
+        const menuHeight = menu.offsetHeight || 120;
         const windowWidth = window.innerWidth;
         const windowHeight = window.innerHeight;
         
-        // 计算x坐标，确保菜单不会超出窗口右边缘
-        let x = event.clientX;
-        if (x + menuWidth > windowWidth) {
-            x = windowWidth - menuWidth - 10; // 10px的边距
-        }
+        let x, y;
         
-        // 计算y坐标，确保菜单不会超出窗口下边缘
-        let y = event.clientY;
-        if (y + menuHeight > windowHeight) {
-            y = windowHeight - menuHeight - 10; // 10px的边距
+        if (triggerElement) {
+            // 如果有触发元素，从元素下方弹出
+            const rect = triggerElement.getBoundingClientRect();
+            x = rect.left;
+            y = rect.bottom + 4; // 4px 间距
+            
+            // 确保菜单不会超出窗口右边缘
+            if (x + menuWidth > windowWidth) {
+                x = windowWidth - menuWidth - 10;
+            }
+            
+            // 确保菜单不会超出窗口下边缘
+            if (y + menuHeight > windowHeight) {
+                y = rect.top - menuHeight - 4; // 在按钮上方显示
+            }
+        } else {
+            // 使用鼠标位置
+            x = event.clientX;
+            y = event.clientY;
+            
+            if (x + menuWidth > windowWidth) {
+                x = windowWidth - menuWidth - 10;
+            }
+            if (y + menuHeight > windowHeight) {
+                y = windowHeight - menuHeight - 10;
+            }
         }
         
         // 设置菜单位置
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
-        menu.classList.remove('hidden');
     }
     
     // 隐藏上下文菜单

@@ -68,7 +68,7 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-# Logs
+# Logs (包含 logs/allure/allure-reports 和 logs/allure/allure-results)
 logs/
 *.log
 
@@ -79,27 +79,26 @@ build/
 *.tgz
 *.tar.gz
 
-# Allure reports (可选，如果不想提交生成的报告)
-allure-reports/
-allure-results/
-
-# Test data (可选，如果不想提交测试数据)
+# Test data
 test_data/
 
-# Test files (可选，如果不想提交测试文件)
+# Test files (不提交测试文件)
 tests/
 
 # Local configuration files
 local_settings.py
 
-# Database files (如果有数据库)
+# Database files
 *.db
 *.sqlite3
 
 # Temporary files
 *.tmp
 *.temp
-test_plans.json
+
+# Auto-generated config files (测试计划和定时计划可自动生成)
+config/test_plans.json
+config/scheduled_plans.json
 
 # Trae IDE
 .trae/

@@ -2,7 +2,7 @@
   "name": "xkautotester-electron",
   "version": "0.1.2-dev.1",
   "description": "XKAutoTester - 基于Electron+Python的自动化测试平台",
-  "main": "main.js",
+  "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
@@ -36,32 +36,59 @@
       "output": "dist"
     },
     "files": [
-      "main.js",
-      "preload.js",
+      "src/**/*",
       "splash.html",
       "renderer/**/*",
       "assets/**/*",
+      "locales/**/*",
       "node_modules/**/*"
     ],
     "asar": false,
     "extraResources": [
       {
-        "from": "../",
-        "to": "../",
+        "from": "../src",
+        "to": "src",
         "filter": [
-          "**/*.py",
-          "**/*.txt",
-          "**/*.ini",
-          "tests/**",
-          "utils/**",
-          "config/**",
-          "env/**",
-          "!electron/**",
-          "!node_modules/**",
-          "!dist/**",
-          "!test_plans.json",
-          "!allure-results/**"
+          "**/*.py"
         ]
+      },
+      {
+        "from": "../config",
+        "to": "config",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../.venv",
+        "to": ".venv",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "../env",
+        "to": "env",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../tests",
+        "to": "tests",
+        "filter": [
+          "**/*.py"
+        ]
+      },
+      {
+        "from": "../pyproject.toml",
+        "to": "pyproject.toml"
+      },
+      {
+        "from": "../uv.lock",
+        "to": "uv.lock"
       }
     ],
     "win": {

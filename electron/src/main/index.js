@@ -16,8 +16,8 @@ class I18nService {
 
   async initI18n() {
     try {
-      // 构建语言文件路径
-      const localesPath = path.join(__dirname, 'locales');
+      // 构建语言文件路径 - locales 在 electron/ 目录下
+      const localesPath = path.join(__dirname, '..', '..', 'locales');
       
       // 加载语言文件
       const resources = {};
@@ -40,10 +40,10 @@ class I18nService {
         };
       }
       
-      // 获取用户配置的语言
+      // 获取用户配置的语言 - config 在项目根目录下
       let savedLanguage = 'zh-CN';
       try {
-        const configPath = path.join(__dirname, '..', 'config', 'config.json');
+        const configPath = path.join(__dirname, '..', '..', '..', 'config', 'config.json');
         if (fs.existsSync(configPath)) {
           const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
           if (configData.APP_SETTINGS && configData.APP_SETTINGS.language) {
@@ -488,11 +488,12 @@ class ElectronApp {
     
     // 根据打包状态设置项目根目录
     if (this.isPackaged) {
-      // 打包后，Python文件位于exe文件同级目录的resources/app.asar.unpacked/../
-      this.projectRoot = path.join(process.resourcesPath, '..');
+      // 打包后，extraResources 复制到 resources/ 目录
+      // .venv, src, config 等都在 resources/ 下
+      this.projectRoot = process.resourcesPath;
     } else {
-      // 开发环境，使用原来的路径
-      this.projectRoot = path.join(__dirname, '..');
+      // 开发环境，__dirname 是 electron/src/main/，需要向上3级到项目根目录
+      this.projectRoot = path.join(__dirname, '..', '..', '..');
     }
     
     this.allureServerProcess = null;
@@ -502,7 +503,8 @@ class ElectronApp {
     this.allureOpenProcess = null;  // 新增：存储allure open进程
     this.currentPythonProcess = null; // 存储当前运行的Python进程
     
-    this.scheduledPlansPath = path.join(this.projectRoot, 'scheduled_plans.json');
+    // 配置文件统一放在 config 目录
+    this.scheduledPlansPath = path.join(this.projectRoot, 'config', 'scheduled_plans.json');
     this.smartScheduler = null;
   }
   
@@ -538,7 +540,6 @@ class ElectronApp {
       height: 740,
       frame: false,
       resizable: false,
-      show: false,
       center: true,
       transparent: true,
       backgroundColor: "#00000000",
@@ -549,18 +550,20 @@ class ElectronApp {
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
-        preload: this.isPackaged ? path.join(process.resourcesPath, 'app', 'preload.js') : path.join(__dirname, 'preload.js'),
+        preload: this.isPackaged 
+          ? path.join(process.resourcesPath, 'app', 'src', 'preload', 'index.js') 
+          : path.join(__dirname, '..', 'preload', 'index.js'),
         webSecurity: false // 允许加载本地文件
       }
     });
     
-    // 加载启动页面
-    const splashPath = this.isPackaged ? path.join(process.resourcesPath, 'app', 'splash.html') : path.join(__dirname, 'splash.html');
+    // 加载启动页面 - splash.html 在 electron/ 目录下
+    const splashPath = this.isPackaged 
+      ? path.join(process.resourcesPath, 'app', 'splash.html') 
+      : path.join(__dirname, '..', '..', 'splash.html');
     this.splashWindow.loadFile(splashPath);
     
     this.splashWindow.once('ready-to-show', () => {
-      // 直接显示窗口，不使用setTimeout，避免闪烁
-      this.splashWindow.show();
       // 强制窗口重绘，解决透明效果不显示的问题
       if (this.splashWindow) {
         // 使用更平滑的方式强制重绘，避免窗口闪烁
@@ -956,7 +959,9 @@ class ElectronApp {
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
-        preload: this.isPackaged ? path.join(process.resourcesPath, 'app', 'preload.js') : path.join(__dirname, 'preload.js'),
+        preload: this.isPackaged 
+          ? path.join(process.resourcesPath, 'app', 'src', 'preload', 'index.js') 
+          : path.join(__dirname, '..', 'preload', 'index.js'),
         webSecurity: false // 允许加载本地文件
       },
       frame: false, // 隐藏原生标题栏
@@ -964,8 +969,9 @@ class ElectronApp {
       backgroundColor: '#00000000', // 完全透明背景
       hasShadow: true,
       roundedCorners: true,
-      show: false,
-      icon: this.isPackaged ? path.join(process.resourcesPath, 'app', 'assets', 'icon.png') : path.join(__dirname, 'assets', 'icon.png'),
+      icon: this.isPackaged 
+        ? path.join(process.resourcesPath, 'app', 'assets', 'icon.png') 
+        : path.join(__dirname, '..', '..', 'assets', 'icon.png'),
       x: 100, // 设置窗口位置
       y: 100,
       autoHideMenuBar: true, // 自动隐藏菜单栏
@@ -975,13 +981,14 @@ class ElectronApp {
     // 完全禁用菜单栏
     this.mainWindow.setMenu(null);
 
-    // 加载应用的index.html
-    const htmlPath = this.isPackaged ? path.join(process.resourcesPath, 'app', 'renderer', 'index.html') : path.join(__dirname, 'renderer', 'index.html');
+    // 加载应用的index.html - renderer 在 electron/ 目录下
+    const htmlPath = this.isPackaged 
+      ? path.join(process.resourcesPath, 'app', 'renderer', 'index.html') 
+      : path.join(__dirname, '..', '..', 'renderer', 'index.html');
     this.mainWindow.loadFile(htmlPath);
 
-    // 窗口准备好后显示
+    // 窗口准备好后执行
     this.mainWindow.once('ready-to-show', () => {
-      this.mainWindow.show();
       this.mainWindow.focus();
       this.mainWindow.center(); // 居中显示窗口
       this.mainWindow.webContents.openDevTools(); // 打开开发者工具
@@ -1210,10 +1217,23 @@ class ElectronApp {
         
         let stdout = '';
         let stderr = '';
+        let resolved = false;
         
         return new Promise((resolve) => {
+          const doResolve = (result) => {
+            if (resolved) return;
+            resolved = true;
+            resolve(result);
+          };
+          
           adbProcess.stdout.on('data', (data) => {
             stdout += data.toString();
+            
+            // 对于tcpip命令，检测成功输出后立即返回
+            if (firstCmd === 'tcpip' && stdout.includes('restarting in TCP mode port:')) {
+              adbProcess.kill();
+              doResolve({ success: true, output: stdout, error: stderr });
+            }
           });
           
           adbProcess.stderr.on('data', (data) => {
@@ -1225,29 +1245,44 @@ class ElectronApp {
             if (firstCmd === 'connect') {
               // 检查输出内容来判断连接是否成功
               if (stdout.includes('connected to') || stdout.includes('already connected')) {
-                resolve({ success: true, output: stdout, error: stderr });
+                doResolve({ success: true, output: stdout, error: stderr });
               } else {
                 // 连接失败，使用stderr作为错误信息，不添加额外前缀
-                resolve({ success: false, error: stderr || stdout, output: stdout });
+                doResolve({ success: false, error: stderr || stdout, output: stdout });
+              }
+            } else if (firstCmd === 'tcpip') {
+              // tcpip命令：如果已经检测到成功输出则已返回，否则检查是否有错误
+              if (stdout.includes('restarting in TCP mode port:')) {
+                doResolve({ success: true, output: stdout, error: stderr });
+              } else if (stderr.includes('error:') || code !== 0) {
+                doResolve({ success: false, error: stderr || 'Failed to restart in TCP mode', output: stdout });
+              } else {
+                doResolve({ success: true, output: stdout, error: stderr });
               }
             } else {
               // 其他命令使用退出码判断
               if (code !== 0) {
-                resolve({ success: false, error: stderr || i18nService.t('main.commandFailed', { code }), output: stdout });
+                doResolve({ success: false, error: stderr || i18nService.t('main.commandFailed', { code }), output: stdout });
               } else {
-                resolve({ success: true, output: stdout, error: stderr });
+                doResolve({ success: true, output: stdout, error: stderr });
               }
             }
           });
           
           adbProcess.on('error', (error) => {
-            resolve({ success: false, error: error.message, output: '' });
+            doResolve({ success: false, error: error.message, output: '' });
           });
           
           // 设置超时
           setTimeout(() => {
+            if (resolved) return;
             adbProcess.kill();
-            resolve({ success: false, error: i18nService.t('main.commandTimeout'), output: stdout });
+            // 对于tcpip命令，超时时检查是否已有成功输出
+            if (firstCmd === 'tcpip' && stdout.includes('restarting in TCP mode port:')) {
+              doResolve({ success: true, output: stdout, error: stderr });
+            } else {
+              doResolve({ success: false, error: i18nService.t('main.commandTimeout'), output: stdout });
+            }
           }, 5000);
         });
       } catch (error) {
@@ -1998,9 +2033,9 @@ class ElectronApp {
       // 启动未授权弹窗监控
       this.startUnauthorizedDialogMonitor();
       
-      // 构建Python命令 - 使用新的Electron专用运行器
+      // 构建Python命令 - 使用新的模块入口点
       const pythonArgs = [
-        path.join(this.projectRoot, 'electron_run_tests.py'),
+        '-m', 'main',
         '--test-paths', testPaths.join(',')
       ];
 
@@ -2019,7 +2054,8 @@ class ElectronApp {
         env: {
           ...process.env,
           PYTHONIOENCODING: 'utf-8',  // 设置Python输出编码
-          PYTHONUTF8: '1'  // 启用Python UTF-8模式
+          PYTHONUTF8: '1',  // 启用Python UTF-8模式
+          PYTHONPATH: path.join(this.projectRoot, 'src')  // 添加 src 目录到 Python 路径
         },
         windowsHide: true  // 隐藏Windows下的命令行窗口
       });
@@ -2124,7 +2160,7 @@ class ElectronApp {
   async getTestPlans() {
     try {
       // 静默读取测试计划文件，避免控制台输出格式问题
-      const plansPath = path.join(this.projectRoot, 'test_plans.json');
+      const plansPath = path.join(this.projectRoot, 'config', 'test_plans.json');
       
       if (fs.existsSync(plansPath)) {
         const data = fs.readFileSync(plansPath, 'utf8');
@@ -2140,7 +2176,7 @@ class ElectronApp {
 
   async getTestPlanRuns(testPlanName) {
     try {
-      const plansPath = path.join(this.projectRoot, 'test_plans.json');
+      const plansPath = path.join(this.projectRoot, 'config', 'test_plans.json');
       
       if (!fs.existsSync(plansPath)) {
         return { success: false, error: '测试计划文件不存在', runs: [] };
@@ -2282,7 +2318,7 @@ class ElectronApp {
 
   async saveTestPlan(planData) {
     try {
-      const plansPath = path.join(this.projectRoot, 'test_plans.json');
+      const plansPath = path.join(this.projectRoot, 'config', 'test_plans.json');
       let existingPlans = [];
       
       if (fs.existsSync(plansPath)) {
@@ -2308,7 +2344,7 @@ class ElectronApp {
 
   async updateTestPlan(planData) {
     try {
-      const plansPath = path.join(this.projectRoot, 'test_plans.json');
+      const plansPath = path.join(this.projectRoot, 'config', 'test_plans.json');
       let existingPlans = [];
       
       if (fs.existsSync(plansPath)) {
@@ -2342,7 +2378,7 @@ class ElectronApp {
 
   async deleteTestPlan(planId) {
     try {
-      const plansPath = path.join(this.projectRoot, 'test_plans.json');
+      const plansPath = path.join(this.projectRoot, 'config', 'test_plans.json');
       let existingPlans = [];
       
       if (fs.existsSync(plansPath)) {
@@ -2384,7 +2420,7 @@ class ElectronApp {
           testPlanName = testPlans[testPlans.length - 1].name;
         } else {
           // 检查是否有任何报告目录存在
-          const allureReportBaseDir = path.join(this.projectRoot, 'allure-reports');
+          const allureReportBaseDir = path.join(this.projectRoot, 'logs', 'Allure', 'allure-reports');
           if (fs.existsSync(allureReportBaseDir)) {
             const reportDirs = fs.readdirSync(allureReportBaseDir).filter(item => {
               const itemPath = path.join(allureReportBaseDir, item);
@@ -2402,7 +2438,7 @@ class ElectronApp {
         return { success: false, error: '没有可用的Allure报告，请先生成报告' };
       }
 
-      const allureReportDir = path.join(this.projectRoot, 'allure-reports', testPlanName);
+      const allureReportDir = path.join(this.projectRoot, 'logs', 'Allure', 'allure-reports', testPlanName);
       
       if (!fs.existsSync(allureReportDir)) {
         return { success: false, error: `测试计划 '${testPlanName}' 的Allure报告不存在` };
@@ -2446,7 +2482,7 @@ class ElectronApp {
         };
       }
 
-      const allureReportDir = path.join(this.projectRoot, 'allure-reports', testPlanName);
+      const allureReportDir = path.join(this.projectRoot, 'logs', 'Allure', 'allure-reports', testPlanName);
       
       if (!fs.existsSync(allureReportDir)) {
         return { success: false, error: '报告目录不存在' };
@@ -2754,7 +2790,7 @@ class ElectronApp {
 
   async clearAllureReports() {
     try {
-      const allureReportsDir = path.join(this.projectRoot, 'allure-reports');
+      const allureReportsDir = path.join(this.projectRoot, 'logs', 'Allure', 'allure-reports');
       
       if (!fs.existsSync(allureReportsDir)) {
         return { success: true, message: 'Allure报告目录不存在' };
@@ -2813,7 +2849,7 @@ class ElectronApp {
       
       logMessage(`Starting to open Allure report with allure open: ${testPlanName}`);
       
-      const allureReportDir = path.join(this.projectRoot, 'allure-reports', testPlanName);
+      const allureReportDir = path.join(this.projectRoot, 'logs', 'Allure', 'allure-reports', testPlanName);
       
       if (!fs.existsSync(allureReportDir)) {
         logMessage(`Report directory does not exist: ${allureReportDir}`);
@@ -2966,7 +3002,7 @@ class ElectronApp {
     try {
 
       
-      const allureReportDir = path.join(this.projectRoot, 'allure-reports', testPlanName);
+      const allureReportDir = path.join(this.projectRoot, 'logs', 'Allure', 'allure-reports', testPlanName);
       const indexHtmlPath = path.join(allureReportDir, 'index.html');
       
 
@@ -2987,7 +3023,7 @@ class ElectronApp {
 
   async getPytestMarkers() {
     try {
-      const pytestIniPath = path.join(this.projectRoot, 'pytest.ini');
+      const pytestIniPath = path.join(this.projectRoot, 'config', 'pytest.ini');
       if (!fs.existsSync(pytestIniPath)) {
         throw new Error('pytest.ini文件不存在');
       }

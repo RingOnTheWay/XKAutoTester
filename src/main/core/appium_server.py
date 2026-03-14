@@ -11,9 +11,9 @@ import os
 from pathlib import Path
 import datetime
 
-from utils.config import config_manager
-
 logger = logging.getLogger(__name__)
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
 
 class AppiumServer:
@@ -51,11 +51,8 @@ class AppiumServer:
         # 查找Appium可执行文件路径
         self.appium_executable = self._find_appium_executable()
         
-        # 从配置文件获取logs文件夹路径
-        base_path = Path(config_manager.get("LOG_CONFIG.file_path", ".")).resolve()
-        
-        # 在logs文件夹下建立Appium子文件夹
-        self.log_dir = base_path / "logs" / "Appium"
+        # 日志文件路径固定为项目根目录下的logs/Appium
+        self.log_dir = PROJECT_ROOT / "logs" / "Appium"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         
         # 生成与XKAT日志格式一致的日志文件名
@@ -373,7 +370,6 @@ class AppiumServer:
             return response.status_code == 200
         except:
             return False
-    
 
     
     def get_status(self):

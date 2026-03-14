@@ -14,12 +14,12 @@ import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-# 添加项目根目录到Python路径
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
+# 添加 src 目录到 Python 路径（main 模块在 src/ 下）
+src_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(src_dir))
 
-from utils.pytest_runner import PytestRunner
-from utils.logger import get_logger
+from main.core.pytest_runner import PytestRunner
+from main.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

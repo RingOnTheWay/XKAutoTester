@@ -190,7 +190,7 @@ class ADBManager:
             from pathlib import Path
             
             # 创建弹窗触发文件
-            dialog_trigger_file = Path(__file__).parent.parent / "logs" / "unauthorized_dialog.json"
+            dialog_trigger_file = Path(__file__).parent.parent.parent.parent / "logs" / "unauthorized_dialog.json"
             dialog_trigger_file.parent.mkdir(parents=True, exist_ok=True)
             
             dialog_data = {
@@ -456,7 +456,6 @@ class ADBManager:
             logger.warning(f"检查崩溃日志时出错: {e}")
             return []
     
-
 
 
 def create_adb_manager(device_name: str, app_package: str) -> ADBManager:
