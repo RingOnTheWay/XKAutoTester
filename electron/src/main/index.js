@@ -566,6 +566,8 @@ class ElectronApp {
     this.splashWindow.once('ready-to-show', () => {
       // 强制窗口重绘，解决透明效果不显示的问题
       if (this.splashWindow) {
+        // 打开开发者工具
+        // this.splashWindow.webContents.openDevTools({ mode: 'detach' });
         // 使用更平滑的方式强制重绘，避免窗口闪烁
         this.splashWindow.focus();
         // 确保窗口在最前面
@@ -991,7 +993,7 @@ class ElectronApp {
     this.mainWindow.once('ready-to-show', () => {
       this.mainWindow.focus();
       this.mainWindow.center(); // 居中显示窗口
-      this.mainWindow.webContents.openDevTools(); // 打开开发者工具
+      // this.mainWindow.webContents.openDevTools(); // 打开开发者工具
     });
 
     // 处理窗口关闭

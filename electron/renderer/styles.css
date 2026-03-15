@@ -1172,8 +1172,8 @@ body:not(.dark-theme) #test-execution .scheduled-plan-item .scheduled-status.run
 
 .datetime-picker-panel {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.98) 100%);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(8px) saturate(180%);
+  -webkit-backdrop-filter: blur(8px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 20px;
   box-shadow:
@@ -1463,8 +1463,8 @@ body:not(.dark-theme) #test-execution .scheduled-plan-item .scheduled-status.run
 /* 深色主题适配 - 玻璃拟态风格 */
 body.dark-theme .datetime-picker-panel {
   background: linear-gradient(135deg, rgba(30, 30, 46, 0.95) 0%, rgba(40, 40, 60, 0.98) 100%);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(8px) saturate(180%);
+  -webkit-backdrop-filter: blur(8px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.3),
@@ -2069,8 +2069,8 @@ body:not(.dark-theme) .btn-spinner {
 
 /* 上下文菜单 */
 #android-connection .context-menu {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border: 1px solid var(--glass-border);
   border-radius: 12px;
 }
@@ -2260,8 +2260,8 @@ body:not(.dark-theme) #android-connection .download-error {
   background: linear-gradient(135deg, 
     rgba(255, 255, 255, 0.06) 0%, 
     rgba(255, 255, 255, 0.02) 100%);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 20px;
@@ -2365,8 +2365,8 @@ body:not(.dark-theme) #android-connection .download-error {
   padding: 10px 14px;
   border-radius: 10px;
   font-size: 13px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   transition: all 0.2s ease;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -3434,8 +3434,6 @@ body.dark-theme .welcome-app-name {
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5426,8 +5424,8 @@ body.dark-theme .theme-color-option.selected {
   font-size: 14px;
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   transition: all 0.2s ease;
   display: flex;
   justify-content: space-between;
@@ -5455,9 +5453,9 @@ body.dark-theme .theme-color-option.selected {
   left: 0;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 12px;
-  background: rgba(30, 30, 30, 0.65);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background: rgba(30, 30, 30, 0.85);
+  backdrop-filter: blur(8px) saturate(180%);
+  -webkit-backdrop-filter: blur(8px) saturate(180%);
   box-shadow: 
     0 8px 32px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),

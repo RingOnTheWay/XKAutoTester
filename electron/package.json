@@ -76,13 +76,6 @@
         ]
       },
       {
-        "from": "../tests",
-        "to": "tests",
-        "filter": [
-          "**/*.py"
-        ]
-      },
-      {
         "from": "../pyproject.toml",
         "to": "pyproject.toml"
       },
@@ -97,7 +90,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "include": "build/installer.nsh"
     }
   }
 }
