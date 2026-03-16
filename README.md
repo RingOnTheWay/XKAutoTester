@@ -18,6 +18,8 @@
 
 [功能特性](#功能特性) • [快速开始](#快速开始) • [环境要求](#环境要求) • [安装](#安装) • [使用指南](#使用指南)
 
+</div>
+
 ---
 
 ## 概述
@@ -40,8 +42,6 @@ XKAutoTester 是一个功能强大的自动化测试平台，结合了 Electron 
 - **通知推送** - 支持钉钉平台的通知推送
 
 ## 技术架构
-
-<div align="center">
 
 | 组件 | 技术栈 |
 |:---:|:---:|
@@ -164,7 +164,7 @@ XKAutoTester/
 │   └── utils/               # 工具模块
 ├── config/                   # 配置文件
 │   ├── config.json          # 应用配置
-└── └── pytest.ini           # Pytest 配置
+└── pytest.ini               # Pytest 配置
 ```
 
 ## 配置说明
@@ -201,6 +201,8 @@ npm install -g appium
 appium driver install uiautomator2
 ```
 
+</details>
+
 <details>
 <summary><b>ADB 设备连接失败</b></summary>
 
@@ -208,10 +210,14 @@ appium driver install uiautomator2
 2. 检查设备是否开启 USB 调试模式
 3. 无线连接需确保设备与电脑在同一网络
 
+</details>
+
 <details>
 <summary><b>Allure 报告生成失败</b></summary>
 
 确保已安装 Java 运行环境（JRE 8+），Allure 依赖 Java 运行。
+
+</details>
 
 ## 资源
 
