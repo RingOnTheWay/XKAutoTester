@@ -4,10 +4,16 @@ class XKAutoTesterApp {
         this.selectedTestFiles = [];
         this.testPlans = [];
         this.currentTestPlan = null;
+        this.scheduledPlans = [];
+        this.currentScheduledPlan = null;
         this.isRunning = false;
+        this.runningTestPlanName = null; // 正在执行的测试计划名称
+        this.runningScheduledPlanId = null; // 正在执行的定时计划ID
         this.isInitializing = false; // 添加初始化状态标志
         this.initialized = false; // 添加初始化完成标志
         this.selectedDevice = null; // 添加设备管理相关属性
+        this.currentMarkers = []; // 保存当前的测试类型标记
+        this.selectedReportRun = null; // 选中的报告运行记录
         
         // 文件管理器相关属性
         this.currentPath = '/storage/emulated/0'; // 默认路径
@@ -15,6 +21,9 @@ class XKAutoTesterApp {
         this.fileList = []; // 当前目录的文件列表
         this.contextMenu = null; // 上下文菜单引用
         this.contextMenuTarget = null; // 上下文菜单的目标元素
+        
+        // 预绑定方法，避免重复创建函数引用
+        this.boundOpenPort5555 = this.openPort5555.bind(this);
         
         // 延迟初始化，确保DOM完全加载
         if (document.readyState === 'loading') {
@@ -34,17 +43,23 @@ class XKAutoTesterApp {
         }
         this.isInitializing = true;
         
+        // 初始化i18next
+        await this.initializeI18next();
 
+        // 加载HTML组件
+        await this.loadComponents();
 
+        // 初始化SVG图标
+        this.initializeIcons();
+        
+        // 初始化自定义下拉框（包括 index.html 中的）
+        this.initializeCustomSelects();
 
         // 初始化事件监听
         this.setupEventListeners();
         
         // 初始化设备显示和屏幕控制按钮状态
         this.updateSelectedDeviceDisplay();
-        
-        // 初始化文件管理器状态
-        this.toggleFileManagerEnabled(false);
         
         // 只在应用启动时显示一次占位符
         this.initializePlaceholders();
@@ -55,10 +70,16 @@ class XKAutoTesterApp {
         // 加载配置文件
         await this.loadConfig();
         
+        // 初始化文件管理器状态（在加载配置后调用，确保使用正确的语言）
+        this.toggleFileManagerEnabled(false);
+        
         // 页面加载时就显示测试计划区域并加载测试计划
         const testPlanSection = document.getElementById('test-plan-section');
         testPlanSection.classList.remove('hidden');
         await this.loadTestPlans();
+        
+        // 加载定时计划
+        await this.loadScheduledPlans();
         
         // 初始化运行按钮状态
         this.updateRunButtonState();
@@ -68,10 +89,14 @@ class XKAutoTesterApp {
         
         // 添加滚动调试监听器
         this.addScrollDebugListeners();
-        
+
+        // 初始化查看报告模态框事件
+        this.initReportModalEvents();
+
 
         this.isInitializing = false;
         this.initialized = true;
+        this.deviceStatusSaved = false; // 初始化设备状态保存标记
         
         // 强制显示占位符，确保它们被显示
         setTimeout(() => {
@@ -79,8 +104,762 @@ class XKAutoTesterApp {
             this.forceDisplayPlaceholders();
         }, 1000);
     }
+    
+    // 初始化i18next
+    async initializeI18next() {
+        try {
+            // 检查electronAPI是否可用
+            if (window.electronAPI && window.electronAPI.i18n) {
+                // 使用preload.js中暴露的i18n实例
+                window.i18n = window.electronAPI.i18n;
+            } else {
+                throw new Error('electronAPI.i18n未定义');
+            }
+            
+            // 从配置中获取保存的语言设置
+            // 暂时使用默认值，因为this.config还没有初始化
+            const savedLanguage = 'zh-CN';
+            
+            // 设置为保存的语言
+            if (window.i18n) {
+                await window.i18n.changeLanguage(savedLanguage);
+                // 测试翻译
+            }
+        } catch (error) {
+            console.error('初始化i18next失败:', error);
+        }
+    }
+
+    async loadComponents() {
+        try {
+            const components = [
+                { container: 'confirm-modal-container', path: 'components/confirm-modal.html' }
+            ];
+
+            for (const component of components) {
+                const container = document.getElementById(component.container);
+                if (container) {
+                    const response = await fetch(component.path);
+                    if (response.ok) {
+                        const html = await response.text();
+                        container.innerHTML = html;
+                    } else {
+                        console.error(`加载组件失败: ${component.path}`);
+                    }
+                }
+            }
+            
+            this.initializeComponentIcons();
+            this.updateComponentTranslations();
+        } catch (error) {
+            console.error('加载组件失败:', error);
+        }
+    }
+
+    initializeCustomSelects() {
+        const selectWrappers = document.querySelectorAll('.custom-select-wrapper[data-options]');
+        
+        selectWrappers.forEach(wrapper => {
+            // 跳过已经初始化的下拉框
+            if (wrapper.querySelector('.custom-select')) return;
+            
+            const optionsData = wrapper.getAttribute('data-options');
+            if (!optionsData) return;
+            
+            try {
+                const options = JSON.parse(optionsData);
+                const selectId = wrapper.id;
+                
+                const selectHtml = `
+                    <div class="custom-select" id="${selectId}-select">
+                        <div class="custom-select__selected" id="${selectId}-selected">
+                            <span class="custom-select__text"></span>
+                        </div>
+                        <div class="custom-select__options" id="${selectId}-options">
+                            ${options.map(opt => `
+                                <div class="custom-select__option${opt.default ? ' selected' : ''}" data-value="${opt.value}">
+                                    <span data-i18n="${opt.label}">${window.i18n ? window.i18n.t(opt.label) : opt.value}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+                
+                wrapper.innerHTML = selectHtml;
+                
+                const selectedSpan = wrapper.querySelector('.custom-select__text');
+                const defaultOption = options.find(opt => opt.default);
+                if (selectedSpan && defaultOption) {
+                    selectedSpan.textContent = window.i18n ? window.i18n.t(defaultOption.label) : defaultOption.value;
+                    selectedSpan.setAttribute('data-i18n', defaultOption.label);
+                }
+                
+                this.initCustomSelect(`${selectId}-select`);
+            } catch (e) {
+                console.error('解析下拉框选项失败:', e);
+            }
+        });
+    }
+
+    initializeComponentIcons() {
+        if (typeof window.Icons === 'undefined') return;
+        
+        const containers = document.querySelectorAll('#confirm-modal-container');
+        containers.forEach(container => {
+            const iconElements = container.querySelectorAll('.svg-icon[data-icon]');
+            iconElements.forEach(element => {
+                const iconName = element.getAttribute('data-icon');
+                if (window.Icons[iconName]) {
+                    element.innerHTML = window.Icons[iconName];
+                }
+            });
+        });
+    }
+
+    updateComponentTranslations() {
+        if (!window.i18n) return;
+        
+        const containers = document.querySelectorAll('#confirm-modal-container');
+        containers.forEach(container => {
+            const elements = container.querySelectorAll('[data-i18n]');
+            elements.forEach(element => {
+                const key = element.getAttribute('data-i18n');
+                if (key) {
+                    const translation = window.i18n.t(key);
+                    if (translation) {
+                        element.textContent = translation;
+                    }
+                }
+            });
+        });
+    }
+    
+    // 初始化SVG图标
+    initializeIcons() {
+        if (typeof window.Icons === 'undefined') {
+            console.error('Icons对象未定义，请确保icons.js已正确加载');
+            return;
+        }
+        
+        const iconElements = document.querySelectorAll('.svg-icon[data-icon]');
+        iconElements.forEach(element => {
+            const iconName = element.getAttribute('data-icon');
+            if (window.Icons[iconName]) {
+                element.innerHTML = window.Icons[iconName];
+            } else {
+                console.warn(`图标 "${iconName}" 未找到`);
+            }
+        });
+    }
+    
+    // 获取SVG图标HTML
+    getIconHtml(iconName, style = '') {
+        if (typeof window.Icons === 'undefined' || !window.Icons[iconName]) {
+            console.warn(`图标 "${iconName}" 未找到`);
+            return '';
+        }
+        return `<span class="svg-icon" data-icon="${iconName}" style="${style}">${window.Icons[iconName]}</span>`;
+    }
+    
+    // 切换语言
+    changeLanguage(language) {
+        if (window.i18n) {
+            window.i18n.changeLanguage(language).then(() => {
+                this.updateUIText();
+                this.updateComponentTranslations();
+                this.displayTestPlans();
+                this.refreshTestTypes();
+                this.updateLanguageSelectorText(language);
+            }).catch(error => {
+                console.error('语言切换失败:', error);
+            });
+        } else {
+            console.error('i18n实例不存在，无法切换语言');
+        }
+    }
+    
+    // 更新语言选择器显示文本
+    updateLanguageSelectorText(language) {
+        const selectedSpan = document.querySelector('#custom-language-selected .custom-select__text');
+        if (selectedSpan) {
+            const languageNames = {
+                'zh-CN': '简体中文',
+                'en-US': 'English'
+            };
+            selectedSpan.textContent = languageNames[language] || language;
+        }
+    }
+    
+    refreshTestTypes() {
+        if (this.currentMarkers && this.currentMarkers.length > 0) {
+            const translatedMarkers = this.currentMarkers.map(marker => ({
+                name: marker.name,
+                description: window.i18n ? window.i18n.t(`testTypes.${marker.name}`) : marker.description
+            }));
+            this.displayTestTypes(translatedMarkers, null, true);
+        } else {
+            // 如果没有 markers，检查是否需要更新占位符
+            const container = document.getElementById('test-type-selector');
+            if (container) {
+                // 只选择文本 span，排除图标 span
+                const placeholderElement = container.querySelector('.placeholder-message > span:last-child');
+                if (placeholderElement && window.i18n) {
+                    placeholderElement.textContent = window.i18n.t('testExecution.selectTestDirectoryFirst');
+                }
+            }
+        }
+        
+        // 更新测试计划占位符
+        const testPlansContainer = document.getElementById('test-plans-list');
+        if (testPlansContainer) {
+            // 只选择文本 span，排除图标 span
+            const plansPlaceholder = testPlansContainer.querySelector('.placeholder-message > span:last-child');
+            if (plansPlaceholder && window.i18n) {
+                plansPlaceholder.textContent = window.i18n.t('testExecution.noTestPlans');
+            }
+        }
+        
+        // 更新文件管理器占位符
+        this.refreshFileManagerPlaceholders();
+    }
+    
+    // 更新文件管理器的动态文本
+    refreshFileManagerPlaceholders() {
+        if (!window.i18n) return;
+        
+        const fileList = document.getElementById('file-list');
+        if (fileList) {
+            // 选择文件列表中的文本 span（排除图标 span）
+            const fileTextSpan = fileList.querySelector('td > div > span:last-child');
+            if (fileTextSpan) {
+                // 根据当前显示的文本类型更新
+                const currentText = fileTextSpan.textContent;
+                if (currentText.includes('select') || currentText.includes('选择') || currentText.includes('device') || currentText.includes('设备')) {
+                    fileTextSpan.textContent = window.i18n.t('fileManager.selectDeviceFirst');
+                } else if (currentText.includes('Loading') || currentText.includes('加载')) {
+                    fileTextSpan.textContent = window.i18n.t('fileManager.loadingFiles');
+                } else if (currentText.includes('Empty') || currentText.includes('空')) {
+                    fileTextSpan.textContent = window.i18n.t('fileManager.emptyDirectory');
+                }
+            }
+        }
+        
+        // 更新模态框中的测试文件占位符
+        const modalTestFiles = document.getElementById('modal-test-files');
+        if (modalTestFiles) {
+            const noFilesElement = modalTestFiles.querySelector('.no-files');
+            if (noFilesElement) {
+                const currentText = noFilesElement.textContent;
+                if (currentText.includes('select') || currentText.includes('选择') || currentText.includes('directory') || currentText.includes('目录')) {
+                    noFilesElement.textContent = window.i18n.t('testExecution.selectTestDirectoryFirst');
+                } else if (currentText.includes('no') || currentText.includes('没有') || currentText.includes('No test files')) {
+                    noFilesElement.textContent = window.i18n.t('testExecution.noTestFilesInDir');
+                }
+            }
+        }
+        
+        // 更新欢迎消息
+        const welcomeMessage = document.querySelector('.welcome-message');
+        if (welcomeMessage) {
+            const welcomeText = welcomeMessage.querySelector('.welcome-text');
+            const welcomeDesc = welcomeMessage.querySelector('p');
+            if (welcomeText) {
+                welcomeText.textContent = window.i18n.t('testExecution.welcome');
+            }
+            if (welcomeDesc) {
+                welcomeDesc.textContent = window.i18n.t('testExecution.createTestPlan');
+            }
+        }
+    }
+    
+    // 更新UI文本
+    updateUIText() {
+        if (!window.i18n) return;
+        
+        // 通用方法：根据data-i18n属性更新文本
+        const updateElementsByI18nAttribute = () => {
+            const elements = document.querySelectorAll('[data-i18n]');
+            elements.forEach(element => {
+                const key = element.getAttribute('data-i18n');
+                if (key) {
+                    const translation = window.i18n.t(key);
+                    if (translation) {
+                        element.textContent = translation;
+                    }
+                }
+            });
+        };
+        
+        // 通用方法：根据data-i18n-placeholder属性更新占位符
+        const updatePlaceholdersByI18nAttribute = () => {
+            const elements = document.querySelectorAll('[data-i18n-placeholder]');
+            elements.forEach(element => {
+                const key = element.getAttribute('data-i18n-placeholder');
+                if (key) {
+                    const translation = window.i18n.t(key);
+                    if (translation) {
+                        element.placeholder = translation;
+                    }
+                }
+            });
+        };
+        
+        // 调用通用方法更新文本
+        updateElementsByI18nAttribute();
+        updatePlaceholdersByI18nAttribute();
+        
+        // 更新标签页文本
+        const testExecutionTab = document.querySelector('[data-tab="test-execution"] span:last-child');
+        if (testExecutionTab) {
+            testExecutionTab.textContent = window.i18n.t('tabs.testExecution');
+        }
+        
+        const androidConnectionTab = document.querySelector('[data-tab="android-connection"] span:last-child');
+        if (androidConnectionTab) {
+            androidConnectionTab.textContent = window.i18n.t('tabs.androidConnection');
+        }
+        
+        const settingsTab = document.querySelector('[data-tab="settings"] span:last-child');
+        if (settingsTab) {
+            settingsTab.textContent = window.i18n.t('tabs.settings');
+        }
+        
+        // 更新设置页面文本
+        const displayCard = document.querySelector('#settings .material-card[data-card-type="display"] .card-header h3');
+        if (displayCard) {
+            displayCard.textContent = window.i18n.t('settings.display');
+        }
+        
+        const directoryCard = document.querySelector('#settings .material-card[data-card-type="directory"] .card-header h3');
+        if (directoryCard) {
+            directoryCard.textContent = window.i18n.t('settings.directory');
+        }
+        
+        const notificationCard = document.querySelector('#settings .material-card[data-card-type="notification"] .card-header h3');
+        if (notificationCard) {
+            notificationCard.textContent = window.i18n.t('settings.notification');
+        }
+        
+        const versionCard = document.querySelector('#settings .material-card[data-card-type="version"] .card-header h3');
+        if (versionCard) {
+            versionCard.textContent = window.i18n.t('settings.version');
+        }
+        
+        const dataCard = document.querySelector('#settings .material-card[data-card-type="data"] .card-header h3');
+        if (dataCard) {
+            dataCard.textContent = window.i18n.t('settings.data');
+        }
+        
+        // 更新设置项文本
+        const darkModeLabel = document.querySelector('#settings .material-card[data-card-type="display"] .setting-item:nth-child(1) .setting-label span:last-child');
+        if (darkModeLabel) {
+            darkModeLabel.textContent = window.i18n.t('settings.darkMode');
+        }
+        
+        const themeColorLabel = document.querySelector('#settings .material-card[data-card-type="display"] .setting-item:nth-child(2) .setting-label span:last-child');
+        if (themeColorLabel) {
+            themeColorLabel.textContent = window.i18n.t('settings.themeColor');
+        }
+        
+        const languageLabel = document.querySelector('#settings .material-card[data-card-type="display"] .setting-item:nth-child(3) .setting-label span:last-child');
+        if (languageLabel) {
+            languageLabel.textContent = window.i18n.t('settings.language');
+        }
+        
+        const defaultDownloadPathLabel = document.querySelector('#settings .material-card[data-card-type="directory"] .setting-label span:last-child');
+        if (defaultDownloadPathLabel) {
+            defaultDownloadPathLabel.textContent = window.i18n.t('settings.defaultDownloadPath');
+        }
+        
+        // 更新默认下载路径的占位符文本
+        const defaultTestDirectoryInput = document.getElementById('default-test-directory');
+        if (defaultTestDirectoryInput) {
+            defaultTestDirectoryInput.placeholder = window.i18n.t('placeholders.defaultDownloadPath');
+        }
+        
+        // 更新版本信息卡片中的标签
+        const versionLabels = document.querySelectorAll('#settings .material-card[data-card-type="version"] .version-label');
+        if (versionLabels.length >= 3) {
+            versionLabels[0].textContent = window.i18n.t('labels.version');
+            versionLabels[1].textContent = window.i18n.t('labels.buildDate');
+            versionLabels[2].textContent = window.i18n.t('labels.copyright');
+        }
+        
+        // 更新安卓连接页面文本
+        
+        // 设备选择卡片标题
+        const deviceSelectionCard = document.querySelector('#android-connection .left-panel .material-card:nth-child(1) .card-header h3');
+        if (deviceSelectionCard) {
+            deviceSelectionCard.textContent = window.i18n.t('android.deviceSelection');
+        }
+        
+        // 设备管理按钮
+        const deviceManagementBtn = document.querySelector('#device-management-btn span:last-child');
+        if (deviceManagementBtn) {
+            deviceManagementBtn.textContent = window.i18n.t('android.deviceManagement');
+        }
+        
+        // 未选择设备文本
+        const noDeviceSelected = document.getElementById('selected-device-name');
+        if (noDeviceSelected) {
+            noDeviceSelected.textContent = window.i18n.t('android.noDeviceSelected');
+        }
+        
+        // 屏幕控制按钮
+        const screenControlBtn = document.querySelector('#screen-control-btn span:last-child');
+        if (screenControlBtn) {
+            screenControlBtn.textContent = window.i18n.t('android.screenControl');
+        }
+        
+        // 控制参数按钮
+        const controlParamsBtn = document.querySelector('#control-params-btn span:last-child');
+        if (controlParamsBtn) {
+            controlParamsBtn.textContent = window.i18n.t('android.controlParams');
+        }
+        
+        // 设备信息卡片标题
+        const deviceInfoCard = document.querySelector('#device-info-card .card-header h3');
+        if (deviceInfoCard) {
+            deviceInfoCard.textContent = window.i18n.t('android.deviceInfo');
+        }
+        
+        // 设备信息标签
+        const deviceInfoLabels = document.querySelectorAll('#device-info-content .status-item-label');
+        if (deviceInfoLabels.length >= 7) {
+            deviceInfoLabels[0].textContent = window.i18n.t('android.manufacturer');
+            deviceInfoLabels[1].textContent = window.i18n.t('android.model');
+            deviceInfoLabels[2].textContent = window.i18n.t('android.androidVersion');
+            deviceInfoLabels[3].textContent = window.i18n.t('android.connectedWifi');
+            deviceInfoLabels[4].textContent = window.i18n.t('android.batteryLevel');
+            deviceInfoLabels[5].textContent = window.i18n.t('android.storageUsage');
+            deviceInfoLabels[6].textContent = window.i18n.t('android.memoryUsage');
+        }
+        
+        // 更新文件管理器文本
+        
+        // 文件管理器标题
+        const fileManagerTitle = document.querySelector('#android-connection .right-panel .material-card .card-header h3');
+        if (fileManagerTitle) {
+            fileManagerTitle.textContent = window.i18n.t('fileManager.title');
+        }
+        
+        // 文件管理器按钮
+        const fileManagerBtns = document.querySelectorAll('.file-manager-btn .btn-text');
+        if (fileManagerBtns.length >= 5) {
+            fileManagerBtns[0].textContent = window.i18n.t('fileManager.back');
+            fileManagerBtns[1].textContent = window.i18n.t('fileManager.refresh');
+            fileManagerBtns[2].textContent = window.i18n.t('fileManager.delete');
+            fileManagerBtns[3].textContent = window.i18n.t('fileManager.upload');
+            fileManagerBtns[4].textContent = window.i18n.t('fileManager.download');
+        }
+        
+        // 文件管理器表格标题
+        const fileTableHeaders = document.querySelectorAll('.file-list-table th');
+        if (fileTableHeaders.length >= 6) {
+            fileTableHeaders[1].textContent = window.i18n.t('fileManager.name');
+            fileTableHeaders[2].textContent = window.i18n.t('fileManager.size');
+            fileTableHeaders[3].textContent = window.i18n.t('fileManager.modifyTime');
+            fileTableHeaders[4].textContent = window.i18n.t('fileManager.createTime');
+            fileTableHeaders[5].textContent = window.i18n.t('fileManager.actions');
+        }
+        
+        // 下载进度条文本
+        const downloadingText = document.getElementById('download-filename');
+        if (downloadingText) {
+            downloadingText.textContent = window.i18n.t('fileManager.downloading');
+        }
+        
+        const autoCloseText = document.getElementById('download-countdown');
+        if (autoCloseText) {
+            autoCloseText.textContent = window.i18n.t('fileManager.autoCloseIn');
+        }
+        
+        const downloadFailedText = document.querySelector('.error-title');
+        if (downloadFailedText) {
+            downloadFailedText.textContent = window.i18n.t('fileManager.downloadFailed');
+        }
+        
+        // 上下文菜单文本
+        const contextMenuItems = document.querySelectorAll('.context-menu-item span:last-child');
+        if (contextMenuItems.length >= 3) {
+            contextMenuItems[0].textContent = window.i18n.t('fileManager.download');
+            contextMenuItems[1].textContent = window.i18n.t('fileManager.rename');
+            contextMenuItems[2].textContent = window.i18n.t('fileManager.delete');
+        }
+        
+        // 更新设备管理弹窗文本
+        
+        // 弹窗标题
+        const deviceModalTitle = document.getElementById('device-modal-title');
+        if (deviceModalTitle) {
+            deviceModalTitle.textContent = window.i18n.t('deviceModal.title');
+        }
+        
+        // 扫描设备文本
+        const scanningText = document.querySelector('#device-scanning span:last-child');
+        if (scanningText) {
+            scanningText.textContent = window.i18n.t('deviceModal.scanning');
+        }
+        
+        // 按IP新增设备文本
+        const addDeviceText = document.querySelector('#add-device-btn span:last-child');
+        if (addDeviceText) {
+            addDeviceText.textContent = window.i18n.t('deviceModal.addDevice');
+        }
+        
+        // IP输入框占位符
+        const ipInput = document.getElementById('add-device-input');
+        if (ipInput) {
+            ipInput.placeholder = window.i18n.t('deviceModal.ipPlaceholder');
+        }
+        
+        // 开放5555端口按钮
+        const openPortBtn = document.getElementById('open-port-btn');
+        if (openPortBtn) {
+            openPortBtn.textContent = window.i18n.t('deviceModal.openPort');
+        }
+        
+        // 确认选择按钮
+        const confirmSelectBtn = document.getElementById('device-modal-confirm-btn');
+        if (confirmSelectBtn) {
+            confirmSelectBtn.textContent = window.i18n.t('deviceModal.confirmSelect');
+        }
+        
+        // 取消按钮
+        const cancelBtn = document.getElementById('device-modal-cancel-btn');
+        if (cancelBtn) {
+            cancelBtn.textContent = window.i18n.t('deviceModal.cancel');
+        }
+        
+        // 设备管理弹窗的设备信息卡片
+        const deviceInfoTitle = document.querySelector('#modal-device-status-card .device-status-title');
+        if (deviceInfoTitle) {
+            deviceInfoTitle.textContent = window.i18n.t('deviceModal.deviceInfo');
+        }
+        
+        // 设备信息标签
+        const modalDeviceInfoLabels = document.querySelectorAll('#modal-device-info-content .status-item-label');
+        if (modalDeviceInfoLabels.length >= 3) {
+            modalDeviceInfoLabels[0].textContent = window.i18n.t('deviceModal.manufacturer');
+            modalDeviceInfoLabels[1].textContent = window.i18n.t('deviceModal.model');
+            modalDeviceInfoLabels[2].textContent = window.i18n.t('deviceModal.androidVersion');
+        }
+        
+        // 控制参数弹窗
+        const controlParamsTitle = document.querySelector('#control-params-overlay .modal-header h3');
+        if (controlParamsTitle) {
+            controlParamsTitle.textContent = window.i18n.t('controlParams.title');
+        }
+        
+        // 控制参数弹窗的保存和取消按钮
+        const controlParamsSaveBtn = document.querySelector('#control-params-overlay .modal-footer button.primary');
+        if (controlParamsSaveBtn) {
+            controlParamsSaveBtn.textContent = window.i18n.t('controlParams.saveParams');
+        }
+        
+        const controlParamsCancelBtn = document.querySelector('#control-params-overlay .modal-footer button.outlined');
+        if (controlParamsCancelBtn) {
+            controlParamsCancelBtn.textContent = window.i18n.t('controlParams.cancel');
+        }
+        
+        // 控制参数弹窗的表单标签
+        const maxResolutionLabel = document.querySelector('#control-params-form label[for="max-size"]');
+        if (maxResolutionLabel) {
+            maxResolutionLabel.textContent = window.i18n.t('controlParams.maxResolution');
+        }
+        
+        const videoBitRateLabel = document.querySelector('#control-params-form label[for="video-bit-rate"]');
+        if (videoBitRateLabel) {
+            videoBitRateLabel.textContent = window.i18n.t('controlParams.videoBitRate');
+        }
+        
+        const mbpsUnit = document.querySelector('#control-params-form small');
+        if (mbpsUnit) {
+            mbpsUnit.textContent = window.i18n.t('controlParams.mbps');
+        }
+        
+        const maxFpsLabel = document.querySelector('#control-params-form label[for="max-fps"]');
+        if (maxFpsLabel) {
+            maxFpsLabel.textContent = window.i18n.t('controlParams.maxFps');
+        }
+        
+        const videoCodecLabel = document.querySelector('#control-params-form label[for="video-codec"]');
+        if (videoCodecLabel) {
+            videoCodecLabel.textContent = window.i18n.t('controlParams.videoCodec');
+        }
+        
+        const alwaysOnTopLabel = document.querySelector('#control-params-form label[for="always-on-top"]');
+        if (alwaysOnTopLabel) {
+            alwaysOnTopLabel.textContent = window.i18n.t('controlParams.alwaysOnTop');
+        }
+        
+        // 视频编解码器选项
+        const videoCodecOptions = document.querySelectorAll('#video-codec-options .custom-select__option span');
+        if (videoCodecOptions.length >= 3) {
+            videoCodecOptions[0].textContent = window.i18n.t('controlParams.h264');
+            videoCodecOptions[1].textContent = window.i18n.t('controlParams.h265');
+            videoCodecOptions[2].textContent = window.i18n.t('controlParams.av1');
+        }
+        
+        // 更新选中的显示文本
+        const videoCodecSelected = document.querySelector('#video-codec-selected .custom-select__text');
+        const selectedVideoOption = document.querySelector('#video-codec-options .custom-select__option.selected');
+        if (videoCodecSelected && selectedVideoOption) {
+            videoCodecSelected.textContent = selectedVideoOption.querySelector('span')?.textContent || videoCodecSelected.textContent;
+        }
+        
+        // 更新测试执行页面文本
+        const testDirectoryTitle = document.querySelector('#test-execution .left-panel .material-card:nth-child(1) .card-header h3');
+        if (testDirectoryTitle) {
+            testDirectoryTitle.textContent = window.i18n.t('testExecution.testDirectory');
+        }
+        
+        const selectDirectoryBtn = document.querySelector('#select-directory-btn span:last-child');
+        if (selectDirectoryBtn) {
+            selectDirectoryBtn.textContent = window.i18n.t('testExecution.selectTestDirectory');
+        }
+        
+        const noDirectorySelected = document.getElementById('selected-directory');
+        if (noDirectorySelected && !this.selectedDirectory) {
+            noDirectorySelected.textContent = window.i18n.t('testExecution.noDirectorySelected');
+        }
+        
+        const testPlanTitle = document.querySelector('#test-plan-section .card-header h3');
+        if (testPlanTitle) {
+            testPlanTitle.textContent = window.i18n.t('testExecution.testPlan');
+        }
+        
+        const newPlanBtn = document.querySelector('#new-plan-btn span:last-child');
+        if (newPlanBtn) {
+            newPlanBtn.textContent = window.i18n.t('testExecution.newPlan');
+        }
+        
+        const editPlanBtn = document.querySelector('#edit-plan-btn span:last-child');
+        if (editPlanBtn) {
+            editPlanBtn.textContent = window.i18n.t('testExecution.editPlan');
+        }
+        
+        const deletePlanBtn = document.querySelector('#delete-plan-btn span:last-child');
+        if (deletePlanBtn) {
+            deletePlanBtn.textContent = window.i18n.t('testExecution.deletePlan');
+        }
+        
+        const testTypeTitle = document.querySelector('#test-execution .left-panel .material-card:nth-child(3) .card-header h3');
+        if (testTypeTitle) {
+            testTypeTitle.textContent = window.i18n.t('testExecution.testType');
+        }
+        
+        const testOutputTitle = document.querySelector('#test-execution .right-panel .material-card:nth-child(1) .card-header h3');
+        if (testOutputTitle) {
+            testOutputTitle.textContent = window.i18n.t('testExecution.testOutput');
+        }
+        
+        const progressStatus = document.getElementById('progress-status');
+        if (progressStatus && progressStatus.textContent === '准备就绪') {
+            progressStatus.textContent = window.i18n.t('testExecution.ready');
+        }
+        
+        const runTestsBtn = document.querySelector('#run-tests-btn span:last-child');
+        if (runTestsBtn) {
+            runTestsBtn.textContent = window.i18n.t('testExecution.runTests');
+        }
+        
+        const stopTestsBtn = document.querySelector('#stop-tests-btn span:last-child');
+        if (stopTestsBtn) {
+            stopTestsBtn.textContent = window.i18n.t('testExecution.stopTests');
+        }
+        
+        const viewReportBtn = document.querySelector('#view-report-btn span:last-child');
+        if (viewReportBtn) {
+            viewReportBtn.textContent = window.i18n.t('testExecution.viewReport');
+        }
+        
+        const stopServerBtn = document.querySelector('#stop-allure-btn span:last-child');
+        if (stopServerBtn) {
+            stopServerBtn.textContent = window.i18n.t('testExecution.stopServer');
+        }
+        
+        // 更新模态框文本
+        const modalTitle = document.getElementById('modal-title');
+        if (modalTitle && modalTitle.textContent === '新建测试计划') {
+            modalTitle.textContent = window.i18n.t('modal.newTestPlan');
+        }
+        
+        const planNameLabel = document.querySelector('#test-plan-form label[for="plan-name"]');
+        if (planNameLabel) {
+            planNameLabel.textContent = window.i18n.t('modal.planName');
+        }
+        
+        const planDescriptionLabel = document.querySelector('#test-plan-form label[for="plan-description"]');
+        if (planDescriptionLabel) {
+            planDescriptionLabel.textContent = window.i18n.t('modal.planDescription');
+        }
+        
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
+        if (modalCancelBtn) {
+            modalCancelBtn.textContent = window.i18n.t('modal.cancel');
+        }
+        
+        const savePlanBtn = document.getElementById('save-plan-btn');
+        if (savePlanBtn) {
+            savePlanBtn.textContent = window.i18n.t('modal.save');
+        }
+        
+        const updatePlanBtn = document.getElementById('update-plan-btn');
+        if (updatePlanBtn) {
+            updatePlanBtn.textContent = window.i18n.t('modal.updatePlan');
+        }
+        
+        const renameModalTitle = document.getElementById('rename-modal-title');
+        if (renameModalTitle) {
+            renameModalTitle.textContent = window.i18n.t('modal.rename');
+        }
+        
+        const renameLabel = document.querySelector('#rename-modal-form label[for="rename-input"]');
+        if (renameLabel) {
+            renameLabel.textContent = window.i18n.t('modal.name');
+        }
+        
+        const renameInput = document.getElementById('rename-input');
+        if (renameInput) {
+            renameInput.placeholder = window.i18n.t('modal.enterNewName');
+        }
+        
+        const renameModalCancelBtn = document.getElementById('rename-modal-cancel-btn');
+        if (renameModalCancelBtn) {
+            renameModalCancelBtn.textContent = window.i18n.t('modal.cancel');
+        }
+        
+        const renameModalSaveBtn = document.getElementById('rename-modal-save-btn');
+        if (renameModalSaveBtn) {
+            renameModalSaveBtn.textContent = window.i18n.t('modal.save');
+        }
+    }
 
     setupEventListeners() {
+        // 阻止滚动的处理函数
+        this.preventScroll = (e) => {
+            const mainContent = document.querySelector('.main-content');
+            if (mainContent && mainContent.classList.contains('dropdown-open')) {
+                e.preventDefault();
+            }
+        };
+        
+        // 全局点击事件 - 关闭所有下拉框
+        document.addEventListener('click', () => {
+            const hadOpenDropdowns = document.querySelectorAll('.custom-select__options.show').length > 0;
+            document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+                opt.classList.remove('show');
+            });
+            if (hadOpenDropdowns) {
+                const mainContent = document.querySelector('.main-content');
+                if (mainContent) {
+                    mainContent.classList.remove('dropdown-open');
+                    mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                }
+            }
+        });
+        
         // 导航标签切换
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.addEventListener('click', () => {
@@ -220,6 +999,21 @@ class XKAutoTesterApp {
             });
         }
 
+        // 确认弹窗控制
+        const confirmModalCancelBtn = document.getElementById('confirm-modal-cancel-btn');
+        if (confirmModalCancelBtn) {
+            confirmModalCancelBtn.addEventListener('click', () => {
+                this.hideConfirmModal();
+            });
+        }
+
+        const confirmModalConfirmBtn = document.getElementById('confirm-modal-confirm-btn');
+        if (confirmModalConfirmBtn) {
+            confirmModalConfirmBtn.addEventListener('click', () => {
+                this.executeConfirmAction();
+            });
+        }
+
         // 屏幕控制
         const screenControlBtn = document.getElementById('screen-control-btn');
         if (screenControlBtn) {
@@ -242,6 +1036,51 @@ class XKAutoTesterApp {
         
         // 文件管理器事件监听
         this.setupFileManagerEventListeners();
+
+        // 定时计划管理
+        document.getElementById('new-scheduled-plan-btn').addEventListener('click', async () => {
+            await this.showNewScheduledPlanModal();
+        });
+
+        document.getElementById('edit-scheduled-plan-btn').addEventListener('click', () => {
+            this.editScheduledPlan();
+        });
+
+        document.getElementById('delete-scheduled-plan-btn').addEventListener('click', () => {
+            this.deleteScheduledPlan();
+        });
+
+        // 定时计划模态框控制
+        document.getElementById('scheduled-plan-modal-close-btn').addEventListener('click', () => {
+            this.hideScheduledPlanModal();
+        });
+
+        document.getElementById('scheduled-plan-cancel-btn').addEventListener('click', () => {
+            this.hideScheduledPlanModal();
+        });
+
+        document.getElementById('scheduled-plan-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveScheduledPlan();
+        });
+
+        document.getElementById('update-scheduled-plan-btn').addEventListener('click', () => {
+            this.updateScheduledPlan();
+        });
+
+        // 定时执行事件监听
+        if (window.electronAPI && window.electronAPI.onScheduledTestStart) {
+            window.electronAPI.onScheduledTestStart((event, data) => {
+                this.handleScheduledTestStart(data);
+            });
+        }
+        
+        // 定时计划过期事件监听
+        if (window.electronAPI && window.electronAPI.onScheduledPlanExpired) {
+            window.electronAPI.onScheduledPlanExpired((event, data) => {
+                this.handleScheduledPlanExpired(data);
+            });
+        }
     }
 
     async loadProjectInfo() {
@@ -279,6 +1118,11 @@ class XKAutoTesterApp {
                 const defaultTestDirectory = document.getElementById('default-test-directory');
                 if (defaultTestDirectory) {
                     defaultTestDirectory.value = config.APP_SETTINGS.default_download_directory || '';
+                    // 更新悬浮提示内容
+                    const directoryTooltip = document.querySelector('.directory-tooltip');
+                    if (directoryTooltip) {
+                        directoryTooltip.textContent = defaultTestDirectory.value;
+                    }
                 }
                 
                 // 更新主题色预览
@@ -306,15 +1150,117 @@ class XKAutoTesterApp {
                     }
                 });
                 
+                // 更新自定义语言选择器
+                const languageValue = config.APP_SETTINGS.language || 'zh-CN';
+                const customLanguageSelected = document.getElementById('custom-language-selected');
+                const customLanguageOptions = document.getElementById('custom-language-options');
+                
+                if (customLanguageSelected && customLanguageOptions) {
+                    const languageNames = {
+                        'zh-CN': '简体中文',
+                        'en-US': 'English'
+                    };
+                    const displayText = languageNames[languageValue] || '简体中文';
+                    
+                    // 更新选中显示的文本
+                    const selectedSpan = customLanguageSelected.querySelector('.custom-select__text');
+                    if (selectedSpan) {
+                        selectedSpan.textContent = displayText;
+                    }
+                    
+                    // 标记选中的选项
+                    const options = customLanguageOptions.querySelectorAll('.custom-select__option');
+                    options.forEach(option => {
+                        if (option.dataset.value === languageValue) {
+                            option.classList.add('selected');
+                        } else {
+                            option.classList.remove('selected');
+                        }
+                    });
+                }
+                
                 // 应用黑暗模式
                 this.applyDarkMode(config.APP_SETTINGS.dark_mode || false);
                 
                 // 应用主题色
                 const themeColor = config.APP_SETTINGS.theme_color || '#4CAF50';
                 this.applyThemeColor(themeColor);
+                
+                // 应用语言设置
+                this.changeLanguage(languageValue);
+                
+                // 加载通知配置
+                this.loadNotificationConfig(config.APP_SETTINGS.notification);
             }
         } catch (error) {
             console.error('加载配置失败:', error);
+        }
+    }
+    
+    loadNotificationConfig(notificationConfig) {
+        if (!notificationConfig) {
+            notificationConfig = {
+                platform: 'none',
+                dingtalk: {
+                    access_token: '',
+                    secret: ''
+                }
+            };
+        }
+        
+        const platform = notificationConfig.platform || 'none';
+        
+        const notificationPlatformSelected = document.getElementById('custom-notification-platform-selected');
+        const notificationPlatformOptions = document.getElementById('custom-notification-platform-options');
+        
+        if (notificationPlatformSelected && notificationPlatformOptions) {
+            const platformI18nKeys = {
+                'none': 'settings.none',
+                'dingtalk': 'settings.dingtalk'
+            };
+            const platformNames = {
+                'none': window.i18n ? window.i18n.t('settings.none') : '无',
+                'dingtalk': window.i18n ? window.i18n.t('settings.dingtalk') : '钉钉'
+            };
+            const displayText = platformNames[platform] || platformNames['none'];
+            const i18nKey = platformI18nKeys[platform] || platformI18nKeys['none'];
+            
+            const selectedSpan = notificationPlatformSelected.querySelector('.custom-select__text');
+            if (selectedSpan) {
+                selectedSpan.textContent = displayText;
+                selectedSpan.setAttribute('data-i18n', i18nKey);
+            }
+            
+            const options = notificationPlatformOptions.querySelectorAll('.custom-select__option');
+            options.forEach(option => {
+                if (option.dataset.value === platform) {
+                    option.classList.add('selected');
+                } else {
+                    option.classList.remove('selected');
+                }
+            });
+        }
+        
+        const accessTokenInput = document.getElementById('notification-access-token');
+        const secretInput = document.getElementById('notification-secret');
+        const accessTokenItem = document.getElementById('notification-access-token-item');
+        const secretItem = document.getElementById('notification-secret-item');
+        
+        if (notificationConfig.dingtalk) {
+            if (accessTokenInput) {
+                accessTokenInput.value = notificationConfig.dingtalk.access_token || '';
+            }
+            if (secretInput) {
+                secretInput.value = notificationConfig.dingtalk.secret || '';
+            }
+        }
+        
+        if (platform === 'dingtalk') {
+            if (accessTokenItem) accessTokenItem.classList.remove('hidden');
+            if (secretItem) secretItem.classList.remove('hidden');
+        } else {
+            if (accessTokenItem) accessTokenItem.classList.add('hidden');
+            if (secretItem) secretItem.classList.add('hidden');
         }
     }
 
@@ -429,29 +1375,6 @@ class XKAutoTesterApp {
     }
 
     // 显示Toast提示
-    showToast(message, type = 'info', duration = 3000) {
-        const toastContainer = document.getElementById('toast-container');
-        if (!toastContainer) return;
-        
-        // 创建Toast元素
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        
-        // 添加到容器
-        toastContainer.appendChild(toast);
-        
-        // 自动移除
-        setTimeout(() => {
-            toast.classList.add('fade-out');
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.parentNode.removeChild(toast);
-                }
-            }, 300);
-        }, duration);
-    }
-
     setupSettingsEventListeners() {
         // 黑暗模式开关事件监听
         const darkModeToggle = document.getElementById('dark-mode-toggle');
@@ -485,7 +1408,19 @@ class XKAutoTesterApp {
                     themeColorHex.value = hexColor.toUpperCase();
                 }
                 
-                themeColorOptions.classList.toggle('show');
+                const isShowing = themeColorOptions.classList.toggle('show');
+                const mainContent = document.querySelector('.main-content');
+                if (isShowing) {
+                    if (mainContent) {
+                        mainContent.classList.add('dropdown-open');
+                        mainContent.addEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                } else {
+                    if (mainContent) {
+                        mainContent.classList.remove('dropdown-open');
+                        mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                }
             });
             
             // 点击颜色选项选择颜色
@@ -514,6 +1449,11 @@ class XKAutoTesterApp {
                     
                     // 隐藏选项
                     themeColorOptions.classList.remove('show');
+                    const mainContent = document.querySelector('.main-content');
+                    if (mainContent) {
+                        mainContent.classList.remove('dropdown-open');
+                        mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                    }
                     
                     // 保存配置
                     this.saveConfig({
@@ -561,7 +1501,7 @@ class XKAutoTesterApp {
                         });
                     } else {
                         // 显示错误提示
-                        this.showToast('请输入有效的HEX颜色格式，如 #4CAF50', 'error');
+                        Toast.error('请输入有效的HEX颜色格式，如 #4CAF50');
                         
                         // 恢复原来的颜色值
                         const currentColor = themeColorPreview.style.backgroundColor;
@@ -573,7 +1513,14 @@ class XKAutoTesterApp {
             
             // 点击页面其他地方隐藏颜色选项
             document.addEventListener('click', () => {
-                themeColorOptions.classList.remove('show');
+                if (themeColorOptions.classList.contains('show')) {
+                    themeColorOptions.classList.remove('show');
+                    const mainContent = document.querySelector('.main-content');
+                    if (mainContent) {
+                        mainContent.classList.remove('dropdown-open');
+                        mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                }
             });
             
             // 阻止选项内部点击事件冒泡
@@ -582,6 +1529,21 @@ class XKAutoTesterApp {
             });
         }
         
+        // 更新目录输入框悬浮提示
+        const updateDirectoryTooltip = () => {
+            const defaultTestDirectory = document.getElementById('default-test-directory');
+            const directoryTooltip = document.querySelector('.directory-tooltip');
+            if (defaultTestDirectory && directoryTooltip) {
+                const value = defaultTestDirectory.value;
+                directoryTooltip.textContent = value;
+                if (value && value.trim()) {
+                    directoryTooltip.classList.remove('empty');
+                } else {
+                    directoryTooltip.classList.add('empty');
+                }
+            }
+        };
+
         // 默认下载路径输入框事件监听
         const defaultTestDirectory = document.getElementById('default-test-directory');
         if (defaultTestDirectory) {
@@ -589,7 +1551,11 @@ class XKAutoTesterApp {
                 this.saveConfig({
                     default_download_directory: e.target.value
                 });
+                updateDirectoryTooltip();
             });
+            
+            // 初始化悬浮提示内容
+            updateDirectoryTooltip();
         }
         
         // 浏览默认测试目录按钮事件监听
@@ -611,6 +1577,7 @@ class XKAutoTesterApp {
                             this.saveConfig({
                                 default_download_directory: directoryPath
                             });
+                            updateDirectoryTooltip();
                         }
                     }
                 } catch (error) {
@@ -629,9 +1596,297 @@ class XKAutoTesterApp {
                     this.saveConfig({
                         default_download_directory: ''
                     });
+                    updateDirectoryTooltip();
                 }
             });
         }
+        
+        // 自定义语言选择器事件监听
+        const customLanguageSelect = document.getElementById('custom-language-select');
+        const customLanguageSelected = document.getElementById('custom-language-selected');
+        const customLanguageOptions = document.getElementById('custom-language-options');
+        
+        if (customLanguageSelect && customLanguageSelected && customLanguageOptions) {
+            // 将下拉框选项移到 body 下，避免被 modal 的 backdrop-filter 影响
+            document.body.appendChild(customLanguageOptions);
+            
+            // 点击选中区域切换下拉框显示/隐藏
+            customLanguageSelected.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isShowing = customLanguageOptions.classList.contains('show');
+                const mainContent = document.querySelector('.main-content');
+                if (!isShowing) {
+                    this.positionDropdown(customLanguageSelected, customLanguageOptions);
+                    customLanguageOptions.classList.add('show');
+                    if (mainContent) {
+                        mainContent.classList.add('dropdown-open');
+                        mainContent.addEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                } else {
+                    customLanguageOptions.classList.remove('show');
+                    if (mainContent) {
+                        mainContent.classList.remove('dropdown-open');
+                        mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                }
+            });
+            
+            // 点击选项选择语言
+            const options = customLanguageOptions.querySelectorAll('.custom-select__option');
+            options.forEach(option => {
+                option.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const selectedLanguage = option.dataset.value;
+                    const displayText = option.querySelector('span')?.textContent || option.textContent;
+                    
+                    // 更新选中显示
+                    const selectedSpan = customLanguageSelected.querySelector('.custom-select__text');
+                    if (selectedSpan) {
+                        selectedSpan.textContent = displayText;
+                    }
+                    
+                    // 更新选中状态
+                    options.forEach(opt => opt.classList.remove('selected'));
+                    option.classList.add('selected');
+                    
+                    // 隐藏下拉框
+                    customLanguageOptions.classList.remove('show');
+                    const mainContent = document.querySelector('.main-content');
+                    if (mainContent) {
+                        mainContent.classList.remove('dropdown-open');
+                        mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                    
+                    // 保存语言设置
+                    this.saveConfig({
+                        language: selectedLanguage
+                    });
+                    
+                    // 切换语言
+                    this.changeLanguage(selectedLanguage);
+                });
+            });
+        }
+        
+        // 通知平台选择器事件监听
+        const notificationPlatformSelect = document.getElementById('custom-notification-platform-select');
+        const notificationPlatformSelected = document.getElementById('custom-notification-platform-selected');
+        const notificationPlatformOptions = document.getElementById('custom-notification-platform-options');
+        
+        if (notificationPlatformSelect && notificationPlatformSelected && notificationPlatformOptions) {
+            document.body.appendChild(notificationPlatformOptions);
+            
+            notificationPlatformSelected.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isShowing = notificationPlatformOptions.classList.contains('show');
+                const mainContent = document.querySelector('.main-content');
+                if (!isShowing) {
+                    this.positionDropdown(notificationPlatformSelected, notificationPlatformOptions);
+                    notificationPlatformOptions.classList.add('show');
+                    if (mainContent) {
+                        mainContent.classList.add('dropdown-open');
+                        mainContent.addEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                } else {
+                    notificationPlatformOptions.classList.remove('show');
+                    if (mainContent) {
+                        mainContent.classList.remove('dropdown-open');
+                        mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                }
+            });
+            
+            const options = notificationPlatformOptions.querySelectorAll('.custom-select__option');
+            options.forEach(option => {
+                option.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const selectedPlatform = option.dataset.value;
+                    const optionSpan = option.querySelector('span');
+                    const displayText = optionSpan?.textContent || option.textContent;
+                    const optionI18nKey = optionSpan?.getAttribute('data-i18n');
+                    
+                    const selectedSpan = notificationPlatformSelected.querySelector('.custom-select__text');
+                    if (selectedSpan) {
+                        selectedSpan.textContent = displayText;
+                        if (optionI18nKey) {
+                            selectedSpan.setAttribute('data-i18n', optionI18nKey);
+                        }
+                    }
+                    
+                    options.forEach(opt => opt.classList.remove('selected'));
+                    option.classList.add('selected');
+                    
+                    notificationPlatformOptions.classList.remove('show');
+                    const mainContent = document.querySelector('.main-content');
+                    if (mainContent) {
+                        mainContent.classList.remove('dropdown-open');
+                        mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                    
+                    const accessTokenItem = document.getElementById('notification-access-token-item');
+                    const secretItem = document.getElementById('notification-secret-item');
+                    
+                    if (selectedPlatform === 'dingtalk') {
+                        if (accessTokenItem) accessTokenItem.classList.remove('hidden');
+                        if (secretItem) secretItem.classList.remove('hidden');
+                    } else {
+                        if (accessTokenItem) accessTokenItem.classList.add('hidden');
+                        if (secretItem) secretItem.classList.add('hidden');
+                    }
+                    
+                    this.saveNotificationConfig();
+                });
+            });
+        }
+        
+        // 通知配置输入框事件监听
+        const notificationAccessToken = document.getElementById('notification-access-token');
+        const notificationSecret = document.getElementById('notification-secret');
+        
+        if (notificationAccessToken) {
+            notificationAccessToken.addEventListener('blur', () => {
+                this.saveNotificationConfig();
+            });
+        }
+        
+        if (notificationSecret) {
+            notificationSecret.addEventListener('blur', () => {
+                this.saveNotificationConfig();
+            });
+        }
+        
+        // 清空Allure报告数据按钮事件监听
+        const clearAllureReportsBtn = document.getElementById('clear-allure-reports-btn');
+        if (clearAllureReportsBtn) {
+            clearAllureReportsBtn.addEventListener('click', () => {
+                const title = window.i18n.t('settings.clearAllureReports');
+                const message = window.i18n.t('settings.clearAllureReportsConfirm');
+                
+                this.showConfirmModal(title, message, async () => {
+                    try {
+                        clearAllureReportsBtn.disabled = true;
+                        const result = await window.electronAPI.clearAllureReports();
+                        
+                        if (result.success) {
+                            Toast.success(window.i18n.t('settings.clearAllureReportsSuccess'));
+                        } else {
+                            Toast.error(window.i18n.t('settings.clearAllureReportsFailed') + ': ' + result.error);
+                        }
+                    } catch (error) {
+                        console.error('清空Allure报告数据失败:', error);
+                        Toast.error(window.i18n.t('settings.clearAllureReportsFailed'));
+                    } finally {
+                        clearAllureReportsBtn.disabled = false;
+                    }
+                });
+            });
+        }
+    }
+    
+    // 初始化自定义下拉框
+    initCustomSelect(selectId) {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+        
+        // 跳过已初始化的下拉框
+        if (select.dataset.initialized === 'true') return;
+        select.dataset.initialized = 'true';
+        
+        const selected = select.querySelector('.custom-select__selected');
+        const options = select.querySelector('.custom-select__options');
+        
+        if (!selected || !options) return;
+        
+        // 将下拉框选项移到 body 下，避免被 modal 的 backdrop-filter 影响
+        document.body.appendChild(options);
+        
+        const self = this;
+        
+        // 点击选中区域切换下拉框显示/隐藏
+        selected.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // 关闭其他下拉框
+            document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+                if (opt !== options) {
+                    opt.classList.remove('show');
+                }
+            });
+            
+            const mainContent = document.querySelector('.main-content');
+            const isShowing = options.classList.contains('show');
+            if (!isShowing) {
+                self.positionDropdown(selected, options);
+                options.classList.add('show');
+                if (mainContent) {
+                    mainContent.classList.add('dropdown-open');
+                    mainContent.addEventListener('wheel', self.preventScroll, { passive: false });
+                }
+            } else {
+                options.classList.remove('show');
+                if (mainContent) {
+                    mainContent.classList.remove('dropdown-open');
+                    mainContent.removeEventListener('wheel', self.preventScroll, { passive: false });
+                }
+            }
+        });
+        
+        // 点击选项选择
+        const optionItems = options.querySelectorAll('.custom-select__option');
+        optionItems.forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const displayText = option.querySelector('span')?.textContent || option.textContent;
+                
+                // 更新选中显示
+                const selectedSpan = selected.querySelector('.custom-select__text');
+                if (selectedSpan) {
+                    selectedSpan.textContent = displayText;
+                }
+                
+                // 更新选中状态
+                optionItems.forEach(opt => opt.classList.remove('selected'));
+                option.classList.add('selected');
+                
+                // 隐藏下拉框
+                options.classList.remove('show');
+                const mainContent = document.querySelector('.main-content');
+                if (mainContent) {
+                    mainContent.classList.remove('dropdown-open');
+                    mainContent.removeEventListener('wheel', self.preventScroll, { passive: false });
+                }
+            });
+        });
+    }
+    
+    // 定位下拉框选项
+    positionDropdown(selected, options) {
+        const rect = selected.getBoundingClientRect();
+        
+        // 如果元素不可见，使用默认位置
+        if (rect.width === 0 && rect.height === 0) {
+            options.style.top = '50%';
+            options.style.left = '50%';
+            options.style.width = '200px';
+            options.style.transform = 'translate(-50%, -50%)';
+            return;
+        }
+        
+        const viewportHeight = window.innerHeight;
+        const optionsHeight = 200;
+        
+        let top = rect.bottom + 4;
+        
+        if (top + optionsHeight > viewportHeight - 20) {
+            top = rect.top - optionsHeight - 4;
+            if (top < 0) {
+                top = 10;
+            }
+        }
+        
+        options.style.top = `${top}px`;
+        options.style.left = `${rect.left}px`;
+        options.style.width = `${rect.width}px`;
+        options.style.transform = 'none';
     }
 
     async saveConfig(settings) {
@@ -660,6 +1915,36 @@ class XKAutoTesterApp {
             await window.electronAPI.saveConfig(config);
         } catch (error) {
             console.error('保存配置失败:', error);
+        }
+    }
+    
+    async saveNotificationConfig() {
+        try {
+            const notificationPlatformSelected = document.getElementById('custom-notification-platform-selected');
+            const accessTokenInput = document.getElementById('notification-access-token');
+            const secretInput = document.getElementById('notification-secret');
+            
+            let platform = 'none';
+            if (notificationPlatformSelected) {
+                const selectedOption = document.querySelector('#custom-notification-platform-options .custom-select__option.selected');
+                if (selectedOption) {
+                    platform = selectedOption.dataset.value || 'none';
+                }
+            }
+            
+            const notificationConfig = {
+                platform: platform,
+                dingtalk: {
+                    access_token: accessTokenInput ? accessTokenInput.value : '',
+                    secret: secretInput ? secretInput.value : ''
+                }
+            };
+            
+            await this.saveConfig({
+                notification: notificationConfig
+            });
+        } catch (error) {
+            console.error('保存通知配置失败:', error);
         }
     }
 
@@ -738,8 +2023,8 @@ class XKAutoTesterApp {
 
         if (!this.selectedDirectory) {
             // 未选择目录时，显示测试计划但显示占位符
-            this.displayTestTypes([], '请先选择测试目录');
-            this.displayTestPlansPlaceholder('测试计划为空');
+            this.displayTestTypes([], window.i18n.t('testExecution.selectTestDirectoryFirst'));
+            this.displayTestPlansPlaceholder(window.i18n.t('testExecution.noTestPlans'));
             // 更新计划按钮状态
             this.updatePlanButtons();
             return;
@@ -748,7 +2033,7 @@ class XKAutoTesterApp {
         try {
             // 安全检查：确保electronAPI已加载
             if (!window.electronAPI || !window.electronAPI.scanTestFiles) {
-                this.showError('Electron API未正确加载，无法扫描测试文件');
+                this.showError(window.i18n.t('testExecution.electronApiNotLoaded'));
                 console.error('electronAPI未定义:', window.electronAPI);
                 return;
             }
@@ -757,12 +2042,12 @@ class XKAutoTesterApp {
             const testFiles = await window.electronAPI.scanTestFiles(this.selectedDirectory);
 
             if (testFiles.length === 0) {
-                this.showError('在tests目录下未找到任何测试文件');
+                this.showError(window.i18n.t('testExecution.noTestFilesFound'));
                 // 没有找到文件时，显示请选择文件的提示
-                this.displayTestTypes([], '请选择测试文件');
+                this.displayTestTypes([], window.i18n.t('testExecution.selectTestFile'));
                 // 只有在没有测试计划时才显示占位符
                 if (!this.testPlans || this.testPlans.length === 0) {
-                    this.displayTestPlansPlaceholder('测试计划为空');
+                    this.displayTestPlansPlaceholder(window.i18n.t('testExecution.noTestPlans'));
                 }
                 return;
             }
@@ -770,14 +2055,14 @@ class XKAutoTesterApp {
             this.displayTestFiles(testFiles);
             
             // 扫描到文件后，显示请选择文件的提示
-            this.displayTestTypes([], '请选择测试文件');
+            this.displayTestTypes([], window.i18n.t('testExecution.selectTestFile'));
             // 只有在没有测试计划时才显示占位符
             if (!this.testPlans || this.testPlans.length === 0) {
-                this.displayTestPlansPlaceholder('测试计划为空');
+                this.displayTestPlansPlaceholder(window.i18n.t('testExecution.noTestPlans'));
             }
         } catch (error) {
             console.error('扫描测试文件失败:', error);
-            this.showError('扫描测试文件失败: ' + error.message);
+            this.showError(window.i18n.t('testExecution.scanTestFilesFailed') + ': ' + error.message);
         }
     }
 
@@ -789,7 +2074,7 @@ class XKAutoTesterApp {
         this.setupPlaceholders();
         
         // 强制显示初始占位符
-        this.displayTestTypes([], '请先选择测试目录');
+        this.displayTestTypes([], window.i18n.t('testExecution.selectTestDirectoryFirst'));
     }
     
     // 实际设置占位符的逻辑
@@ -803,13 +2088,13 @@ class XKAutoTesterApp {
         // 如果测试类型容器没有占位符，才设置
         if (testTypeContainer && !testTypeContainer.querySelector('.placeholder-message')) {
 
-            this.displayTestTypes([], '请先选择测试目录');
+            this.displayTestTypes([], window.i18n.t('testExecution.selectTestDirectoryFirst'));
         }
         
         // 如果测试计划容器没有占位符，才设置
         if (testPlansContainer && !testPlansContainer.querySelector('.placeholder-message')) {
 
-            this.displayTestPlansPlaceholder('测试计划为空');
+            this.displayTestPlansPlaceholder(window.i18n.t('testExecution.noTestPlans'));
         }
     }
 
@@ -826,8 +2111,8 @@ class XKAutoTesterApp {
             const placeholderElement = document.createElement('div');
             placeholderElement.className = 'placeholder-message';
             placeholderElement.innerHTML = `
-                <span class="material-icons">info</span>
-                <span>请先选择测试目录</span>
+                ${this.getIconHtml('info')}
+                <span>${window.i18n.t('testExecution.selectTestDirectoryFirst')}</span>
             `;
             container.appendChild(placeholderElement);
             
@@ -837,7 +2122,7 @@ class XKAutoTesterApp {
         // 只有在没有测试计划时才显示测试计划占位符
         if (this.testPlans && this.testPlans.length === 0) {
 
-            this.displayTestPlansPlaceholder('测试计划为空');
+            this.displayTestPlansPlaceholder(window.i18n.t('testExecution.noTestPlans'));
         } else {
 
         }
@@ -879,44 +2164,12 @@ class XKAutoTesterApp {
             fileElement.className = 'test-file-item';
             fileElement.setAttribute('data-path', file.path);
             fileElement.innerHTML = `
-                <span class="material-icons">description</span>
+                ${this.getIconHtml('description')}
                 <span>${file.name}</span>
             `;
 
-            fileElement.addEventListener('click', () => {
-                this.toggleTestFile(file, fileElement);
-            });
-
             container.appendChild(fileElement);
         });
-    }
-
-    toggleTestFile(file, element) {
-        const index = this.selectedTestFiles.findIndex(f => f.path === file.path);
-        
-        if (index >= 0) {
-            // 取消选择
-            this.selectedTestFiles.splice(index, 1);
-            element.classList.remove('selected');
-        } else {
-            // 选择
-            this.selectedTestFiles.push(file);
-            element.classList.add('selected');
-        }
-
-        // 基于选中的文件动态更新测试类型选择器
-        // 添加防抖机制，避免频繁调用
-        if (this.updateTestTypesTimeout) {
-            clearTimeout(this.updateTestTypesTimeout);
-        }
-        this.updateTestTypesTimeout = setTimeout(() => {
-            // 如果正在通过测试计划选择文件，则不触发标记提取
-            if (!this.selectingFromPlan) {
-                this.updateTestTypesFromSelectedFiles();
-            }
-        }, 100);
-        
-        this.updateRunButtonState();
     }
 
     findTestFileItemByPath(filePath) {
@@ -964,11 +2217,17 @@ class XKAutoTesterApp {
         const hasTestPlans = this.testPlans && this.testPlans.length > 0;
         const hasSelectedPlan = !!this.currentTestPlan;
         
-
+        // 判断是否应该禁用编辑和删除按钮
+        let shouldDisableEditDelete = !hasSelectedPlan;
+        
+        // 如果测试正在运行，且选中的是正在执行的测试计划，则禁用编辑和删除按钮
+        if (this.isRunning && hasSelectedPlan && this.runningTestPlanName === this.currentTestPlan.name) {
+            shouldDisableEditDelete = true;
+        }
         
         newPlanButton.disabled = !hasDirectory;
-        editPlanButton.disabled = !hasSelectedPlan;
-        deletePlanButton.disabled = !hasSelectedPlan;
+        editPlanButton.disabled = shouldDisableEditDelete;
+        deletePlanButton.disabled = shouldDisableEditDelete;
         
         // 更新查看报告按钮状态
         if (hasSelectedPlan) {
@@ -982,6 +2241,9 @@ class XKAutoTesterApp {
 
     // 显示设备管理模态框
     async showDeviceManagementModal() {
+        // 清除所有Toast消息，避免弹窗显示时能看到未消失的toast
+        Toast.clearAll();
+        
         // 显示模态框
         const modalOverlay = document.getElementById('device-modal-overlay');
         if (modalOverlay) {
@@ -994,41 +2256,48 @@ class XKAutoTesterApp {
         // 扫描设备
         await this.scanDevices();
         
+        // 如果有保存的设备状态，自动选择对应设备并显示设备信息卡片
+        if (this.deviceStatusSaved && this.selectedDevice) {
+            setTimeout(() => {
+                const deviceToSelect = document.querySelector(`.device-item[data-device-id="${this.selectedDevice}"]`);
+                if (deviceToSelect) {
+                    // 模拟点击事件，自动选择设备
+                    deviceToSelect.click();
+                }
+            }, 100);
+        }
+        
         // 添加开放5555端口按钮事件监听
         const openPortBtn = document.getElementById('open-port-btn');
         if (openPortBtn) {
             // 移除旧的事件监听，避免重复绑定
-            openPortBtn.removeEventListener('click', this.openPort5555.bind(this));
+            openPortBtn.removeEventListener('click', this.boundOpenPort5555);
             // 添加新的事件监听
-            openPortBtn.addEventListener('click', this.openPort5555.bind(this));
+            openPortBtn.addEventListener('click', this.boundOpenPort5555);
         }
     }
     
     // 开放5555端口
     async openPort5555() {
+        // 获取设备管理弹窗容器
+        const modalContainer = document.querySelector('#device-modal-overlay .modal-container');
+        
         // 获取选中的USB设备
         const selectedDeviceElement = document.querySelector('.device-item.selected');
         if (!selectedDeviceElement) {
-            this.showError('请先选择一个USB设备');
+            Toast.error(window.i18n.t('deviceModal.selectUsbDevice'), { container: modalContainer });
             return;
         }
         
         const deviceId = selectedDeviceElement.getAttribute('data-device-id');
         if (!deviceId || deviceId.includes(':')) {
-            this.showError('请选择一个USB设备');
-            return;
-        }
-        
-        // 获取开放端口按钮元素
-        const openPortBtn = document.getElementById('open-port-btn');
-        if (!openPortBtn) {
-            this.showError('开放端口按钮未找到');
+            Toast.error(window.i18n.t('deviceModal.selectUsbDevice'), { container: modalContainer });
             return;
         }
         
         try {
             // 显示操作中提示
-            this.showFloatingTooltip(openPortBtn, '正在开放5555端口...', 'info');
+            Toast.info(window.i18n.t('deviceModal.openingPort'), { container: modalContainer });
             
             // 执行adb命令开放5555端口
             // 使用tcpip命令开启TCP/IP模式
@@ -1036,17 +2305,17 @@ class XKAutoTesterApp {
             
             // 检查结果
             if (result.success) {
-                this.showFloatingTooltip(openPortBtn, '5555端口开放成功', 'success');
+                Toast.success(window.i18n.t('deviceModal.portOpenSuccess'), { container: modalContainer });
                 
                 // 重新扫描设备，查看是否出现IP连接
                 setTimeout(async () => {
                     await this.scanDevices();
                 }, 1000);
             } else {
-                this.showFloatingTooltip(openPortBtn, `端口开放失败: ${result.error}`, 'error');
+                Toast.error(`${window.i18n.t('deviceModal.portOpenFailed')}: ${result.error}`, { container: modalContainer });
             }
         } catch (error) {
-            this.showFloatingTooltip(openPortBtn, `端口开放失败: ${error.message}`, 'error');
+            Toast.error(`${window.i18n.t('deviceModal.portOpenFailed')}: ${error.message}`, { container: modalContainer });
         }
     }
 
@@ -1059,6 +2328,16 @@ class XKAutoTesterApp {
         
         // 隐藏新增设备输入框和结果提示
         this.hideAddDeviceInput();
+        
+        // 清除设备列表中的选中状态
+        const deviceListElement = document.getElementById('device-list');
+        if (deviceListElement) {
+            const selectedDeviceElement = deviceListElement.querySelector('.device-item.selected');
+            if (selectedDeviceElement) {
+                selectedDeviceElement.classList.remove('selected');
+                selectedDeviceElement.style.backgroundColor = '';
+            }
+        }
     }
 
     // 显示设备扫描状态
@@ -1088,11 +2367,17 @@ class XKAutoTesterApp {
         const confirmButton = document.getElementById('device-modal-confirm-btn');
         const openPortBtn = document.getElementById('open-port-btn');
         const addDeviceInputContainer = document.getElementById('add-device-input-container');
+        const deviceStatusCard = document.getElementById('modal-device-status-card');
 
         if (scanningElement) scanningElement.classList.add('hidden');
         if (addDeviceInputContainer) addDeviceInputContainer.classList.add('hidden');
+        // 隐藏设备信息卡片
+        if (deviceStatusCard) deviceStatusCard.classList.add('hidden');
         
-        // 初始禁用开放5555端口按钮
+        // 初始禁用确认按钮和开放5555端口按钮
+        if (confirmButton) {
+            confirmButton.disabled = true;
+        }
         if (openPortBtn) {
             openPortBtn.disabled = true;
         }
@@ -1101,8 +2386,8 @@ class XKAutoTesterApp {
         if (deviceListElement) {
             deviceListElement.classList.remove('hidden');
             
-            // 保存当前选中的设备ID
-            const selectedDeviceId = document.querySelector('.device-item.selected')?.getAttribute('data-device-id');
+            // 保存当前选中的设备ID（只有当设备状态已保存时才保存）
+            const selectedDeviceId = this.deviceStatusSaved ? this.selectedDevice : null;
             
             // 清空设备列表
             deviceListElement.innerHTML = '';
@@ -1116,7 +2401,7 @@ class XKAutoTesterApp {
                 deviceElement.style.cursor = 'pointer';
                 deviceElement.style.transition = 'background-color 0.2s';
                 deviceElement.style.display = 'flex';
-                deviceElement.style.alignItems = 'center';
+                deviceElement.style.alignItems = 'flex-start';
                 
                 // 判断设备连接类型并使用不同图标
                 let icon = 'device_hub'; // 默认图标
@@ -1129,13 +2414,15 @@ class XKAutoTesterApp {
                 }
                 
                 deviceElement.innerHTML = `
-                    <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">${icon}</span>
-                    <span style="vertical-align: middle;">${device}</span>
+                    ${this.getIconHtml(icon, 'vertical-align: top; margin-right: 8px; flex-shrink: 0; margin-top: 2px;')}
+                    <span style="vertical-align: top; flex: 1; min-width: 0; word-wrap: break-word; overflow-wrap: break-word; white-space: normal;">${device}</span>
                 `;
                 
                 // 添加悬停效果
                 deviceElement.addEventListener('mouseenter', () => {
-                    deviceElement.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                    if (!deviceElement.classList.contains('selected')) {
+                        deviceElement.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                    }
                 });
                 
                 deviceElement.addEventListener('mouseleave', () => {
@@ -1200,10 +2487,10 @@ class XKAutoTesterApp {
             addDeviceButton.style.justifyContent = 'space-between';
             addDeviceButton.innerHTML = `
                 <div style="display: flex; align-items: center;">
-                    <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">add</span>
-                    <span style="vertical-align: middle;">按IP新增设备</span>
+                    ${this.getIconHtml('add', 'vertical-align: middle; margin-right: 8px;')}
+                    <span style="vertical-align: middle;">${window.i18n.t('deviceModal.addDevice')}</span>
                 </div>
-                <span class="material-icons" style="vertical-align: middle;">keyboard_arrow_right</span>
+                ${this.getIconHtml('keyboard_arrow_right', 'vertical-align: middle;')}
             `;
 
             // 添加悬停效果
@@ -1245,6 +2532,16 @@ class XKAutoTesterApp {
                         } else {
                             openPortBtn.disabled = true;
                         }
+                    }
+                    
+                    // 如果设备状态已保存，自动显示设备信息卡片
+                    if (this.deviceStatusSaved) {
+                        const deviceStatusCard = document.getElementById('modal-device-status-card');
+                        if (deviceStatusCard) {
+                            deviceStatusCard.classList.remove('hidden');
+                        }
+                        // 获取设备详细信息
+                        this.getDeviceInfo(selectedDeviceId, true);
                     }
                 }
             }
@@ -1345,7 +2642,7 @@ class XKAutoTesterApp {
 
         const input = addDeviceInput.value.trim();
         if (!input) {
-            this.showAddDeviceResult('请输入IP地址', 'error');
+            this.showAddDeviceResult(window.i18n.t('deviceModal.enterIp'), 'error');
             return;
         }
 
@@ -1356,7 +2653,7 @@ class XKAutoTesterApp {
             ipAddress = parts[0];
             port = parseInt(parts[1]);
             if (isNaN(port)) {
-                this.showAddDeviceResult('端口号格式错误', 'error');
+                this.showAddDeviceResult(window.i18n.t('deviceModal.portFormatError'), 'error');
                 return;
             }
         } else {
@@ -1366,27 +2663,27 @@ class XKAutoTesterApp {
         // 校验IP地址格式
         const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
         if (!ipRegex.test(ipAddress)) {
-            this.showAddDeviceResult('IP地址格式错误', 'error');
+            this.showAddDeviceResult(window.i18n.t('deviceModal.ipFormatError'), 'error');
             return;
         }
 
         // 执行adb connect命令
         try {
-            this.showAddDeviceResult('正在连接...', 'info');
+            this.showAddDeviceResult(window.i18n.t('deviceModal.connecting'), 'info');
             const deviceAddress = `${ipAddress}:${port}`;
             const result = await this.executeAdbCommand(`connect ${deviceAddress}`);
             
             if (result.success) {
-                this.showAddDeviceResult(`连接成功: ${deviceAddress}`, 'success');
+                this.showAddDeviceResult(`${window.i18n.t('deviceModal.connectSuccess')}: ${deviceAddress}`, 'success');
                 // 重新扫描设备
                 setTimeout(async () => {
                     await this.scanDevices();
                 }, 1000);
             } else {
-                this.showAddDeviceResult(`连接失败: ${result.error}`, 'error');
+                this.showAddDeviceResult(`${window.i18n.t('deviceModal.connectFailed')}: ${result.error}`, 'error');
             }
         } catch (error) {
-            this.showAddDeviceResult(`连接失败: ${error.message}`, 'error');
+            this.showAddDeviceResult(`${window.i18n.t('deviceModal.connectFailed')}: ${error.message}`, 'error');
         }
     }
 
@@ -1397,23 +2694,12 @@ class XKAutoTesterApp {
 
         addDeviceResult.textContent = message;
         addDeviceResult.classList.remove('hidden', 'error', 'success', 'info');
+        addDeviceResult.style.backgroundColor = '';
+        addDeviceResult.style.color = '';
+        addDeviceResult.style.border = '';
         
-        switch (type) {
-            case 'error':
-                addDeviceResult.style.backgroundColor = '#ffebee';
-                addDeviceResult.style.color = '#c62828';
-                addDeviceResult.style.border = '1px solid #ef5350';
-                break;
-            case 'success':
-                addDeviceResult.style.backgroundColor = '#e8f5e8';
-                addDeviceResult.style.color = '#2e7d32';
-                addDeviceResult.style.border = '1px solid #4caf50';
-                break;
-            case 'info':
-                addDeviceResult.style.backgroundColor = '#e3f2fd';
-                addDeviceResult.style.color = '#1565c0';
-                addDeviceResult.style.border = '1px solid #2196f3';
-                break;
+        if (type) {
+            addDeviceResult.classList.add(type);
         }
 
         addDeviceResult.classList.remove('hidden');
@@ -1541,35 +2827,71 @@ class XKAutoTesterApp {
             let memory = '-';
             
             if (!isModal) {
-                // WiFi连接
-                const wifiResult = await this.executeAdbCommand('dumpsys wifi | grep -E "SSID|ssid" | head -n 2', deviceId);
+                // WiFi连接 - 尝试多种方法获取SSID
+                // 方法1: dumpsys wifi (适用于大多数Android版本)
+                const wifiResult = await this.executeAdbCommand('dumpsys wifi', deviceId);
                 if (wifiResult.success) {
                     const wifiInfo = wifiResult.output.trim();
                     if (wifiInfo) {
-                        // 尝试多种方式提取SSID
-                        const lines = wifiInfo.split('\n');
-                        for (const line of lines) {
-                            const ssidMatch = line.match(/SSID:\s*"([^"]+)"/i);
-                            if (ssidMatch) {
-                                wifi = ssidMatch[1];
-                                break;
+                        // 尝试匹配 SSID: "xxx" 格式
+                        const ssidMatch1 = wifiInfo.match(/SSID:\s*"([^"]+)"/i);
+                        if (ssidMatch1) {
+                            wifi = ssidMatch1[1];
+                        }
+                        
+                        // 尝试匹配 ssid: "xxx" 或 ssid=xxx 格式
+                        if (wifi === '-') {
+                            const ssidMatch2 = wifiInfo.match(/ssid[=:\s]+"?([^"\n]+)"?/i);
+                            if (ssidMatch2) {
+                                wifi = ssidMatch2[1].replace(/"/g, '');
                             }
                         }
                         
-                        // 如果上面的方法失败，尝试另一种方式
-                        if (wifi === '-' && wifiInfo.includes('SSID:')) {
-                            const ssidStart = wifiInfo.indexOf('SSID:') + 5;
-                            const ssidEnd = wifiInfo.indexOf('"', ssidStart + 1);
-                            if (ssidStart > 4 && ssidEnd > ssidStart) {
-                                wifi = wifiInfo.substring(ssidStart + 1, ssidEnd);
+                        // 尝试匹配 mWifiInfo 中的 SSID (Android 9+)
+                        if (wifi === '-') {
+                            const ssidMatch3 = wifiInfo.match(/mWifiInfo\s*\{[^}]*SSID:\s*"?([^",}\n]+)"?/i);
+                            if (ssidMatch3) {
+                                wifi = ssidMatch3[1].replace(/"/g, '');
                             }
                         }
                     }
                 }
                 
-                // 如果上面的方法失败，尝试另一个命令
+                // 方法2: dumpsys connectivity (适用于Android 8+)
                 if (wifi === '-') {
-                    const wifiResult2 = await this.executeAdbCommand('iwconfig wlan0 | grep "ESSID"', deviceId);
+                    const connectivityResult = await this.executeAdbCommand('dumpsys connectivity', deviceId);
+                    if (connectivityResult.success) {
+                        const connectivityInfo = connectivityResult.output.trim();
+                        if (connectivityInfo) {
+                            // 匹配 NetworkAgentInfo 中的 SSID
+                            const ssidMatch = connectivityInfo.match(/NetworkAgentInfo[^}]*ssid[=:\s]+"?([^",}\n]+)"?/i);
+                            if (ssidMatch) {
+                                wifi = ssidMatch[1].replace(/"/g, '').replace(/\s*$/, '');
+                            }
+                        }
+                    }
+                }
+                
+                // 方法3: 使用 cmd wifi (Android 7+)
+                if (wifi === '-') {
+                    const cmdWifiResult = await this.executeAdbCommand('cmd wifi list-connections', deviceId);
+                    if (cmdWifiResult.success && cmdWifiResult.output.trim()) {
+                        const lines = cmdWifiResult.output.trim().split('\n');
+                        for (const line of lines) {
+                            if (line.includes('connected') || line.includes('COMPLETED')) {
+                                const ssidMatch = line.match(/(\S+)\s+(?:connected|COMPLETED)/i);
+                                if (ssidMatch) {
+                                    wifi = ssidMatch[1];
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // 方法4: 使用 iwconfig (需要 root 或特定权限)
+                if (wifi === '-') {
+                    const wifiResult2 = await this.executeAdbCommand('iwconfig wlan0', deviceId);
                     if (wifiResult2.success) {
                         const wifiInfo2 = wifiResult2.output.trim();
                         if (wifiInfo2) {
@@ -1578,6 +2900,15 @@ class XKAutoTesterApp {
                                 wifi = ssidMatch2[1];
                             }
                         }
+                    }
+                }
+                
+                // 方法5: 读取 /proc/net/wireless (获取信号强度，间接确认WiFi连接)
+                if (wifi === '-') {
+                    const wirelessResult = await this.executeAdbCommand('cat /proc/net/wireless', deviceId);
+                    if (wirelessResult.success && wirelessResult.output.includes('wlan0')) {
+                        // WiFi已连接但无法获取SSID
+                        wifi = '(已连接)';
                     }
                 }
                 
@@ -1796,6 +3127,7 @@ class XKAutoTesterApp {
         if (selectedDeviceElement) {
             const deviceName = selectedDeviceElement.getAttribute('data-device-id');
             this.selectedDevice = deviceName;
+            this.deviceStatusSaved = true; // 标记设备状态已保存
             this.updateSelectedDeviceDisplay();
             
             // 显示设备信息卡片并获取设备信息
@@ -1838,7 +3170,7 @@ class XKAutoTesterApp {
                 // 启用文件管理器
                 this.toggleFileManagerEnabled(true);
             } else {
-                deviceNameElement.textContent = '未选择设备';
+                deviceNameElement.textContent = window.i18n.t('android.noDeviceSelected');
                 deviceNameElement.title = '';
                 deviceNameElement.style.color = 'var(--text-secondary)';
                 
@@ -1907,7 +3239,7 @@ class XKAutoTesterApp {
             // 清空文件列表
             const fileList = document.getElementById('file-list');
             if (fileList) {
-                fileList.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;"><div style="display: flex; align-items: center; justify-content: center; gap: 8px;"><span class="material-icons" style="vertical-align: middle;">info</span><span style="vertical-align: middle;">请先选择设备</span></div></td></tr>';
+                fileList.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;"><div style="display: flex; align-items: center; justify-content: center; gap: 8px;">' + this.getIconHtml('info', 'vertical-align: middle;') + '<span style="vertical-align: middle;">' + window.i18n.t('fileManager.selectDeviceFirst') + '</span></div></td></tr>';
             }
         }
     }
@@ -1923,7 +3255,7 @@ class XKAutoTesterApp {
     async updateTestTypesFromSelectedFiles() {
         if (this.selectedTestFiles.length === 0) {
             // 没有选中文件时，显示占位提示
-            this.displayTestTypes([], '请先选择测试文件');
+            this.displayTestTypes([], window.i18n.t('testExecution.selectTestFileFirst'));
             return;
         }
 
@@ -1990,40 +3322,202 @@ class XKAutoTesterApp {
         }
     }
 
-    async runTests() {
+    async runTests(scheduledPlanInfo = null) {
         if (this.isRunning || !this.currentTestPlan) {
             if (!this.currentTestPlan) {
-                this.showError('请先选择一个测试计划');
+                this.showError(window.i18n.t('testExecution.selectTestPlanFirst'));
             }
             return;
         }
 
         this.isRunning = true;
+        this.runningTestPlanName = this.currentTestPlan.name; // 保存正在执行的测试计划名称
+        if (scheduledPlanInfo && scheduledPlanInfo.planId) {
+            this.runningScheduledPlanId = scheduledPlanInfo.planId; // 保存正在执行的定时计划ID
+        }
         this.updateUIForRunning();
 
-        try {
-            const testConfig = {
-                testPaths: this.selectedTestFiles.map(f => f.path),
-                markers: this.getSelectedTestTypes(),
-                testPlanName: this.currentTestPlan?.name || null
-            };
+        const loopCount = this.currentTestPlan.loopCount || 1;
+        const continueOnFailure = this.currentTestPlan.continueOnFailure !== false;
+        let hasFailure = false;
+        let stoppedEarly = false;
+        const loopResults = [];
 
-            const result = await window.electronAPI.runPythonTests(testConfig);
-            
-            if (result.success) {
-                this.appendOutput('>>> 测试运行完成！');
+        this.appendOutput('\n>>> ========== ' + window.i18n.t('testExecution.testPlanDetails') + ' ==========');
+        this.appendOutput('>>> ' + window.i18n.t('testExecution.planName') + ': ' + (this.currentTestPlan.name || ''));
+        this.appendOutput('>>> ' + window.i18n.t('testExecution.planDescription') + ': ' + (this.currentTestPlan.description || window.i18n.t('common.none')));
+        const testFileNames = this.selectedTestFiles.map(f => f.name || f.path).join(', ');
+        this.appendOutput('>>> ' + window.i18n.t('testExecution.testFiles') + ': ' + (testFileNames || window.i18n.t('common.none')));
+        const testTypes = this.getSelectedTestTypes().join(', ');
+        this.appendOutput('>>> ' + window.i18n.t('testExecution.testTypes') + ': ' + (testTypes || window.i18n.t('testExecution.allTypes')));
+        this.appendOutput('>>> ' + window.i18n.t('testExecution.loopSettings') + ': ' + window.i18n.t('testExecution.loopCount') + ' ' + loopCount + ', ' + window.i18n.t('testExecution.continueOnFailure') + ': ' + (continueOnFailure ? window.i18n.t('common.yes') : window.i18n.t('common.no')));
+
+        if (scheduledPlanInfo) {
+            this.appendOutput('>>> ---------- ' + window.i18n.t('testExecution.scheduledPlanInfo') + ' ----------');
+            this.appendOutput('>>> ' + window.i18n.t('testExecution.scheduledPlanName') + ': ' + (scheduledPlanInfo.name || ''));
+            this.appendOutput('>>> ' + window.i18n.t('testExecution.executionTime') + ': ' + (scheduledPlanInfo.executionTime || new Date().toLocaleString()));
+        }
+
+        this.appendOutput('>>> ==================================\n');
+
+        try {
+            for (let i = 1; i <= loopCount; i++) {
+                if (!this.isRunning) {
+                    stoppedEarly = true;
+                    break;
+                }
+
+                this.updateLoopProgress(i, loopCount);
+
+                const testConfig = {
+                    testPaths: this.selectedTestFiles.map(f => f.path),
+                    markers: this.getSelectedTestTypes(),
+                    testPlanName: this.currentTestPlan?.name || null,
+                    loopIndex: i,
+                    totalLoops: loopCount
+                };
+
+                this.appendOutput(`\n>>> ${window.i18n.t('testExecution.loopProgress', { current: i, total: loopCount })}`);
+
+                const result = await window.electronAPI.runPythonTests(testConfig);
+
+                if (!result.success) {
+                    hasFailure = true;
+                    loopResults.push({ loop: i, success: false });
+                    if (!continueOnFailure) {
+                        this.appendError(`>>> ${window.i18n.t('testExecution.loopStopped', { current: i })}`);
+                        break;
+                    }
+                    this.appendError(`>>> ${window.i18n.t('testExecution.loopFailed', { current: i })}`);
+                } else {
+                    loopResults.push({ loop: i, success: true });
+                    this.appendOutput(`>>> ${window.i18n.t('testExecution.loopCompleted', { current: i })}`);
+                }
+
+                if (!this.isRunning) {
+                    stoppedEarly = true;
+                    break;
+                }
+            }
+
+            if (!stoppedEarly) {
+                if (!hasFailure || continueOnFailure) {
+                    this.appendOutput('\n>>> ' + window.i18n.t('testExecution.allLoopsCompleted'));
+                }
                 this.enableViewReportButton();
-            } else if (result === null) {
-                this.appendError('>>> 已手动停止测试');
-            } else {
-                this.appendError(`>>> 测试运行失败 (退出码: ${result.exitCode})`);
             }
         } catch (error) {
             console.error('运行测试失败:', error);
-            this.appendError('>>> 运行测试失败: ' + error.message);
+            this.appendError(`>>> ${window.i18n.t('testExecution.testRunFailed')}: ${error.message}`);
         } finally {
             this.isRunning = false;
             this.updateUIForStopped();
+
+            this.appendOutput('\n>>> ========== ' + window.i18n.t('testExecution.summaryInfo') + ' ==========');
+            let passRate = '0.00';
+            let passedLoops = 0;
+            if (loopCount > 1) {
+                passedLoops = loopResults.filter(r => r.success).length;
+                passRate = loopResults.length > 0 ? ((passedLoops / loopResults.length) * 100).toFixed(2) : '0.00';
+                this.appendOutput('>>> ' + window.i18n.t('testExecution.totalLoops') + ': ' + loopResults.length);
+                this.appendOutput('>>> ' + window.i18n.t('testExecution.passedLoops') + ': ' + passedLoops);
+                this.appendOutput('>>> ' + window.i18n.t('testExecution.passRate') + ': ' + passRate + '%');
+            } else {
+                const lastResult = loopResults[loopResults.length - 1];
+                if (lastResult && lastResult.success) {
+                    passedLoops = 1;
+                    passRate = '100.00';
+                }
+            }
+            
+            // 统一显示测试结果状态（基于 loopResults 数组，检查是否所有测试都通过）
+            const allTestsPassed = loopResults.length > 0 && loopResults.every(r => r.success);
+            if (!allTestsPassed) {
+                this.appendOutput('>>> ' + window.i18n.t('testExecution.testFailed'));
+            } else {
+                this.appendOutput('>>> ' + window.i18n.t('testExecution.testPassed'));
+            }
+            
+            // 更新 hasFailure 变量以保持与通知一致
+            hasFailure = !allTestsPassed;
+            this.appendOutput('>>> ============================\n');
+
+            const notificationInfo = {
+                testPlanName: this.currentTestPlan?.name || '',
+                testFileNames: testFileNames,
+                testTypes: testTypes,
+                loopCount: loopCount,
+                totalLoops: loopResults.length,
+                passRate: passRate,
+                hasFailure: hasFailure,
+                stoppedEarly: stoppedEarly
+            };
+            
+            if (scheduledPlanInfo) {
+                notificationInfo.scheduledPlanName = scheduledPlanInfo.name;
+                notificationInfo.scheduledPlanExecutionTime = scheduledPlanInfo.executionTime;
+            }
+            
+            await this.sendDingTalkNotificationAfterTest(notificationInfo);
+        }
+    }
+
+    async sendDingTalkNotificationAfterTest(testInfo) {
+        try {
+            const config = await window.electronAPI.getConfig();
+            
+            const notificationConfig = config.APP_SETTINGS?.notification;
+            if (!notificationConfig || notificationConfig.platform !== 'dingtalk') {
+                return;
+            }
+            
+            const dingtalkConfig = notificationConfig.dingtalk;
+            if (!dingtalkConfig || !dingtalkConfig.access_token || !dingtalkConfig.secret) {
+                return;
+            }
+
+            const testResult = testInfo.hasFailure ? '失败' : '通过';
+            
+            let message = `【XKAutoTester 测试结果通知】\n`;
+            
+            if (testInfo.scheduledPlanName) {
+                message += `\n定时计划: ${testInfo.scheduledPlanName}\n`;
+                message += `执行时间: ${testInfo.scheduledPlanExecutionTime || new Date().toLocaleString()}\n`;
+            }
+            
+            message += `\n测试计划: ${testInfo.testPlanName}\n`;
+            message += `测试文件: ${testInfo.testFileNames || '无'}\n`;
+            message += `测试类型: ${testInfo.testTypes || '全部'}\n`;
+            message += `循环次数: ${testInfo.loopCount}\n`;
+            message += `\n聚合信息:\n`;
+            message += `总轮次: ${testInfo.totalLoops}\n`;
+            message += `通过率: ${testInfo.passRate}%\n`;
+            message += `\n测试结果: ${testResult}`;
+
+            const notificationData = {
+                accessToken: dingtalkConfig.access_token,
+                secret: dingtalkConfig.secret,
+                message: message
+            };
+
+            this.appendOutput('\n>>> 正在发送钉钉通知...');
+            const result = await window.electronAPI.sendDingTalkNotification(notificationData);
+            
+            if (result.success) {
+                this.appendOutput('>>> 钉钉通知发送成功');
+            } else {
+                this.appendError('>>> 钉钉通知发送失败: ' + (result.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('发送钉钉通知失败:', error);
+            this.appendError('>>> 发送钉钉通知失败: ' + error.message);
+        }
+    }
+
+    updateLoopProgress(current, total) {
+        const progressStatus = document.getElementById('progress-status');
+        if (total > 1) {
+            progressStatus.textContent = window.i18n.t('testExecution.loopProgress', { current, total });
         }
     }
 
@@ -2041,7 +3535,7 @@ class XKAutoTesterApp {
             }
         } catch (error) {
             console.error('停止测试失败:', error);
-            this.appendError('>>> 停止测试失败: ' + error.message);
+            this.appendError('>>> ' + window.i18n.t('testExecution.stopTestFailed') + ': ' + error.message);
         }
     }
 
@@ -2057,6 +3551,29 @@ class XKAutoTesterApp {
         if (output.querySelector('.welcome-message')) {
             output.innerHTML = '';
         }
+        
+        // 为正在执行的测试计划添加running类
+        if (this.runningTestPlanName) {
+            document.querySelectorAll('.test-plan-item').forEach(item => {
+                if (item.getAttribute('data-plan-name') === this.runningTestPlanName) {
+                    item.classList.add('running');
+                }
+            });
+        }
+        
+        // 为正在执行的定时计划添加running类
+        if (this.runningScheduledPlanId) {
+            document.querySelectorAll('.scheduled-plan-item').forEach(item => {
+                const planId = item.getAttribute('data-plan-id');
+                if (planId === this.runningScheduledPlanId) {
+                    item.classList.add('running');
+                }
+            });
+        }
+        
+        // 更新测试计划和定时计划的按钮状态（根据是否是正在执行的计划来决定是否禁用）
+        this.updatePlanButtons();
+        this.updateScheduledPlanButtons();
     }
 
     updateUIForStopped() {
@@ -2064,6 +3581,22 @@ class XKAutoTesterApp {
         document.getElementById('stop-tests-btn').disabled = true;
         
         this.updateProgress('准备就绪', 100);
+        
+        // 移除所有running类
+        document.querySelectorAll('.test-plan-item.running').forEach(item => {
+            item.classList.remove('running');
+        });
+        document.querySelectorAll('.scheduled-plan-item.running').forEach(item => {
+            item.classList.remove('running');
+        });
+        
+        // 清除正在执行的计划信息
+        this.runningTestPlanName = null;
+        this.runningScheduledPlanId = null;
+        
+        // 恢复测试计划和定时计划的按钮状态
+        this.updatePlanButtons();
+        this.updateScheduledPlanButtons();
     }
 
     updateProgress(status, percentage) {
@@ -2131,7 +3664,7 @@ class XKAutoTesterApp {
 
     clearOutput() {
         const output = document.getElementById('test-output');
-        output.innerHTML = '<div class="welcome-message"><div class="welcome-text-container"><span class="welcome-text">欢迎使用</span><span class="welcome-app-name">XKAutoTester</span></div><p>创建你的测试计划，然后开始运行自动化测试。</p></div>';
+        output.innerHTML = `<div class="welcome-message"><div class="welcome-text-container"><span class="welcome-text">${window.i18n.t('testExecution.welcome')}</span><span class="welcome-app-name">XKAutoTester</span></div><p>${window.i18n.t('testExecution.createTestPlan')}</p></div>`;
         // 移除有内容时的滚动条样式
         output.classList.remove('has-content');
         
@@ -2154,17 +3687,17 @@ class XKAutoTesterApp {
             console.error('加载pytest标记失败:', error);
             // 如果加载失败，使用默认标记
             const defaultMarkers = [
-                { name: 'smoke', description: '冒烟测试' },
-                { name: 'unit', description: '单元功能测试' },
-                { name: 'exception', description: '异常场景测试' },
-                { name: 'critical', description: '关键功能测试' },
-                { name: 'appium', description: 'Appium移动端测试' }
+                { name: 'smoke', description: window.i18n ? window.i18n.t('testTypes.smoke') : '冒烟测试' },
+                { name: 'unit', description: window.i18n ? window.i18n.t('testTypes.unit') : '单元功能测试' },
+                { name: 'exception', description: window.i18n ? window.i18n.t('testTypes.exception') : '异常场景测试' },
+                { name: 'critical', description: window.i18n ? window.i18n.t('testTypes.critical') : '关键功能测试' },
+                { name: 'appium', description: window.i18n ? window.i18n.t('testTypes.appium') : 'Appium移动端测试' }
             ];
             this.displayTestTypes(defaultMarkers);
         }
     }
 
-    displayTestTypes(markers, placeholder = null) {
+    displayTestTypes(markers, placeholder = null, forceRender = false) {
 
         
         const container = document.getElementById('test-type-selector');
@@ -2173,12 +3706,20 @@ class XKAutoTesterApp {
             return;
         }
         
+        // 保存当前的 markers（用于语言切换时重新渲染）
+        if (markers && markers.length > 0) {
+            this.currentMarkers = markers;
+        }
+        
         // 添加调试日志
 
         
         // 如果有占位符，强制重新渲染
         if (placeholder) {
 
+            container.innerHTML = '';
+        } else if (forceRender) {
+            // 强制重新渲染（用于语言切换）
             container.innerHTML = '';
         } else {
             // 检查是否已经有相同的内容，避免重复渲染
@@ -2200,7 +3741,7 @@ class XKAutoTesterApp {
             const placeholderElement = document.createElement('div');
             placeholderElement.className = 'placeholder-message';
             placeholderElement.innerHTML = `
-                <span class="material-icons">info</span>
+                ${this.getIconHtml('info')}
                 <span>${placeholder}</span>
             `;
             container.appendChild(placeholderElement);
@@ -2212,8 +3753,8 @@ class XKAutoTesterApp {
             const placeholderElement = document.createElement('div');
             placeholderElement.className = 'placeholder-message';
             placeholderElement.innerHTML = `
-                <span class="material-icons">info</span>
-                <span>没有找到pytest标记，将执行所有测试</span>
+                ${this.getIconHtml('info')}
+                <span>${window.i18n ? window.i18n.t('testExecution.noMarkers') : '没有找到pytest标记，将执行所有测试'}</span>
             `;
             container.appendChild(placeholderElement);
             return;
@@ -2277,7 +3818,7 @@ class XKAutoTesterApp {
         if (this.testPlans.length === 0) {
             // 没有测试计划时显示占位符，但测试计划区域仍然显示
 
-            this.displayTestPlansPlaceholder('暂无测试计划');
+            this.displayTestPlansPlaceholder(window.i18n.t('testExecution.noTestPlansYet'));
             return;
         }
 
@@ -2285,20 +3826,31 @@ class XKAutoTesterApp {
         this.testPlans.forEach(plan => {
             const planElement = document.createElement('div');
             planElement.className = 'test-plan-item';
+            planElement.setAttribute('data-plan-name', plan.name);
             
             // 构建测试计划详细信息
             const fileCount = plan.testFiles ? plan.testFiles.length : 0;
             const typeCount = plan.testTypes ? plan.testTypes.length : 0;
-            const fileInfo = fileCount > 0 ? `${fileCount}个文件` : '无文件';
-            const typeInfo = typeCount > 0 ? `${typeCount}个类型` : '所有类型';
+            const fileInfo = fileCount > 0 ? `${fileCount} ${window.i18n.t('testExecution.files')}` : window.i18n.t('testExecution.noFiles');
+            const typeInfo = typeCount > 0 ? `${typeCount} ${window.i18n.t('testExecution.types')}` : window.i18n.t('testExecution.allTypes');
+            
+            // 循环设置信息
+            const loopCount = plan.loopCount || 1;
+            const continueOnFailure = plan.continueOnFailure !== false;
+            const loopInfo = window.i18n.t('testExecution.loopInfo', { count: loopCount });
+            const continueInfo = !continueOnFailure ? `<span class="continue-info">${this.getIconHtml('warning')}<span>${window.i18n.t('testExecution.stopOnFailure')}</span></span>` : '';
             
             planElement.innerHTML = `
-                <span class="material-icons">assignment</span>
+                ${this.getIconHtml('assignment')}
                 <div>
                     <div style="font-weight: 500;">${plan.name}</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);">${plan.description || '无描述'}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">${plan.description || (window.i18n ? window.i18n.t('testExecution.noDescription') : '无描述')}</div>
                     <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 4px;">
                         >>> ${fileInfo} | >>> ${typeInfo}
+                    </div>
+                    <div class="test-plan-meta">
+                        <span class="loop-info">${this.getIconHtml('repeat')}<span>${loopInfo}</span></span>
+                        ${continueInfo}
                     </div>
                 </div>
             `;
@@ -2318,7 +3870,7 @@ class XKAutoTesterApp {
         const placeholderElement = document.createElement('div');
         placeholderElement.className = 'placeholder-message';
         placeholderElement.innerHTML = `
-            <span class="material-icons">info</span>
+            ${this.getIconHtml('info')}
             <span>${message}</span>
         `;
         container.appendChild(placeholderElement);
@@ -2394,11 +3946,11 @@ class XKAutoTesterApp {
         
 
         
-        // 测试类型中文映射
+        // 测试类型映射，使用 i18n 翻译
         const markerDescriptions = {
-            'smoke': '冒烟测试',
-            'critical': '关键功能测试',
-            'exception': '异常场景测试'
+            'smoke': window.i18n ? window.i18n.t('testTypes.smoke') : '冒烟测试',
+            'critical': window.i18n ? window.i18n.t('testTypes.critical') : '关键功能测试',
+            'exception': window.i18n ? window.i18n.t('testTypes.exception') : '异常场景测试'
         };
         
         // 如果没有复选框，或者需要更新显示文本，重新创建测试类型显示
@@ -2604,7 +4156,7 @@ class XKAutoTesterApp {
         if (this.contextMenu) {
             // 点击菜单外部关闭上下文菜单
             document.addEventListener('click', (e) => {
-                if (!this.contextMenu.contains(e.target) && e.target.className !== 'file-actions-btn') {
+                if (!this.contextMenu.contains(e.target) && !e.target.closest('.file-actions-btn')) {
                     this.hideContextMenu();
                 }
             });
@@ -2872,7 +4424,7 @@ class XKAutoTesterApp {
             errorTooltipElement.textContent = filteredError;
             
             // 主显示区域只显示简洁的错误提示
-            let simpleError = 'ADB命令执行失败';
+            let simpleError = window.i18n.t('fileManager.adbCommandFailed');
             const errorLines = filteredError.split('\n');
             
             // 优先查找详细错误信息
@@ -2889,7 +4441,7 @@ class XKAutoTesterApp {
             if (!foundDetailedError) {
                 for (const line of errorLines) {
                     if (line.includes('执行的ADB命令:')) {
-                        simpleError = 'ADB命令执行失败';
+                        simpleError = window.i18n.t('fileManager.adbCommandFailed');
                         break;
                     }
                 }
@@ -2901,13 +4453,13 @@ class XKAutoTesterApp {
             errorContainer.classList.remove('hidden');
             
             // 显示toast提示，说明是哪个阶段失败的
-            let toastMessage = '下载失败';
+            let toastMessage = window.i18n.t('fileManager.downloadFailed');
             if (errorMessage.includes('创建zip文件失败')) {
-                toastMessage = '创建zip文件失败';
+                toastMessage = window.i18n.t('fileManager.zipCreationFailed');
             } else if (errorMessage.includes('执行的ADB命令:')) {
-                toastMessage = 'ADB命令执行失败';
+                toastMessage = window.i18n.t('fileManager.adbCommandFailed');
             }
-            this.showToast(toastMessage, 'error', 3000);
+            Toast.error(toastMessage);
         }
     }
     
@@ -3061,22 +4613,22 @@ class XKAutoTesterApp {
         }
         
         if (diff < minute) {
-            return '刚刚';
+            return window.i18n ? window.i18n.t('fileManager.justNow') : '刚刚';
         } else if (diff < hour) {
             const minutes = Math.floor(diff / minute);
-            return `${minutes}分钟前`;
+            return window.i18n ? `${minutes} ${window.i18n.t('fileManager.minutesAgo')}` : `${minutes}分钟前`;
         } else if (diff < day) {
             const hours = Math.floor(diff / hour);
-            return `${hours}小时前`;
+            return window.i18n ? `${hours} ${window.i18n.t('fileManager.hoursAgo')}` : `${hours}小时前`;
         } else if (diff < week) {
             const days = Math.floor(diff / day);
-            return `${days}天前`;
+            return window.i18n ? `${days} ${window.i18n.t('fileManager.daysAgo')}` : `${days}天前`;
         } else if (diff < month) {
             const weeks = Math.floor(diff / week);
-            return `${weeks}周前`;
+            return window.i18n ? `${weeks} ${window.i18n.t('fileManager.weeksAgo')}` : `${weeks}周前`;
         } else if (diff < year) {
             const months = Math.floor(diff / month);
-            return `${months}个月前`;
+            return window.i18n ? `${months} ${window.i18n.t('fileManager.monthsAgo')}` : `${months}个月前`;
         } else {
             // 时间太久远，直接显示日期
             return dateString.slice(0, 16);
@@ -3116,7 +4668,7 @@ class XKAutoTesterApp {
     showFileListLoading() {
         const fileList = document.getElementById('file-list');
         if (fileList) {
-            fileList.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;"><div style="display: flex; align-items: center; justify-content: center; gap: 8px;"><span class="material-icons" style="vertical-align: middle;">sync</span><span style="vertical-align: middle;">正在加载文件列表...</span></div></td></tr>';
+            fileList.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;"><div style="display: flex; align-items: center; justify-content: center; gap: 8px;">' + this.getIconHtml('sync', 'vertical-align: middle;') + '<span style="vertical-align: middle;">' + window.i18n.t('fileManager.loadingFiles') + '</span></div></td></tr>';
         }
     }
     
@@ -3124,7 +4676,7 @@ class XKAutoTesterApp {
     displayFileError(message) {
         const fileList = document.getElementById('file-list');
         if (fileList) {
-            fileList.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;"><div style="display: flex; align-items: center; justify-content: center; gap: 8px;"><span class="material-icons" style="vertical-align: middle; color: var(--error);">error</span><span style="vertical-align: middle; color: var(--error);">' + message + '</span></div></td></tr>';
+            fileList.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;"><div style="display: flex; align-items: center; justify-content: center; gap: 8px;">' + this.getIconHtml('error', 'vertical-align: middle; color: var(--error);') + '<span style="vertical-align: middle; color: var(--error);">' + message + '</span></div></td></tr>';
         }
     }
     
@@ -3143,7 +4695,7 @@ class XKAutoTesterApp {
         // 如果文件列表为空
         if (this.fileList.length === 0) {
             const emptyItem = document.createElement('tr');
-            emptyItem.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;"><div style="display: flex; align-items: center; justify-content: center; gap: 8px;"><span class="material-icons" style="vertical-align: middle;">folder_open</span><span style="vertical-align: middle;">该目录为空</span></div></td></tr>';
+            emptyItem.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;"><div style="display: flex; align-items: center; justify-content: center; gap: 8px;">' + this.getIconHtml('folder_open', 'vertical-align: middle;') + '<span style="vertical-align: middle;">' + window.i18n.t('fileManager.emptyDirectory') + '</span></div></td></tr>';
             fileList.appendChild(emptyItem);
             return;
         }
@@ -3172,7 +4724,7 @@ class XKAutoTesterApp {
                 </td>
                 <td>
                     <div class="file-item-name ${file.isDirectory ? 'directory' : 'file'}">
-                        <span class="material-icons">${file.isDirectory ? 'folder' : 'description'}</span>
+                        ${this.getIconHtml(file.isDirectory ? 'folder' : 'description')}
                         <span>${file.name}</span>
                     </div>
                 </td>
@@ -3181,7 +4733,7 @@ class XKAutoTesterApp {
                 <td class="file-date">${this.formatRelativeTime(file.createdAt)}</td>
                 <td class="file-actions">
                     <button class="file-actions-btn" data-path="${file.path}">
-                        <span class="material-icons">more_vert</span>
+                        ${this.getIconHtml('more_vert')}
                     </button>
                 </td>
             `;
@@ -3209,7 +4761,14 @@ class XKAutoTesterApp {
             if (actionsBtn) {
                 actionsBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    this.showContextMenu(e, file);
+                    // 如果菜单已显示且当前目标是同一个文件，则关闭菜单
+                    if (!this.contextMenu.classList.contains('hidden') && 
+                        this.contextMenuTarget && 
+                        this.contextMenuTarget.path === file.path) {
+                        this.hideContextMenu();
+                    } else {
+                        this.showContextMenu(e, file, actionsBtn);
+                    }
                 });
             }
             
@@ -3416,7 +4975,7 @@ class XKAutoTesterApp {
             const item = document.createElement('div');
             item.className = 'ellipsis-item';
             item.innerHTML = `
-                <span class="material-icons">folder</span>
+                ${this.getIconHtml('folder')}
                 <span>${segment.displayName}</span>
             `;
             item.addEventListener('click', () => {
@@ -3636,33 +5195,52 @@ class XKAutoTesterApp {
     }
     
     // 显示上下文菜单
-    showContextMenu(event, file) {
+    showContextMenu(event, file, triggerElement = null) {
         this.contextMenuTarget = file;
         const menu = this.contextMenu;
         if (!menu) return;
         
-        // 计算菜单位置，确保不会超出窗口边缘
-        const menuWidth = menu.offsetWidth || 180; // 使用默认宽度作为备选
-        const menuHeight = menu.offsetHeight || 120; // 使用默认高度作为备选
+        // 先显示菜单以获取其尺寸
+        menu.classList.remove('hidden');
+        
+        const menuWidth = menu.offsetWidth || 180;
+        const menuHeight = menu.offsetHeight || 120;
         const windowWidth = window.innerWidth;
         const windowHeight = window.innerHeight;
         
-        // 计算x坐标，确保菜单不会超出窗口右边缘
-        let x = event.clientX;
-        if (x + menuWidth > windowWidth) {
-            x = windowWidth - menuWidth - 10; // 10px的边距
-        }
+        let x, y;
         
-        // 计算y坐标，确保菜单不会超出窗口下边缘
-        let y = event.clientY;
-        if (y + menuHeight > windowHeight) {
-            y = windowHeight - menuHeight - 10; // 10px的边距
+        if (triggerElement) {
+            // 如果有触发元素，从元素下方弹出
+            const rect = triggerElement.getBoundingClientRect();
+            x = rect.left;
+            y = rect.bottom + 4; // 4px 间距
+            
+            // 确保菜单不会超出窗口右边缘
+            if (x + menuWidth > windowWidth) {
+                x = windowWidth - menuWidth - 10;
+            }
+            
+            // 确保菜单不会超出窗口下边缘
+            if (y + menuHeight > windowHeight) {
+                y = rect.top - menuHeight - 4; // 在按钮上方显示
+            }
+        } else {
+            // 使用鼠标位置
+            x = event.clientX;
+            y = event.clientY;
+            
+            if (x + menuWidth > windowWidth) {
+                x = windowWidth - menuWidth - 10;
+            }
+            if (y + menuHeight > windowHeight) {
+                y = windowHeight - menuHeight - 10;
+            }
         }
         
         // 设置菜单位置
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
-        menu.classList.remove('hidden');
     }
     
     // 隐藏上下文菜单
@@ -3706,13 +5284,16 @@ class XKAutoTesterApp {
             return;
         }
         
-        if (confirm(`确定要删除选中的 ${this.selectedFiles.length} 个文件/目录吗？`)) {
+        const title = window.i18n.t('modal.deleteFilesTitle');
+        const message = window.i18n.t('modal.deleteFilesMessage', { count: this.selectedFiles.length });
+        
+        this.showConfirmModal(title, message, async () => {
             for (const file of this.selectedFiles) {
                 await this.deleteFile(file);
             }
             this.selectedFiles = [];
             this.loadFileList();
-        }
+        });
     }
     
     // 删除单个文件
@@ -3931,6 +5512,9 @@ class XKAutoTesterApp {
         if (modalOverlay) {
             modalOverlay.classList.remove('hidden');
         }
+        
+        // 确保下拉框已初始化
+        this.initializeCustomSelects();
 
         // 加载控制参数
         await this.loadControlParams();
@@ -3957,11 +5541,46 @@ class XKAutoTesterApp {
             document.getElementById('max-size').value = scrcpyParams.max_size || '';
             document.getElementById('video-bit-rate').value = scrcpyParams.video_bit_rate || '';
             document.getElementById('max-fps').value = scrcpyParams.max_fps || '';
-            document.getElementById('video-codec').value = scrcpyParams.video_codec || 'h264';
             document.getElementById('always-on-top').checked = scrcpyParams.always_on_top || false;
+            
+            // 设置视频编码下拉框
+            const videoCodecValue = scrcpyParams.video_codec || 'h264';
+            this.setCustomSelectValue('video-codec', videoCodecValue);
         } catch (error) {
             console.error('加载控制参数失败:', error);
         }
+    }
+
+    // 设置自定义下拉框的值
+    setCustomSelectValue(wrapperId, value) {
+        const wrapper = document.getElementById(wrapperId);
+        if (!wrapper) return;
+        
+        const select = wrapper.querySelector('.custom-select');
+        if (!select) return;
+        
+        const options = select.querySelectorAll('.custom-select__option');
+        const selected = select.querySelector('.custom-select__text');
+        
+        options.forEach(option => {
+            if (option.dataset.value === value) {
+                option.classList.add('selected');
+                if (selected) {
+                    selected.textContent = option.querySelector('span').textContent;
+                }
+            } else {
+                option.classList.remove('selected');
+            }
+        });
+    }
+
+    // 获取自定义下拉框的值
+    getCustomSelectValue(wrapperId) {
+        const wrapper = document.getElementById(wrapperId);
+        if (!wrapper) return null;
+        
+        const selectedOption = wrapper.querySelector('.custom-select__option.selected');
+        return selectedOption ? selectedOption.dataset.value : null;
     }
 
     // 保存控制参数
@@ -3972,7 +5591,7 @@ class XKAutoTesterApp {
                 max_size: document.getElementById('max-size').value || null,
                 video_bit_rate: document.getElementById('video-bit-rate').value || null,
                 max_fps: document.getElementById('max-fps').value || null,
-                video_codec: document.getElementById('video-codec').value || null,
+                video_codec: this.getCustomSelectValue('video-codec') || null,
                 always_on_top: document.getElementById('always-on-top').checked
             };
             
@@ -3994,10 +5613,10 @@ class XKAutoTesterApp {
     async startScreenControl() {
         try {
             // 显示正在启动中的toast提示
-            this.showToast('正在启动中', 'info');
+            Toast.info(window.i18n.t('screenControl.starting'));
             
             if (!this.selectedDevice) {
-                this.showError('请先选择设备');
+                this.showError(this.translate('selectDeviceFirst'));
                 return;
             }
             
@@ -4011,11 +5630,11 @@ class XKAutoTesterApp {
             if (result.success) {
                 // 屏幕控制已启动，不显示输出
             } else {
-                this.appendError('❌ 启动屏幕控制失败: ' + result.error);
+                this.appendError(`❌ ${window.i18n.t('screenControl.startFailed')}: ${result.error}`);
             }
         } catch (error) {
             console.error('启动屏幕控制失败:', error);
-            this.appendError('❌ 启动屏幕控制失败: ' + error.message);
+            this.appendError(`❌ ${window.i18n.t('screenControl.startFailed')}: ${error.message}`);
         }
     }
 
@@ -4054,7 +5673,7 @@ class XKAutoTesterApp {
             this.displayTestFiles([]);
             
             // 清空测试类型显示，恢复到初始占位符状态
-            this.displayTestTypes([], '请先选择测试目录');
+            this.displayTestTypes([], window.i18n.t('testExecution.selectTestDirectoryFirst'));
             
             // 清空目录显示区域
             this.selectedDirectory = null;
@@ -4068,9 +5687,18 @@ class XKAutoTesterApp {
             // 更新运行按钮状态
             this.updateRunButtonState();
             
-            // 更新计划按钮状态（编辑和删除计划按钮需要恢复置灰）
+            // 更新计划按钮状态
             this.updatePlanButtons();
             return;
+        }
+        
+        // 取消定时计划子项的选中状态
+        if (this.currentScheduledPlan) {
+            document.querySelectorAll('.scheduled-plan-item.selected').forEach(item => {
+                item.classList.remove('selected');
+            });
+            this.currentScheduledPlan = null;
+            this.updateScheduledPlanButtons();
         }
         
         // 移除其他选中状态
@@ -4106,7 +5734,7 @@ class XKAutoTesterApp {
                 // 等待文件显示完成
                 await new Promise(resolve => setTimeout(resolve, 200));
             } catch (error) {
-                console.error('扫描测试文件失败:', error);
+                console.error(window.i18n.t('testExecution.scanTestFilesFailed') + ':', error);
             }
         }
         
@@ -4143,7 +5771,7 @@ class XKAutoTesterApp {
 
         }
         
-        // 更新计划按钮状态（编辑和删除计划按钮需要启用）
+        // 更新计划按钮状态
         this.updatePlanButtons();
     }
 
@@ -4155,7 +5783,7 @@ class XKAutoTesterApp {
             // 未选择目录时显示提示
             const placeholderElement = document.createElement('div');
             placeholderElement.className = 'no-files';
-            placeholderElement.innerHTML = '请先选择测试目录';
+            placeholderElement.innerHTML = window.i18n.t('testExecution.selectTestDirectoryFirst');
             container.appendChild(placeholderElement);
             return;
         }
@@ -4167,7 +5795,7 @@ class XKAutoTesterApp {
             // 没有测试文件时显示提示
             const placeholderElement = document.createElement('div');
             placeholderElement.className = 'no-files';
-            placeholderElement.innerHTML = '当前目录下没有测试文件';
+            placeholderElement.innerHTML = window.i18n.t('testExecution.noTestFilesInDir');
             container.appendChild(placeholderElement);
             return;
         }
@@ -4178,7 +5806,7 @@ class XKAutoTesterApp {
             fileElement.innerHTML = `
                 <input type="checkbox" id="modal-file-${file.name}" value="${file.path}">
                 <label for="modal-file-${file.name}">
-                    <span class="material-icons">description</span>
+                    ${this.getIconHtml('description')}
                     ${file.name}
                 </label>
             `;
@@ -4234,7 +5862,7 @@ class XKAutoTesterApp {
             // 没有选中文件时，显示占位提示
             const placeholder = document.createElement('div');
             placeholder.className = 'placeholder-message';
-            placeholder.textContent = '请先选择测试文件';
+            placeholder.textContent = window.i18n.t('testExecution.selectTestFileFirst');
             container.appendChild(placeholder);
             return;
         }
@@ -4251,7 +5879,7 @@ class XKAutoTesterApp {
                     // 选中的文件没有标记时，显示占位提示
                     const placeholder = document.createElement('div');
                     placeholder.className = 'placeholder-message';
-                    placeholder.textContent = '选中的文件没有pytest标记，将执行所有测试';
+                    placeholder.textContent = window.i18n.t('testExecution.noMarkers');
                     container.appendChild(placeholder);
                 } else {
                     // 前端去重：使用Set确保标记名称唯一
@@ -4269,11 +5897,13 @@ class XKAutoTesterApp {
                     uniqueMarkers.forEach(marker => {
                         const item = document.createElement('div');
                         item.className = 'modal-test-type-item';
+                        // 根据当前语言设置翻译标记描述
+                        const translatedDescription = window.i18n ? window.i18n.t('testTypes.' + marker.name) : marker.description;
                         item.innerHTML = `
                             <input type="checkbox" id="modal-type-${marker.name}" value="${marker.name}">
                             <label for="modal-type-${marker.name}">
-                                <span class="material-icons">category</span>
-                                <strong>${marker.name}</strong> - ${marker.description}
+                                ${this.getIconHtml('category')}
+                                ${translatedDescription}
                             </label>
                         `;
 
@@ -4301,7 +5931,7 @@ class XKAutoTesterApp {
             console.error('提取标记失败:', error);
             const placeholder = document.createElement('div');
             placeholder.className = 'placeholder-message';
-            placeholder.textContent = '提取标记失败，将执行所有测试';
+            placeholder.textContent = window.i18n.t('testExecution.extractMarkersFailed');
             container.appendChild(placeholder);
         } finally {
             // 清除更新状态
@@ -4327,9 +5957,13 @@ class XKAutoTesterApp {
 
     async showNewPlanModal() {
         document.getElementById('modal-overlay').classList.remove('hidden');
-        document.getElementById('modal-title').textContent = '新建测试计划';
+        document.getElementById('modal-title').textContent = window.i18n.t('testExecution.newTestPlan');
         document.getElementById('plan-name').value = '';
         document.getElementById('plan-description').value = '';
+        
+        // 初始化循环设置默认值
+        document.getElementById('loop-count').value = 1;
+        document.getElementById('continue-on-failure').checked = true;
         
         // 显示当前目录下的测试文件和测试类型
         await this.displayModalTestFiles();
@@ -4351,6 +5985,34 @@ class XKAutoTesterApp {
 
     hideModal() {
         document.getElementById('modal-overlay').classList.add('hidden');
+    }
+
+    showConfirmModal(title, message, onConfirm) {
+        const overlay = document.getElementById('confirm-modal-overlay');
+        const titleElement = document.getElementById('confirm-modal-title');
+        const messageElement = document.getElementById('confirm-modal-message');
+        
+        if (titleElement) {
+            titleElement.textContent = title;
+        }
+        if (messageElement) {
+            messageElement.textContent = message;
+        }
+        
+        this.confirmCallback = onConfirm;
+        overlay.classList.remove('hidden');
+    }
+
+    hideConfirmModal() {
+        document.getElementById('confirm-modal-overlay').classList.add('hidden');
+        this.confirmCallback = null;
+    }
+
+    executeConfirmAction() {
+        if (this.confirmCallback) {
+            this.confirmCallback();
+        }
+        this.hideConfirmModal();
     }
 
     getModalSelectedTestFiles() {
@@ -4426,7 +6088,9 @@ class XKAutoTesterApp {
                 description: description,
                 created: new Date().toISOString(),
                 testFiles: selectedTestFiles,
-                testTypes: selectedTestTypes
+                testTypes: selectedTestTypes,
+                loopCount: parseInt(document.getElementById('loop-count').value) || 1,
+                continueOnFailure: document.getElementById('continue-on-failure').checked
             };
 
             const result = await window.electronAPI.saveTestPlan(planData);
@@ -4450,17 +6114,17 @@ class XKAutoTesterApp {
                     }
                 }
             } else {
-                this.showError('保存测试计划失败: ' + result.error);
+                this.showError(window.i18n.t('testExecution.saveTestPlanFailed') + ': ' + result.error);
             }
         } catch (error) {
             console.error('保存测试计划失败:', error);
-            this.showError('保存测试计划失败: ' + error.message);
+            this.showError(window.i18n.t('testExecution.saveTestPlanFailed') + ': ' + error.message);
         }
     }
 
     editTestPlan() {
         if (!this.currentTestPlan) {
-            this.showError('请先选择一个测试计划');
+            this.showError(window.i18n.t('testExecution.selectTestPlanFirst'));
             return;
         }
         
@@ -4469,11 +6133,15 @@ class XKAutoTesterApp {
 
     async showEditPlanModal(plan) {
         document.getElementById('modal-overlay').classList.remove('hidden');
-        document.getElementById('modal-title').textContent = '编辑测试计划';
+        document.getElementById('modal-title').textContent = window.i18n.t('testExecution.editTestPlan');
         
         // 填充现有数据
         document.getElementById('plan-name').value = plan.name;
         document.getElementById('plan-description').value = plan.description || '';
+        
+        // 回填循环设置值（兼容旧计划，使用默认值）
+        document.getElementById('loop-count').value = plan.loopCount || 1;
+        document.getElementById('continue-on-failure').checked = plan.continueOnFailure !== false;
         
         // 显示当前目录下的测试文件
         await this.displayModalTestFiles();
@@ -4523,7 +6191,7 @@ class XKAutoTesterApp {
 
     async updateTestPlan() {
         if (!this.currentTestPlan) {
-            this.showError('没有选中的测试计划');
+            this.showError(window.i18n.t('testExecution.noSelectedTestPlan'));
             return;
         }
 
@@ -4553,7 +6221,9 @@ class XKAutoTesterApp {
                 description: description,
                 created: this.currentTestPlan.created || new Date().toISOString(),
                 testFiles: selectedTestFiles,
-                testTypes: selectedTestTypes
+                testTypes: selectedTestTypes,
+                loopCount: parseInt(document.getElementById('loop-count').value) || 1,
+                continueOnFailure: document.getElementById('continue-on-failure').checked
             };
 
             const result = await window.electronAPI.updateTestPlan(planData);
@@ -4600,95 +6270,333 @@ class XKAutoTesterApp {
                     }
                 }
             } else {
-                this.showError('更新测试计划失败: ' + result.error);
+                this.showError(window.i18n.t('testExecution.updateTestPlanFailed') + ': ' + result.error);
             }
         } catch (error) {
             console.error('更新测试计划失败:', error);
-            this.showError('更新测试计划失败: ' + error.message);
+            this.showError(window.i18n.t('testExecution.updateTestPlanFailed') + ': ' + error.message);
         }
     }
 
     async deleteTestPlan() {
         if (!this.currentTestPlan) {
-            this.showError('请先选择一个测试计划');
+            this.showError(window.i18n.t('testExecution.selectTestPlanFirst'));
             return;
         }
 
         const planName = this.currentTestPlan.name;
-        const confirmDelete = confirm(`确定要删除测试计划 "${planName}" 吗？此操作不可撤销。`);
+        const planId = this.currentTestPlan.id;
+        const title = window.i18n.t('modal.deletePlanTitle');
+        const message = window.i18n.t('modal.deletePlanMessage', { name: planName });
         
-        if (!confirmDelete) {
-            return;
-        }
-
+        this.showConfirmModal(title, message, async () => {
+            try {
+                const result = await window.electronAPI.deleteTestPlan(planId || planName);
+                
+                if (result.success) {
+                    Toast.success(window.i18n.t('testExecution.deleteTestPlanSuccess'));
+                    
+                    // 级联删除：检查并更新包含此测试计划的定时计划
+                    await this.cascadeDeleteFromScheduledPlans(planId, planName);
+                    
+                    this.currentTestPlan = null;
+                    
+                    const planElements = document.querySelectorAll('.test-plan-item');
+                    planElements.forEach(element => {
+                        element.classList.remove('selected');
+                    });
+                    
+                    this.selectedDirectory = null;
+                    this.selectedDirectoryDisplayName = null;
+                    this.updateSelectedDirectory();
+                    
+                    this.selectedTestFiles = [];
+                    this.displayTestFiles([]);
+                    
+                    this.displayTestTypes([], window.i18n.t('testExecution.selectTestDirectoryFirst'));
+                    
+                    this.enableTestDirectoryTab();
+                    this.enableTestTypeTab();
+                    
+                    await this.loadTestPlans();
+                    this.updateRunButtonState();
+                    this.updatePlanButtons();
+                } else {
+                    Toast.error(window.i18n.t('testExecution.deleteTestPlanFailed') + ': ' + result.error);
+                }
+            } catch (error) {
+                console.error('删除测试计划失败:', error);
+                Toast.error(window.i18n.t('testExecution.deleteTestPlanFailed') + ': ' + error.message);
+            }
+        });
+    }
+    
+    async cascadeDeleteFromScheduledPlans(testPlanId, testPlanName) {
         try {
-            const result = await window.electronAPI.deleteTestPlan(this.currentTestPlan.id || planName);
+            const scheduledPlans = await window.electronAPI.getScheduledPlans();
+            const plansToUpdate = [];
+            const plansToDelete = [];
             
-            if (result.success) {
-
-                
-                // 删除计划后取消所有选中，恢复默认初始状态
-                this.currentTestPlan = null;
-                
-                // 清除所有计划项的选中样式
-                const planElements = document.querySelectorAll('.test-plan-item');
-                planElements.forEach(element => {
-                    element.classList.remove('selected');
-                });
-                
-                // 清除目录信息
-                this.selectedDirectory = null;
-                this.selectedDirectoryDisplayName = null;
-                this.updateSelectedDirectory();
-                
-                // 清除文件列表
-                this.selectedTestFiles = [];
-                this.displayTestFiles([]);
-                
-                // 清除测试类型信息
-                this.displayTestTypes([], '请先选择测试目录');
-                
-                // 重新启用测试目录和测试类型选项卡
-                this.enableTestDirectoryTab();
-                this.enableTestTypeTab();
-                
-                await this.loadTestPlans();
-                // 更新运行按钮状态
-                this.updateRunButtonState();
-                // 更新计划按钮状态（删除计划按钮需要恢复置灰）
-                this.updatePlanButtons();
-            } else {
-                this.showError('删除测试计划失败: ' + result.error);
+            for (const plan of scheduledPlans) {
+                if (plan.testPlans && plan.testPlans.length > 0) {
+                    // 检查是否包含被删除的测试计划
+                    const remainingTestPlans = plan.testPlans.filter(tp => {
+                        const tpId = tp.id || tp.name;
+                        return tpId !== testPlanId && tpId !== testPlanName;
+                    });
+                    
+                    if (remainingTestPlans.length < plan.testPlans.length) {
+                        if (remainingTestPlans.length === 0) {
+                            // 如果没有剩余的测试计划，标记为删除
+                            plansToDelete.push(plan);
+                        } else {
+                            // 否则更新定时计划
+                            plansToUpdate.push({
+                                ...plan,
+                                testPlans: remainingTestPlans,
+                                testPlanNames: remainingTestPlans.map(tp => tp.name)
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // 删除没有测试计划的定时计划
+            for (const plan of plansToDelete) {
+                await window.electronAPI.deleteScheduledPlan(plan.id);
+            }
+            
+            // 更新包含被删除测试计划的定时计划
+            for (const plan of plansToUpdate) {
+                await window.electronAPI.updateScheduledPlan(plan);
+            }
+            
+            // 重新加载定时计划列表
+            await this.loadScheduledPlans();
+            
+            // 显示提示信息
+            if (plansToDelete.length > 0 || plansToUpdate.length > 0) {
+                let infoMessage = '';
+                if (plansToDelete.length > 0) {
+                    infoMessage += `已删除 ${plansToDelete.length} 个空的定时计划`;
+                }
+                if (plansToUpdate.length > 0) {
+                    if (infoMessage) infoMessage += '，';
+                    infoMessage += `已更新 ${plansToUpdate.length} 个定时计划`;
+                }
+                if (infoMessage) {
+                    Toast.info(infoMessage);
+                }
             }
         } catch (error) {
-            console.error('删除测试计划失败:', error);
-            this.showError('删除测试计划失败: ' + error.message);
+            console.error('级联删除定时计划失败:', error);
         }
     }
 
     async viewReport() {
+        const selectedPlan = this.getSelectedTestPlan();
+        if (!selectedPlan) {
+            this.appendOutput('>>> ' + window.i18n.t('testExecution.selectTestPlanFirst') || '请先选择一个测试计划');
+            return;
+        }
+
+        await this.showReportModal(selectedPlan);
+    }
+
+    async showReportModal(testPlan) {
+        const modalOverlay = document.getElementById('report-modal-overlay');
+        const planNameElement = document.getElementById('report-plan-name');
+        const runsListElement = document.getElementById('report-runs-list');
+        const noRunsElement = document.getElementById('report-no-runs');
+        const openBtn = document.getElementById('report-modal-open-btn');
+        
+        planNameElement.textContent = testPlan.name;
+        openBtn.disabled = true;
+        this.selectedReportRun = null;
+        
+        runsListElement.innerHTML = `
+            <div class="report-loading">
+                <div class="report-loading-spinner"></div>
+                <span data-i18n="reportModal.loading">${window.i18n.t('reportModal.loading')}</span>
+            </div>
+        `;
+        runsListElement.classList.remove('hidden');
+        noRunsElement.classList.add('hidden');
+        
+        modalOverlay.classList.remove('hidden');
+        
         try {
-            const selectedPlan = this.getSelectedTestPlan();
-            if (!selectedPlan) {
-                this.appendOutput('>>> 请先选择一个测试计划');
+            const result = await window.electronAPI.getTestPlanRuns(testPlan.name);
+            
+            if (!result.success) {
+                runsListElement.innerHTML = `
+                    <div class="report-no-runs">
+                        <span class="svg-icon" data-icon="error"></span>
+                        <span>${result.error || window.i18n.t('reportModal.loadFailed')}</span>
+                    </div>
+                `;
                 return;
             }
-
-            this.appendOutput(`>>> 正在打开测试计划 '${selectedPlan.name}' 的报告...`);
             
-            const result = await window.electronAPI.viewReport(selectedPlan.name);
+            if (result.runs.length === 0) {
+                runsListElement.classList.add('hidden');
+                noRunsElement.classList.remove('hidden');
+                return;
+            }
+            
+            this.renderReportRuns(result.runs);
+        } catch (error) {
+            console.error('加载运行记录失败:', error);
+            runsListElement.innerHTML = `
+                <div class="report-no-runs">
+                    <span class="svg-icon" data-icon="error"></span>
+                    <span>${error.message}</span>
+                </div>
+            `;
+        }
+    }
+
+    renderReportRuns(runs) {
+        const runsListElement = document.getElementById('report-runs-list');
+        
+        runsListElement.innerHTML = runs.map(run => `
+            <div class="report-run-item ${run.available ? '' : 'unavailable'}" 
+                 data-index="${run.index}" 
+                 data-path="${run.reportPath || ''}"
+                 data-available="${run.available}">
+                <div class="report-run-left">
+                    <div class="report-run-index">${run.index}</div>
+                    <div class="report-run-info">
+                        <div class="report-run-time">${run.timestamp}${run.isLatest ? `<span class="report-latest-badge">${window.i18n.t('reportModal.latest')}</span>` : ''}</div>
+                    </div>
+                </div>
+                <div class="report-run-right">
+                    <div class="report-run-status ${run.available ? 'available' : 'unavailable'}">
+                        <span class="svg-icon" data-icon="${run.available ? 'check_circle' : 'cancel'}"></span>
+                        <span>${run.available ? window.i18n.t('reportModal.reportAvailable') : window.i18n.t('reportModal.reportUnavailable')}</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        // 初始化模态框内的SVG图标
+        const modalOverlay = document.getElementById('report-modal-overlay');
+        const iconElements = modalOverlay.querySelectorAll('.svg-icon[data-icon]');
+        iconElements.forEach(element => {
+            const iconName = element.getAttribute('data-icon');
+            if (window.Icons && window.Icons[iconName]) {
+                element.innerHTML = window.Icons[iconName];
+            }
+        });
+        
+        const runItems = runsListElement.querySelectorAll('.report-run-item');
+        runItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const isAvailable = item.dataset.available === 'true';
+                if (!isAvailable) return;
+                
+                runItems.forEach(i => i.classList.remove('selected'));
+                item.classList.add('selected');
+                
+                this.selectedReportRun = {
+                    index: parseInt(item.dataset.index),
+                    path: item.dataset.path,
+                    available: isAvailable
+                };
+                
+                document.getElementById('report-modal-open-btn').disabled = false;
+            });
+        });
+    }
+
+    async openSelectedReport() {
+        if (!this.selectedReportRun || !this.selectedReportRun.path) {
+            this.appendOutput('>>> ' + window.i18n.t('reportModal.selectReport'));
+            return;
+        }
+        
+        const openBtn = document.getElementById('report-modal-open-btn');
+        const cancelBtn = document.getElementById('report-modal-cancel-btn');
+        const closeBtn = document.getElementById('report-modal-close-btn');
+        
+        // 设置加载状态
+        openBtn.disabled = true;
+        openBtn.classList.add('loading');
+        openBtn.innerHTML = `<span class="btn-spinner"></span>`;
+        cancelBtn.disabled = true;
+        closeBtn.disabled = true;
+        
+        const selectedPlan = this.getSelectedTestPlan();
+        this.appendOutput(`>>> 正在打开测试计划 '${selectedPlan.name}' 第 ${this.selectedReportRun.index} 次运行的报告...`);
+        
+        try {
+            const result = await window.electronAPI.openReportByPath(this.selectedReportRun.path);
             
             if (result.success) {
                 this.appendOutput(`>>> ${result.message}`);
-                // 查看报告后启用停止服务器按钮
                 this.enableStopAllureButton();
+                this.hideReportModal();
             } else {
                 this.appendOutput(`>>> 打开报告失败: ${result.error}`);
+                this.resetReportModalButtons();
             }
         } catch (error) {
-            console.error('查看报告失败:', error);
-            this.appendOutput(`>>> 查看报告失败: ${error.message}`);
+            console.error('打开报告失败:', error);
+            this.appendOutput(`>>> 打开报告失败: ${error.message}`);
+            this.resetReportModalButtons();
         }
+    }
+
+    resetReportModalButtons() {
+        const openBtn = document.getElementById('report-modal-open-btn');
+        const cancelBtn = document.getElementById('report-modal-cancel-btn');
+        const closeBtn = document.getElementById('report-modal-close-btn');
+        
+        openBtn.classList.remove('loading');
+        openBtn.textContent = window.i18n.t('reportModal.openReport');
+        openBtn.disabled = this.selectedReportRun ? false : true;
+        cancelBtn.disabled = false;
+        closeBtn.disabled = false;
+    }
+
+    hideReportModal() {
+        const modalOverlay = document.getElementById('report-modal-overlay');
+        modalOverlay.classList.add('hidden');
+        this.selectedReportRun = null;
+        
+        // 重置按钮状态
+        const openBtn = document.getElementById('report-modal-open-btn');
+        const cancelBtn = document.getElementById('report-modal-cancel-btn');
+        const closeBtn = document.getElementById('report-modal-close-btn');
+        
+        openBtn.classList.remove('loading');
+        openBtn.textContent = window.i18n.t('reportModal.openReport');
+        openBtn.disabled = true;
+        cancelBtn.disabled = false;
+        closeBtn.disabled = false;
+    }
+
+    initReportModalEvents() {
+        const modalOverlay = document.getElementById('report-modal-overlay');
+        const closeBtn = document.getElementById('report-modal-close-btn');
+        const cancelBtn = document.getElementById('report-modal-cancel-btn');
+        const openBtn = document.getElementById('report-modal-open-btn');
+        
+        closeBtn.addEventListener('click', () => this.hideReportModal());
+        cancelBtn.addEventListener('click', () => this.hideReportModal());
+        openBtn.addEventListener('click', () => this.openSelectedReport());
+        
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                this.hideReportModal();
+            }
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modalOverlay.classList.contains('hidden')) {
+                this.hideReportModal();
+            }
+        });
     }
 
     async stopAllureServer() {
@@ -4748,26 +6656,12 @@ class XKAutoTesterApp {
         const viewReportBtn = document.getElementById('view-report-btn');
         const selectedPlan = this.getSelectedTestPlan();
         
-
-        
         if (!selectedPlan) {
-
             viewReportBtn.disabled = true;
             return;
         }
 
-
-
-        try {
-            // 检查报告是否存在
-            const result = await window.electronAPI.checkReportExists(selectedPlan.name);
-
-            viewReportBtn.disabled = !result.exists;
-
-        } catch (error) {
-            console.error('检查报告存在性失败:', error);
-            viewReportBtn.disabled = true;
-        }
+        viewReportBtn.disabled = false;
     }
 
     showError(message) {
@@ -4777,13 +6671,932 @@ class XKAutoTesterApp {
     showSuccess(message) {
         this.appendOutput('✅ ' + message);
     }
+
+    // ==================== 定时计划相关方法 ====================
+
+    async loadScheduledPlans() {
+        try {
+            if (window.electronAPI && window.electronAPI.getScheduledPlans) {
+                this.scheduledPlans = await window.electronAPI.getScheduledPlans();
+                this.renderScheduledPlansList();
+                this.updateScheduledPlanButtons();
+            }
+        } catch (error) {
+            console.error('加载定时计划失败:', error);
+        }
+    }
+
+    renderScheduledPlansList() {
+        const container = document.getElementById('scheduled-plans-list');
+        const section = document.getElementById('scheduled-plan-section');
+        
+        container.innerHTML = '';
+
+        if (!this.scheduledPlans || this.scheduledPlans.length === 0) {
+            container.innerHTML = `
+                <div class="placeholder-message">
+                    ${this.getIconHtml('info')}
+                    <span data-i18n="testExecution.noScheduledPlans">${window.i18n.t('testExecution.noScheduledPlans')}</span>
+                </div>
+            `;
+            section.classList.remove('hidden');
+            return;
+        }
+
+        section.classList.remove('hidden');
+
+        this.scheduledPlans.forEach(plan => {
+            const planElement = document.createElement('div');
+            planElement.className = 'scheduled-plan-item';
+            planElement.setAttribute('data-plan-id', plan.id);
+            if (this.currentScheduledPlan && this.currentScheduledPlan.id === plan.id) {
+                planElement.classList.add('selected');
+            }
+
+            const scheduledTime = new Date(plan.scheduledTime);
+            const formattedTime = this.formatDateTime(scheduledTime);
+            const status = this.getScheduledPlanStatus(plan);
+            const planNames = plan.testPlanNames ? plan.testPlanNames.join(', ') : window.i18n.t('testExecution.noTestPlans');
+
+            planElement.innerHTML = `
+                ${this.getIconHtml('schedule')}
+                <div>
+                    <div style="font-weight: 500;">${plan.name}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">${planNames}</div>
+                    <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 4px;">
+                        <span class="scheduled-time">${formattedTime}</span>
+                        <span class="scheduled-status ${status.class}">${status.text}</span>
+                    </div>
+                </div>
+            `;
+
+            planElement.addEventListener('click', () => {
+                this.selectScheduledPlan(plan, planElement);
+            });
+
+            container.appendChild(planElement);
+        });
+    }
+
+    formatDateTime(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}`;
+    }
+
+    getScheduledPlanStatus(plan) {
+        const now = new Date();
+        const scheduledTime = new Date(plan.scheduledTime);
+
+        if (plan.status === 'completed') {
+            return {
+                class: 'completed',
+                text: window.i18n.t('scheduledPlan.statusCompleted') || '已完成'
+            };
+        } else if (plan.status === 'running') {
+            return {
+                class: 'running',
+                text: window.i18n.t('scheduledPlan.statusRunning') || '执行中'
+            };
+        } else if (plan.status === 'cancelled') {
+            return {
+                class: 'cancelled',
+                text: window.i18n.t('scheduledPlan.statusCancelled') || '已取消'
+            };
+        } else if (plan.status === 'expired') {
+            return {
+                class: 'expired',
+                text: window.i18n.t('scheduledPlan.statusExpired') || '已过期'
+            };
+        } else if (scheduledTime <= now) {
+            return {
+                class: 'overdue',
+                text: window.i18n.t('scheduledPlan.statusOverdue') || '已过期'
+            };
+        } else {
+            return {
+                class: 'pending',
+                text: window.i18n.t('scheduledPlan.statusPending') || '待执行'
+            };
+        }
+    }
+
+    selectScheduledPlan(plan, element) {
+        if (this.currentScheduledPlan && this.currentScheduledPlan.id === plan.id) {
+            element.classList.remove('selected');
+            this.currentScheduledPlan = null;
+        } else {
+            // 取消测试计划子项的选中状态
+            if (this.currentTestPlan) {
+                document.querySelectorAll('.test-plan-item.selected').forEach(item => {
+                    item.classList.remove('selected');
+                });
+                this.currentTestPlan = null;
+                this.updatePlanButtons();
+                this.updateRunButtonState();
+            }
+            
+            document.querySelectorAll('.scheduled-plan-item.selected').forEach(item => {
+                item.classList.remove('selected');
+            });
+            element.classList.add('selected');
+            this.currentScheduledPlan = plan;
+        }
+
+        this.updateScheduledPlanButtons();
+        
+        if (this.currentScheduledPlan) {
+            this.enableViewReportButton();
+        }
+    }
+
+    updateScheduledPlanButtons() {
+        const editBtn = document.getElementById('edit-scheduled-plan-btn');
+        const deleteBtn = document.getElementById('delete-scheduled-plan-btn');
+        const hasSelected = !!this.currentScheduledPlan;
+
+        // 判断是否应该禁用编辑和删除按钮
+        let shouldDisable = !hasSelected;
+        
+        // 如果测试正在运行，且选中的是正在执行的定时计划，则禁用编辑和删除按钮
+        if (this.isRunning && hasSelected && this.runningScheduledPlanId && 
+            this.currentScheduledPlan.id === this.runningScheduledPlanId) {
+            shouldDisable = true;
+        }
+
+        if (editBtn) editBtn.disabled = shouldDisable;
+        if (deleteBtn) deleteBtn.disabled = shouldDisable;
+    }
+
+    async showNewScheduledPlanModal() {
+        const modalOverlay = document.getElementById('scheduled-plan-modal-overlay');
+        const modalTitle = document.getElementById('scheduled-plan-modal-title');
+        const nameInput = document.getElementById('scheduled-plan-name');
+        const timeInput = document.getElementById('scheduled-plan-time');
+
+        modalTitle.textContent = window.i18n.t('scheduledPlan.newTitle') || '新建定时计划';
+        nameInput.value = '';
+
+        this.initDateTimePicker(timeInput);
+        timeInput.value = '';
+
+        await this.loadTestPlansForScheduledModal();
+
+        document.getElementById('save-scheduled-plan-btn').classList.remove('hidden');
+        document.getElementById('update-scheduled-plan-btn').classList.add('hidden');
+
+        modalOverlay.classList.remove('hidden');
+    }
+
+    initDateTimePicker(inputElement) {
+        if (!inputElement) return;
+
+        if (!this.dateTimePickerOverlay) {
+            this.createDateTimePickerOverlay();
+        }
+
+        inputElement.addEventListener('click', () => {
+            this.showDateTimePicker(inputElement);
+        });
+
+        const icon = inputElement.parentElement.querySelector('.datetime-picker-icon');
+        if (icon) {
+            icon.style.pointerEvents = 'auto';
+            icon.style.cursor = 'pointer';
+            icon.addEventListener('click', () => {
+                this.showDateTimePicker(inputElement);
+            });
+        }
+    }
+
+    createDateTimePickerOverlay() {
+        const overlay = document.createElement('div');
+        overlay.id = 'datetime-picker-overlay';
+        overlay.className = 'datetime-picker-overlay hidden';
+        overlay.innerHTML = `
+            <div class="datetime-picker-panel">
+                <div class="datetime-picker-header">
+                    <button type="button" class="datetime-picker-nav prev-month" data-action="prev-month">
+                        <span class="svg-icon" data-icon="keyboard_arrow_left"></span>
+                    </button>
+                    <div class="datetime-picker-title">
+                        <span class="picker-year"></span>
+                        <span class="picker-month"></span>
+                    </div>
+                    <button type="button" class="datetime-picker-nav next-month" data-action="next-month">
+                        <span class="svg-icon" data-icon="keyboard_arrow_right"></span>
+                    </button>
+                </div>
+                <div class="datetime-picker-body">
+                    <div class="datetime-picker-weekdays">
+                        <span>${window.i18n.t('datetime.sun') || '日'}</span>
+                        <span>${window.i18n.t('datetime.mon') || '一'}</span>
+                        <span>${window.i18n.t('datetime.tue') || '二'}</span>
+                        <span>${window.i18n.t('datetime.wed') || '三'}</span>
+                        <span>${window.i18n.t('datetime.thu') || '四'}</span>
+                        <span>${window.i18n.t('datetime.fri') || '五'}</span>
+                        <span>${window.i18n.t('datetime.sat') || '六'}</span>
+                    </div>
+                    <div class="datetime-picker-days"></div>
+                </div>
+                <div class="datetime-picker-time">
+                    <div class="time-input-group">
+                        <label>${window.i18n.t('datetime.hour') || '时'}</label>
+                        <input type="number" class="time-input hour-input" min="0" max="23" value="00">
+                    </div>
+                    <span class="time-separator">:</span>
+                    <div class="time-input-group">
+                        <label>${window.i18n.t('datetime.minute') || '分'}</label>
+                        <input type="number" class="time-input minute-input" min="0" max="59" value="00">
+                    </div>
+                </div>
+                <div class="datetime-picker-footer">
+                    <button type="button" class="datetime-picker-btn cancel-btn">${window.i18n.t('modal.cancel') || '取消'}</button>
+                    <button type="button" class="datetime-picker-btn confirm-btn">${window.i18n.t('modal.confirm') || '确定'}</button>
+                </div>
+            </div>
+        `;
+        const modalOverlay = document.getElementById('scheduled-plan-modal-overlay');
+        if (modalOverlay) {
+            modalOverlay.appendChild(overlay);
+        } else {
+            document.body.appendChild(overlay);
+        }
+        this.dateTimePickerOverlay = overlay;
+
+        overlay.querySelector('.prev-month').addEventListener('click', () => this.navigatePicker('month', -1));
+        overlay.querySelector('.next-month').addEventListener('click', () => this.navigatePicker('month', 1));
+        overlay.querySelector('.cancel-btn').addEventListener('click', () => this.hideDateTimePicker());
+        overlay.querySelector('.confirm-btn').addEventListener('click', () => this.confirmDateTimePicker());
+
+        const hourInput = overlay.querySelector('.hour-input');
+        const minuteInput = overlay.querySelector('.minute-input');
+
+        hourInput.addEventListener('input', (e) => {
+            let value = e.target.value.replace(/[^0-9]/g, '');
+            if (value.length > 2) {
+                value = value.slice(0, 2);
+            }
+            const numValue = parseInt(value) || 0;
+            if (numValue > 23) {
+                value = '23';
+            }
+            e.target.value = value;
+        });
+
+        hourInput.addEventListener('blur', (e) => {
+            let value = e.target.value;
+            const numValue = parseInt(value) || 0;
+            if (numValue < 0 || isNaN(numValue)) {
+                value = '00';
+            } else if (numValue > 23) {
+                value = '23';
+            } else {
+                value = String(numValue).padStart(2, '0');
+            }
+            e.target.value = value;
+        });
+
+        minuteInput.addEventListener('input', (e) => {
+            let value = e.target.value.replace(/[^0-9]/g, '');
+            if (value.length > 2) {
+                value = value.slice(0, 2);
+            }
+            const numValue = parseInt(value) || 0;
+            if (numValue > 59) {
+                value = '59';
+            }
+            e.target.value = value;
+        });
+
+        minuteInput.addEventListener('blur', (e) => {
+            let value = e.target.value;
+            const numValue = parseInt(value) || 0;
+            if (numValue < 0 || isNaN(numValue)) {
+                value = '00';
+            } else if (numValue > 59) {
+                value = '59';
+            } else {
+                value = String(numValue).padStart(2, '0');
+            }
+            e.target.value = value;
+        });
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                this.hideDateTimePicker();
+            }
+        });
+
+        this.initializeDateTimePickerIcons(overlay);
+    }
+
+    initializeDateTimePickerIcons(overlay) {
+        if (typeof window.Icons === 'undefined') return;
+        
+        const iconElements = overlay.querySelectorAll('.svg-icon[data-icon]');
+        iconElements.forEach(element => {
+            const iconName = element.getAttribute('data-icon');
+            if (window.Icons[iconName]) {
+                element.innerHTML = window.Icons[iconName];
+            }
+        });
+        
+        const navButtons = overlay.querySelectorAll('.datetime-picker-nav');
+        navButtons.forEach(button => {
+            const iconSpan = button.querySelector('.svg-icon');
+            if (iconSpan && !iconSpan.innerHTML.trim()) {
+                const iconName = iconSpan.getAttribute('data-icon');
+                if (window.Icons[iconName]) {
+                    iconSpan.innerHTML = window.Icons[iconName];
+                    iconSpan.style.display = 'flex';
+                    iconSpan.style.alignItems = 'center';
+                    iconSpan.style.justifyContent = 'center';
+                }
+            }
+        });
+    }
+
+    showDateTimePicker(inputElement) {
+        this.dateTimePickerInput = inputElement;
+        const overlay = this.dateTimePickerOverlay;
+
+        const now = new Date();
+        let initialDate = now;
+
+        if (inputElement.value) {
+            const parsed = this.parseDateTimeString(inputElement.value);
+            if (parsed) {
+                initialDate = parsed;
+            }
+        }
+
+        this.pickerCurrentDate = initialDate;
+        
+        if (inputElement.value) {
+            const parsed = this.parseDateTimeString(inputElement.value);
+            if (parsed) {
+                this.pickerSelectedDate = parsed;
+            } else {
+                this.pickerSelectedDate = null;
+            }
+        } else {
+            this.pickerSelectedDate = null;
+        }
+        
+        this.pickerMinDate = new Date(now.getTime() + 60000);
+        this.pickerMaxDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+        this.renderDatePicker();
+
+        overlay.classList.remove('hidden');
+    }
+
+    hideDateTimePicker() {
+        if (this.dateTimePickerOverlay) {
+            this.dateTimePickerOverlay.classList.add('hidden');
+        }
+    }
+
+    navigatePicker(unit, direction) {
+        if (unit === 'year') {
+            this.pickerCurrentDate.setFullYear(this.pickerCurrentDate.getFullYear() + direction);
+        } else if (unit === 'month') {
+            this.pickerCurrentDate.setMonth(this.pickerCurrentDate.getMonth() + direction);
+        }
+        this.renderDatePicker();
+    }
+
+    renderDatePicker() {
+        const overlay = this.dateTimePickerOverlay;
+        const year = this.pickerCurrentDate.getFullYear();
+        const month = this.pickerCurrentDate.getMonth();
+
+        overlay.querySelector('.picker-year').textContent = year + window.i18n.t('datetime.year') || '年';
+        overlay.querySelector('.picker-month').textContent = (month + 1) + window.i18n.t('datetime.month') || '月';
+
+        const daysContainer = overlay.querySelector('.datetime-picker-days');
+        daysContainer.innerHTML = '';
+
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const startDayOfWeek = firstDay.getDay();
+        const totalDays = lastDay.getDate();
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        for (let i = 0; i < startDayOfWeek; i++) {
+            const emptyDay = document.createElement('div');
+            emptyDay.className = 'datetime-picker-day empty';
+            daysContainer.appendChild(emptyDay);
+        }
+
+        for (let day = 1; day <= totalDays; day++) {
+            const dayElement = document.createElement('div');
+            dayElement.className = 'datetime-picker-day';
+            dayElement.textContent = day;
+
+            const currentDate = new Date(year, month, day);
+            currentDate.setHours(0, 0, 0, 0);
+
+            if (currentDate.getTime() === today.getTime()) {
+                dayElement.classList.add('today');
+            }
+
+            if (this.pickerSelectedDate && 
+                this.pickerSelectedDate.getFullYear() === year &&
+                this.pickerSelectedDate.getMonth() === month &&
+                this.pickerSelectedDate.getDate() === day) {
+                dayElement.classList.add('selected');
+            }
+
+            const minDateCompare = new Date(this.pickerMinDate);
+            minDateCompare.setHours(0, 0, 0, 0);
+            const maxDateCompare = new Date(this.pickerMaxDate);
+            maxDateCompare.setHours(0, 0, 0, 0);
+
+            if (currentDate.getTime() < minDateCompare.getTime() || currentDate.getTime() > maxDateCompare.getTime()) {
+                dayElement.classList.add('disabled');
+            } else {
+                dayElement.addEventListener('click', () => {
+                    this.selectDate(year, month, day);
+                });
+            }
+
+            daysContainer.appendChild(dayElement);
+        }
+
+        const hourInput = overlay.querySelector('.hour-input');
+        const minuteInput = overlay.querySelector('.minute-input');
+        if (this.pickerSelectedDate) {
+            hourInput.value = String(this.pickerSelectedDate.getHours()).padStart(2, '0');
+            minuteInput.value = String(this.pickerSelectedDate.getMinutes()).padStart(2, '0');
+        } else {
+            const now = new Date();
+            hourInput.value = String(now.getHours()).padStart(2, '0');
+            minuteInput.value = String(now.getMinutes()).padStart(2, '0');
+        }
+    }
+
+    selectDate(year, month, day) {
+        const overlay = this.dateTimePickerOverlay;
+        const hourInput = overlay.querySelector('.hour-input');
+        const minuteInput = overlay.querySelector('.minute-input');
+        
+        const currentHour = parseInt(hourInput.value) || 0;
+        const currentMinute = parseInt(minuteInput.value) || 0;
+        
+        this.pickerSelectedDate = new Date(year, month, day);
+        this.pickerSelectedDate.setHours(currentHour, currentMinute, 0, 0);
+        
+        this.renderDatePicker();
+    }
+
+    confirmDateTimePicker() {
+        if (!this.pickerSelectedDate) {
+            this.pickerSelectedDate = new Date(this.pickerCurrentDate);
+        }
+
+        const overlay = this.dateTimePickerOverlay;
+        const hour = parseInt(overlay.querySelector('.hour-input').value) || 0;
+        const minute = parseInt(overlay.querySelector('.minute-input').value) || 0;
+
+        this.pickerSelectedDate.setHours(hour, minute, 0, 0);
+
+        const now = new Date();
+        now.setSeconds(0, 0);
+        const selectedTime = new Date(this.pickerSelectedDate);
+        selectedTime.setSeconds(0, 0);
+        
+        if (selectedTime <= now) {
+            Toast.error(window.i18n.t('scheduledPlan.timeMustBeFuture') || '执行时间必须晚于当前时间');
+            return;
+        }
+
+        if (this.dateTimePickerInput) {
+            this.dateTimePickerInput.value = this.formatDateTime(this.pickerSelectedDate);
+            this.dateTimePickerInput.dataset.iso = this.pickerSelectedDate.toISOString();
+        }
+
+        this.hideDateTimePicker();
+    }
+
+    parseDateTimeString(str) {
+        const match = str.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
+        if (match) {
+            return new Date(
+                parseInt(match[1]),
+                parseInt(match[2]) - 1,
+                parseInt(match[3]),
+                parseInt(match[4]),
+                parseInt(match[5])
+            );
+        }
+        return null;
+    }
+
+    async loadTestPlansForScheduledModal(selectedPlanIds = []) {
+        const container = document.getElementById('scheduled-test-plans-list');
+        container.innerHTML = '';
+
+        if (!this.testPlans || this.testPlans.length === 0) {
+            container.innerHTML = `
+                <div class="placeholder-message">
+                    ${this.getIconHtml('info')}
+                    <span data-i18n="testExecution.noTestPlans">${window.i18n.t('testExecution.noTestPlans')}</span>
+                </div>
+            `;
+            return;
+        }
+
+        this.testPlans.forEach(plan => {
+            const isSelected = selectedPlanIds.includes(plan.id || plan.name);
+            const planElement = document.createElement('div');
+            planElement.className = 'checkbox-item scheduled-plan-checkbox';
+            planElement.innerHTML = `
+                <input type="checkbox" id="scheduled-plan-${plan.id || plan.name}" value="${plan.id || plan.name}" ${isSelected ? 'checked' : ''}>
+                <label for="scheduled-plan-${plan.id || plan.name}">${plan.name}</label>
+            `;
+            container.appendChild(planElement);
+        });
+    }
+
+    getSelectedTestPlansFromModal() {
+        const selectedPlans = [];
+        const checkboxes = document.querySelectorAll('#scheduled-test-plans-list input[type="checkbox"]:checked');
+        checkboxes.forEach(checkbox => {
+            const plan = this.testPlans.find(p => (p.id || p.name) === checkbox.value);
+            if (plan) {
+                selectedPlans.push({
+                    id: plan.id || plan.name,
+                    name: plan.name
+                });
+            }
+        });
+        return selectedPlans;
+    }
+
+    hideScheduledPlanModal() {
+        document.getElementById('scheduled-plan-modal-overlay').classList.add('hidden');
+    }
+
+    editScheduledPlan() {
+        if (!this.currentScheduledPlan) {
+            this.showError(window.i18n.t('testExecution.selectScheduledPlanFirst') || '请先选择一个定时计划');
+            return;
+        }
+        this.showEditScheduledPlanModal(this.currentScheduledPlan);
+    }
+
+    async showEditScheduledPlanModal(plan) {
+        const modalOverlay = document.getElementById('scheduled-plan-modal-overlay');
+        const modalTitle = document.getElementById('scheduled-plan-modal-title');
+        const nameInput = document.getElementById('scheduled-plan-name');
+        const timeInput = document.getElementById('scheduled-plan-time');
+
+        modalTitle.textContent = window.i18n.t('scheduledPlan.editTitle') || '编辑定时计划';
+        nameInput.value = plan.name;
+
+        this.initDateTimePicker(timeInput);
+        
+        if (plan.scheduledTime) {
+            const date = new Date(plan.scheduledTime);
+            timeInput.value = this.formatDateTime(date);
+            timeInput.dataset.iso = date.toISOString();
+        }
+
+        const selectedPlanIds = plan.testPlans ? plan.testPlans.map(p => p.id || p.name) : [];
+        await this.loadTestPlansForScheduledModal(selectedPlanIds);
+
+        document.getElementById('save-scheduled-plan-btn').classList.add('hidden');
+        document.getElementById('update-scheduled-plan-btn').classList.remove('hidden');
+
+        modalOverlay.classList.remove('hidden');
+    }
+
+    formatDateTimeForInput(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    async saveScheduledPlan() {
+        const name = document.getElementById('scheduled-plan-name').value.trim();
+        const scheduledTime = document.getElementById('scheduled-plan-time').value;
+        const selectedTestPlans = this.getSelectedTestPlansFromModal();
+
+        if (!name) {
+            Toast.error(window.i18n.t('scheduledPlan.nameRequired') || '请输入计划名称');
+            return;
+        }
+
+        if (!scheduledTime) {
+            Toast.error(window.i18n.t('scheduledPlan.timeRequired') || '请选择执行时间');
+            return;
+        }
+
+        if (selectedTestPlans.length === 0) {
+            Toast.error(window.i18n.t('scheduledPlan.selectAtLeastOne') || '请至少选择一个测试计划');
+            return;
+        }
+
+        const hasConflict = await this.checkTimeConflict(scheduledTime);
+        if (hasConflict) {
+            return;
+        }
+
+        try {
+            const planData = {
+                name: name,
+                scheduledTime: new Date(scheduledTime).toISOString(),
+                testPlans: selectedTestPlans,
+                testPlanNames: selectedTestPlans.map(p => p.name),
+                status: 'pending',
+                created: new Date().toISOString()
+            };
+
+            const result = await window.electronAPI.saveScheduledPlan(planData);
+
+            if (result.success) {
+                this.hideScheduledPlanModal();
+                await this.loadScheduledPlans();
+                Toast.success(window.i18n.t('scheduledPlan.saveSuccess') || '定时计划保存成功');
+            } else {
+                Toast.error(window.i18n.t('scheduledPlan.saveFailed') + ': ' + result.error);
+            }
+        } catch (error) {
+            console.error('保存定时计划失败:', error);
+            Toast.error(window.i18n.t('scheduledPlan.saveFailed') + ': ' + error.message);
+        }
+    }
+
+    async updateScheduledPlan() {
+        if (!this.currentScheduledPlan) {
+            Toast.error(window.i18n.t('testExecution.noSelectedScheduledPlan') || '没有选中的定时计划');
+            return;
+        }
+
+        const name = document.getElementById('scheduled-plan-name').value.trim();
+        const scheduledTime = document.getElementById('scheduled-plan-time').value;
+        const selectedTestPlans = this.getSelectedTestPlansFromModal();
+
+        if (!name) {
+            Toast.error(window.i18n.t('scheduledPlan.nameRequired') || '请输入计划名称');
+            return;
+        }
+
+        if (!scheduledTime) {
+            Toast.error(window.i18n.t('scheduledPlan.timeRequired') || '请选择执行时间');
+            return;
+        }
+
+        if (selectedTestPlans.length === 0) {
+            Toast.error(window.i18n.t('scheduledPlan.selectAtLeastOne') || '请至少选择一个测试计划');
+            return;
+        }
+
+        const hasConflict = await this.checkTimeConflict(scheduledTime, this.currentScheduledPlan.id);
+        if (hasConflict) {
+            return;
+        }
+
+        try {
+            const newScheduledTime = new Date(scheduledTime);
+            const now = new Date();
+            let status = this.currentScheduledPlan.status;
+            
+            // 如果是已完成或已过期的计划，且新时间是未来时间，将状态改回待执行
+            if ((status === 'completed' || status === 'expired') && newScheduledTime > now) {
+                status = 'pending';
+            }
+            
+            const planData = {
+                id: this.currentScheduledPlan.id,
+                name: name,
+                scheduledTime: newScheduledTime.toISOString(),
+                testPlans: selectedTestPlans,
+                testPlanNames: selectedTestPlans.map(p => p.name),
+                status: status,
+                created: this.currentScheduledPlan.created
+            };
+
+            const result = await window.electronAPI.updateScheduledPlan(planData);
+
+            if (result.success) {
+                this.hideScheduledPlanModal();
+                await this.loadScheduledPlans();
+                // 更新当前选中的定时计划数据
+                this.currentScheduledPlan = {
+                    ...this.currentScheduledPlan,
+                    name: name,
+                    scheduledTime: newScheduledTime.toISOString(),
+                    testPlans: selectedTestPlans,
+                    testPlanNames: selectedTestPlans.map(p => p.name),
+                    status: status
+                };
+                Toast.success(window.i18n.t('scheduledPlan.updateSuccess') || '定时计划更新成功');
+            } else {
+                Toast.error(window.i18n.t('scheduledPlan.updateFailed') + ': ' + result.error);
+            }
+        } catch (error) {
+            console.error('更新定时计划失败:', error);
+            Toast.error(window.i18n.t('scheduledPlan.updateFailed') + ': ' + error.message);
+        }
+    }
+
+    async deleteScheduledPlan() {
+        if (!this.currentScheduledPlan) {
+            Toast.error(window.i18n.t('testExecution.selectScheduledPlanFirst') || '请先选择一个定时计划');
+            return;
+        }
+
+        const planName = this.currentScheduledPlan.name;
+        const title = window.i18n.t('scheduledPlan.deleteSchedule') || '删除定时计划';
+        const message = window.i18n.t('scheduledPlan.deleteConfirm', { name: planName }) || `确定要删除定时计划 "${planName}" 吗？`;
+
+        this.showConfirmModal(title, message, async () => {
+            try {
+                const result = await window.electronAPI.deleteScheduledPlan(this.currentScheduledPlan.id);
+
+                if (result.success) {
+                    Toast.success(window.i18n.t('scheduledPlan.deleteSuccess') || '定时计划删除成功');
+                    this.currentScheduledPlan = null;
+                    await this.loadScheduledPlans();
+                } else {
+                    Toast.error(window.i18n.t('scheduledPlan.deleteFailed') + ': ' + result.error);
+                }
+            } catch (error) {
+                console.error('删除定时计划失败:', error);
+                Toast.error(window.i18n.t('scheduledPlan.deleteFailed') + ': ' + error.message);
+            }
+        });
+    }
+
+    async checkTimeConflict(scheduledTime, excludeId = null) {
+        try {
+            if (window.electronAPI && window.electronAPI.checkTimeConflict) {
+                const result = await window.electronAPI.checkTimeConflict({
+                    scheduledTime: new Date(scheduledTime).toISOString(),
+                    excludeId: excludeId
+                });
+
+                if (result.hasConflict) {
+                    this.showError(window.i18n.t('scheduledPlan.timeConflict') || '该时间已有其他定时计划，请选择其他时间');
+                    return true;
+                }
+            }
+            return false;
+        } catch (error) {
+            console.error('检查时间冲突失败:', error);
+            return false;
+        }
+    }
+
+    async handleScheduledTestStart(data) {
+        const message = window.i18n.t('scheduledPlan.testStarting', { name: data.planName }) || `定时计划 "${data.planName}" 开始执行...`;
+        this.appendOutput(`\n>>> ${message}`);
+        
+        // 重新加载定时计划列表，显示"执行中"状态
+        await this.loadScheduledPlans();
+        
+        try {
+            const testPlans = await window.electronAPI.getTestPlans();
+            
+            if (!data.testPlans || data.testPlans.length === 0) {
+                this.appendError('>>> 定时计划没有关联的测试计划');
+                return;
+            }
+            
+            for (const testPlanObj of data.testPlans) {
+                const testPlanId = testPlanObj.id || testPlanObj.name;
+                const testPlan = testPlans.find(p => p.id === testPlanId || p.name === testPlanId);
+                
+                if (!testPlan) {
+                    this.appendError(`>>> 测试计划 ${testPlanId} 不存在`);
+                    continue;
+                }
+                
+                this.appendOutput(`>>> 正在执行测试计划: ${testPlan.name}`);
+                
+                this.currentTestPlan = testPlan;
+                
+                if (testPlan.testFiles && testPlan.testFiles.length > 0) {
+                    this.selectTestPlanDirectory(testPlan.testFiles);
+                    
+                    const testFiles = await window.electronAPI.scanTestFiles(this.selectedDirectory);
+                    this.displayTestFiles(testFiles);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    
+                    this.selectTestPlanTypes(testPlan.testTypes || []);
+                    this.selectTestPlanFiles(testPlan.testFiles);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+                const scheduledPlanInfo = {
+                    planId: data.planId,
+                    name: data.planName,
+                    executionTime: data.executionTime || new Date().toLocaleString()
+                };
+                
+                await this.runTests(scheduledPlanInfo);
+            }
+            
+        } catch (error) {
+            console.error('执行定时计划失败:', error);
+            this.appendError('>>> 执行定时计划失败: ' + error.message);
+        } finally {
+            // 通知主进程测试执行完成，更新定时计划状态
+            if (data.planId) {
+                await window.electronAPI.scheduledTestComplete(data.planId);
+            }
+            
+            // 执行完成后重新加载定时计划列表，显示"已完成"状态
+            this.loadScheduledPlans();
+        }
+    }
+
+    handleScheduledPlanExpired(data) {
+        this.loadScheduledPlans();
+        Toast.warning(
+            window.i18n.t('scheduledPlan.expiredNotification', { name: data.planName })
+        );
+    }
 }
+
+
 
 // 应用启动
 document.addEventListener('DOMContentLoaded', () => {
 
     try {
         new XKAutoTesterApp();
+        
+        // 窗口控制按钮事件
+        const minimizeBtn = document.getElementById('window-minimize');
+        const maximizeBtn = document.getElementById('window-maximize');
+        const closeBtn = document.getElementById('window-close');
+        
+        if (minimizeBtn) {
+            minimizeBtn.addEventListener('click', () => {
+                window.electronAPI.minimizeWindow();
+            });
+        }
+        
+        if (maximizeBtn) {
+            maximizeBtn.addEventListener('click', async () => {
+                const isMaximized = await window.electronAPI.maximizeWindow();
+                updateMaximizeButton(isMaximized);
+            });
+        }
+        
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                window.electronAPI.closeWindow();
+            });
+        }
+        
+        // 更新最大化按钮图标
+        function updateMaximizeButton(isMaximized) {
+            if (maximizeBtn) {
+                if (isMaximized) {
+                    maximizeBtn.innerHTML = `
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="8" y="8" width="12" height="12" rx="2"/>
+                            <path d="M4 16V6a2 2 0 0 1 2-2h10"/>
+                        </svg>
+                    `;
+                    maximizeBtn.title = '还原';
+                    document.body.classList.add('window-maximized');
+                } else {
+                    maximizeBtn.innerHTML = `
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="4" y="4" width="16" height="16" rx="2"/>
+                        </svg>
+                    `;
+                    maximizeBtn.title = '最大化';
+                    document.body.classList.remove('window-maximized');
+                }
+            }
+        }
+
+        // 初始化时检查窗口最大化状态
+        window.electronAPI.isWindowMaximized().then(isMaximized => {
+            updateMaximizeButton(isMaximized);
+        });
+
+        // 监听窗口最大化事件
+        window.electronAPI.onWindowMaximized((isMaximized) => {
+            updateMaximizeButton(isMaximized);
+        });
 
     } catch (error) {
         console.error('创建XKAutoTesterApp实例失败:', error);

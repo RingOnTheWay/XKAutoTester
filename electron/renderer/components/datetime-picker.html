@@ -1,0 +1,47 @@
+<!-- 自定义日期时间选择器组件 -->
+<div class="datetime-picker-overlay hidden" id="datetime-picker-overlay">
+    <div class="datetime-picker-panel">
+        <div class="datetime-picker-header">
+            <button type="button" class="datetime-picker-nav prev-month" data-action="prev-month">
+                <span class="svg-icon" data-icon="keyboard_arrow_left"></span>
+            </button>
+            <div class="datetime-picker-title">
+                <span class="picker-year"></span>
+                <span class="picker-month"></span>
+            </div>
+            <button type="button" class="datetime-picker-nav next-month" data-action="next-month">
+                <span class="svg-icon" data-icon="keyboard_arrow_right"></span>
+            </button>
+        </div>
+        
+        <div class="datetime-picker-body">
+            <div class="datetime-picker-weekdays">
+                <span data-i18n="datetime.sun">日</span>
+                <span data-i18n="datetime.mon">一</span>
+                <span data-i18n="datetime.tue">二</span>
+                <span data-i18n="datetime.wed">三</span>
+                <span data-i18n="datetime.thu">四</span>
+                <span data-i18n="datetime.fri">五</span>
+                <span data-i18n="datetime.sat">六</span>
+            </div>
+            <div class="datetime-picker-days"></div>
+        </div>
+        
+        <div class="datetime-picker-time">
+            <div class="time-input-group">
+                <label data-i18n="datetime.hour">时</label>
+                <input type="number" class="time-input hour-input" min="0" max="23" value="00">
+            </div>
+            <span class="time-separator">:</span>
+            <div class="time-input-group">
+                <label data-i18n="datetime.minute">分</label>
+                <input type="number" class="time-input minute-input" min="0" max="59" value="00">
+            </div>
+        </div>
+        
+        <div class="datetime-picker-footer">
+            <button type="button" class="datetime-picker-btn cancel-btn" data-i18n="modal.cancel">取消</button>
+            <button type="button" class="datetime-picker-btn confirm-btn" data-i18n="modal.confirm">确定</button>
+        </div>
+    </div>
+</div>

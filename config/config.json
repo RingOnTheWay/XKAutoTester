@@ -16,6 +16,14 @@
   "APP_SETTINGS": {
     "default_download_directory": "",
     "dark_mode": false,
-    "theme_color": "#4CAF50"
+    "theme_color": "#4CAF50",
+    "language": "zh-CN",
+    "notification": {
+      "platform": "none",
+      "dingtalk": {
+        "access_token": "",
+        "secret": ""
+      }
+    }
   }
 }
