@@ -1214,15 +1214,21 @@ class XKAutoTesterApp {
         const notificationPlatformOptions = document.getElementById('custom-notification-platform-options');
         
         if (notificationPlatformSelected && notificationPlatformOptions) {
-            const platformNames = {
-                'none': '无',
-                'dingtalk': '钉钉'
+            const platformI18nKeys = {
+                'none': 'settings.none',
+                'dingtalk': 'settings.dingtalk'
             };
-            const displayText = platformNames[platform] || '无';
+            const platformNames = {
+                'none': window.i18n ? window.i18n.t('settings.none') : '无',
+                'dingtalk': window.i18n ? window.i18n.t('settings.dingtalk') : '钉钉'
+            };
+            const displayText = platformNames[platform] || platformNames['none'];
+            const i18nKey = platformI18nKeys[platform] || platformI18nKeys['none'];
             
             const selectedSpan = notificationPlatformSelected.querySelector('.custom-select__text');
             if (selectedSpan) {
                 selectedSpan.textContent = displayText;
+                selectedSpan.setAttribute('data-i18n', i18nKey);
             }
             
             const options = notificationPlatformOptions.querySelectorAll('.custom-select__option');
@@ -1695,11 +1701,16 @@ class XKAutoTesterApp {
                 option.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const selectedPlatform = option.dataset.value;
-                    const displayText = option.querySelector('span')?.textContent || option.textContent;
+                    const optionSpan = option.querySelector('span');
+                    const displayText = optionSpan?.textContent || option.textContent;
+                    const optionI18nKey = optionSpan?.getAttribute('data-i18n');
                     
                     const selectedSpan = notificationPlatformSelected.querySelector('.custom-select__text');
                     if (selectedSpan) {
                         selectedSpan.textContent = displayText;
+                        if (optionI18nKey) {
+                            selectedSpan.setAttribute('data-i18n', optionI18nKey);
+                        }
                     }
                     
                     options.forEach(opt => opt.classList.remove('selected'));

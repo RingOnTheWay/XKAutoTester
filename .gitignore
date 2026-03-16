@@ -21,10 +21,6 @@ wheels/
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
@@ -68,7 +64,7 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-# Logs (包含 logs/allure/allure-reports 和 logs/allure/allure-results)
+# Logs
 logs/
 *.log
 
@@ -78,15 +74,6 @@ dist/
 build/
 *.tgz
 *.tar.gz
-
-# Test data
-test_data/
-
-# Test files (不提交测试文件)
-tests/
-
-# Local configuration files
-local_settings.py
 
 # Database files
 *.db

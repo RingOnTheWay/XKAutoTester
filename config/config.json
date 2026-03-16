@@ -14,15 +14,15 @@
     "always_on_top": true
   },
   "APP_SETTINGS": {
-    "default_download_directory": "D:\\Downloads",
+    "default_download_directory": "",
     "dark_mode": false,
     "theme_color": "#4CAF50",
     "language": "zh-CN",
     "notification": {
       "platform": "none",
       "dingtalk": {
-        "access_token": "88560dd5c70ca2ded946a7116bb301e9eb52519e64e79b956dd7d7701f7f2029",
-        "secret": "SEC56daa883f136a433fd7f947f3e63f406470f86e105957da7c215d4fce13cc0d7"
+        "access_token": "",
+        "secret": ""
       }
     }
   }

@@ -1,222 +1,226 @@
-# 运行平台
-
-## 操作系统
-
-### 控制端：Windows 10
-
-### 被控端：Windows 10、Android 13及其以上
+<div align="center">
 
-# 环境配置
-
-## 一、配置Python环境
-
-### 安装
-
-- ```
-  1.打开python-3.12.4-amd64.exe
-  2.勾选Use admin privileges when installing py.exe和Add python.exe to PATH
-  3.选择Customize installation
-  4.保持默认点击Next
-  5.自定义安装目录，其他保持默认
-  6.点击Install
-  7.安装成功后点击Disable path length limit
-  8.完成安装
-  ```
-
-### 配置阿里源
-
-- ```
-  1.使用管理员身份打开命令提示符
-  2.输入并回车pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
-  3.输入并回车pip config set install.trusted-host mirrors.aliyun.com
-  4.配置完成
-  ```
-
-### 依赖安装
-
-- ```
-  1.使用管理员身份打开命令提示符
-  2.把XKAutoTester目录下的requirements.txt拖进命令提示符
-  3.补充信息变为pip install -r <requirements.txt文件目录>
-  4.回车进行安装
-  5.完成安装
-  ```
-
-  
-
-## 二、配置nodejs环境
-
-### 安装
-
-- ```
-  1.打开node-v22.19.0-x64.msi
-  2.同意条款并自定义安装目录
-  3.其他保持默认进行安装
-  4.完成安装
-  ```
+<img src="./electron/assets/icon.png" alt="XKAutoTester" align="center" height="96" />
 
-### 配置环境变量
+# XKAutoTester
 
-- ```
-  1.打开nodejs安装目录，新建两个文件夹node_global和node_cache
-  2.使用管理员身份打开命令提示符(以下命令带双引号)
-  3.npm config set prefix "node_global路径"
-  4.npm config set cache "node_cache路径"
-  5.Win+Q启动搜索，搜索"编辑系统环境变量",进入后点击"环境变量"
-  5.新建系统变量
-  -变量名:NODE_PATH
-  -变量值:此处填写node_global路径，后面再拼接\node_modules
-  6.打开用户变量的PATH，将C:\Users\{用户名}\AppData\Roaming\npm替换为node_global路径
-  7.打开系统变量的PATH，新建一个%NODE_PATH%
-  8.环境变量配置完成
-  ```
+**基于 Electron + Python 的自动化测试平台**
 
-### 配置国内源
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12.4-3c873a?style=flat-square)](https://www.python.org)
+[![Java](https://img.shields.io/badge/Java-17.0.15-007396?style=flat-square)](https://www.java.com)
+[![Electron](https://img.shields.io/badge/Electron-38.7.2-47848f?style=flat-square)](https://www.electronjs.org)
+[![Node.js](https://img.shields.io/badge/Node.js-22.19.0-3c873a?style=flat-square)](https://nodejs.org)
+[![Version](https://img.shields.io/badge/Version-0.1.2--dev.5-9cf?style=flat-square)](https://github.com/your-username/XKAutoTester)
+[![Platform](https://img.shields.io/badge/Platform-Windows-0078d7?style=flat-square)](https://www.microsoft.com/windows)
 
-- ```
-  1.使用管理员身份打开命令提示符
-  2.输入并回车npm config set registry https://registry.npmmirror.com
-  3.输入并回车npm install -g cnpm --registry=https://registry.npmmirror.com
-  4.配置完成
-  ```
+⭐ 如果您喜欢这个项目，不妨在 GitHub 上点个 Star — 非常感谢！
 
-### 安装Appium
+[功能特性](#功能特性) • [快速开始](#快速开始) • [环境要求](#环境要求) • [安装](#安装) • [使用指南](#使用指南)
 
-- ```
-  1.使用管理员身份打开命令提示符
-  2.输入并回车cnpm install -g appium@3.1.0
-  3.输入并回车cnpm install -g @colors/colors
-  4.输入并回车appium driver install uiautomator2
-  5.配置完成
-  ```
+---
 
-## 三、配置JAVA环境
+## 概述
 
-### 安装
+XKAutoTester 是一个功能强大的自动化测试平台，结合了 Electron 的跨平台桌面应用能力和 Python 的自动化测试生态，目前只维护Windows平台下软件的执行环境。该平台支持 Android 设备的自动化测试，提供完整的测试计划管理、定时执行、报告生成等功能。
 
-- ```
-  1.打开jdk-17.0.15_windows-x64_bin.exe
-  2.自定义安装目录
-  3.完成安装
-  ```
+> [!TIP]
+> 本项目采用前后端分离架构，Electron 负责桌面 GUI 界面，Python 负责测试执行和设备控制，两者通过 IPC 通信实现无缝集成。
 
-## 四、配置Android SDK环境
+## 功能特性
 
-### 安装
+- **测试计划管理** - 创建、编辑、删除测试计划，支持测试文件选择和测试类型筛选
+- **定时执行** - 设置定时计划，自动在指定时间执行测试
+- **循环执行** - 支持循环运行测试，可配置失败后是否继续
+- **Allure 报告** - 自动生成专业的测试报告，支持历史记录查看
+- **Android 设备管理** - ADB 连接管理，支持 USB 和无线连接
+- **屏幕控制** - 集成 Scrcpy，实时查看和控制设备屏幕
+- **文件管理** - 浏览和管理安卓设备文件系统
+- **多语言支持** - 支持中文和英文界面语言
+- **通知推送** - 支持钉钉平台的通知推送
 
-- ```
-  1.打开installer_r24.4.1-windows.exe
-  2.自定义安装目录，其他默认
-  3.打开SDK管理器（安装完默认自动打开）
-  4.Packages只勾选Android SDK Tools、Android SDK Platform-tools、Android SDK Build-tools、Google USB Driver、Google Web Driver
-  5.点击Install
-  6.同意条款后安装
-  7.完成安装
-  ```
+## 技术架构
 
-### Android sdk配置环境变量
+<div align="center">
 
-- ```
-  1.Win+Q启动搜索，搜索"编辑系统环境变量",进入后点击"环境变量"
-  2.新建系统变量
-  -变量名:ANDROID_HOME
-  -变量值:所安装android-sdk文件夹的路径
-  3.打开系统变量的PATH，新建%ANDROID_HOME%\build-tools\29.0.3
-  4.继续新建%ANDROID_HOME%\tools
-  5.继续新建%ANDROID_HOME%\platform-tools
-  6.配置完成
-  ```
+| 组件 | 技术栈 |
+|:---:|:---:|
+| 桌面应用 | Electron 38 |
+| 测试框架 | Pytest + Allure |
+| 移动测试 | Appium + UiAutomator2 |
+| 设备控制 | ADB + Scrcpy |
+| 包管理 | uv (Python) + npm (Node.js) |
 
-## 五、配置USB转串口驱动环境
+## 环境要求
 
-### 安装
+### 必需环境
 
-- ```
-  1.解压CP210x_Windows_Drivers.zip
-  2.打开CP210xVCPInstaller_x64.exe
-  3.默认安装
-  4.完成安装
-  ```
+| 工具 | 版本要求 | 说明 |
+|:---|:---:|:---|
+| Python | 3.12.4 | 测试执行核心 |
+| Node.js | 22.19.0 | Electron 运行环境 |
+| Java | 17.0.15 | Allure 报告生成 |
+| Android SDK | - | ADB 和相关工具 |
 
-# 操作指引
+### 可选工具
 
-## 用例编辑流程
+| 工具 | 说明 |
+|:---|:---|
+| Appium | 移动端自动化测试 |
+| Scrcpy | 设备屏幕镜像控制 |
 
-#### 1.编辑示例用例文件内容
+## 安装
 
-#### ![PixPin_2025-12-30_19-40-09](D:\Downloads\env\img\PixPin_2025-12-30_19-40-09.png)
+### 1. 克隆项目
 
-#### 1.1.关于包名与activity的补充
+```bash
+git clone https://github.com/RingOnTheWay/XKAutoTester.git
+```
 
-- 获取包名和activity名称（命令行）（需启动过app）
+### 2. 安装 Python 依赖
 
-  - ```shell
-    adb shell dumpsys activity activities | findstr "xiekang" | findstr "ActivityRecord"
-    ```
+使用 [uv](https://github.com/astral-sh/uv) 进行依赖管理：
 
-  - ![PixPin_2025-12-31_15-14-22](D:\Downloads\env\img\PixPin_2025-12-31_15-14-22.png)
+```bash
+# 安装 uv（如果尚未安装）
+pip install uv
 
-  - 一般activity名称取第一个，或带splash名称的
+# 同步依赖
+uv sync
+```
 
-#### 1.1.关于设备名称的补充
+### 3. 安装 Electron 依赖
 
-- 有线连接模式（命令行）
+```bash
+cd electron
+npm install
+```
 
-  - 需用数据线连接电脑
+### 4. 安装 Allure 和 Scrcpy
 
-  - ```shell
-    adb shell getprop ro.product.model
-    ```
-
-    
-
-  - ![PixPin_2025-12-30_19-59-07](D:\Downloads\env\img\PixPin_2025-12-30_19-59-07.png)
-
-- 无线连接模式（命令行）
-
-  - 需用数据线连接电脑，开放端口后即可断开USB连接
-
-  - ```shell
-    adb tcpip 5555
-    ```
-
-  - ![PixPin_2025-12-31_15-20-00](D:\Downloads\env\img\PixPin_2025-12-31_15-20-00.png)
-
-  - 设备名称填入IP即可（无需填入端口）
-
-  - 设备重启需要重新开放端口
-
-- 无线连接模式（无线调试）
-
-  - 通过开发者选项的无线调试功能进行连接（需填入端口）
-  - ![PixPin_2025-12-31_15-21-59](D:\Downloads\env\img\PixPin_2025-12-31_15-21-59.png)
-  - 无线调试端口可能会自己变化
-
-
-## 软件使用流程
-
-#### 1.点击“选择测试目录”按钮
-
-### ![PixPin_2025-12-30_17-25-34](D:\Downloads\env\img\PixPin_2025-12-30_17-25-34.png)
-
-#### 2.选择用例文件所在的文件夹![PixPin_2025-12-30_17-28-09](D:\Downloads\env\img\PixPin_2025-12-30_17-28-09.png)
-
-#### 3.点击“新建计划”
-
-![PixPin_2025-12-30_17-31-44](D:\Downloads\env\img\PixPin_2025-12-30_17-31-44.png)
-
-#### 4.输入计划信息
-
-![PixPin_2025-12-30_19-42-38](D:\Downloads\env\img\PixPin_2025-12-30_19-42-38.png)
-
-#### 5.执行测试（首次连接设备需要在手机上授权）
-
-![PixPin_2025-12-30_19-43-23](D:\Downloads\env\img\PixPin_2025-12-30_19-43-23.png)
-
-#### 6.查看报告
-
-![PixPin_2025-12-30_20-18-09](D:\Downloads\env\img\PixPin_2025-12-30_20-18-09.png)
-
-#### 7.停止报告服务器
-
-![PixPin_2025-12-30_20-21-07](.\img\PixPin_2025-12-30_20-21-07.png)
+下载并放置到项目的 `env/allure` 目录下。
+
+## 快速开始
+
+### 开发模式运行
+
+```bash
+# 在项目根目录
+cd electron
+npm start
+```
+
+### 构建生产版本
+
+```bash
+cd electron
+npm run build-win
+```
+
+构建完成后，安装包将生成在 `electron/dist` 目录。
+
+## 使用指南
+
+### 测试执行
+
+1. **选择测试目录（如无测试计划）** - 点击「选择测试目录」，选择测试目录
+2. **创建测试计划** - 点击「新建计划」，选择测试目录下的测试用例文件
+3. **配置测试类型** - 选择要执行的测试类型（冒烟测试、单元测试等）
+4. **运行测试** - 点击「运行测试」开始执行
+5. **查看报告** - 测试完成后点击「查看报告」查看 Allure 报告
+
+### 设备连接
+
+1. **USB 连接** - 通过 USB 连接设备，在设备管理中查看
+2. **无线连接** - 输入设备 IP 地址进行无线连接
+3. **屏幕控制** - 选择设备后可启动 Scrcpy 进行屏幕控制
+
+### 定时计划
+
+1. 创建定时计划，选择要执行的测试计划
+2. 设置执行时间
+3. 系统将在指定时间自动执行测试（需禁止系统休眠）
+
+## 项目结构
+
+```
+XKAutoTester/
+├── electron/                 # Electron 前端代码
+│   ├── src/
+│   │   ├── main/            # 主进程代码
+│   │   │   ├── handlers/    # IPC 处理器
+│   │   │   └── services/    # 后端服务
+│   │   ├── preload/         # 预加载脚本
+│   │   └── shared/          # 共享常量
+│   ├── renderer/            # 渲染进程（UI）
+│   ├── assets/              # 静态资源
+│   └── locales/             # 国际化文件
+├── src/main/                 # Python 后端代码
+│   ├── core/                # 核心模块
+│   │   ├── adb_manager.py   # ADB 设备管理
+│   │   ├── appium_server.py # Appium 服务器管理
+│   │   └── pytest_runner.py # Pytest 运行器
+│   ├── recognition/         # 识别模块
+│   └── utils/               # 工具模块
+├── config/                   # 配置文件
+│   ├── config.json          # 应用配置
+└── └── pytest.ini           # Pytest 配置
+```
+
+## 配置说明
+
+主配置文件位于 `config/config.json`：
+
+```json
+{
+  "LOG_CONFIG": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  "SCRCPY_PARAMS": {
+    "max_size": "1920",
+    "video_bit_rate": "8",
+    "max_fps": "60"
+  },
+  "APP_SETTINGS": {
+    "language": "zh-CN",
+    "theme_color": "#4CAF50"
+  }
+}
+```
+
+## 常见问题
+
+<details>
+<summary><b>Appium 服务器启动失败</b></summary>
+
+确保已正确安装 Node.js 和 Appium：
+
+```bash
+npm install -g appium
+appium driver install uiautomator2
+```
+
+<details>
+<summary><b>ADB 设备连接失败</b></summary>
+
+1. 确保已安装 Android SDK 并配置环境变量
+2. 检查设备是否开启 USB 调试模式
+3. 无线连接需确保设备与电脑在同一网络
+
+<details>
+<summary><b>Allure 报告生成失败</b></summary>
+
+确保已安装 Java 运行环境（JRE 8+），Allure 依赖 Java 运行。
+
+## 资源
+
+- [Pytest 官方文档](https://docs.pytest.org/)
+- [Allure 报告文档](https://docs.qameta.io/allure/)
+- [Appium 官方文档](https://appium.io/)
+- [Electron 官方文档](https://www.electronjs.org/docs)
+- [Scrcpy 项目](https://github.com/Genymobile/scrcpy)
+
+## 许可证
+
+本项目采用 [MIT](LICENSE) 许可证开源。

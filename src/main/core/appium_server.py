@@ -86,11 +86,6 @@ class AppiumServer:
         Returns:
             Appium可执行文件完整路径
         """
-        # 检查全局npm安装路径
-        npm_global_path = r'D:\Software\nodejs\node_global\appium.cmd'
-        if os.path.exists(npm_global_path):
-            return npm_global_path
-        
         # 检查PATH环境变量中的appium
         for path in os.environ.get('PATH', '').split(os.pathsep):
             appium_path = os.path.join(path, 'appium.cmd')
