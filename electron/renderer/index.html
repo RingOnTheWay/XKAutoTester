@@ -30,6 +30,14 @@
                         <span class="svg-icon" data-icon="play_circle"></span>
                         <span data-i18n="tabs.testExecution">测试执行</span>
                     </div>
+                    <div class="nav-tab" data-tab="page-package">
+                        <span class="svg-icon" data-icon="widgets"></span>
+                        <span data-i18n="tabs.pagePackage">页面封装</span>
+                    </div>
+                    <div class="nav-tab" data-tab="test-case">
+                        <span class="svg-icon" data-icon="description"></span>
+                        <span data-i18n="tabs.testCase">测试用例</span>
+                    </div>
                     <div class="nav-tab" data-tab="android-connection">
                         <span class="svg-icon" data-icon="devices"></span>
                         <span data-i18n="tabs.androidConnection">安卓连接</span>
@@ -229,6 +237,325 @@
                 </div>
             </div>
 
+            <!-- 页面封装页面 -->
+            <div id="page-package" class="page">
+                <div class="pp-container">
+                    <!-- 顶部Tab切换 -->
+                    <div class="pp-tabs">
+                        <button class="pp-tab active" data-tab="page">
+                            <span class="svg-icon" data-icon="web"></span>
+                            <span data-i18n="pagePackage.pagePackageTab">页面封装</span>
+                        </button>
+                    </div>
+
+                    <!-- 页面封装内容 -->
+                    <div class="pp-content pp-content--page active" id="pp-page-content">
+                    <!-- 应用选择卡片 -->
+                    <div class="pp-card pp-card--app" id="pp-app-card">
+                        <div class="pp-card-header">
+                            <div class="pp-card-title">
+                                <span class="svg-icon" data-icon="apps"></span>
+                                <span data-i18n="pagePackage.appSelection">应用选择</span>
+                            </div>
+                            <div class="pp-card-badge" id="pp-app-badge" style="display: none;">
+                                <span id="pp-app-count">0</span>
+                            </div>
+                        </div>
+                        <div class="pp-card-body">
+                            <div class="cascade-select-wrapper" id="pp-app-select-wrapper">
+                                <div class="cascade-select">
+                                    <div class="cascade-select__header">
+                                        <input type="text" class="cascade-select__search" placeholder="搜索..." data-i18n-placeholder="pagePackage.searchPlaceholder">
+                                        <div class="cascade-select__actions">
+                                            <button class="cascade-select__btn add" title="新增">
+                                                <span class="svg-icon" data-icon="add"></span>
+                                            </button>
+                                            <button class="cascade-select__btn edit" title="编辑" disabled>
+                                                <span class="svg-icon" data-icon="edit"></span>
+                                            </button>
+                                            <button class="cascade-select__btn delete" title="删除" disabled>
+                                                <span class="svg-icon" data-icon="delete"></span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="cascade-select__selected">
+                                        <span class="cascade-select__text placeholder" data-i18n="pagePackage.selectApp">请选择应用</span>
+                                    </div>
+                                    <div class="cascade-select__dropdown">
+                                        <div class="cascade-select__options"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 页面选择卡片 -->
+                    <div class="pp-card pp-card--page collapsed" id="pp-page-card">
+                        <div class="pp-card-header">
+                            <div class="pp-card-title">
+                                <span class="svg-icon" data-icon="web"></span>
+                                <span data-i18n="pagePackage.pageSelection">页面选择</span>
+                            </div>
+                            <div class="pp-card-badge" id="pp-page-badge" style="display: none;">
+                                <span id="pp-page-count">0</span>
+                            </div>
+                        </div>
+                        <div class="pp-card-body">
+                            <div class="cascade-select-wrapper" id="pp-page-select-wrapper">
+                                <div class="cascade-select disabled">
+                                    <div class="cascade-select__header">
+                                        <input type="text" class="cascade-select__search" placeholder="搜索..." data-i18n-placeholder="pagePackage.searchPlaceholder">
+                                        <div class="cascade-select__actions">
+                                            <button class="cascade-select__btn add" title="新增">
+                                                <span class="svg-icon" data-icon="add"></span>
+                                            </button>
+                                            <button class="cascade-select__btn edit" title="编辑" disabled>
+                                                <span class="svg-icon" data-icon="edit"></span>
+                                            </button>
+                                            <button class="cascade-select__btn delete" title="删除" disabled>
+                                                <span class="svg-icon" data-icon="delete"></span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="cascade-select__selected">
+                                        <span class="cascade-select__text placeholder" data-i18n="pagePackage.selectPage">请选择页面</span>
+                                    </div>
+                                    <div class="cascade-select__dropdown">
+                                        <div class="cascade-select__options"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 元素选择卡片 -->
+                    <div class="pp-card pp-card--element collapsed" id="pp-element-card">
+                        <div class="pp-card-header">
+                            <div class="pp-card-title">
+                                <span class="svg-icon" data-icon="widgets"></span>
+                                <span data-i18n="pagePackage.elementSelection">元素选择</span>
+                            </div>
+                            <div class="pp-card-badge" id="pp-element-badge" style="display: none;">
+                                <span id="pp-element-count">0</span>
+                            </div>
+                        </div>
+                        <div class="pp-card-body">
+                            <div class="cascade-select-wrapper" id="pp-element-select-wrapper">
+                                <div class="cascade-select disabled">
+                                    <div class="cascade-select__header">
+                                        <input type="text" class="cascade-select__search" placeholder="搜索..." data-i18n-placeholder="pagePackage.searchPlaceholder">
+                                        <div class="cascade-select__actions">
+                                            <button class="cascade-select__btn add" title="新增">
+                                                <span class="svg-icon" data-icon="add"></span>
+                                            </button>
+                                            <button class="cascade-select__btn edit" title="编辑" disabled>
+                                                <span class="svg-icon" data-icon="edit"></span>
+                                            </button>
+                                            <button class="cascade-select__btn delete" title="删除" disabled>
+                                                <span class="svg-icon" data-icon="delete"></span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="cascade-select__selected">
+                                        <span class="cascade-select__text placeholder" data-i18n="pagePackage.selectElement">请选择元素</span>
+                                    </div>
+                                    <div class="cascade-select__dropdown">
+                                        <div class="cascade-select__options"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+
+
+                </div>
+            </div>
+
+            <!-- 测试用例页面 -->
+            <div id="test-case" class="page">
+                <div class="content-splitter">
+                    <!-- 左侧面板 -->
+                    <div class="left-panel">
+                        <!-- 测试目录选择 -->
+                        <div class="material-card elevation-1 glass-card">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="folder_open"></span>
+                                <h3 data-i18n="testCase.testDirectory">测试目录</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="directory-selector">
+                                    <button id="tc-select-directory-btn" class="material-button primary">
+                                        <span class="svg-icon" data-icon="folder_open"></span>
+                                        <span data-i18n="testCase.selectTestDirectory">选择测试目录</span>
+                                    </button>
+                                    <div id="tc-selected-directory" class="selected-path" data-i18n="testCase.noDirectorySelected">未选择目录</div>
+                                </div>
+                                <div id="tc-test-files-list" class="test-files-list">
+                                    <!-- 测试文件列表将在这里动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧面板 -->
+                    <div class="right-panel">
+                        <!-- 未选中状态 - 显示"+"按钮 -->
+                        <div id="tc-editor-empty" class="material-card elevation-2 glass-card tc-editor-empty">
+                            <div class="tc-add-button disabled" id="tc-add-new-btn" disabled>
+                                <span class="svg-icon" data-icon="add"></span>
+                            </div>
+                            <p data-i18n="testCase.clickToAdd">点击添加测试用例</p>
+                        </div>
+                        
+                        <!-- 编辑状态 - 显示表单 -->
+                        <div id="tc-editor-form" class="material-card elevation-2 glass-card tc-editor-form hidden">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="edit"></span>
+                                <h3 data-i18n="testCase.editCase">编辑测试用例</h3>
+                            </div>
+                            <div class="card-content tc-editor-content">
+                                <form id="tc-case-form">
+                                    <!-- 基本信息 -->
+                                    <div class="tc-section">
+                                        <div class="tc-section-title">
+                                            <span class="svg-icon" data-icon="info"></span>
+                                            <span data-i18n="testCase.basicInfo">基本信息</span>
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label for="tc-file-name" data-i18n="testCase.fileName">文件名称</label>
+                                                <input type="text" id="tc-file-name" class="glass-input" pattern="[a-zA-Z0-9_]+" data-i18n-placeholder="placeholders.fileName" placeholder="只能输入英文、数字和下划线">
+                                                <div id="tc-file-name-error" class="input-error error-hidden">
+                                                    <span class="svg-icon" data-icon="error"></span>
+                                                    <span data-i18n="testCase.enterFileName">请输入文件名称</span>
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="tc-case-name" data-i18n="testCase.caseName">用例名称</label>
+                                                <input type="text" id="tc-case-name" class="glass-input">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tc-description" data-i18n="testCase.description">用例描述</label>
+                                            <textarea id="tc-description" class="glass-input" rows="2"></textarea>
+                                        </div>
+                                    </div>
+
+                                    <!-- 应用平台 -->
+                                    <div class="tc-section">
+                                        <div class="tc-section-title">
+                                            <span class="svg-icon" data-icon="devices"></span>
+                                            <span data-i18n="testCase.appPlatform">应用平台</span>
+                                        </div>
+                                        <div class="tc-app-platform-grid">
+                                            <!-- 平台 -->
+                                            <div class="form-group">
+                                                <label data-i18n="testCase.platform">平台</label>
+                                                <div class="custom-select-wrapper" id="tc-platform-select-wrapper" data-options='[{"value":"android","label":"testCase.platforms.android","default":true}]'></div>
+                                            </div>
+                                            <!-- 应用 -->
+                                            <div class="form-group">
+                                                <label data-i18n="testCase.app">应用</label>
+                                                <div id="tc-app-select-wrapper" class="custom-select-wrapper">
+                                                    <div class="custom-select" id="tc-app-select">
+                                                        <div class="custom-select__selected" id="tc-app-selected">
+                                                            <span class="custom-select__text" data-i18n="testCase.selectApp">请选择目标应用</span>
+                                                        </div>
+                                                        <div class="custom-select__options" id="tc-app-options">
+                                                            <!-- 动态生成选项 -->
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 测试步骤 -->
+                                    <div id="tc-steps-section" class="tc-section disabled">
+                                        <div class="tc-section-title">
+                                            <span class="svg-icon" data-icon="list_alt"></span>
+                                            <span data-i18n="testCase.testSteps">测试步骤</span>
+                                            <button type="button" id="tc-add-step-btn" class="material-button primary small" style="margin-left: auto;" disabled>
+                                                <span class="svg-icon" data-icon="add"></span>
+                                                <span data-i18n="testCase.addStep">添加步骤</span>
+                                            </button>
+                                        </div>
+                                        <div id="tc-steps-disabled-hint" class="tc-steps-disabled-hint">
+                                            <span class="svg-icon" data-icon="info"></span>
+                                            <span data-i18n="testCase.selectAppToEnableSteps">请先选择目标应用以启用测试步骤</span>
+                                        </div>
+                                        <div id="tc-steps-container" class="tc-steps-container hidden">
+                                            <!-- 步骤为空时显示添加提示 -->
+                                            <div id="tc-steps-empty" class="tc-steps-empty">
+                                                <div class="tc-steps-empty-icon">
+                                                    <span class="svg-icon" data-icon="add_circle_outline"></span>
+                                                </div>
+                                                <p data-i18n="testCase.noSteps">暂无测试步骤</p>
+                                                <p class="tc-steps-empty-hint" data-i18n="testCase.clickAddStep">点击上方"添加步骤"按钮开始配置</p>
+                                            </div>
+                                            <!-- 步骤列表 -->
+                                            <div id="tc-steps-list" class="tc-steps-list hidden"></div>
+                                            <!-- 底部添加步骤按钮 -->
+                                            <button type="button" id="tc-add-step-bottom-btn" class="tc-add-step-bottom-btn hidden">
+                                                <span class="svg-icon" data-icon="add"></span>
+                                                <span data-i18n="testCase.addStep">添加步骤</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Allure 配置 -->
+                                    <div class="tc-section tc-section-collapsible collapsed">
+                                        <div class="tc-section-title tc-collapsible-header">
+                                            <span class="svg-icon" data-icon="assessment"></span>
+                                            <span data-i18n="testCase.allureConfig">Allure配置</span>
+                                            <span class="svg-icon tc-collapse-icon" data-icon="expand_more"></span>
+                                        </div>
+                                        <div class="tc-collapsible-content">
+                                            <div class="form-row">
+                                                <div class="form-group">
+                                                    <label for="tc-allure-epic">Epic</label>
+                                                    <input type="text" id="tc-allure-epic" class="glass-input" data-i18n-placeholder="placeholders.epic" placeholder="被测应用">
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="tc-allure-feature">Feature</label>
+                                                    <input type="text" id="tc-allure-feature" class="glass-input" data-i18n-placeholder="placeholders.feature" placeholder="被测模块">
+                                                </div>
+                                            </div>
+                                            <div class="form-row">
+                                                <div class="form-group">
+                                                    <label for="tc-allure-story">Story</label>
+                                                    <input type="text" id="tc-allure-story" class="glass-input" data-i18n-placeholder="placeholders.story" placeholder="被测功能">
+                                                </div>
+                                                <div class="form-group">
+                                                    <label>Markers</label>
+                                                    <div class="custom-select-wrapper">
+                                                        <div class="custom-select" id="tc-markers-select">
+                                                            <div class="custom-select__selected" id="tc-markers-selected">
+                                                                <span class="custom-select__text" data-i18n="placeholders.selectMarkers">请选择标记</span>
+                                                            </div>
+                                                            <div class="custom-select__options" id="tc-markers-options">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" id="tc-delete-btn" class="material-button danger hidden" data-i18n="testCase.deleteCase">删除</button>
+                                <div class="form-actions-right">
+                                    <button type="button" id="tc-cancel-btn" class="material-button outlined" data-i18n="testCase.cancelEdit">取消编辑</button>
+                                    <button type="button" id="tc-save-btn" class="material-button primary" data-i18n="testCase.confirm">保存</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 安卓连接页面 -->
             <div id="android-connection" class="page">
                 <div class="content-splitter">
@@ -348,6 +675,12 @@
                                             <span class="btn-text" data-i18n="fileManager.download">下载</span>
                                         </div>
                                     </button>
+                                    <button id="install-apk-btn" class="file-manager-btn" title="安装APK">
+                                        <div class="btn-content">
+                                            <span class="svg-icon" data-icon="android"></span>
+                                            <span class="btn-text" data-i18n="fileManager.installApk">安装APK</span>
+                                        </div>
+                                    </button>
                                 </div>
                             </div>
                             <div class="card-content file-manager-content">
@@ -460,6 +793,26 @@
                                         </button>
                                         <button id="clear-default-directory" class="material-button error small">
                                             <span class="svg-icon" data-icon="clear"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="folder_open"></span>
+                                    <span data-i18n="settings.configStoragePath">配置存放位置</span>
+                                </div>
+                                <div class="setting-control">
+                                    <div class="directory-input-group">
+                                        <div class="directory-input-wrapper">
+                                            <input type="text" id="config-storage-path" class="directory-input" placeholder="请选择配置存放位置" data-i18n-placeholder="placeholders.configStoragePath" readonly>
+                                            <div class="directory-tooltip" id="config-storage-tooltip"></div>
+                                        </div>
+                                        <button id="browse-config-storage" class="material-button primary small">
+                                            <span class="svg-icon" data-icon="folder_open"></span>
+                                        </button>
+                                        <button id="reset-config-storage" class="material-button warning small">
+                                            <span class="svg-icon" data-icon="restore"></span>
                                         </button>
                                     </div>
                                 </div>
@@ -595,6 +948,70 @@
                                     </button>
                                 </div>
                             </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="delete_sweep"></span>
+                                    <span data-i18n="settings.clearAllLogs">清除所有日志数据</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="clear-all-logs-btn" class="material-button error small">
+                                        <span data-i18n="settings.clear">清空</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 运行 -->
+                    <div class="material-card elevation-2" data-card-type="run">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="prevent_sleep"></span>
+                            <h3 data-i18n="settings.run">运行</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="prevent_sleep"></span>
+                                    <span data-i18n="settings.preventSleep">程序运行时禁用睡眠模式</span>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="switch">
+                                        <input type="checkbox" id="prevent-sleep-toggle">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 更新 -->
+                    <div class="material-card elevation-2" data-card-type="update">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="system_update"></span>
+                            <h3 data-i18n="settings.update">更新</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="refresh"></span>
+                                    <span data-i18n="settings.autoCheckUpdate">启动时自动检查更新</span>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="switch">
+                                        <input type="checkbox" id="auto-check-update-toggle">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="download"></span>
+                                    <span data-i18n="settings.checkUpdateNow">检查版本更新</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="check-update-btn" class="material-button outlined" data-i18n="settings.checkNow">立即检查</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -609,12 +1026,12 @@
                                 <div class="version-item">
                                     <span class="svg-icon" data-icon="code"></span>
                                     <span class="version-label" data-i18n="labels.version">版本号</span>
-                                    <span id="app-version-info" class="version-value">v0.1.2-dev.5</span>
+                                    <span id="app-version-info" class="version-value">v0.1.3-dev.1</span>
                                 </div>
                                 <div class="version-item">
                                     <span class="svg-icon" data-icon="build"></span>
                                     <span class="version-label" data-i18n="labels.buildDate">构建日期</span>
-                                    <span class="version-value">2026-02-02</span>
+                                    <span class="version-value">2026-04-15</span>
                                 </div>
                                 <div class="version-item">
                                     <span class="svg-icon" data-icon="copyright"></span>
@@ -820,8 +1237,239 @@
             </div>
         </div>
 
+        <!-- 编辑设备连接标识弹窗 -->
+        <div id="edit-device-id-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container" style="max-width: 450px;">
+                <div class="modal-header">
+                    <h3 id="edit-device-id-modal-title" data-i18n="testExecution.deviceSelection.editDeviceId">编辑设备连接标识</h3>
+                    <button id="edit-device-id-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <div class="form-group">
+                        <label for="edit-device-id-input" data-i18n="testExecution.deviceSelection.deviceId">安卓ADB连接标识</label>
+                        <input type="text" id="edit-device-id-input" class="glass-input" data-i18n-placeholder="testExecution.deviceSelection.deviceIdPlaceholder" placeholder="输入设备IP或ID">
+                    </div>
+                    <div class="form-group" id="android-version-group">
+                        <label for="edit-android-version-input" data-i18n="testExecution.deviceSelection.androidVersion">安卓版本</label>
+                        <input type="text" id="edit-android-version-input" class="glass-input" data-i18n-placeholder="testExecution.deviceSelection.androidVersionPlaceholder" placeholder="输入安卓版本，如14">
+                    </div>
+                    <div class="form-group" id="ble-mock-port-group" style="display: none;">
+                        <label for="edit-ble-port-input" data-i18n="testExecution.deviceSelection.bleMockPort">蓝牙Mock端口</label>
+                        <input type="text" id="edit-ble-port-input" class="glass-input" pattern="^COM\d+$" data-i18n-placeholder="testExecution.deviceSelection.bleMockPortPlaceholder" placeholder="输入蓝牙Mock设备所在的端口号(如COM7)">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div style="padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" id="edit-device-id-manage-btn" class="material-button outlined">
+                                <span class="svg-icon" data-icon="devices"></span>
+                                <span data-i18n="testExecution.deviceSelection.deviceManagement">设备管理</span>
+                            </button>
+                            <button type="button" id="edit-port-manage-btn" class="material-button outlined" style="display: none;">
+                                <span class="svg-icon" data-icon="cable"></span>
+                                <span data-i18n="testExecution.deviceSelection.portManagement">端口管理</span>
+                            </button>
+                        </div>
+                        <div style="display: flex; gap: 12px;">
+                            <button type="button" id="edit-device-id-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                            <button type="button" id="edit-device-id-confirm-btn" class="material-button primary" data-i18n="modal.confirm">确定</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 端口管理模态框 -->
+        <div id="port-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container" style="max-width: 400px;">
+                <div class="modal-header">
+                    <h3 id="port-modal-title" data-i18n="testExecution.deviceSelection.portManagement">端口管理</h3>
+                    <button id="port-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <div id="port-modal-content">
+                        <div id="port-scanning" class="device-scanning" style="display: flex; align-items: center; gap: 8px; padding: 16px;">
+                            <span class="svg-icon" data-icon="sync"></span>
+                            <span style="vertical-align: middle;" data-i18n="testExecution.deviceSelection.scanningPorts">正在扫描端口...</span>
+                        </div>
+                        <div id="port-list" class="device-list hidden">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div style="padding: 16px; display: flex; justify-content: flex-end; align-items: center;">
+                        <div style="display: flex; gap: 16px;">
+                            <button id="port-modal-confirm-btn" class="material-button primary" disabled data-i18n="modal.confirmSelection">确认选择</button>
+                            <button id="port-modal-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 组件容器 - 确认弹窗 -->
         <div id="confirm-modal-container"></div>
+
+        <!-- 更新弹窗 -->
+        <div id="update-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container update-modal">
+                <div class="modal-header">
+                    <h3 data-i18n="settings.updateAvailable">版本更新</h3>
+                    <button id="update-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <div class="update-modal-body">
+                        <div class="update-icon">
+                            <span class="svg-icon" data-icon="download"></span>
+                        </div>
+                        <div class="update-title" data-i18n="settings.updateAvailableTitle">版本更新可用</div>
+                        <div class="update-version">
+                            <span id="update-current-version" class="update-old-version"></span>
+                            <span class="update-arrow">→</span>
+                            <span id="update-new-version" class="update-new-version"></span>
+                        </div>
+                        <div id="update-changelog" class="update-changelog"></div>
+                        <div id="update-progress-container" class="update-progress-container hidden">
+                            <div class="update-progress-bar">
+                                <div id="update-progress-fill" class="update-progress-fill"></div>
+                            </div>
+                            <div class="update-progress-info">
+                                <span id="update-progress-text" class="update-progress-text">0%</span>
+                                <span id="update-progress-speed" class="update-progress-speed"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="update-cancel-btn" class="material-button outlined" data-i18n="settings.cancelUpdate">取消</button>
+                    <button id="update-download-btn" class="material-button primary" data-i18n="settings.downloadUpdate">下载更新</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页面封装 - 应用弹窗 -->
+        <div id="pp-app-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 id="pp-app-modal-title" data-i18n="pagePackage.newApp">新增应用</h3>
+                    <button class="icon-button pp-modal-close">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <form id="pp-app-form" novalidate>
+                        <div class="form-group">
+                            <label for="pp-app-input" data-i18n="pagePackage.appName">应用名称</label>
+                            <input type="text" id="pp-app-input" class="glass-input">
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="pagePackage.apkDropZone">APK识别区域</label>
+                            <div class="apk-drop-zone" id="apk-drop-zone">
+                                <div class="apk-drop-zone-content">
+                                    <div class="apk-drop-icon">
+                                        <span class="svg-icon" data-icon="apk_file"></span>
+                                    </div>
+                                    <div class="apk-drop-text" data-i18n="pagePackage.apkDropHint">拖放APK文件到此处</div>
+                                    <div class="apk-drop-subtext" data-i18n="pagePackage.apkDropSubtext">自动识别包名和Activity</div>
+                                </div>
+                                <div class="apk-drop-zone-loading hidden" id="apk-drop-loading">
+                                    <div class="apk-loading-spinner"></div>
+                                    <span data-i18n="pagePackage.apkParsing">正在解析...</span>
+                                </div>
+                                <div class="apk-drop-zone-success hidden" id="apk-drop-success">
+                                    <span class="svg-icon" data-icon="check_circle"></span>
+                                    <span data-i18n="pagePackage.apkParseSuccess">解析成功</span>
+                                </div>
+                                <div class="apk-drop-zone-error hidden" id="apk-drop-error">
+                                    <span class="svg-icon" data-icon="error"></span>
+                                    <span id="apk-error-message"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="pagePackage.platform">平台</label>
+                            <div class="custom-select-wrapper" id="pp-platform-wrapper" data-options='[{"value":"android","label":"pagePackage.platforms.android","default":true}]'></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pp-package-input" data-i18n="pagePackage.packageName">包名</label>
+                            <input type="text" id="pp-package-input" class="glass-input" placeholder="com.example.app">
+                        </div>
+                        <div class="form-group">
+                            <label for="pp-activity-input" data-i18n="pagePackage.activityName">Activity名称</label>
+                            <input type="text" id="pp-activity-input" class="glass-input" placeholder="com.example.app.MainActivity">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="material-button outlined pp-modal-cancel" data-i18n="modal.cancel">取消</button>
+                    <button type="button" class="material-button primary" id="pp-app-save-btn" data-i18n="modal.save">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页面封装 - 页面弹窗 -->
+        <div id="pp-page-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 id="pp-page-modal-title" data-i18n="pagePackage.newPage">新增页面</h3>
+                    <button class="icon-button pp-modal-close">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <form id="pp-page-form" novalidate>
+                        <div class="form-group">
+                            <label for="pp-page-input" data-i18n="pagePackage.pageName">页面名称</label>
+                            <input type="text" id="pp-page-input" class="glass-input">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="material-button outlined pp-modal-cancel" data-i18n="modal.cancel">取消</button>
+                    <button type="button" class="material-button primary" id="pp-page-save-btn" data-i18n="modal.save">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页面封装 - 元素弹窗 -->
+        <div id="pp-element-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 id="pp-element-modal-title" data-i18n="pagePackage.newElement">新增元素</h3>
+                    <button class="icon-button pp-modal-close">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <form id="pp-element-form" novalidate>
+                        <div class="form-group">
+                            <label for="pp-element-name-input" data-i18n="pagePackage.elementName">元素名称</label>
+                            <input type="text" id="pp-element-name-input" class="glass-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="pp-element-locator-select" data-i18n="pagePackage.locator">定位器</label>
+                            <div class="custom-select-wrapper" id="pp-element-locator-wrapper" data-options='[{"value":"id","label":"pagePackage.locators.id","default":true},{"value":"xpath","label":"pagePackage.locators.xpath"},{"value":"css","label":"pagePackage.locators.css"},{"value":"accessibility_id","label":"pagePackage.locators.accessibility_id"},{"value":"class_name","label":"pagePackage.locators.class_name"}]'></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pp-element-value-input" data-i18n="pagePackage.locatorValue">定位值</label>
+                            <input type="text" id="pp-element-value-input" class="glass-input">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="material-button outlined pp-modal-cancel" data-i18n="modal.cancel">取消</button>
+                    <button type="button" class="material-button primary" id="pp-element-save-btn" data-i18n="modal.save">保存</button>
+                </div>
+            </div>
+        </div>
+
+
 
         <!-- 查看报告模态框 -->
         <div id="report-modal-overlay" class="modal-overlay hidden">
@@ -964,6 +1612,8 @@
     </div>
     
     <script src="components/toast.js"></script>
+    <script src="components/progress-indicator.js"></script>
+    <script src="../node_modules/lucide/dist/umd/lucide.min.js"></script>
     <script src="icons.js"></script>
     <script src="script.js"></script>
 </body>

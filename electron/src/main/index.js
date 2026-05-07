@@ -1,10 +1,5 @@
 const { app } = require('electron');
 
-// if (process.platform === 'win32') {
-//   app.disableHardwareAcceleration();
-//   app.commandLine.appendSwitch('enable-transparent-visuals');
-// }
-
 const ElectronApp = require('./ElectronApp');
 const i18nService = require('./services/I18nService');
 const { SchedulerService } = require('./services/SchedulerService');
@@ -16,6 +11,13 @@ const AllureService = require('./services/AllureService');
 const ADBService = require('./services/ADBService');
 const NotificationService = require('./services/NotificationService');
 const ScrcpyService = require('./services/ScrcpyService');
+const PagePackageService = require('./services/PagePackageService');
+const BleDeviceDiscoveryService = require('./services/BleDeviceDiscoveryService');
+const TestCaseService = require('./services/TestCaseService');
+const ApkParserService = require('./services/ApkParserService');
+const VersionService = require('./services/VersionService');
+const UserDataService = require('./services/UserDataService');
+const UpdateService = require('./services/UpdateService');
 const { registerAllHandlers } = require('./handlers');
 
 const electronApp = new ElectronApp();
@@ -23,21 +25,37 @@ const electronApp = new ElectronApp();
 async function initializeServices() {
   const isPackaged = electronApp.isPackaged;
   const projectRoot = electronApp.projectRoot;
-  
-  await i18nService.init(projectRoot, isPackaged);
-  
-  const scheduledPlanService = new ScheduledPlanService(projectRoot);
-  const testPlanService = new TestPlanService(projectRoot);
-  const pythonTestService = new PythonTestService(projectRoot, i18nService);
-  const environmentService = new EnvironmentService(i18nService);
-  const allureService = new AllureService(projectRoot, i18nService);
+
+  const userDataService = new UserDataService(projectRoot);
+
+  const userConfigPath = userDataService.getUserConfigPath();
+  const userDataPath = userDataService.getUserDataPath();
+
+  electronApp.userConfigPath = userConfigPath;
+  electronApp.userDataPath = userDataPath;
+
+  await i18nService.init(projectRoot, isPackaged, userConfigPath);
+
+  const scheduledPlanService = new ScheduledPlanService(userConfigPath);
+  const testPlanService = new TestPlanService(userConfigPath, projectRoot);
+  const pythonTestService = new PythonTestService(projectRoot, i18nService, userDataPath);
+  const environmentService = new EnvironmentService(i18nService, projectRoot);
+  await environmentService.configurePythonEnvironment();
+  const allureService = new AllureService(projectRoot, i18nService, userDataPath);
   const adbService = new ADBService(projectRoot, i18nService);
   const notificationService = new NotificationService(i18nService);
   const scrcpyService = new ScrcpyService(projectRoot, i18nService);
-  
+  const pagePackageService = new PagePackageService(userConfigPath);
+  const bleDeviceDiscoveryService = new BleDeviceDiscoveryService(projectRoot);
+  const testCaseService = new TestCaseService(userConfigPath, projectRoot);
+  const apkParserService = new ApkParserService(projectRoot);
+  const versionService = new VersionService(projectRoot);
+  const updateService = new UpdateService(versionService, userDataService);
+  await apkParserService.initialize();
+
   const schedulerService = new SchedulerService();
   schedulerService.init(i18nService, scheduledPlanService);
-  
+
   electronApp.setServices({
     i18nService,
     schedulerService,
@@ -49,6 +67,13 @@ async function initializeServices() {
     adbService,
     notificationService,
     scrcpyService,
+    pagePackageService,
+    bleDeviceDiscoveryService,
+    testCaseService,
+    apkParserService,
+    versionService,
+    userDataService,
+    updateService,
     registerHandlers: registerAllHandlers
   });
 }

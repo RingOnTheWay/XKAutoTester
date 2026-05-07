@@ -320,6 +320,13 @@
             text-overflow: ellipsis;
         }
         
+        .check-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        
         .check-status-wrapper {
             position: static;
             flex-shrink: 0;
@@ -352,6 +359,115 @@
         .check-status.error {
             color: var(--error-color);
             background: rgba(244, 67, 54, 0.15);
+        }
+        
+        .install-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            background: rgba(33, 150, 243, 0.2);
+            color: #2196F3;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+        
+        .install-btn:hover {
+            background: rgba(33, 150, 243, 0.3);
+            transform: translateY(-1px);
+        }
+        
+        .install-btn:active {
+            transform: translateY(0);
+        }
+        
+        .install-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+        
+        .install-btn.installing {
+            background: rgba(255, 152, 0, 0.2);
+            color: #FF9800;
+            cursor: default;
+            pointer-events: none;
+        }
+        
+        .install-btn.installing:hover {
+            background: rgba(255, 152, 0, 0.2);
+            transform: none;
+        }
+        
+        .install-btn.checking {
+            background: rgba(33, 150, 243, 0.15);
+            color: #2196F3;
+            cursor: default;
+            pointer-events: none;
+        }
+        
+        .install-btn.checking:hover {
+            background: rgba(33, 150, 243, 0.15);
+            transform: none;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .install-btn .spinning-icon {
+            animation: spin 1s linear infinite;
+        }
+        
+        .info-icon-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        
+        .info-icon {
+            width: 16px;
+            height: 16px;
+            color: var(--warning-color);
+            cursor: help;
+            opacity: 0.8;
+            transition: opacity 0.2s ease;
+        }
+        
+        .info-icon:hover {
+            opacity: 1;
+        }
+        
+        .info-tooltip {
+            position: absolute;
+            right: 0;
+            top: 100%;
+            margin-top: 8px;
+            background: linear-gradient(135deg, rgba(26, 26, 46, 0.95) 0%, rgba(22, 33, 62, 0.95) 100%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            white-space: nowrap;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            z-index: 100;
+            pointer-events: none;
+        }
+        
+        .info-icon-wrapper:hover .info-tooltip {
+            opacity: 1;
+            visibility: visible;
         }
         
         .check-status-tooltip {
@@ -473,7 +589,10 @@
         const SVG_ICONS = {
             success: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z" clip-rule="evenodd"/></svg>`,
             warning: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.2 4.5-2.599 4.5H4.645c-2.4 0-3.753-2.5-2.599-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a1.125 1.125 0 1 0 0-2.25 1.125 1.125 0 0 0 0 2.25Z" clip-rule="evenodd"/></svg>`,
-            error: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-1.72 6.97a.75.75 0 1 0-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 1 0 1.06 1.06L12 13.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L13.06 12l1.72-1.72a.75.75 0 1 0-1.06-1.06L12 10.94l-1.72-1.72Z" clip-rule="evenodd"/></svg>`
+            error: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-1.72 6.97a.75.75 0 1 0-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 1 0 1.06 1.06L12 13.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L13.06 12l1.72-1.72a.75.75 0 1 0-1.06-1.06L12 10.94l-1.72-1.72Z" clip-rule="evenodd"/></svg>`,
+            info: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm8.706-1.442c1.146-.573 2.437.463 2.126 1.706l-.709 2.836.042-.02a.75.75 0 0 1 .67 1.34l-.04.022c-1.147.573-2.438-.463-2.127-1.706l.71-2.836-.042.02a.75.75 0 1 1-.671-1.34l.041-.022ZM12 9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clip-rule="evenodd"/></svg>`,
+            download: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v11.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3a.75.75 0 0 1 .75-.75Zm-9 13.5a.75.75 0 0 1 .75.75v2.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V16.5a.75.75 0 0 1 1.5 0v2.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V16.5a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd"/></svg>`,
+            refresh: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M4.755 10.059a7.5 7.5 0 0 1 12.548-3.364l1.903 1.903h-3.183a.75.75 0 1 0 0 1.5h4.992a.75.75 0 0 0 .75-.75V4.356a.75.75 0 0 0-1.5 0v3.18l-1.9-1.9A9 9 0 0 0 3.306 9.67a.75.75 0 1 0 1.45.388Zm15.048 3.882a.75.75 0 0 0-.926.521 7.5 7.5 0 0 1-12.548 3.364l-1.902-1.903h3.183a.75.75 0 1 0 0-1.5H2.618a.75.75 0 0 0-.75.75v4.992a.75.75 0 0 0 1.5 0v-3.18l1.9 1.9a9 9 0 0 0 15.059-4.018.75.75 0 0 0-.524-.926Z" clip-rule="evenodd"/></svg>`
         };
         
         let i18n;
@@ -520,28 +639,179 @@
             document.getElementById('progressText').textContent = text;
         }
         
-        function addCheckItem(name, status, message) {
+        function addCheckItem(name, status, message, options = {}) {
             const container = document.getElementById('checksContainer');
             const checkItem = document.createElement('div');
             checkItem.className = 'check-item';
+            checkItem.setAttribute('data-check-name', name);
             
             const iconSvg = SVG_ICONS[status] || SVG_ICONS.success;
             
-            checkItem.innerHTML = `
-                <div class="check-icon ${status}">${iconSvg}</div>
-                <div class="check-text">${name}</div>
+            let actionsHtml = `
                 <div class="check-status-wrapper">
                     <div class="check-status ${status}">${message}</div>
                 </div>
             `;
             
+            if (options.canInstall && options.installerPath) {
+                actionsHtml = `
+                    <div class="check-actions">
+                        <div class="info-icon-wrapper">
+                            ${SVG_ICONS.info}
+                            <div class="info-tooltip">${t('splash.checks.driverTooltip', '此驱动用于蓝牙Mock功能')}</div>
+                        </div>
+                        <button class="install-btn" data-installer-path="${options.installerPath.replace(/\\/g, '\\\\')}" onclick="installDriver(this)">
+                            ${SVG_ICONS.download}
+                            <span>${t('splash.checks.install', '安装')}</span>
+                        </button>
+                    </div>
+                `;
+            }
+            
+            checkItem.innerHTML = `
+                <div class="check-icon ${status}">${iconSvg}</div>
+                <div class="check-text">${name}</div>
+                ${actionsHtml}
+            `;
+            
             container.appendChild(checkItem);
             
             const wrapper = checkItem.querySelector('.check-status-wrapper');
+            if (wrapper) {
+                const statusEl = wrapper.querySelector('.check-status');
+                let tooltip = null;
+                
+                wrapper.addEventListener('mouseenter', () => {
+                    if (!tooltip) {
+                        tooltip = document.createElement('div');
+                        tooltip.className = 'check-status-tooltip';
+                        tooltip.textContent = message;
+                        document.body.appendChild(tooltip);
+                    }
+                    const rect = statusEl.getBoundingClientRect();
+                    tooltip.style.left = rect.left + 'px';
+                    tooltip.style.top = (rect.bottom + 8) + 'px';
+                    tooltip.style.maxWidth = Math.min(300, window.innerWidth - rect.left - 20) + 'px';
+                    tooltip.style.opacity = '1';
+                    tooltip.style.visibility = 'visible';
+                });
+                
+                wrapper.addEventListener('mouseleave', () => {
+                    if (tooltip) {
+                        tooltip.style.opacity = '0';
+                        tooltip.style.visibility = 'hidden';
+                    }
+                });
+            }
+        }
+        
+        let driverInstallPollTimer = null;
+
+        async function installDriver(btnElement) {
+            if (btnElement.classList.contains('installing') || btnElement.classList.contains('checking')) {
+                return;
+            }
+
+            const installerPath = btnElement.getAttribute('data-installer-path');
+            if (!installerPath) return;
+
+            try {
+                const result = await window.electronAPI.installDriver(installerPath);
+                if (result.success) {
+                    setInstallBtnInstalling(btnElement);
+                    startInstallerPolling(btnElement, installerPath);
+                }
+            } catch (error) {
+                console.error('启动安装程序失败:', error);
+            }
+        }
+
+        function setInstallBtnInstalling(btnElement) {
+            btnElement.className = 'install-btn installing';
+            btnElement.innerHTML = `${SVG_ICONS.refresh}<span>${t('splash.checks.installing', '安装中...')}</span>`;
+        }
+
+        function setInstallBtnChecking(btnElement) {
+            btnElement.className = 'install-btn checking';
+            btnElement.innerHTML = `<span class="spinning-icon">${SVG_ICONS.refresh}</span><span>${t('splash.checks.rechecking', '检查中...')}</span>`;
+        }
+
+        function setInstallBtnDefault(btnElement, installerPath) {
+            btnElement.className = 'install-btn';
+            btnElement.setAttribute('data-installer-path', installerPath);
+            btnElement.innerHTML = `${SVG_ICONS.download}<span>${t('splash.checks.install', '安装')}</span>`;
+        }
+
+        function startInstallerPolling(btnElement, installerPath) {
+            if (driverInstallPollTimer) {
+                clearInterval(driverInstallPollTimer);
+            }
+
+            driverInstallPollTimer = setInterval(async () => {
+                try {
+                    const result = await window.electronAPI.checkInstallerRunning();
+                    if (result.success && !result.isRunning) {
+                        clearInterval(driverInstallPollTimer);
+                        driverInstallPollTimer = null;
+                        await recheckDriver(btnElement, installerPath);
+                    }
+                } catch (error) {
+                    console.error('检查安装程序状态失败:', error);
+                }
+            }, 2000);
+        }
+
+        async function recheckDriver(btnElement, installerPath) {
+            setInstallBtnChecking(btnElement);
+
+            try {
+                const result = await window.electronAPI.recheckCP210xDriver();
+                if (result.success && result.result) {
+                    const checkResult = result.result;
+                    const checkItem = btnElement.closest('.check-item');
+                    if (checkItem) {
+                        updateCP210xCheckItem(checkItem, checkResult);
+                    }
+                } else {
+                    setInstallBtnDefault(btnElement, installerPath);
+                }
+            } catch (error) {
+                console.error('重新检查驱动失败:', error);
+                setInstallBtnDefault(btnElement, installerPath);
+            }
+        }
+
+        function updateCP210xCheckItem(checkItem, checkResult) {
+            const iconEl = checkItem.querySelector('.check-icon');
+            if (iconEl) {
+                iconEl.className = `check-icon ${checkResult.status}`;
+                iconEl.innerHTML = SVG_ICONS[checkResult.status] || SVG_ICONS.success;
+            }
+
+            const actionsContainer = checkItem.querySelector('.check-actions');
+            if (checkResult.status === 'success') {
+                if (actionsContainer) {
+                    actionsContainer.remove();
+                }
+                const statusWrapper = document.createElement('div');
+                statusWrapper.className = 'check-status-wrapper';
+                statusWrapper.innerHTML = `<div class="check-status ${checkResult.status}">${checkResult.message}</div>`;
+                checkItem.appendChild(statusWrapper);
+                setupStatusTooltip(statusWrapper, checkResult.message);
+            } else if (checkResult.canInstall && checkResult.installerPath) {
+                if (actionsContainer) {
+                    const btnElement = actionsContainer.querySelector('.install-btn');
+                    if (btnElement) {
+                        setInstallBtnDefault(btnElement, checkResult.installerPath);
+                    }
+                }
+            }
+        }
+
+        function setupStatusTooltip(wrapper, message) {
             const statusEl = wrapper.querySelector('.check-status');
-            
             let tooltip = null;
-            
+
             wrapper.addEventListener('mouseenter', () => {
                 if (!tooltip) {
                     tooltip = document.createElement('div');
@@ -556,7 +826,7 @@
                 tooltip.style.opacity = '1';
                 tooltip.style.visibility = 'visible';
             });
-            
+
             wrapper.addEventListener('mouseleave', () => {
                 if (tooltip) {
                     tooltip.style.opacity = '0';
@@ -693,13 +963,13 @@
         async function loadConfigAndApplyTheme() {
             try {
                 const config = await window.electronAPI.getConfig();
-                const isDark = config?.APP_SETTINGS?.dark_mode !== false;
+                const isDark = config?.APP_SETTINGS?.dark_mode === true;
                 applyDarkMode(isDark);
                 const themeColor = config?.APP_SETTINGS?.theme_color || '#4CAF50';
                 applyThemeColor(themeColor);
             } catch (error) {
                 console.error('加载配置失败:', error);
-                applyDarkMode(true);
+                applyDarkMode(false);
                 applyThemeColor('#4CAF50');
             }
         }
@@ -741,12 +1011,70 @@
             return `${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}`;
         }
         
+        function setupTransparentAreaClickThrough() {
+            let isIgnoringMouseEvents = false;
+            
+            const checkAndUpdateMouseEvents = (e) => {
+                const container = document.querySelector('.splash-container');
+                if (!container) return;
+                
+                const rect = container.getBoundingClientRect();
+                const mouseX = e.clientX;
+                const mouseY = e.clientY;
+                
+                const isInTransparentArea = 
+                    mouseX < rect.left || 
+                    mouseX > rect.right || 
+                    mouseY < rect.top || 
+                    mouseY > rect.bottom;
+                
+                if (isInTransparentArea && !isIgnoringMouseEvents) {
+                    isIgnoringMouseEvents = true;
+                    window.electronAPI.setIgnoreMouseEvents(true, { forward: true }, 'splash');
+                } else if (!isInTransparentArea && isIgnoringMouseEvents) {
+                    isIgnoringMouseEvents = false;
+                    window.electronAPI.setIgnoreMouseEvents(false, null, 'splash');
+                }
+            };
+            
+            document.addEventListener('mousemove', checkAndUpdateMouseEvents);
+            
+            document.addEventListener('mouseleave', () => {
+                if (!isIgnoringMouseEvents) {
+                    isIgnoringMouseEvents = true;
+                    window.electronAPI.setIgnoreMouseEvents(true, { forward: true }, 'splash');
+                }
+            });
+            
+            document.addEventListener('mouseenter', (e) => {
+                if (isIgnoringMouseEvents) {
+                    const container = document.querySelector('.splash-container');
+                    if (container) {
+                        const rect = container.getBoundingClientRect();
+                        const isInTransparentArea = 
+                            e.clientX < rect.left || 
+                            e.clientX > rect.right || 
+                            e.clientY < rect.top || 
+                            e.clientY > rect.bottom;
+                        
+                        if (!isInTransparentArea) {
+                            isIgnoringMouseEvents = false;
+                            window.electronAPI.setIgnoreMouseEvents(false, null, 'splash');
+                        }
+                    }
+                }
+            });
+        }
+        
         window.electronAPI.on('check-progress', (data) => {
             updateProgress(data.percentage, data.message);
         });
         
         window.electronAPI.on('check-result', (data) => {
-            addCheckItem(data.name, data.status, data.message);
+            addCheckItem(data.name, data.status, data.message, {
+                canInstall: data.canInstall,
+                installerPath: data.installerPath
+            });
         });
         
         window.electronAPI.on('check-complete', (data) => {
@@ -758,10 +1086,17 @@
         document.addEventListener('DOMContentLoaded', () => {
             initI18n();
             loadConfigAndApplyTheme();
-            // 触发环境检查
+            setupTransparentAreaClickThrough();
             setTimeout(() => {
                 window.electronAPI.send('start-checks');
             }, 500);
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (driverInstallPollTimer) {
+                clearInterval(driverInstallPollTimer);
+                driverInstallPollTimer = null;
+            }
         });
     </script>
 </body>

@@ -1,17 +1,45 @@
 const path = require('path');
-const { spawn, execSync } = require('child_process');
+const { spawn, exec } = require('child_process');
 const asyncFs = require('../utils/asyncFs');
 
 class AllureService {
-  constructor(projectRoot, i18nService) {
+  constructor(projectRoot, i18nService, userDataPath) {
     this.projectRoot = projectRoot;
     this.i18nService = i18nService;
+    this.userDataPath = userDataPath;
     this.allureServerProcess = null;
     this.allureServerPort = null;
     this.allureServerTestPlan = null;
     this.allureServerStartTime = null;
     this.allureOpenProcess = null;
     this.allureOpenOutput = '';
+    this.cachedEnvOptions = null;
+  }
+
+  _getLogsPath(...subdirs) {
+    const baseDir = this.userDataPath || this.projectRoot;
+    return path.join(baseDir, 'logs', ...subdirs);
+  }
+
+  async buildEnvWithJdk() {
+    if (this.cachedEnvOptions) {
+      return this.cachedEnvOptions;
+    }
+
+    const envOptions = { ...process.env };
+    const projectJdkDir = path.join(this.projectRoot, 'env', 'jdk');
+    const jdkBinDir = path.join(projectJdkDir, 'bin');
+
+    if (await asyncFs.exists(jdkBinDir)) {
+      envOptions.JAVA_HOME = projectJdkDir;
+      envOptions.PATH = `${jdkBinDir}${path.delimiter}${process.env.PATH || ''}`;
+      console.log(`[AllureService] Using built-in JDK: ${projectJdkDir}`);
+    } else {
+      console.log('[AllureService] Built-in JDK not found, using system Java');
+    }
+
+    this.cachedEnvOptions = envOptions;
+    return envOptions;
   }
 
   async openAllureReport(testPlanName = null) {
@@ -26,7 +54,7 @@ class AllureService {
       }
 
       if (!testPlanName) {
-        const allureReportBaseDir = path.join(this.projectRoot, 'logs', 'Allure', 'allure-reports');
+        const allureReportBaseDir = this._getLogsPath('Allure', 'allure-reports');
         if (await asyncFs.exists(allureReportBaseDir)) {
           const items = await asyncFs.readdir(allureReportBaseDir);
           const reportDirs = [];
@@ -49,7 +77,7 @@ class AllureService {
         return { success: false, error: '没有可用的Allure报告，请先生成报告' };
       }
 
-      const allureReportDir = path.join(this.projectRoot, 'logs', 'Allure', 'allure-reports', testPlanName);
+      const allureReportDir = this._getLogsPath('Allure', 'allure-reports', testPlanName);
       
       if (!(await asyncFs.exists(allureReportDir))) {
         return { success: false, error: `测试计划 '${testPlanName}' 的Allure报告不存在` };
@@ -70,7 +98,7 @@ class AllureService {
 
   async openAllureReportDirectly(testPlanName) {
     try {
-      const logsDir = path.join(this.projectRoot, 'logs', 'XKAT');
+      const logsDir = this._getLogsPath('XKAT');
       await asyncFs.ensureDir(logsDir);
 
       const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
@@ -88,7 +116,7 @@ class AllureService {
       
       await logMessage(`Starting to open Allure report: ${testPlanName}`);
       
-      const allureReportDir = path.join(this.projectRoot, 'logs', 'Allure', 'allure-reports', testPlanName);
+      const allureReportDir = this._getLogsPath('Allure', 'allure-reports', testPlanName);
       
       if (!(await asyncFs.exists(allureReportDir))) {
         await logMessage(`Report directory does not exist: ${allureReportDir}`);
@@ -119,12 +147,16 @@ class AllureService {
 
       await logMessage(`Opening report with allure open, command: ${command}`);
       
+      const envOptions = await this.buildEnvWithJdk();
+      await logMessage(`Using JAVA_HOME: ${envOptions.JAVA_HOME || 'system default'}`);
+      
       this.allureOpenProcess = spawn(command, {
         cwd: this.projectRoot,
         stdio: 'pipe',
         detached: false,
         shell: true,
-        windowsHide: true
+        windowsHide: true,
+        env: envOptions
       });
 
       this.allureOpenOutput = '';
@@ -191,7 +223,7 @@ class AllureService {
 
   async openAllureReportDirectlyByPath(reportPath) {
     try {
-      const logsDir = path.join(this.projectRoot, 'logs', 'XKAT');
+      const logsDir = this._getLogsPath('XKAT');
       await asyncFs.ensureDir(logsDir);
 
       const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
@@ -222,13 +254,17 @@ class AllureService {
       }
       
       await logMessage(`Command: ${command}`);
+      
+      const envOptions = await this.buildEnvWithJdk();
+      await logMessage(`Using JAVA_HOME: ${envOptions.JAVA_HOME || 'system default'}`);
 
       this.allureOpenProcess = spawn(command, {
         cwd: this.projectRoot,
         stdio: 'pipe',
         detached: false,
         shell: true,
-        windowsHide: true
+        windowsHide: true,
+        env: envOptions
       });
 
       const self = this;
@@ -267,7 +303,7 @@ class AllureService {
 
   async stopAllureServer() {
     try {
-      const logsDir = path.join(this.projectRoot, 'logs', 'XKAT');
+      const logsDir = this._getLogsPath('XKAT');
       await asyncFs.ensureDir(logsDir);
       
       const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
@@ -353,7 +389,7 @@ class AllureService {
 
   async clearAllureReports() {
     try {
-      const allureReportsDir = path.join(this.projectRoot, 'logs', 'Allure', 'allure-reports');
+      const allureReportsDir = this._getLogsPath('Allure', 'allure-reports');
       
       if (!(await asyncFs.exists(allureReportsDir))) {
         return { success: true, message: 'Allure报告目录不存在' };
@@ -384,9 +420,56 @@ class AllureService {
     }
   }
 
+  async clearAllLogs() {
+    try {
+      const logsDir = this._getLogsPath();
+      
+      if (!(await asyncFs.exists(logsDir))) {
+        return { success: true, message: '日志目录不存在' };
+      }
+      
+      const subDirs = await asyncFs.readdir(logsDir);
+      let deletedCount = 0;
+      
+      for (const subDir of subDirs) {
+        const subDirPath = path.join(logsDir, subDir);
+        try {
+          const stat = await asyncFs.stat(subDirPath);
+          if (stat.isDirectory()) {
+            const items = await asyncFs.readdir(subDirPath);
+            for (const item of items) {
+              const itemPath = path.join(subDirPath, item);
+              try {
+                const itemStat = await asyncFs.stat(itemPath);
+                if (itemStat.isDirectory()) {
+                  await asyncFs.rm(itemPath, { recursive: true, force: true });
+                } else {
+                  await asyncFs.unlink(itemPath);
+                }
+                deletedCount++;
+              } catch (e) {
+                console.error(`删除 ${itemPath} 失败:`, e);
+              }
+            }
+          } else {
+            await asyncFs.unlink(subDirPath);
+            deletedCount++;
+          }
+        } catch (e) {
+          console.error(`处理 ${subDirPath} 失败:`, e);
+        }
+      }
+      
+      return { success: true, message: `已清除 ${deletedCount} 个日志文件` };
+    } catch (error) {
+      console.error('清除日志数据失败:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   async checkReportExists(testPlanName) {
     try {
-      const allureReportDir = path.join(this.projectRoot, 'logs', 'Allure', 'allure-reports', testPlanName);
+      const allureReportDir = this._getLogsPath('Allure', 'allure-reports', testPlanName);
       const indexHtmlPath = path.join(allureReportDir, 'index.html');
       
       const dirExists = await asyncFs.exists(allureReportDir);
@@ -427,7 +510,7 @@ class AllureService {
   }
 
   async killProcessByPort(port, processName = 'allure open进程') {
-    const logsDir = path.join(this.projectRoot, 'logs', 'XKAT');
+    const logsDir = this._getLogsPath('XKAT');
     await asyncFs.ensureDir(logsDir);
     
     const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
@@ -445,7 +528,12 @@ class AllureService {
       const findCommand = `netstat -ano | findstr :${port} | findstr LISTENING`;
       await logMessage(`执行命令查找端口进程: ${findCommand}`);
       
-      const result = execSync(findCommand, { encoding: 'utf8' });
+      const result = await new Promise((resolve, reject) => {
+        exec(findCommand, { encoding: 'utf8' }, (err, stdout) => {
+          if (err) reject(err);
+          else resolve(stdout);
+        });
+      });
       await logMessage(`查找结果: ${result}`);
       
       if (result.trim()) {
@@ -462,7 +550,12 @@ class AllureService {
             await logMessage(`执行杀死进程命令: ${killCommand}`);
             
             try {
-              execSync(killCommand);
+              await new Promise((resolve, reject) => {
+                exec(killCommand, (err) => {
+                  if (err) reject(err);
+                  else resolve();
+                });
+              });
               await logMessage(`成功杀死进程PID: ${pid}`);
               killedProcesses.push(`端口${port}的进程(PID:${pid})`);
             } catch (killError) {

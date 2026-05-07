@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -32,15 +32,12 @@ async function initializeI18next() {
       };
     }
     
-    // 获取用户配置的语言 - config 在项目根目录下
+    // 获取用户配置的语言 - 通过 IPC 从主进程获取
     let savedLanguage = 'zh-CN';
     try {
-      const configPath = path.join(__dirname, '..', '..', '..', 'config', 'config.json');
-      if (fs.existsSync(configPath)) {
-        const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        if (configData.APP_SETTINGS && configData.APP_SETTINGS.language) {
-          savedLanguage = configData.APP_SETTINGS.language;
-        }
+      const configData = await ipcRenderer.invoke('get-config');
+      if (configData && configData.APP_SETTINGS && configData.APP_SETTINGS.language) {
+        savedLanguage = configData.APP_SETTINGS.language;
       }
     } catch (error) {
       console.error('读取配置文件失败:', error);
@@ -68,10 +65,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeWindow: () => ipcRenderer.invoke('window-close'),
   isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
   onWindowMaximized: (callback) => ipcRenderer.on('window-maximized', (event, isMaximized) => callback(isMaximized)),
+  setIgnoreMouseEvents: (ignore, options, windowType) => ipcRenderer.invoke('window-set-ignore-mouse-events', ignore, options, windowType),
+  
+  // 窗口拖拽
+  startWindowDrag: (mouseX, mouseY) => ipcRenderer.send('window-drag-start', mouseX, mouseY),
+  moveWindowDrag: (mouseX, mouseY) => ipcRenderer.send('window-drag-move', mouseX, mouseY),
+  endWindowDrag: () => ipcRenderer.send('window-drag-end'),
   
   // 文件操作
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   selectFile: () => ipcRenderer.invoke('select-file'),
+  selectApkFile: () => ipcRenderer.invoke('select-apk-file'),
+  getFilePath: (file) => webUtils.getPathForFile(file),
   
   // 测试操作
   runPythonTests: (testConfig) => ipcRenderer.invoke('run-python-tests', testConfig),
@@ -102,6 +107,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 扫描测试文件
   scanTestFiles: (directoryPath) => ipcRenderer.invoke('scan-test-files', directoryPath),
   
+  // 保存测试用例
+  saveTestCase: (data) => ipcRenderer.invoke('save-test-case', data),
+  
+  // 删除测试用例
+  deleteTestCase: (data) => ipcRenderer.invoke('delete-test-case', data),
+  
   // 提取pytest标记
   extractPytestMarkers: (filePaths) => ipcRenderer.invoke('extract-pytest-markers', filePaths),
   
@@ -121,6 +132,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopAllureServer: () => ipcRenderer.invoke('stop-allure-server'),
   getAllureServerStatus: () => ipcRenderer.invoke('get-allure-server-status'),
   clearAllureReports: () => ipcRenderer.invoke('clear-allure-reports'),
+  clearAllLogs: () => ipcRenderer.invoke('clear-all-logs'),
   
   // 弹窗功能
   showDialog: (options) => ipcRenderer.invoke('show-dialog', options),
@@ -131,12 +143,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 获取连接的设备列表
   getConnectedDevices: () => ipcRenderer.invoke('getConnectedDevices'),
   
+  // 获取串口列表
+  getSerialPorts: () => ipcRenderer.invoke('getSerialPorts'),
+  
   // 配置管理
   getConfig: () => ipcRenderer.invoke('get-config'),
   saveConfig: (config) => ipcRenderer.invoke('save-config', config),
   
+  // 配置存放位置
+  getDataPath: () => ipcRenderer.invoke('get-data-path'),
+  changeDataPath: (newPath) => ipcRenderer.invoke('change-data-path', newPath),
+  resetDataPath: () => ipcRenderer.invoke('reset-data-path'),
+  relaunchApp: () => ipcRenderer.invoke('relaunch-app'),
+  
+  // 版本信息
+  getVersionInfo: () => ipcRenderer.invoke('get-version-info'),
+  
+  // 更新检查
+  checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
+  downloadUpdate: (downloadUrl, fileName) => ipcRenderer.invoke('download-update', downloadUrl, fileName),
+  installUpdate: (filePath) => ipcRenderer.invoke('install-update', filePath),
+  onUpdateDownloadProgress: (callback) => {
+    const listener = (event, progress) => callback(progress);
+    ipcRenderer.on('on-download-progress', listener);
+    return () => ipcRenderer.removeListener('on-download-progress', listener);
+  },
+  
   // 屏幕控制
   startScrcpy: (deviceId, scrcpyParams) => ipcRenderer.invoke('start-scrcpy', deviceId, scrcpyParams),
+  onScrcpyError: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('scrcpy-error', listener);
+    return () => ipcRenderer.removeListener('scrcpy-error', listener);
+  },
   
   // 文件管理器相关
   executeAdbCommand: (cmd, deviceId) => ipcRenderer.invoke('executeAdbCommand', cmd, deviceId),
@@ -144,9 +183,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   uploadFile: (localPath, remotePath, deviceId) => ipcRenderer.invoke('uploadFile', localPath, remotePath, deviceId),
   downloadFile: (remotePath, localPath, deviceId) => ipcRenderer.invoke('downloadFile', remotePath, localPath, deviceId),
   onDownloadProgress: (callback) => ipcRenderer.on('download-progress', callback),
+  installApk: (apkPath, deviceId) => ipcRenderer.invoke('install-apk', { apkPath, deviceId }),
+  onInstallProgress: (callback) => {
+    const listener = (event, progress) => callback(progress);
+    ipcRenderer.on('install-progress', listener);
+    return () => ipcRenderer.removeListener('install-progress', listener);
+  },
   
   // 路径检查
   checkPathExists: (path) => ipcRenderer.invoke('checkPathExists', path),
+  createDirectory: (dirPath) => ipcRenderer.invoke('createDirectory', dirPath),
   
   // 钉钉通知
   sendDingTalkNotification: (notificationData) => ipcRenderer.invoke('send-dingtalk-notification', notificationData),
@@ -179,5 +225,62 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getLanguage: () => {
       return i18next.language;
     }
-  }
+  },
+  
+  // 页面封装相关
+  pagePackage: {
+    // 应用管理
+    getApps: () => ipcRenderer.invoke('page-package:get-apps'),
+    addApp: (name) => ipcRenderer.invoke('page-package:add-app', name),
+    updateApp: (appId, name) => ipcRenderer.invoke('page-package:update-app', appId, name),
+    deleteApp: (appId) => ipcRenderer.invoke('page-package:delete-app', appId),
+    searchApps: (keyword) => ipcRenderer.invoke('page-package:search-apps', keyword),
+
+    // 页面管理
+    getPages: (appId) => ipcRenderer.invoke('page-package:get-pages', appId),
+    addPage: (appId, name) => ipcRenderer.invoke('page-package:add-page', appId, name),
+    updatePage: (appId, pageId, name) => ipcRenderer.invoke('page-package:update-page', appId, pageId, name),
+    deletePage: (appId, pageId) => ipcRenderer.invoke('page-package:delete-page', appId, pageId),
+    searchPages: (appId, keyword) => ipcRenderer.invoke('page-package:search-pages', appId, keyword),
+
+    // 元素管理
+    getElements: (appId, pageId) => ipcRenderer.invoke('page-package:get-elements', appId, pageId),
+    addElement: (appId, pageId, elementData) => ipcRenderer.invoke('page-package:add-element', appId, pageId, elementData),
+    updateElement: (appId, pageId, elementId, elementData) => ipcRenderer.invoke('page-package:update-element', appId, pageId, elementId, elementData),
+    deleteElement: (appId, pageId, elementId) => ipcRenderer.invoke('page-package:delete-element', appId, pageId, elementId),
+    searchElements: (appId, pageId, keyword) => ipcRenderer.invoke('page-package:search-elements', appId, pageId, keyword),
+
+    // 统计信息
+    getAppStats: (appId) => ipcRenderer.invoke('page-package:get-app-stats', appId),
+    getPageStats: (appId, pageId) => ipcRenderer.invoke('page-package:get-page-stats', appId, pageId)
+  },
+
+  // 测试用例管理（新版）
+  testCase: {
+    list: () => ipcRenderer.invoke('test-case:list'),
+    get: (fileName) => ipcRenderer.invoke('test-case:get', fileName),
+    save: (caseData) => ipcRenderer.invoke('test-case:save', caseData),
+    delete: (param) => ipcRenderer.invoke('test-case:delete', param),
+    checkJsonExists: (fileName) => ipcRenderer.invoke('test-case:check-json-exists', fileName),
+    generatePython: (caseData, outputDir) => ipcRenderer.invoke('test-case:generate-python', { caseData, outputDir }),
+    saveAndGenerate: (caseData, outputDir) => ipcRenderer.invoke('test-case:save-and-generate', { caseData, outputDir })
+  },
+
+  // APK解析
+  apk: {
+    parse: (apkPath) => ipcRenderer.invoke('apk:parse', apkPath)
+  },
+
+  // BLE设备发现
+  bleDeviceDiscovery: {
+    getDevices: () => ipcRenderer.invoke('ble-device-discovery:get-devices'),
+    getDeviceDetail: (deviceId) => ipcRenderer.invoke('ble-device-discovery:get-device-detail', deviceId)
+  },
+
+  // 驱动安装
+  installDriver: (installerPath) => ipcRenderer.invoke('install-driver', installerPath),
+  checkInstallerRunning: () => ipcRenderer.invoke('check-installer-running'),
+  recheckCP210xDriver: () => ipcRenderer.invoke('recheck-cp210x-driver'),
+
+  setPreventSleep: (enable) => ipcRenderer.invoke('set-prevent-sleep', enable)
 });

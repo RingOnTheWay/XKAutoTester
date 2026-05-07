@@ -8,11 +8,11 @@
 
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12.4-3c873a?style=flat-square)](https://www.python.org)
-[![Java](https://img.shields.io/badge/Java-17.0.15-007396?style=flat-square)](https://www.java.com)
-[![Electron](https://img.shields.io/badge/Electron-38.7.2-47848f?style=flat-square)](https://www.electronjs.org)
-[![Node.js](https://img.shields.io/badge/Node.js-22.19.0-3c873a?style=flat-square)](https://nodejs.org)
-[![Version](https://img.shields.io/badge/Version-0.1.2--dev.5-9cf?style=flat-square)](https://github.com/your-username/XKAutoTester)
+[![Electron](https://img.shields.io/badge/Electron-38-47848f?style=flat-square)](https://www.electronjs.org)
+[![Version](https://img.shields.io/badge/Version-0.1.3-9cf?style=flat-square)](https://github.com/RingOnTheWay/XKAutoTester)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078d7?style=flat-square)](https://www.microsoft.com/windows)
+
+**简体中文 | [English](docs/README_EN.md)**
 
 ⭐ 如果您喜欢这个项目，不妨在 GitHub 上点个 Star — 非常感谢！
 
@@ -20,54 +20,68 @@
 
 </div>
 
----
+***
 
 ## 概述
 
-XKAutoTester 是一个功能强大的自动化测试平台，结合了 Electron 的跨平台桌面应用能力和 Python 的自动化测试生态，目前只维护Windows平台下软件的执行环境。该平台支持 Android 设备的自动化测试，提供完整的测试计划管理、定时执行、报告生成等功能。
-
-> [!TIP]
-> 本项目采用前后端分离架构，Electron 负责桌面 GUI 界面，Python 负责测试执行和设备控制，两者通过 IPC 通信实现无缝集成。
+XKAutoTester 是一个功能强大的自动化测试平台，结合了 Electron 的跨平台桌面应用能力和 Python 的自动化测试生态，目前只维护 Windows 平台下软件的执行环境。该平台支持 Android 设备的自动化测试，提供测试用例管理、页面元素封装、蓝牙设备模拟、测试计划管理、定时执行、报告生成等完整功能。
 
 ## 功能特性
 
+### 测试管理
+
+- **测试用例管理** - 可视化创建、编辑测试用例，支持安卓用例模板化 Python 代码生成
+- **页面元素封装** - 应用-页面-元素三级管理，APK 包信息自动识别，元素定位器统一维护
 - **测试计划管理** - 创建、编辑、删除测试计划，支持测试文件选择和测试类型筛选
 - **定时执行** - 设置定时计划，自动在指定时间执行测试
 - **循环执行** - 支持循环运行测试，可配置失败后是否继续
-- **Allure 报告** - 自动生成专业的测试报告，支持历史记录查看
+- **Allure 报告** - 自动生成专业的测试报告，支持历史记录查看与钉钉通知推送
+
+### 设备与连接
+
 - **Android 设备管理** - ADB 连接管理，支持 USB 和无线连接
+- **蓝牙设备模拟** - BLE 设备 Mock 管理，支持串口通信与数据模拟
 - **屏幕控制** - 集成 Scrcpy，实时查看和控制设备屏幕
-- **文件管理** - 浏览和管理安卓设备文件系统
+- **文件管理** - 浏览和管理安卓设备文件系统，支持 APK 一键安装
+
+### 平台能力
+
 - **多语言支持** - 支持中文和英文界面语言
+- **暗色模式** - 支持亮色/暗色主题切换
 - **通知推送** - 支持钉钉平台的通知推送
+- **自动更新** - 支持应用版本检查与自动更新
+- **配置迁移** - 用户配置跨版本自动迁移与同步
+- **防系统休眠** - 测试执行期间可禁止系统睡眠
 
 ## 技术架构
 
-| 组件 | 技术栈 |
-|:---:|:---:|
-| 桌面应用 | Electron 38 |
-| 测试框架 | Pytest + Allure |
-| 移动测试 | Appium + UiAutomator2 |
-| 设备控制 | ADB + Scrcpy |
-| 包管理 | uv (Python) + npm (Node.js) |
+|  组件  |              技术栈             |
+| :--: | :--------------------------: |
+| 桌面应用 | Electron 38 + 原生 HTML/CSS/JS |
+| 测试框架 |        Pytest + Allure       |
+| 移动测试 |     Appium + UiAutomator2    |
+| 设备控制 |         ADB + Scrcpy         |
+| 蓝牙模拟 |     PySerial + MB026A 模块     |
+| 代码生成 |          Jinja 模板引擎          |
+|  包管理 |  uv (Python) + npm (Node.js) |
+|  图标  |         Lucide Icons         |
+|  国际化 |            i18next           |
+|  打包  |    electron-builder (NSIS)   |
 
 ## 环境要求
 
-### 必需环境
+| 工具                         |  版本要求  | 说明            |
+| :------------------------- | :----: | :------------ |
+| Python                     | 3.12.4 | 测试执行核心        |
+| Node.js                    |   22+  | Electron 运行环境 |
+| JDK                        |   17+  | Allure 报告生成依赖 |
+| Allure                     | 2.35.1 | 测试报告生成        |
+| Android SDK Platform-tools |   36   | ADB 工具        |
+| Android SDK Build-tools    | 29.0.3 | aapt2 工具      |
+| Scrcpy                     |  3.3.3 | 设备屏幕镜像控制      |
 
-| 工具 | 版本要求 | 说明 |
-|:---|:---:|:---|
-| Python | 3.12.4 | 测试执行核心 |
-| Node.js | 22.19.0 | Electron 运行环境 |
-| Java | 17.0.15 | Allure 报告生成 |
-| Android SDK | - | ADB 和相关工具 |
-
-### 可选工具
-
-| 工具 | 说明 |
-|:---|:---|
-| Appium | 移动端自动化测试 |
-| Scrcpy | 设备屏幕镜像控制 |
+> \[!NOTE]
+> 安装包已内置所需环境，无需手动配置，开发模式下需自行安装。
 
 ## 安装
 
@@ -96,9 +110,7 @@ cd electron
 npm install
 ```
 
-### 4. 安装 Allure 和 Scrcpy
-
-下载并放置到项目的 `env/allure` 目录下。
+### 4. 下载并配置Allure、Android SDK、Scrcpy到环境变量中
 
 ## 快速开始
 
@@ -121,103 +133,62 @@ npm run build-win
 
 ## 使用指南
 
-### 测试执行
+完整的操作指南请参阅以下教程：
 
-1. **选择测试目录（如无测试计划）** - 点击「选择测试目录」，选择测试目录
-2. **创建测试计划** - 点击「新建计划」，选择测试目录下的测试用例文件
-3. **配置测试类型** - 选择要执行的测试类型（冒烟测试、单元测试等）
-4. **运行测试** - 点击「运行测试」开始执行
-5. **查看报告** - 测试完成后点击「查看报告」查看 Allure 报告
+| 编号 | 教程 | 内容 |
+|:--:|------|------|
+| 01 | [安装与环境配置](docs/tutorials/zh-CN/01-installation.md) | 开发环境搭建、依赖安装、首次启动 |
+| 02 | [测试用例管理](docs/tutorials/zh-CN/02-test-case.md) | 用例创建、步骤配置、代码生成、蓝牙 Mock |
+| 03 | [页面元素封装](docs/tutorials/zh-CN/03-page-package.md) | 应用-页面-元素三级管理、APK 自动解析 |
+| 04 | [测试执行与报告](docs/tutorials/zh-CN/04-test-execution.md) | 计划管理、测试运行、Allure 报告查看 |
+| 05 | [设备连接与投屏](docs/tutorials/zh-CN/05-device-connection.md) | 设备连接、Scrcpy 投屏、文件管理、APK 安装 |
+| 06 | [定时计划与循环执行](docs/tutorials/zh-CN/06-scheduled-plan.md) | 定时触发、循环执行、失败处理策略 |
+| 07 | [系统设置](docs/tutorials/zh-CN/07-settings.md) | 语言/主题/通知/数据路径/更新配置 |
 
-### 设备连接
-
-1. **USB 连接** - 通过 USB 连接设备，在设备管理中查看
-2. **无线连接** - 输入设备 IP 地址进行无线连接
-3. **屏幕控制** - 选择设备后可启动 Scrcpy 进行屏幕控制
-
-### 定时计划
-
-1. 创建定时计划，选择要执行的测试计划
-2. 设置执行时间
-3. 系统将在指定时间自动执行测试（需禁止系统休眠）
+> English guides are available at [docs/tutorials/en-US/](docs/tutorials/en-US/)
 
 ## 项目结构
 
 ```
 XKAutoTester/
-├── electron/                 # Electron 前端代码
+├── electron/                    # Electron 前端
 │   ├── src/
-│   │   ├── main/            # 主进程代码
-│   │   │   ├── handlers/    # IPC 处理器
-│   │   │   └── services/    # 后端服务
-│   │   ├── preload/         # 预加载脚本
-│   │   └── shared/          # 共享常量
-│   ├── renderer/            # 渲染进程（UI）
-│   ├── assets/              # 静态资源
-│   └── locales/             # 国际化文件
-├── src/main/                 # Python 后端代码
-│   ├── core/                # 核心模块
-│   │   ├── adb_manager.py   # ADB 设备管理
-│   │   ├── appium_server.py # Appium 服务器管理
-│   │   └── pytest_runner.py # Pytest 运行器
-│   ├── recognition/         # 识别模块
-│   └── utils/               # 工具模块
-├── config/                   # 配置文件
-│   ├── config.json          # 应用配置
-└── pytest.ini               # Pytest 配置
+│   │   ├── main/               # 主进程
+│   │   │   ├── handlers/       # IPC 处理器
+│   │   │   ├── services/       # 业务服务层
+│   │   │   └── utils/          # 工具模块
+│   │   ├── preload/            # Preload 桥接脚本
+│   │   └── shared/             # IPC 通道常量
+│   ├── renderer/               # 渲染进程（UI）
+│   │   └── components/         # UI 组件
+│   ├── assets/                 # 静态资源
+│   ├── locales/                # 国际化文件
+│   └── templates/              # 测试用例代码模板
+├── src/main/                    # Python 后端
+│   ├── core/                   # 核心模块
+│   │   ├── adb_manager.py      # ADB 设备管理
+│   │   ├── appium_server.py    # Appium 服务管理
+│   │   ├── pytest_runner.py    # Pytest 运行器
+│   │   └── mock_ble_device.py  # BLE 蓝牙设备模拟
+│   ├── device/                 # 设备模块
+│   │   └── temperature/        # 体温计数据生成
+│   ├── recognition/            # 识别模块（验证码 OCR）
+│   └── utils/                  # 工具模块
+│       ├── config.py           # 配置管理器
+│       ├── logger.py           # 日志管理
+│       ├── test_initializer.py # 测试初始化
+│       └── test_utils.py       # 测试工具
+├── config/                      # 配置文件
+│   ├── config.json             # 应用配置
+│   ├── ble_device.json         # 蓝牙设备配置
+│   ├── page_package.json       # 页面封装配置
+│   └── pytest.ini              # Pytest 配置
+├── scripts/                     # 工具脚本
+│   └── sync_version.py         # 版本同步脚本
+└── version.json                 # 版本信息
 ```
 
-## 配置说明
-
-主配置文件位于 `config/config.json`：
-
-```json
-{
-  "LOG_CONFIG": {
-    "level": "INFO",
-    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-  },
-  "SCRCPY_PARAMS": {
-    "max_size": "1920",
-    "video_bit_rate": "8",
-    "max_fps": "60"
-  },
-  "APP_SETTINGS": {
-    "language": "zh-CN",
-    "theme_color": "#4CAF50"
-  }
-}
-```
-
-## 常见问题
-
-<details>
-<summary><b>Appium 服务器启动失败</b></summary>
-
-确保已正确安装 Node.js 和 Appium：
-
-```bash
-npm install -g appium
-appium driver install uiautomator2
-```
-
-</details>
-
-<details>
-<summary><b>ADB 设备连接失败</b></summary>
-
-1. 确保已安装 Android SDK 并配置环境变量
-2. 检查设备是否开启 USB 调试模式
-3. 无线连接需确保设备与电脑在同一网络
-
-</details>
-
-<details>
-<summary><b>Allure 报告生成失败</b></summary>
-
-确保已安装 Java 运行环境（JRE 8+），Allure 依赖 Java 运行。
-
-</details>
+<br />
 
 ## 资源
 
@@ -226,6 +197,8 @@ appium driver install uiautomator2
 - [Appium 官方文档](https://appium.io/)
 - [Electron 官方文档](https://www.electronjs.org/docs)
 - [Scrcpy 项目](https://github.com/Genymobile/scrcpy)
+- [Lucide 图标库](https://lucide.dev/)
+- [Temurin17 项目](https://github.com/adoptium/temurin17-binaries)
 
 ## 许可证
 

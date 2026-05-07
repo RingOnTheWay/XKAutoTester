@@ -1,14 +1,48 @@
+const { registerHandler } = require('./base/handlerUtils');
+
 function register(ipcMain, services) {
-  const { environmentService, electronApp } = services;
+  const { environmentService, electronApp, testCaseService, i18nService, userDataService } = services;
 
   ipcMain.on('start-checks', async (event) => {
     try {
       const results = await environmentService.runEnvironmentChecks(
-        electronApp.projectRoot, 
+        electronApp.projectRoot,
         electronApp.splashWindow
       );
-      
+
       if (electronApp.splashWindow) {
+        electronApp.splashWindow.webContents.send('check-progress', {
+          percentage: 90,
+          message: i18nService.t('splash.checks.cleaningInvalidFiles')
+        });
+      }
+
+      try {
+        await testCaseService.cleanupOrphanedFiles();
+
+        if (electronApp.splashWindow) {
+          electronApp.splashWindow.webContents.send('check-progress', {
+            percentage: 95,
+            message: i18nService.t('splash.checks.migratingConfig')
+          });
+        }
+      } catch (cleanupError) {
+        console.error('清理无效用例文件失败:', cleanupError);
+      }
+
+      if (userDataService) {
+        try {
+          await userDataService.runMigration();
+        } catch (migrationError) {
+          console.error('配置迁移失败:', migrationError);
+        }
+      }
+
+      if (electronApp.splashWindow) {
+        electronApp.splashWindow.webContents.send('check-progress', {
+          percentage: 100,
+          message: i18nService.t('splash.checkComplete')
+        });
         electronApp.splashWindow.webContents.send('check-complete', {
           requiredErrors: results.required,
           warnings: results.warnings
@@ -18,7 +52,7 @@ function register(ipcMain, services) {
       console.error('环境检查失败:', error);
       if (electronApp.splashWindow) {
         electronApp.splashWindow.webContents.send('check-complete', {
-          requiredErrors: [services.i18nService.t('splash.checks.environmentCheckFailed', { error: error.message })],
+          requiredErrors: [i18nService.t('splash.checks.environmentCheckFailed', { error: error.message })],
           warnings: []
         });
       }
@@ -29,26 +63,69 @@ function register(ipcMain, services) {
     if (electronApp.splashWindow) {
       electronApp.splashWindow.close();
     }
-    
+
     electronApp.createWindow();
   });
 
-  ipcMain.on('get-config', (event) => {
+  registerHandler(ipcMain, 'install-driver', async (installerPath) => {
     const fs = require('fs');
-    const path = require('path');
+
+    if (!installerPath || !fs.existsSync(installerPath)) {
+      return { success: false, message: '安装程序路径不存在' };
+    }
+
     try {
-      const configPath = path.join(electronApp.projectRoot, 'config', 'config.json');
-      if (fs.existsSync(configPath)) {
-        const data = fs.readFileSync(configPath, 'utf8');
-        event.sender.send('config-data', JSON.parse(data));
-      } else {
-        event.sender.send('config-data', {});
-      }
+      const { exec } = require('child_process');
+      const escapedPath = installerPath.replace(/'/g, "''");
+      await new Promise((resolve, reject) => {
+        exec(
+          `powershell.exe -NoProfile -Command "Start-Process -FilePath '${escapedPath}'"`,
+          (error) => {
+            if (error) {
+              reject(error);
+            } else {
+              resolve();
+            }
+          }
+        );
+      });
+
+      return { success: true, message: '驱动安装程序已启动' };
     } catch (error) {
-      console.error('获取配置失败:', error);
-      event.sender.send('config-data', {});
+      return { success: false, message: `启动安装程序失败: ${error.message}` };
     }
   });
+
+  registerHandler(ipcMain, 'check-installer-running', async () => {
+    try {
+      const isRunning = await environmentService.isInstallerRunning();
+      return { success: true, isRunning };
+    } catch (error) {
+      return { success: false, isRunning: false, error: error.message };
+    }
+  });
+
+  registerHandler(ipcMain, 'recheck-cp210x-driver', async () => {
+    try {
+      const result = await environmentService.checkCP210xDriver();
+      return {
+        success: true,
+        result: {
+          name: i18nService.t('splash.checks.cp210DriverCheck'),
+          status: result.status,
+          message: result.message,
+          canInstall: result.canInstall || false,
+          installerPath: result.installerPath || null
+        }
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  registerHandler(ipcMain, 'getSerialPorts', () =>
+    environmentService.getSerialPorts()
+  );
 }
 
 module.exports = { register };

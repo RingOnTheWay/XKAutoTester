@@ -1,0 +1,68 @@
+{
+  "deviceId": "E127B",
+  "name": "E127B",
+  "manufacturer": "爱奥乐",
+  "manufacturerId": "bioland",
+  "deviceType": "temperature",
+  "category": "体温",
+  "bleConfig": {
+    "uuids": "0000100000001000800000805F9B34FB",
+    "uuidn": "0000100100001000800000805F9B34FB",
+    "uuidw": "0000100200001000800000805F9B34FB",
+    "bleName": "Bioland-IT",
+    "advData": "FF01FF1126E37E"
+  },
+  "methods": [
+    {
+      "name": "send_random_data",
+      "displayName": "发送随机数据",
+      "functionName": "temperature_bioland_gen",
+      "importPath": "main.device.bioland.E127B",
+      "params": [
+        {
+          "key": "min_value",
+          "label": "体温最小值(单位:℃)",
+          "type": "number",
+          "default": 36.0,
+          "step": 0.1,
+          "precision": 1
+        },
+        {
+          "key": "max_value",
+          "label": "体温最大值(单位:℃)",
+          "type": "number",
+          "default": 37.5,
+          "step": 0.1,
+          "precision": 1
+        },
+        {
+          "key": "precision",
+          "label": "体温精度",
+          "type": "select",
+          "default": 1,
+          "options": [
+            {"value": 0, "label": "整数"},
+            {"value": 1, "label": "1位小数"},
+            {"value": 2, "label": "2位小数"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "send_custom_data",
+      "displayName": "自定义",
+      "functionName": "temperature_bioland_gen",
+      "importPath": "main.device.bioland.E127B",
+      "params": [
+        {
+          "key": "temperature",
+          "label": "体温值(单位:℃)",
+          "type": "number",
+          "required": true,
+          "step": 0.01,
+          "precision": 2
+        }
+      ]
+    }
+  ]
+}

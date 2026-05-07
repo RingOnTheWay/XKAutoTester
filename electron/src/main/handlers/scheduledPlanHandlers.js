@@ -1,11 +1,11 @@
+const { registerHandler } = require('./base/handlerUtils');
+
 function register(ipcMain, services) {
   const { scheduledPlanService, schedulerService } = services;
 
-  ipcMain.handle('get-scheduled-plans', async () => {
-    return scheduledPlanService.getScheduledPlans();
-  });
+  registerHandler(ipcMain, 'get-scheduled-plans', () => scheduledPlanService.getScheduledPlans());
 
-  ipcMain.handle('save-scheduled-plan', async (event, planData) => {
+  registerHandler(ipcMain, 'save-scheduled-plan', async (planData) => {
     const result = await scheduledPlanService.saveScheduledPlan(planData);
     if (result.success) {
       schedulerService.addPlan(result.plan);
@@ -13,7 +13,7 @@ function register(ipcMain, services) {
     return result;
   });
 
-  ipcMain.handle('update-scheduled-plan', async (event, planData) => {
+  registerHandler(ipcMain, 'update-scheduled-plan', async (planData) => {
     const result = await scheduledPlanService.updateScheduledPlan(planData);
     if (result.success) {
       schedulerService.updatePlan(planData.id, planData);
@@ -21,7 +21,7 @@ function register(ipcMain, services) {
     return result;
   });
 
-  ipcMain.handle('delete-scheduled-plan', async (event, planId) => {
+  registerHandler(ipcMain, 'delete-scheduled-plan', async (planId) => {
     const result = await scheduledPlanService.deleteScheduledPlan(planId);
     if (result.success) {
       schedulerService.removePlan(planId);
@@ -29,22 +29,20 @@ function register(ipcMain, services) {
     return result;
   });
 
-  ipcMain.handle('check-time-conflict', async (event, data) => {
+  registerHandler(ipcMain, 'check-time-conflict', (data) => {
     const { scheduledTime, excludeId } = data || {};
     return scheduledPlanService.checkTimeConflict(scheduledTime, excludeId);
   });
 
-  ipcMain.handle('scheduled-test-complete', async (event, planId) => {
-    return scheduledPlanService.updateScheduledPlan({
+  registerHandler(ipcMain, 'scheduled-test-complete', (planId) =>
+    scheduledPlanService.updateScheduledPlan({
       id: planId,
       status: 'completed',
       lastRun: new Date().toISOString()
-    });
-  });
+    })
+  );
 
-  ipcMain.handle('get-scheduler-status', async () => {
-    return schedulerService.getStatus();
-  });
+  registerHandler(ipcMain, 'get-scheduler-status', () => schedulerService.getStatus());
 }
 
 module.exports = { register };

@@ -1,32 +1,17 @@
+const { registerHandlers } = require('./base/handlerUtils');
+
 function register(ipcMain, services) {
   const { allureService, notificationService } = services;
 
-  ipcMain.handle('view-report', async (event, testPlanName) => {
-    return allureService.openAllureReport(testPlanName);
-  });
-
-  ipcMain.handle('check-report-exists', async (event, testPlanName) => {
-    return allureService.checkReportExists(testPlanName);
-  });
-
-  ipcMain.handle('open-report-by-path', async (event, reportPath) => {
-    return allureService.openReportByPath(reportPath);
-  });
-
-  ipcMain.handle('stop-allure-server', async () => {
-    return allureService.stopAllureServer();
-  });
-
-  ipcMain.handle('get-allure-server-status', async () => {
-    return allureService.getAllureServerStatus();
-  });
-
-  ipcMain.handle('clear-allure-reports', async () => {
-    return allureService.clearAllureReports();
-  });
-
-  ipcMain.handle('send-dingtalk-notification', async (event, notificationData) => {
-    return notificationService.sendDingTalkNotification(notificationData);
+  registerHandlers(ipcMain, {
+    'view-report': (testPlanName) => allureService.openAllureReport(testPlanName),
+    'check-report-exists': (testPlanName) => allureService.checkReportExists(testPlanName),
+    'open-report-by-path': (reportPath) => allureService.openReportByPath(reportPath),
+    'stop-allure-server': () => allureService.stopAllureServer(),
+    'get-allure-server-status': () => allureService.getAllureServerStatus(),
+    'clear-allure-reports': () => allureService.clearAllureReports(),
+    'clear-all-logs': () => allureService.clearAllLogs(),
+    'send-dingtalk-notification': (notificationData) => notificationService.sendDingTalkNotification(notificationData)
   });
 }
 

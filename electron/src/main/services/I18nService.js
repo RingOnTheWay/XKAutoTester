@@ -8,13 +8,11 @@ class I18nService {
     this.initialized = false;
   }
 
-  async init(projectRoot, isPackaged) {
+  async init(projectRoot, isPackaged, userConfigPath) {
     if (this.initialized) return;
     
     try {
-      const localesPath = isPackaged 
-        ? path.join(process.resourcesPath, 'app', 'locales')
-        : path.join(__dirname, '..', '..', '..', 'locales');
+      const localesPath = path.join(__dirname, '..', '..', '..', 'locales');
       
       const resources = {};
       
@@ -32,7 +30,9 @@ class I18nService {
       
       let savedLanguage = 'zh-CN';
       try {
-        const configPath = path.join(projectRoot, 'config', 'config.json');
+        const configPath = userConfigPath
+          ? path.join(userConfigPath, 'config.json')
+          : path.join(projectRoot, 'config', 'config.json');
         if (await asyncFs.exists(configPath)) {
           const configData = await asyncFs.readJson(configPath);
           if (configData.APP_SETTINGS && configData.APP_SETTINGS.language) {

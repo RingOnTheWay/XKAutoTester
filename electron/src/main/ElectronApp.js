@@ -11,6 +11,8 @@ class ElectronApp {
     
     this.projectRoot = pathHelper.getProjectRoot(this.isPackaged, __dirname);
     
+    this.userConfigPath = null;
+    this.userDataPath = null;
     this.services = {};
   }
 
@@ -89,6 +91,11 @@ class ElectronApp {
     const htmlPath = path.join(pathHelper.getRendererPath(this.isPackaged, __dirname), 'index.html');
     this.mainWindow.loadFile(htmlPath);
 
+    // 开发模式下自动打开DevTools
+    if (!this.isPackaged) {
+      this.mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
+
     this.mainWindow.once('ready-to-show', () => {
       this.mainWindow.focus();
       this.mainWindow.center();
@@ -134,7 +141,7 @@ class ElectronApp {
 
     app.whenReady().then(() => {
       this.createSplashWindow();
-      
+
       if (this.services.registerHandlers) {
         this.services.registerHandlers(ipcMain, {
           electronApp: this,
@@ -147,13 +154,22 @@ class ElectronApp {
           allureService: this.services.allureService,
           adbService: this.services.adbService,
           notificationService: this.services.notificationService,
-          scrcpyService: this.services.scrcpyService
+          scrcpyService: this.services.scrcpyService,
+          pagePackageService: this.services.pagePackageService,
+          bleDeviceDiscoveryService: this.services.bleDeviceDiscoveryService,
+          testCaseService: this.services.testCaseService,
+          apkParserService: this.services.apkParserService,
+          versionService: this.services.versionService,
+          userDataService: this.services.userDataService,
+          updateService: this.services.updateService
         });
       }
-      
+
       if (this.services.schedulerService) {
         this.services.schedulerService.start();
       }
+
+      this.restorePreventSleepSetting();
     });
 
     app.on('web-contents-created', (event, contents) => {
@@ -169,6 +185,22 @@ class ElectronApp {
         this.services.schedulerService.stop();
       }
     });
+  }
+
+  async restorePreventSleepSetting() {
+    try {
+      const configPath = require('path').join(this.userConfigPath, 'config.json');
+      const asyncFs = require('./utils/asyncFs');
+      if (await asyncFs.exists(configPath)) {
+        const config = await asyncFs.readJson(configPath);
+        if (config && config.APP_SETTINGS && config.APP_SETTINGS.preventSleep) {
+          const { startPreventSleep } = require('./handlers/powerHandlers');
+          startPreventSleep();
+        }
+      }
+    } catch (error) {
+      console.error('恢复防睡眠设置失败:', error);
+    }
   }
 }
 

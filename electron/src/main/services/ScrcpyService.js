@@ -1,4 +1,4 @@
-const { spawn, execFile } = require('child_process');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -12,7 +12,7 @@ class ScrcpyService {
     try {
       const scrcpyPath = path.join(this.projectRoot, 'env', 'scrcpy', 'scrcpy.exe');
       const args = ['-s', deviceId];
-      
+
       if (scrcpyParams.max_size) {
         args.push('--max-size', scrcpyParams.max_size);
       }
@@ -30,30 +30,29 @@ class ScrcpyService {
       if (scrcpyParams.always_on_top) {
         args.push('--always-on-top');
       }
-      
+
       if (!fs.existsSync(scrcpyPath)) {
         return { success: false, error: this.i18nService.t('main.scrcpyNotFound', { path: scrcpyPath }) };
       }
-      
+
+      let child;
       if (process.platform === 'win32') {
-        const argsStr = args.map(arg => `'${arg}'`).join(' ');
-        const command = `powershell.exe -WindowStyle Hidden -Command "& '${scrcpyPath}' ${argsStr}"`;
-        
-        spawn('powershell.exe', ['-WindowStyle', 'Hidden', '-Command', `& '${scrcpyPath}' ${argsStr}`], {
+        child = spawn('cmd.exe', ['/c', scrcpyPath, ...args], {
           cwd: path.dirname(scrcpyPath),
           windowsHide: true,
-          detached: true,
-          stdio: 'ignore'
+          stdio: 'pipe'
         });
       } else {
-        execFile(scrcpyPath, args, {
+        child = spawn(scrcpyPath, args, {
           cwd: path.dirname(scrcpyPath),
-          detached: true,
-          stdio: 'ignore'
+          stdio: 'pipe'
         });
       }
-      
-      return { success: true };
+
+      child.stdout.resume();
+      child.stderr.resume();
+
+      return { success: true, process: child };
     } catch (error) {
       return { success: false, error: error.message };
     }

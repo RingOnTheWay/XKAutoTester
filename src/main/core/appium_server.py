@@ -13,7 +13,12 @@ import datetime
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+
+def _get_data_root():
+    user_data = os.environ.get('XKAUTOTESTER_USER_DATA')
+    if user_data:
+        return Path(user_data)
+    return Path(__file__).parent.parent.parent.parent
 
 
 class AppiumServer:
@@ -52,7 +57,7 @@ class AppiumServer:
         self.appium_executable = self._find_appium_executable()
         
         # 日志文件路径固定为项目根目录下的logs/Appium
-        self.log_dir = PROJECT_ROOT / "logs" / "Appium"
+        self.log_dir = _get_data_root() / "logs" / "Appium"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         
         # 生成与XKAT日志格式一致的日志文件名
