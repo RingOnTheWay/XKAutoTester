@@ -1,6 +1,6 @@
 {
   "name": "xkautotester-electron",
-  "version": "0.1.2-dev.5",
+  "version": "0.1.3-dev.3",
   "description": "XKAutoTester - 基于Electron+Python的自动化测试平台",
   "main": "src/main/index.js",
   "scripts": {
@@ -8,7 +8,13 @@
     "dev": "electron . --dev",
     "build": "electron-builder",
     "build-win": "electron-builder --win",
-    "pack": "electron-builder --dir"
+    "pack": "electron-builder --dir",
+    "version:bump": "python ../scripts/sync_version.py",
+    "version:verify": "python ../scripts/sync_version.py --verify",
+    "version:sync": "python ../scripts/sync_version.py --sync",
+    "postinstall": "node patch-nsis.js",
+    "prebuild": "node patch-nsis.js",
+    "prebuild-win": "node patch-nsis.js"
   },
   "keywords": [
     "electron",
@@ -26,7 +32,8 @@
     "adm-zip": "^0.5.16",
     "axios": "^1.6.0",
     "i18next": "^25.8.0",
-    "i18next-browser-languagedetector": "^8.2.0"
+    "i18next-browser-languagedetector": "^8.2.0",
+    "lucide": "^1.8.0"
   },
   "build": {
     "appId": "com.ring.xkautotester",
@@ -41,23 +48,25 @@
       "renderer/**/*",
       "assets/**/*",
       "locales/**/*",
+      "templates/**/*",
       "node_modules/**/*"
     ],
-    "asar": false,
+    "asar": true,
+    "asarUnpack": [
+      "src/preload/**/*"
+    ],
     "extraResources": [
       {
         "from": "../src",
         "to": "src",
         "filter": [
-          "**/*.py"
+          "**/*.py",
+          "**/*.json"
         ]
       },
       {
-        "from": "../config",
-        "to": "config",
-        "filter": [
-          "**/*"
-        ]
+        "from": "../config/pytest.ini",
+        "to": "config/pytest.ini"
       },
       {
         "from": "../.venv",
@@ -82,6 +91,10 @@
       {
         "from": "../uv.lock",
         "to": "uv.lock"
+      },
+      {
+        "from": "../version.json",
+        "to": "version.json"
       }
     ],
     "win": {
@@ -91,7 +104,15 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "include": "build/installer.nsh"
+      "include": "build/installer.nsh",
+      "multiLanguageInstaller": true,
+      "displayLanguageSelector": true,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
+      "installerSidebar": "assets/installerSidebar.bmp",
+      "uninstallerSidebar": "assets/installerSidebar.bmp"
     }
   }
 }

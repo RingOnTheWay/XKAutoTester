@@ -1,4 +1,8 @@
-# Python
+# ================================
+# XKAutoTester .gitignore
+# ================================
+
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
@@ -20,12 +24,13 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+.ruff_cache/
 
-# Installer logs
+# Python installer logs
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
+# Python test / coverage reports
 htmlcov/
 .tox/
 .nox/
@@ -39,23 +44,44 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
-# Environments
-.env
+# --- Node.js / Electron ---
+node_modules/
+*.tgz
+*.tar.gz
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Electron-builder
+electron/dist/
+electron/build/
+
+# --- Environments ---
 .venv
-env/
 venv/
 ENV/
 env.bak/
 venv.bak/
 
-# IDE
+# 内置工具环境
+/env/
+
+# 本地环境变量
+.env
+.env.local
+.env.*.local
+
+# --- IDE ---
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.trae/
+.qoder/
 
-# OS
+# --- OS ---
 .DS_Store
 .DS_Store?
 ._*
@@ -64,28 +90,41 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-# Logs
+# --- Logs ---
 logs/
 *.log
 
-# Electron
-node_modules/
-dist/
-build/
-*.tgz
-*.tar.gz
+# --- Allure ---
+allure-results/
+allure-report/
 
-# Database files
+# --- Database ---
 *.db
 *.sqlite3
 
-# Temporary files
+# --- Temporary files ---
 *.tmp
 *.temp
 
-# Auto-generated config files (测试计划和定时计划可自动生成)
+# --- 大体积二进制文件 ---
+*.apk
+*.aab
+
+# --- 密钥和证书 ---
+*.keystore
+*.jks
+*.p12
+*.pem
+*.key
+
+# --- 用户数据 ---
+config/config.json
+config/ble_device.json
+config/page_package.json
 config/test_plans.json
 config/scheduled_plans.json
+config/test_cases/
 
-# Trae IDE
-.trae/
+# --- AI Agent 上下文 ---
+AGENTS.md
+/trae-backup

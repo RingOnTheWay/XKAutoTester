@@ -1,7 +1,9 @@
-const { spawn, exec, execSync } = require('child_process');
+const { spawn, exec } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const asyncFs = require('../utils/asyncFs');
 const AdmZip = require('adm-zip');
+const pathHelper = require('../utils/pathHelper');
 
 class ADBService {
   constructor(projectRoot, i18nService) {
@@ -9,9 +11,19 @@ class ADBService {
     this.i18nService = i18nService;
   }
 
+  getAdbPath() {
+    return pathHelper.getAdbPath(this.projectRoot, true);
+  }
+
   async getConnectedDevices() {
     try {
-      const result = execSync('adb devices', { encoding: 'utf8' });
+      const adbPath = this.getAdbPath();
+      const result = await new Promise((resolve, reject) => {
+        exec(`"${adbPath}" devices`, { encoding: 'utf8' }, (err, stdout) => {
+          if (err) reject(err);
+          else resolve(stdout);
+        });
+      });
       
       const devices = [];
       const lines = result.split('\n');
@@ -31,6 +43,7 @@ class ADBService {
 
   async executeAdbCommand(cmd, deviceId) {
     try {
+      const adbPath = this.getAdbPath();
       const cmdParts = cmd.split(/\s+/).filter(part => part.trim() !== '');
       
       const args = [];
@@ -47,7 +60,7 @@ class ADBService {
       
       args.push(...cmdParts);
       
-      const adbProcess = spawn('adb', args, { 
+      const adbProcess = spawn(adbPath, args, { 
         windowsHide: true
       });
       
@@ -120,7 +133,8 @@ class ADBService {
 
   async uploadFile(localPath, remotePath, deviceId) {
     try {
-      const adbCmd = deviceId ? `adb -s ${deviceId} push "${localPath}" "${remotePath}"` : `adb push "${localPath}" "${remotePath}"`;
+      const adbPath = this.getAdbPath();
+      const adbCmd = deviceId ? `"${adbPath}" -s ${deviceId} push "${localPath}" "${remotePath}"` : `"${adbPath}" push "${localPath}" "${remotePath}"`;
       
       return new Promise((resolve) => {
         exec(adbCmd, { windowsHide: true }, (error, stdout, stderr) => {
@@ -138,17 +152,23 @@ class ADBService {
 
   async downloadFile(remotePath, localPath, deviceId, eventSender) {
     try {
+      const adbPath = this.getAdbPath();
       let isDir = false;
       
       try {
         const listCmd = deviceId 
-          ? `adb -s ${deviceId} shell ls -la "${remotePath}"` 
-          : `adb shell ls -la "${remotePath}"`;
+          ? `"${adbPath}" -s ${deviceId} shell ls -la "${remotePath}"` 
+          : `"${adbPath}" shell ls -la "${remotePath}"`;
         
-        const result = execSync(listCmd, { 
-          encoding: 'utf-8', 
-          windowsHide: true,
-          stdio: ['ignore', 'pipe', 'ignore']
+        const result = await new Promise((resolve, reject) => {
+          exec(listCmd, { 
+            encoding: 'utf-8', 
+            windowsHide: true,
+            stdio: ['ignore', 'pipe', 'ignore']
+          }, (err, stdout) => {
+            if (err) reject(err);
+            else resolve(stdout);
+          });
         }).trim();
         
         isDir = result.startsWith('total') || result.includes('drwx');
@@ -177,8 +197,8 @@ class ADBService {
         }
         
         const adbExecOutCmd = deviceId 
-          ? `adb -s ${deviceId} exec-out "cd \\"${remotePath}\\" && tar -chf - ./"` 
-          : `adb exec-out "cd \\"${remotePath}\\" && tar -chf - ./"`;
+          ? `"${adbPath}" -s ${deviceId} exec-out "cd \\"${remotePath}\\" && tar -chf - ./"` 
+          : `"${adbPath}" exec-out "cd \\"${remotePath}\\" && tar -chf - ./"`;
         
         const tempTarPath = path.join(tempDir, `${sanitizedDirName}.tar`);
         const fs = require('fs');
@@ -249,8 +269,8 @@ class ADBService {
         finalLocalPath = `${basePath}/${sanitizedFileName}`;
         
         const adbCmd = deviceId 
-          ? `adb -s ${deviceId} pull -p "${remotePath}" "${finalLocalPath}"` 
-          : `adb pull -p "${remotePath}" "${finalLocalPath}"`;
+          ? `"${adbPath}" -s ${deviceId} pull -p "${remotePath}" "${finalLocalPath}"` 
+          : `"${adbPath}" pull -p "${remotePath}" "${finalLocalPath}"`;
         
         return new Promise((resolve) => {
           const process = spawn(adbCmd, { shell: true, windowsHide: true });
@@ -392,6 +412,318 @@ class ADBService {
         fileName: path.basename(finalLocalPath)
       });
     }
+  }
+
+  async installApk(apkPath, deviceId, eventSender) {
+    try {
+      const adbPath = this.getAdbPath();
+      const fs = require('fs');
+      
+      // 获取APK文件大小
+      const stats = fs.statSync(apkPath);
+      const fileSizeInBytes = stats.size;
+      const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2);
+      console.log('[ADBService] Installing APK:', { apkPath, deviceId, fileSize: fileSizeInMB + 'MB' });
+      
+      // 生成临时文件路径
+      const tempFileName = `temp_${Date.now()}.apk`;
+      const tempRemotePath = `/data/local/tmp/${tempFileName}`;
+      
+      // 发送初始进度
+      if (eventSender) {
+        eventSender.send('install-progress', {
+          percentage: 0,
+          status: 'preparing',
+          message: this.i18nService.t('fileManager.preparingInstall'),
+          fileName: path.basename(apkPath),
+          fileSize: fileSizeInMB + ' MB'
+        });
+      }
+      
+      // 步骤1: 使用adb push推送文件到设备
+      console.log('[ADBService] Step 1: Pushing APK to device...');
+      const pushArgs = deviceId ? ['-s', deviceId, 'push', apkPath, tempRemotePath] : ['push', apkPath, tempRemotePath];
+      
+      const pushProcess = spawn(adbPath, pushArgs, { windowsHide: true });
+      let pushResolved = false;
+      
+      // 启动进度监控
+      const monitorInterval = setInterval(async () => {
+        if (pushResolved) {
+          clearInterval(monitorInterval);
+          return;
+        }
+        
+        try {
+          // 使用adb stat获取文件大小
+          const statArgs = deviceId ? ['-s', deviceId, 'shell', 'stat', tempRemotePath] : ['shell', 'stat', tempRemotePath];
+          const statResult = await this.executeAdbCommandAsync(statArgs);
+          
+          if (pushResolved) return;
+          
+          if (statResult.success && statResult.output) {
+            // 解析stat输出，格式: Size: 1234567
+            const sizeMatch = statResult.output.match(/Size:\s*(\d+)/);
+            if (sizeMatch) {
+              const transferredBytes = parseInt(sizeMatch[1]);
+              const percentage = Math.min(80, Math.round((transferredBytes / fileSizeInBytes) * 80));
+              
+              console.log('[ADBService] Transfer progress:', transferredBytes, '/', fileSizeInBytes, 'bytes (', percentage, '%)');
+              
+              if (eventSender) {
+                eventSender.send('install-progress', {
+                  percentage: percentage,
+                  status: 'transferring',
+                  message: this.i18nService.t('fileManager.transferring') || '正在传输文件...',
+                  fileName: path.basename(apkPath),
+                  fileSize: fileSizeInMB + ' MB'
+                });
+              }
+            }
+          }
+        } catch (error) {
+          // 忽略监控错误
+        }
+      }, 500);
+      
+      // 等待push完成
+      const pushResult = await new Promise((resolve) => {
+        let pushStdout = '';
+        let pushStderr = '';
+        
+        pushProcess.stdout.on('data', (data) => {
+          pushStdout += data.toString();
+          console.log('[ADBService] push stdout:', data.toString());
+        });
+        
+        pushProcess.stderr.on('data', (data) => {
+          pushStderr += data.toString();
+          console.log('[ADBService] push stderr:', data.toString());
+        });
+        
+        pushProcess.on('close', (code) => {
+          pushResolved = true;
+          clearInterval(monitorInterval);
+          console.log('[ADBService] Push completed with code:', code);
+          
+          // 即使退出码为1，也要检查是否成功推送
+          // ADB有时会返回退出码1，但实际上文件已成功推送
+          const success = code === 0 || pushStderr.includes('file pushed') || pushStdout.includes('file pushed');
+          
+          resolve({
+            success: success,
+            stdout: pushStdout,
+            stderr: pushStderr,
+            code: code
+          });
+        });
+        
+        pushProcess.on('error', (error) => {
+          pushResolved = true;
+          clearInterval(monitorInterval);
+          console.error('[ADBService] Push error:', error);
+          resolve({
+            success: false,
+            stdout: pushStdout,
+            stderr: pushStderr,
+            error: error.message
+          });
+        });
+      });
+      
+      // 检查push是否成功
+      if (!pushResult.success) {
+        console.error('[ADBService] Push failed:', pushResult);
+        const errorMsg = pushResult.stderr || pushResult.error || 'Failed to push APK to device';
+        if (eventSender) {
+          eventSender.send('install-progress', {
+            percentage: 100,
+            status: 'error',
+            message: this.i18nService.t('fileManager.installFailed'),
+            fileName: path.basename(apkPath),
+            fileSize: fileSizeInMB + ' MB',
+            error: errorMsg
+          });
+        }
+        return { success: false, error: errorMsg, output: pushResult.stdout };
+      }
+      
+      // 步骤2: 使用adb shell pm install安装临时文件
+      console.log('[ADBService] Step 2: Installing APK...');
+      if (eventSender) {
+        eventSender.send('install-progress', {
+          percentage: 80,
+          status: 'installing',
+          message: this.i18nService.t('fileManager.installing'),
+          fileName: path.basename(apkPath),
+          fileSize: fileSizeInMB + ' MB'
+        });
+      }
+      
+      // 使用pm install而不是adb install，因为文件已经在设备上了
+      const installArgs = deviceId 
+        ? ['-s', deviceId, 'shell', 'pm', 'install', '-r', tempRemotePath] 
+        : ['shell', 'pm', 'install', '-r', tempRemotePath];
+      const installProcess = spawn(adbPath, installArgs, { windowsHide: true });
+      
+      let stdout = '';
+      let stderr = '';
+      let resolved = false;
+      
+      return new Promise((resolve) => {
+        const doResolve = async (result) => {
+          if (resolved) return;
+          resolved = true;
+          
+          // 步骤3: 删除临时文件
+          console.log('[ADBService] Step 3: Cleaning up temp file...');
+          try {
+            const rmArgs = deviceId ? ['-s', deviceId, 'shell', 'rm', tempRemotePath] : ['shell', 'rm', tempRemotePath];
+            await this.executeAdbCommandAsync(rmArgs);
+            console.log('[ADBService] Temp file removed');
+          } catch (error) {
+            console.error('[ADBService] Failed to remove temp file:', error);
+          }
+          
+          console.log('[ADBService] Install result:', result);
+          resolve(result);
+        };
+        
+        installProcess.stdout.on('data', (data) => {
+          const output = data.toString();
+          stdout += output;
+          console.log('[ADBService] install stdout:', output);
+        });
+        
+        installProcess.stderr.on('data', (data) => {
+          stderr += data.toString();
+          console.log('[ADBService] install stderr:', data.toString());
+        });
+        
+        installProcess.on('close', (code) => {
+          console.log('[ADBService] Install process closed with code:', code);
+          console.log('[ADBService] Full stdout:', stdout);
+          console.log('[ADBService] Full stderr:', stderr);
+          
+          const isSuccess = stdout.toLowerCase().includes('success');
+          
+          if (isSuccess) {
+            if (eventSender) {
+              eventSender.send('install-progress', {
+                percentage: 100,
+                status: 'success',
+                message: this.i18nService.t('fileManager.installSuccess'),
+                fileName: path.basename(apkPath),
+                fileSize: fileSizeInMB + ' MB'
+              });
+            }
+            doResolve({ 
+              success: true, 
+              output: stdout, 
+              error: stderr 
+            });
+          } else {
+            const errorMsg = stderr || stdout || this.i18nService.t('fileManager.installFailed');
+            if (eventSender) {
+              eventSender.send('install-progress', {
+                percentage: 100,
+                status: 'error',
+                message: this.i18nService.t('fileManager.installFailed'),
+                fileName: path.basename(apkPath),
+                fileSize: fileSizeInMB + ' MB',
+                error: errorMsg
+              });
+            }
+            doResolve({ 
+              success: false, 
+              error: errorMsg, 
+              output: stdout 
+            });
+          }
+        });
+        
+        installProcess.on('error', (error) => {
+          console.error('[ADBService] Install process error:', error);
+          if (eventSender) {
+            eventSender.send('install-progress', {
+              percentage: 100,
+              status: 'error',
+              message: this.i18nService.t('fileManager.installFailed'),
+              fileName: path.basename(apkPath),
+              fileSize: fileSizeInMB + ' MB',
+              error: error.message
+            });
+          }
+          doResolve({ success: false, error: error.message });
+        });
+        
+        // 10分钟超时
+        setTimeout(() => {
+          if (resolved) return;
+          installProcess.kill();
+          const errorMsg = this.i18nService.t('main.commandTimeout');
+          console.error('[ADBService] Timeout after 600s (10 minutes)');
+          if (eventSender) {
+            eventSender.send('install-progress', {
+              percentage: 100,
+              status: 'error',
+              message: this.i18nService.t('fileManager.installFailed'),
+              fileName: path.basename(apkPath),
+              fileSize: fileSizeInMB + ' MB',
+              error: errorMsg
+            });
+          }
+          doResolve({ success: false, error: errorMsg, output: stdout });
+        }, 600000);
+      });
+    } catch (error) {
+      console.error('[ADBService] Install APK exception:', error);
+      return { success: false, error: error.message };
+    }
+  }
+  
+  // 辅助方法：异步执行ADB命令并返回结果
+  executeAdbCommandAsync(args) {
+    return new Promise((resolve) => {
+      const adbPath = this.getAdbPath();
+      const process = spawn(adbPath, args, { windowsHide: true });
+      let stdout = '';
+      let stderr = '';
+      
+      process.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+      
+      process.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      process.on('close', (code) => {
+        resolve({
+          success: code === 0,
+          output: stdout,
+          error: stderr
+        });
+      });
+      
+      process.on('error', (error) => {
+        resolve({
+          success: false,
+          output: '',
+          error: error.message
+        });
+      });
+      
+      // 5秒超时
+      setTimeout(() => {
+        process.kill();
+        resolve({
+          success: false,
+          output: stdout,
+          error: 'Timeout'
+        });
+      }, 5000);
+    });
   }
 }
 

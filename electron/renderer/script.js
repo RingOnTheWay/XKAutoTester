@@ -9,11 +9,38 @@ class XKAutoTesterApp {
         this.isRunning = false;
         this.runningTestPlanName = null; // 正在执行的测试计划名称
         this.runningScheduledPlanId = null; // 正在执行的定时计划ID
-        this.isInitializing = false; // 添加初始化状态标志
+        this.isInitializing = false;
         this.initialized = false; // 添加初始化完成标志
         this.selectedDevice = null; // 添加设备管理相关属性
         this.currentMarkers = []; // 保存当前的测试类型标记
         this.selectedReportRun = null; // 选中的报告运行记录
+        
+        // 测试用例相关属性
+        this.tcSelectedDirectory = null;
+        this.tcSelectedFile = null;
+        this.tcIsEditing = false;
+        this.tcTestFiles = [];
+        this.tcSteps = [];  // 测试步骤列表
+        this.tcDraggedStep = null;  // 拖拽中的步骤
+        this.tcSelectedApp = null;  // 选中的目标应用
+        this.tcApps = [];  // 应用列表
+        this.tcSelectedPlatform = 'android';  // 选中的应用平台，默认Android
+        this.tcBleDevices = [];  // 蓝牙设备列表（用于测试步骤中的蓝牙操作）
+        this.tcMarkers = [];  // Markers列表
+        this.tcSelectedMarkers = [];  // 选中的Markers
+        this.tcLoadedDeviceConfig = null;  // 加载的设备配置（编辑时保留）
+        this.tcLoadedBleDevice = null;  // 加载的蓝牙设备配置（编辑时保留）
+        
+        // 页面封装相关属性
+        this.ppSelectedApp = null;
+        this.ppSelectedPage = null;
+        this.ppSelectedElement = null;
+        this.ppApps = [];
+        this.ppPages = [];
+        this.ppElements = [];
+        this.ppIsEditing = false;
+        this.ppEditingType = null;
+        this.ppInitialized = false;
         
         // 文件管理器相关属性
         this.currentPath = '/storage/emulated/0'; // 默认路径
@@ -21,6 +48,13 @@ class XKAutoTesterApp {
         this.fileList = []; // 当前目录的文件列表
         this.contextMenu = null; // 上下文菜单引用
         this.contextMenuTarget = null; // 上下文菜单的目标元素
+        
+        // 进度指示器
+        this.progressIndicator = null;
+        
+        // 测试输出批量渲染缓冲区
+        this._outputBuffer = [];
+        this._outputRafId = null;
         
         // 预绑定方法，避免重复创建函数引用
         this.boundOpenPort5555 = this.openPort5555.bind(this);
@@ -49,6 +83,12 @@ class XKAutoTesterApp {
         // 加载HTML组件
         await this.loadComponents();
 
+        // 初始化模态框组件
+        this.initModals();
+
+        // 初始化进度指示器
+        this.progressIndicator = new ProgressIndicator();
+
         // 初始化SVG图标
         this.initializeIcons();
         
@@ -70,16 +110,22 @@ class XKAutoTesterApp {
         // 加载配置文件
         await this.loadConfig();
         
+        // 加载版本信息
+        await this.loadVersionInfo();
+        
         // 初始化文件管理器状态（在加载配置后调用，确保使用正确的语言）
         this.toggleFileManagerEnabled(false);
         
         // 页面加载时就显示测试计划区域并加载测试计划
         const testPlanSection = document.getElementById('test-plan-section');
         testPlanSection.classList.remove('hidden');
-        await this.loadTestPlans();
         
-        // 加载定时计划
-        await this.loadScheduledPlans();
+        // 并行加载测试计划、定时计划、页面封装（互不依赖）
+        await Promise.all([
+            this.loadTestPlans(),
+            this.loadScheduledPlans(),
+            this.initPagePackage()
+        ]);
         
         // 初始化运行按钮状态
         this.updateRunButtonState();
@@ -96,7 +142,9 @@ class XKAutoTesterApp {
 
         this.isInitializing = false;
         this.initialized = true;
-        this.deviceStatusSaved = false; // 初始化设备状态保存标记
+        this.deviceStatusSaved = false;
+
+        this.autoCheckForUpdate();
         
         // 强制显示占位符，确保它们被显示
         setTimeout(() => {
@@ -148,12 +196,45 @@ class XKAutoTesterApp {
                     }
                 }
             }
+
+            await this.loadScript('components/modal.js');
+            await this.loadScript('components/custom-select.js');
+            await this.loadScript('components/cascade-select.js');
+            await this.loadScript('components/device-cascade-select.js');
             
             this.initializeComponentIcons();
             this.updateComponentTranslations();
         } catch (error) {
             console.error('加载组件失败:', error);
         }
+    }
+
+    loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+    }
+
+    initModals() {
+        this.modals = {
+            plan: new Modal({ id: 'modal-overlay', onOpen: () => this.onPlanModalOpen?.(), onClose: () => this.onPlanModalClose?.() }),
+            rename: new Modal({ id: 'rename-modal-overlay' }),
+            device: new Modal({ id: 'device-modal-overlay', onOpen: () => this.onDeviceModalOpen?.(), onClose: () => this.onDeviceModalClose?.() }),
+            editDeviceId: new Modal({ id: 'edit-device-id-modal-overlay' }),
+            port: new Modal({ id: 'port-modal-overlay' }),
+            confirm: new Modal({ id: 'confirm-modal-overlay' }),
+            update: new Modal({ id: 'update-modal-overlay' }),
+            ppApp: new Modal({ id: 'pp-app-modal-overlay' }),
+            ppPage: new Modal({ id: 'pp-page-modal-overlay' }),
+            ppElement: new Modal({ id: 'pp-element-modal-overlay' }),
+            report: new Modal({ id: 'report-modal-overlay' }),
+            controlParams: new Modal({ id: 'control-params-overlay' }),
+            scheduledPlan: new Modal({ id: 'scheduled-plan-modal-overlay', onOpen: () => this.onScheduledPlanModalOpen?.(), onClose: () => this.onScheduledPlanModalClose?.() })
+        };
     }
 
     initializeCustomSelects() {
@@ -414,6 +495,12 @@ class XKAutoTesterApp {
             testExecutionTab.textContent = window.i18n.t('tabs.testExecution');
         }
         
+        // 更新页面封装页面文本
+        const pagePackageTab = document.querySelector('[data-tab="page-package"] span:last-child');
+        if (pagePackageTab) {
+            pagePackageTab.textContent = window.i18n.t('tabs.pagePackage');
+        }
+        
         const androidConnectionTab = document.querySelector('[data-tab="android-connection"] span:last-child');
         if (androidConnectionTab) {
             androidConnectionTab.textContent = window.i18n.t('tabs.androidConnection');
@@ -422,6 +509,12 @@ class XKAutoTesterApp {
         const settingsTab = document.querySelector('[data-tab="settings"] span:last-child');
         if (settingsTab) {
             settingsTab.textContent = window.i18n.t('tabs.settings');
+        }
+        
+        // 更新测试用例页面文本
+        const testCaseTab = document.querySelector('[data-tab="test-case"] span:last-child');
+        if (testCaseTab) {
+            testCaseTab.textContent = window.i18n.t('tabs.testCase');
         }
         
         // 更新设置页面文本
@@ -448,6 +541,36 @@ class XKAutoTesterApp {
         const dataCard = document.querySelector('#settings .material-card[data-card-type="data"] .card-header h3');
         if (dataCard) {
             dataCard.textContent = window.i18n.t('settings.data');
+        }
+
+        const updateCard = document.querySelector('#settings .material-card[data-card-type="update"] .card-header h3');
+        if (updateCard) {
+            updateCard.textContent = window.i18n.t('settings.update');
+        }
+
+        const runCard = document.querySelector('#settings .material-card[data-card-type="run"] .card-header h3');
+        if (runCard) {
+            runCard.textContent = window.i18n.t('settings.run');
+        }
+
+        const preventSleepLabel = document.querySelector('#settings .material-card[data-card-type="run"] .setting-label span:last-child');
+        if (preventSleepLabel) {
+            preventSleepLabel.textContent = window.i18n.t('settings.preventSleep');
+        }
+
+        const autoCheckUpdateLabel = document.querySelector('#settings .material-card[data-card-type="update"] .setting-item:nth-child(1) .setting-label span:last-child');
+        if (autoCheckUpdateLabel) {
+            autoCheckUpdateLabel.textContent = window.i18n.t('settings.autoCheckUpdate');
+        }
+
+        const checkUpdateNowLabel = document.querySelector('#settings .material-card[data-card-type="update"] .setting-item:nth-child(2) .setting-label span:last-child');
+        if (checkUpdateNowLabel) {
+            checkUpdateNowLabel.textContent = window.i18n.t('settings.checkUpdateNow');
+        }
+
+        const checkUpdateBtn = document.getElementById('check-update-btn');
+        if (checkUpdateBtn) {
+            checkUpdateBtn.textContent = window.i18n.t('settings.checkNow');
         }
         
         // 更新设置项文本
@@ -837,6 +960,8 @@ class XKAutoTesterApp {
     }
 
     setupEventListeners() {
+        this.setupTransparentAreaClickThrough();
+        
         // 阻止滚动的处理函数
         this.preventScroll = (e) => {
             const mainContent = document.querySelector('.main-content');
@@ -969,6 +1094,94 @@ class XKAutoTesterApp {
             });
         }
 
+        // 编辑安卓设备连接标识弹窗控制
+        const editDeviceIdCloseBtn = document.getElementById('edit-device-id-modal-close-btn');
+        if (editDeviceIdCloseBtn) {
+            editDeviceIdCloseBtn.addEventListener('click', () => {
+                this.hideEditDeviceIdModal();
+            });
+        }
+
+        const editDeviceIdCancelBtn = document.getElementById('edit-device-id-cancel-btn');
+        if (editDeviceIdCancelBtn) {
+            editDeviceIdCancelBtn.addEventListener('click', () => {
+                this.hideEditDeviceIdModal();
+            });
+        }
+
+        const editDeviceIdConfirmBtn = document.getElementById('edit-device-id-confirm-btn');
+        if (editDeviceIdConfirmBtn) {
+            editDeviceIdConfirmBtn.addEventListener('click', () => {
+                this.confirmEditDeviceId();
+            });
+        }
+
+        const editDeviceIdManageBtn = document.getElementById('edit-device-id-manage-btn');
+        if (editDeviceIdManageBtn) {
+            editDeviceIdManageBtn.addEventListener('click', () => {
+                this.showDeviceManagementModalForEdit();
+            });
+        }
+
+        // 端口管理按钮
+        const editPortManageBtn = document.getElementById('edit-port-manage-btn');
+        if (editPortManageBtn) {
+            editPortManageBtn.addEventListener('click', () => {
+                this.showPortManagementModal();
+            });
+        }
+
+        // 蓝牙端口输入框验证 - 只允许COM+数字格式
+        const blePortInput = document.getElementById('edit-ble-port-input');
+        if (blePortInput) {
+            blePortInput.addEventListener('input', (e) => {
+                let value = e.target.value.toUpperCase();
+                if (value.length > 0) {
+                    if (/^COM\d*$/.test(value)) {
+                        e.target.value = value;
+                    } else if (/^C(O(M)?)?$/.test(value)) {
+                        e.target.value = value;
+                    } else {
+                        const digits = value.replace(/\D/g, '');
+                        if (digits) {
+                            e.target.value = 'COM' + digits;
+                        } else {
+                            e.target.value = value;
+                        }
+                    }
+                }
+            });
+            blePortInput.addEventListener('blur', (e) => {
+                let value = e.target.value.toUpperCase();
+                if (value.length > 0 && !/^COM\d+$/.test(value)) {
+                    const digits = value.replace(/\D/g, '');
+                    e.target.value = digits ? 'COM' + digits : '';
+                }
+            });
+        }
+
+        // 端口管理弹窗控制
+        const portModalCloseBtn = document.getElementById('port-modal-close-btn');
+        if (portModalCloseBtn) {
+            portModalCloseBtn.addEventListener('click', () => {
+                this.hidePortManagementModal();
+            });
+        }
+
+        const portModalCancelBtn = document.getElementById('port-modal-cancel-btn');
+        if (portModalCancelBtn) {
+            portModalCancelBtn.addEventListener('click', () => {
+                this.hidePortManagementModal();
+            });
+        }
+
+        const portModalConfirmBtn = document.getElementById('port-modal-confirm-btn');
+        if (portModalConfirmBtn) {
+            portModalConfirmBtn.addEventListener('click', () => {
+                this.confirmPortSelection();
+            });
+        }
+
         // 控制参数
         const controlParamsBtn = document.getElementById('control-params-btn');
         if (controlParamsBtn) {
@@ -1019,6 +1232,17 @@ class XKAutoTesterApp {
         if (screenControlBtn) {
             screenControlBtn.addEventListener('click', () => {
                 this.startScreenControl();
+            });
+        }
+
+        // scrcpy 进程错误监听
+        if (window.electronAPI && window.electronAPI.onScrcpyError) {
+            window.electronAPI.onScrcpyError((data) => {
+                if (data.error === 'crash') {
+                    Toast.error(window.i18n.t('screenControl.crashError'));
+                } else {
+                    Toast.error(`${window.i18n.t('screenControl.startFailed')}: ${data.error}`);
+                }
             });
         }
 
@@ -1081,6 +1305,538 @@ class XKAutoTesterApp {
                 this.handleScheduledPlanExpired(data);
             });
         }
+        
+        // 测试用例页面事件
+        this.setupTestCaseEvents();
+    }
+
+    setupTestCaseEvents() {
+        // 选择目录按钮
+        const selectDirBtn = document.getElementById('tc-select-directory-btn');
+        if (selectDirBtn) {
+            selectDirBtn.addEventListener('click', () => this.tcSelectDirectory());
+        }
+
+        // 添加新用例按钮
+        const addNewBtn = document.getElementById('tc-add-new-btn');
+        if (addNewBtn) {
+            addNewBtn.addEventListener('click', () => {
+                if (addNewBtn.hasAttribute('disabled') || addNewBtn.classList.contains('disabled')) {
+                    return;
+                }
+                this.tcShowEditor();
+                // 初始化编辑器
+                this.tcInitEditor();
+            });
+        }
+
+        // 添加步骤按钮
+        const addStepBtn = document.getElementById('tc-add-step-btn');
+        if (addStepBtn) {
+            addStepBtn.addEventListener('click', () => this.tcAddStep());
+        }
+
+        // 底部添加步骤按钮
+        const addStepBottomBtn = document.getElementById('tc-add-step-bottom-btn');
+        if (addStepBottomBtn) {
+            addStepBottomBtn.addEventListener('click', () => this.tcAddStep());
+        }
+
+        // 取消编辑按钮
+        const cancelBtn = document.getElementById('tc-cancel-btn');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                this.tcCancelEdit();
+                this.tcResetEditor();
+            });
+        }
+
+        // 保存按钮
+        const saveBtn = document.getElementById('tc-save-btn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => this.tcSaveCase());
+        }
+
+        // 删除按钮
+        const deleteBtn = document.getElementById('tc-delete-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => this.tcDeleteCase());
+        }
+    }
+
+    async tcSelectDirectory() {
+        try {
+            const result = await window.electronAPI.selectDirectory();
+            if (result && !result.canceled && result.filePaths.length > 0) {
+                this.tcSelectedDirectory = result.filePaths[0];
+                const selectedDirElement = document.getElementById('tc-selected-directory');
+                if (selectedDirElement) {
+                    const folderName = this.tcSelectedDirectory.split(/[\\/]/).pop();
+                    selectedDirElement.textContent = folderName;
+                    selectedDirElement.setAttribute('title', this.tcSelectedDirectory);
+                }
+                await this.tcScanTestFiles();
+                this.tcUpdateAddButtonState(true);
+            }
+        } catch (error) {
+            console.error('选择目录失败:', error);
+        }
+    }
+
+    tcUpdateAddButtonState(enabled) {
+        const addBtn = document.getElementById('tc-add-new-btn');
+        if (addBtn) {
+            if (enabled) {
+                addBtn.removeAttribute('disabled');
+                addBtn.classList.remove('disabled');
+            } else {
+                addBtn.setAttribute('disabled', 'true');
+                addBtn.classList.add('disabled');
+            }
+        }
+    }
+
+    async tcScanTestFiles() {
+        if (!this.tcSelectedDirectory) return;
+        
+        try {
+            const files = await window.electronAPI.scanTestFiles(this.tcSelectedDirectory);
+            this.tcTestFiles = files || [];
+            this.tcDisplayTestFiles();
+        } catch (error) {
+            console.error('扫描测试文件失败:', error);
+        }
+    }
+
+    tcDisplayTestFiles() {
+        const container = document.getElementById('tc-test-files-list');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        if (!this.tcTestFiles || this.tcTestFiles.length === 0) {
+            container.innerHTML = `
+                <div class="placeholder-message">
+                    <span class="svg-icon" data-icon="info"></span>
+                    <span data-i18n="testCase.noTestFiles">${window.i18n ? window.i18n.t('testCase.noTestFiles') : '当前目录下没有测试文件'}</span>
+                </div>
+            `;
+            this.initializeIcons();
+            return;
+        }
+        
+        const fragment = document.createDocumentFragment();
+        this.tcTestFiles.forEach(file => {
+            const fileElement = document.createElement('div');
+            fileElement.className = 'test-case-file-item';
+            fileElement.setAttribute('data-path', file.path);
+            fileElement.innerHTML = `
+                ${this.getIconHtml('description')}
+                <span>${file.name}</span>
+            `;
+            
+            fileElement.addEventListener('click', () => this.tcSelectFile(file, fileElement));
+            fragment.appendChild(fileElement);
+        });
+        container.appendChild(fragment);
+    }
+
+    tcSelectFile(file, element) {
+        if (element.classList.contains('selected')) {
+            element.classList.remove('selected');
+            this.tcSelectedFile = null;
+            this.tcLoadedDeviceConfig = null;
+            this.tcLoadedBleDevice = null;
+            
+            const emptyState = document.getElementById('tc-editor-empty');
+            const editorForm = document.getElementById('tc-editor-form');
+            if (editorForm) editorForm.classList.add('hidden');
+            if (emptyState) emptyState.classList.remove('hidden');
+            
+            const fileNameInput = document.getElementById('tc-file-name');
+            if (fileNameInput) fileNameInput.value = '';
+            
+            return;
+        }
+        
+        document.querySelectorAll('.test-case-file-item.selected').forEach(item => {
+            item.classList.remove('selected');
+        });
+        
+        element.classList.add('selected');
+        this.tcSelectedFile = file;
+        
+        this.tcShowEditor(file);
+    }
+
+    async tcShowEditor(file = null) {
+        const emptyState = document.getElementById('tc-editor-empty');
+        const editorForm = document.getElementById('tc-editor-form');
+        const titleElement = document.querySelector('#tc-editor-form .card-header h3');
+        const deleteBtn = document.getElementById('tc-delete-btn');
+        const saveBtn = document.getElementById('tc-save-btn');
+
+        if (file) {
+            const fileName = file.name.replace(/\.[^/.]+$/, '');
+            const jsonCheck = await window.electronAPI.testCase.checkJsonExists(fileName);
+
+            if (!jsonCheck.exists) {
+                this.tcIsEditing = false;
+                this.tcResetEditor();
+
+                if (titleElement) {
+                    titleElement.setAttribute('data-i18n', 'testCase.editCase');
+                    titleElement.textContent = window.i18n ? window.i18n.t('testCase.editCase') : '编辑测试用例';
+                }
+                const fileNameInput = document.getElementById('tc-file-name');
+                if (fileNameInput) {
+                    fileNameInput.value = fileName;
+                    fileNameInput.disabled = true;
+                }
+                if (deleteBtn) {
+                    deleteBtn.classList.remove('hidden');
+                }
+                if (saveBtn) {
+                    saveBtn.disabled = true;
+                    saveBtn.classList.add('disabled');
+                }
+                if (emptyState) emptyState.classList.add('hidden');
+                if (editorForm) editorForm.classList.remove('hidden');
+
+                const editorContentNoJson = document.querySelector('.tc-editor-content');
+                if (editorContentNoJson) {
+                    editorContentNoJson.scrollTop = 0;
+                }
+
+                await this.tcInitEditor();
+
+                const formInputs = editorForm.querySelectorAll('input, select, textarea, button:not(#tc-delete-btn):not(#tc-cancel-btn)');
+                formInputs.forEach(el => {
+                    el.disabled = true;
+                    el.classList.add('disabled');
+                });
+
+                this.tcShowJsonMissingWarning(fileName);
+                return;
+            }
+
+            this.tcIsEditing = true;
+            if (titleElement) {
+                titleElement.setAttribute('data-i18n', 'testCase.editCase');
+                titleElement.textContent = window.i18n ? window.i18n.t('testCase.editCase') : '编辑测试用例';
+            }
+            const fileNameInput = document.getElementById('tc-file-name');
+            if (fileNameInput) {
+                fileNameInput.value = fileName;
+                fileNameInput.disabled = false;
+            }
+            if (deleteBtn) {
+                deleteBtn.classList.remove('hidden');
+            }
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.classList.remove('disabled');
+            }
+
+            const existingWarning = document.getElementById('tc-json-missing-warning');
+            if (existingWarning) existingWarning.remove();
+
+            const formInputs = editorForm.querySelectorAll('input, select, textarea, button');
+            formInputs.forEach(el => {
+                el.disabled = false;
+                el.classList.remove('disabled');
+            });
+        } else {
+            this.tcIsEditing = false;
+            if (titleElement) {
+                titleElement.setAttribute('data-i18n', 'testCase.newCase');
+                titleElement.textContent = window.i18n ? window.i18n.t('testCase.newCase') : '新建测试用例';
+            }
+            const fileNameInput = document.getElementById('tc-file-name');
+            if (fileNameInput) {
+                fileNameInput.value = '';
+                fileNameInput.disabled = false;
+            }
+            if (deleteBtn) {
+                deleteBtn.classList.add('hidden');
+            }
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.classList.remove('disabled');
+            }
+
+            const existingWarning = document.getElementById('tc-json-missing-warning');
+            if (existingWarning) existingWarning.remove();
+
+            const formInputs = editorForm.querySelectorAll('input, select, textarea, button');
+            formInputs.forEach(el => {
+                el.disabled = false;
+                el.classList.remove('disabled');
+            });
+
+            this.tcResetEditor();
+        }
+
+        if (emptyState) emptyState.classList.add('hidden');
+        if (editorForm) editorForm.classList.remove('hidden');
+
+        const editorContent = document.querySelector('.tc-editor-content');
+        if (editorContent) {
+            editorContent.scrollTop = 0;
+        }
+
+        await this.tcInitEditor();
+
+        if (file) {
+            await this.tcLoadCaseData(file.name.replace(/\.[^/.]+$/, ''));
+        }
+
+        this.tcHideError();
+    }
+
+    tcShowJsonMissingWarning(fileName) {
+        const existingWarning = document.getElementById('tc-json-missing-warning');
+        if (existingWarning) existingWarning.remove();
+
+        const editorContent = document.querySelector('.tc-editor-content');
+        if (!editorContent) return;
+
+        const warningDiv = document.createElement('div');
+        warningDiv.id = 'tc-json-missing-warning';
+        warningDiv.className = 'tc-json-missing-warning';
+        warningDiv.innerHTML = `
+            <span class="svg-icon" data-icon="warning"></span>
+            <span>${window.i18n ? window.i18n.t('testCase.jsonMissingWarning', { fileName }) : `对应JSON数据文件(${fileName}.json)缺失，此用例不可编辑。请删除后重新创建。`}</span>
+        `;
+        editorContent.insertBefore(warningDiv, editorContent.firstChild);
+        this.initializeIcons();
+    }
+
+    /**
+     * 加载测试用例数据并填充表单
+     */
+    async tcLoadCaseData(fileName) {
+        try {
+            const result = await window.electronAPI.testCase.get(fileName);
+            if (!result.success) {
+                console.error('加载测试用例数据失败:', result.error);
+                return;
+            }
+
+            const caseData = result.data;
+            
+            // 填充用例名称
+            const caseNameInput = document.getElementById('tc-case-name');
+            if (caseNameInput) {
+                caseNameInput.value = caseData.name || '';
+            }
+
+            // 填充描述
+            const descriptionInput = document.getElementById('tc-description');
+            if (descriptionInput) {
+                descriptionInput.value = caseData.description || '';
+            }
+
+            // 填充Allure配置
+            const allureConfig = caseData.allureConfig || {};
+            const epicInput = document.getElementById('tc-allure-epic');
+            const featureInput = document.getElementById('tc-allure-feature');
+            const storyInput = document.getElementById('tc-allure-story');
+
+            if (epicInput) epicInput.value = allureConfig.epic || '';
+            if (featureInput) featureInput.value = allureConfig.feature || '';
+            if (storyInput) storyInput.value = allureConfig.story || '';
+
+            // 设置选中的Markers
+            const savedMarkers = allureConfig.markers || [];
+            this.tcSelectedMarkers = savedMarkers;
+            
+            // 更新Markers选项选中状态
+            const markersOptionsContainer = document.getElementById('tc-markers-options');
+            if (markersOptionsContainer) {
+                markersOptionsContainer.querySelectorAll('.custom-select__option').forEach(opt => {
+                    opt.classList.toggle('selected', savedMarkers.includes(opt.dataset.value));
+                });
+            }
+
+            // 更新Markers显示（徽章形式）
+            this.tcUpdateMarkersDisplay();
+
+            // 设置选中的应用
+            if (caseData.targetApp && caseData.targetApp.id) {
+                this.tcSelectedApp = caseData.targetApp;
+                // 更新应用选择下拉框显示
+                const selectedSpan = document.querySelector('#tc-app-selected .custom-select__text');
+                if (selectedSpan) {
+                    selectedSpan.textContent = caseData.targetApp.name || '';
+                }
+                // 更新选项选中状态
+                const optionsContainer = document.getElementById('tc-app-options');
+                if (optionsContainer) {
+                    optionsContainer.querySelectorAll('.custom-select__option').forEach(opt => {
+                        opt.classList.toggle('selected', opt.dataset.value === caseData.targetApp.id);
+                    });
+                }
+                // 启用测试步骤卡片
+                this.tcUpdateStepsSectionState(true);
+            }
+
+            // 加载步骤
+            if (caseData.steps && caseData.steps.length > 0) {
+                this.tcSteps = caseData.steps;
+                this.tcRenderSteps();
+                this.tcHideStepsEmpty();
+            } else {
+                this.tcSteps = [];
+                const container = document.getElementById('tc-steps-list');
+                if (container) container.innerHTML = '';
+                this.tcShowStepsEmpty();
+            }
+
+            // 加载设备配置和蓝牙设备配置（编辑时保留）
+            this.tcLoadedDeviceConfig = caseData.deviceConfig || null;
+            this.tcLoadedBleDevice = caseData.bleDevice || null;
+
+        } catch (error) {
+            console.error('加载测试用例数据失败:', error);
+        }
+    }
+
+    tcCancelEdit() {
+        const emptyState = document.getElementById('tc-editor-empty');
+        const editorForm = document.getElementById('tc-editor-form');
+        
+        if (editorForm) editorForm.classList.add('hidden');
+        if (emptyState) emptyState.classList.remove('hidden');
+        
+        const fileNameInput = document.getElementById('tc-file-name');
+        if (fileNameInput) {
+            fileNameInput.value = '';
+            fileNameInput.disabled = false;
+        }
+
+        const saveBtn = document.getElementById('tc-save-btn');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.classList.remove('disabled');
+        }
+
+        const formInputs = editorForm.querySelectorAll('input, select, textarea, button');
+        formInputs.forEach(el => {
+            el.disabled = false;
+            el.classList.remove('disabled');
+        });
+
+        const existingWarning = document.getElementById('tc-json-missing-warning');
+        if (existingWarning) existingWarning.remove();
+        
+        document.querySelectorAll('.test-case-file-item.selected').forEach(item => {
+            item.classList.remove('selected');
+        });
+        this.tcSelectedFile = null;
+        this.tcIsEditing = false;
+        this.tcLoadedDeviceConfig = null;
+        this.tcLoadedBleDevice = null;
+        
+        this.tcHideError();
+    }
+
+    async tcSaveCase() {
+        const fileNameInput = document.getElementById('tc-file-name');
+        let fileName = fileNameInput ? fileNameInput.value.trim() : '';
+
+        if (!fileName) {
+            Toast.error(window.i18n ? window.i18n.t('testCase.fileNameRequired') : '请输入文件名称');
+            return;
+        }
+
+        const validPattern = /^[a-zA-Z0-9_]+$/;
+        if (!validPattern.test(fileName)) {
+            Toast.error(window.i18n ? window.i18n.t('testCase.fileNameInvalidChars') : '文件名称只能包含英文、数字和下划线');
+            return;
+        }
+
+        if (!this.tcSelectedDirectory) {
+            Toast.error(window.i18n ? window.i18n.t('testCase.selectCaseFirst') : '请先选择测试目录');
+            return;
+        }
+
+        // 检查是否选择了目标应用
+        if (!this.tcSelectedApp) {
+            Toast.error(window.i18n ? window.i18n.t('testCase.selectAppFirst') : '请先选择目标应用');
+            return;
+        }
+
+        // 收集表单数据
+        const caseData = this.tcCollectFormData();
+
+        try {
+            // 使用新的API保存并生成Python文件
+            const result = await window.electronAPI.testCase.saveAndGenerate(caseData, this.tcSelectedDirectory);
+
+            if (result && result.success) {
+                Toast.success(window.i18n ? window.i18n.t('testCase.saveSuccess') : '测试用例保存成功');
+
+                await this.tcScanTestFiles();
+
+                this.tcCancelEdit();
+            } else {
+                Toast.error(result?.error || (window.i18n ? window.i18n.t('testCase.saveFailed') : '测试用例保存失败'));
+            }
+        } catch (error) {
+            console.error('保存测试用例失败:', error);
+            Toast.error(window.i18n ? window.i18n.t('testCase.saveFailed') : '测试用例保存失败');
+        }
+    }
+
+    tcShowError(messageKey) {
+        const errorElement = document.getElementById('tc-file-name-error');
+        const messageSpan = errorElement ? errorElement.querySelector('span:last-child') : null;
+        
+        if (errorElement && messageSpan) {
+            messageSpan.setAttribute('data-i18n', messageKey);
+            messageSpan.textContent = window.i18n ? window.i18n.t(messageKey) : messageKey;
+            errorElement.classList.remove('error-hidden');
+        }
+    }
+
+    tcHideError() {
+        const errorElement = document.getElementById('tc-file-name-error');
+        if (errorElement) {
+            errorElement.classList.add('error-hidden');
+        }
+    }
+
+    async tcDeleteCase() {
+        if (!this.tcSelectedFile) {
+            Toast.error(window.i18n ? window.i18n.t('testCase.noFileSelected') : '未选择要删除的文件');
+            return;
+        }
+        
+        const title = window.i18n ? window.i18n.t('testCase.deleteConfirmTitle') : '删除确认';
+        const message = window.i18n ? window.i18n.t('testCase.deleteConfirmMessage', { name: this.tcSelectedFile.name }) : `确定要删除测试用例 "${this.tcSelectedFile.name}" 吗？关联的JSON和Python文件将被同时删除。`;
+        
+        this.showConfirmModal(title, message, async () => {
+            try {
+                const pyFileName = this.tcSelectedFile.name;
+                const fileName = pyFileName.replace('.py', '');
+                const pyFilePath = this.tcSelectedFile.path;
+                const result = await window.electronAPI.testCase.delete({ fileName, pyFilePath });
+                
+                if (result && result.success) {
+                    Toast.success(window.i18n ? window.i18n.t('testCase.deleteSuccess') : '测试用例删除成功');
+                    
+                    await this.tcScanTestFiles();
+                    
+                    this.tcCancelEdit();
+                } else {
+                    Toast.error(result?.error || (window.i18n ? window.i18n.t('testCase.deleteFailed') : '测试用例删除失败'));
+                }
+            } catch (error) {
+                console.error('删除测试用例失败:', error);
+                Toast.error(window.i18n ? window.i18n.t('testCase.deleteFailed') : '测试用例删除失败');
+            }
+        });
     }
 
     async loadProjectInfo() {
@@ -1191,9 +1947,48 @@ class XKAutoTesterApp {
                 
                 // 加载通知配置
                 this.loadNotificationConfig(config.APP_SETTINGS.notification);
+
+                // 更新自动检查更新开关
+                const autoCheckUpdateToggle = document.getElementById('auto-check-update-toggle');
+                if (autoCheckUpdateToggle) {
+                    autoCheckUpdateToggle.checked = config.APP_SETTINGS.autoCheckUpdate === true;
+                }
+
+                const preventSleepToggle = document.getElementById('prevent-sleep-toggle');
+                if (preventSleepToggle) {
+                    preventSleepToggle.checked = config.APP_SETTINGS.preventSleep || false;
+                }
             }
         } catch (error) {
             console.error('加载配置失败:', error);
+        }
+    }
+    
+    async loadVersionInfo() {
+        try {
+            if (!window.electronAPI || !window.electronAPI.getVersionInfo) {
+                console.error('electronAPI未定义，无法加载版本信息');
+                return;
+            }
+            
+            const result = await window.electronAPI.getVersionInfo();
+            if (result && result.success && result.data) {
+                const versionInfo = result.data;
+                
+                const versionElement = document.getElementById('app-version-info');
+                if (versionElement) {
+                    versionElement.textContent = versionInfo.fullVersion 
+                        ? `v${versionInfo.fullVersion}` 
+                        : `v${versionInfo.version || '0.0.0'}`;
+                }
+                
+                const buildDateElement = document.querySelector('.version-item:nth-child(2) .version-value');
+                if (buildDateElement && versionInfo.buildDate) {
+                    buildDateElement.textContent = versionInfo.buildDate;
+                }
+            }
+        } catch (error) {
+            console.error('加载版本信息失败:', error);
         }
     }
     
@@ -1601,10 +2396,162 @@ class XKAutoTesterApp {
             });
         }
         
+        // 配置存放位置 - 初始化
+        const initConfigStoragePath = async () => {
+            const configStorageInput = document.getElementById('config-storage-path');
+            const configStorageTooltip = document.getElementById('config-storage-tooltip');
+            if (!configStorageInput) return;
+            
+            try {
+                const dataPathInfo = await window.electronAPI.getDataPath();
+                if (dataPathInfo && dataPathInfo.currentPath) {
+                    configStorageInput.value = dataPathInfo.currentPath;
+                    if (configStorageTooltip) {
+                        configStorageTooltip.textContent = dataPathInfo.currentPath;
+                        configStorageTooltip.classList.remove('empty');
+                    }
+                }
+            } catch (error) {
+                console.error('获取配置路径失败:', error);
+            }
+        };
+        initConfigStoragePath();
+        
+        const showConfigConfirmDialog = (title, message, confirmText, cancelText) => {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirm-modal-overlay');
+                const titleEl = document.getElementById('confirm-modal-title');
+                const messageEl = document.getElementById('confirm-modal-message');
+                const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
+                const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
+
+                if (!modal || !confirmBtn || !cancelBtn) {
+                    console.error('确认弹窗元素未找到');
+                    resolve(false);
+                    return;
+                }
+
+                if (titleEl) titleEl.textContent = title;
+                if (messageEl) messageEl.textContent = message;
+                confirmBtn.textContent = confirmText;
+                cancelBtn.textContent = cancelText;
+
+                modal.classList.remove('hidden');
+
+                const handleConfirm = () => {
+                    modal.classList.add('hidden');
+                    confirmBtn.removeEventListener('click', handleConfirm);
+                    cancelBtn.removeEventListener('click', handleCancel);
+                    resolve(true);
+                };
+
+                const handleCancel = () => {
+                    modal.classList.add('hidden');
+                    confirmBtn.removeEventListener('click', handleConfirm);
+                    cancelBtn.removeEventListener('click', handleCancel);
+                    resolve(false);
+                };
+
+                confirmBtn.addEventListener('click', handleConfirm);
+                cancelBtn.addEventListener('click', handleCancel);
+            });
+        };
+        
+        // 配置存放位置 - 浏览按钮
+        const browseConfigStorageBtn = document.getElementById('browse-config-storage');
+        if (browseConfigStorageBtn) {
+            browseConfigStorageBtn.addEventListener('click', async () => {
+                try {
+                    if (!window.electronAPI || !window.electronAPI.selectDirectory) return;
+                    
+                    const result = await window.electronAPI.selectDirectory();
+                    if (!result.canceled && result.filePaths.length > 0) {
+                        let newPath = result.filePaths[0];
+                        
+                        const lastPart = newPath.split(/[/\\]/).pop();
+                        if (lastPart !== 'Xkautotester') {
+                            newPath = newPath + (newPath.includes('\\') ? '\\' : '/') + 'Xkautotester';
+                        }
+                        
+                        const configStorageInput = document.getElementById('config-storage-path');
+                        const configStorageTooltip = document.getElementById('config-storage-tooltip');
+                        
+                        const changeResult = await window.electronAPI.changeDataPath(newPath);
+                        if (changeResult.success) {
+                            if (configStorageInput) configStorageInput.value = newPath;
+                            if (configStorageTooltip) {
+                                configStorageTooltip.textContent = newPath;
+                                configStorageTooltip.classList.remove('empty');
+                            }
+                            
+                            const restartConfirmed = await showConfigConfirmDialog(
+                                window.i18n ? window.i18n.t('settings.restartRequired') : '需要重启',
+                                window.i18n ? window.i18n.t('settings.changeAndRestartMessage') : '配置路径已更改，需要重启应用才能生效。是否立即重启？',
+                                window.i18n ? window.i18n.t('settings.restartNow') : '立即重启',
+                                window.i18n ? window.i18n.t('settings.restartLater') : '稍后重启'
+                            );
+                            
+                            if (restartConfirmed) {
+                                await window.electronAPI.relaunchApp();
+                            }
+                        } else {
+                            await showConfigConfirmDialog(
+                                window.i18n ? window.i18n.t('common.error') : '错误',
+                                changeResult.error || (window.i18n ? window.i18n.t('settings.changeConfigPathFailed') : '更改配置路径失败'),
+                                window.i18n ? window.i18n.t('common.confirm') : '确定',
+                                window.i18n ? window.i18n.t('common.cancel') : '取消'
+                            );
+                        }
+                    }
+                } catch (error) {
+                    console.error('更改配置路径失败:', error);
+                }
+            });
+        }
+        
+        // 配置存放位置 - 重置按钮
+        const resetConfigStorageBtn = document.getElementById('reset-config-storage');
+        if (resetConfigStorageBtn) {
+            resetConfigStorageBtn.addEventListener('click', async () => {
+                try {
+                    const resetResult = await window.electronAPI.resetDataPath();
+                    if (resetResult.success) {
+                        const dataPathInfo = await window.electronAPI.getDataPath();
+                        const configStorageInput = document.getElementById('config-storage-path');
+                        const configStorageTooltip = document.getElementById('config-storage-tooltip');
+                        
+                        if (configStorageInput) configStorageInput.value = dataPathInfo.defaultPath;
+                        if (configStorageTooltip) {
+                            configStorageTooltip.textContent = dataPathInfo.defaultPath;
+                            configStorageTooltip.classList.remove('empty');
+                        }
+                        
+                        const restartConfirmed = await showConfigConfirmDialog(
+                            window.i18n ? window.i18n.t('settings.restartRequired') : '需要重启',
+                            window.i18n ? window.i18n.t('settings.resetAndRestartMessage') : '配置路径已重置为默认路径，需要重启应用才能生效。是否立即重启？',
+                            window.i18n ? window.i18n.t('settings.restartNow') : '立即重启',
+                            window.i18n ? window.i18n.t('settings.restartLater') : '稍后重启'
+                        );
+                        
+                        if (restartConfirmed) {
+                            await window.electronAPI.relaunchApp();
+                        }
+                    }
+                } catch (error) {
+                    console.error('重置配置路径失败:', error);
+                }
+            });
+        }
+        
         // 自定义语言选择器事件监听
         const customLanguageSelect = document.getElementById('custom-language-select');
         const customLanguageSelected = document.getElementById('custom-language-selected');
         const customLanguageOptions = document.getElementById('custom-language-options');
+        
+        // 通知平台选择器事件监听
+        const notificationPlatformSelect = document.getElementById('custom-notification-platform-select');
+        const notificationPlatformSelected = document.getElementById('custom-notification-platform-selected');
+        const notificationPlatformOptions = document.getElementById('custom-notification-platform-options');
         
         if (customLanguageSelect && customLanguageSelected && customLanguageOptions) {
             // 将下拉框选项移到 body 下，避免被 modal 的 backdrop-filter 影响
@@ -1616,6 +2563,10 @@ class XKAutoTesterApp {
                 const isShowing = customLanguageOptions.classList.contains('show');
                 const mainContent = document.querySelector('.main-content');
                 if (!isShowing) {
+                    // 关闭其他下拉框
+                    if (notificationPlatformOptions) {
+                        notificationPlatformOptions.classList.remove('show');
+                    }
                     this.positionDropdown(customLanguageSelected, customLanguageOptions);
                     customLanguageOptions.classList.add('show');
                     if (mainContent) {
@@ -1668,11 +2619,6 @@ class XKAutoTesterApp {
             });
         }
         
-        // 通知平台选择器事件监听
-        const notificationPlatformSelect = document.getElementById('custom-notification-platform-select');
-        const notificationPlatformSelected = document.getElementById('custom-notification-platform-selected');
-        const notificationPlatformOptions = document.getElementById('custom-notification-platform-options');
-        
         if (notificationPlatformSelect && notificationPlatformSelected && notificationPlatformOptions) {
             document.body.appendChild(notificationPlatformOptions);
             
@@ -1681,6 +2627,10 @@ class XKAutoTesterApp {
                 const isShowing = notificationPlatformOptions.classList.contains('show');
                 const mainContent = document.querySelector('.main-content');
                 if (!isShowing) {
+                    // 关闭其他下拉框
+                    if (customLanguageOptions) {
+                        customLanguageOptions.classList.remove('show');
+                    }
                     this.positionDropdown(notificationPlatformSelected, notificationPlatformOptions);
                     notificationPlatformOptions.classList.add('show');
                     if (mainContent) {
@@ -1781,6 +2731,90 @@ class XKAutoTesterApp {
                 });
             });
         }
+        
+        // 清除所有日志数据按钮事件监听
+        const clearAllLogsBtn = document.getElementById('clear-all-logs-btn');
+        if (clearAllLogsBtn) {
+            clearAllLogsBtn.addEventListener('click', () => {
+                const title = window.i18n.t('settings.clearAllLogs');
+                const message = window.i18n.t('settings.clearAllLogsConfirm');
+                
+                this.showConfirmModal(title, message, async () => {
+                    try {
+                        clearAllLogsBtn.disabled = true;
+                        const result = await window.electronAPI.clearAllLogs();
+                        
+                        if (result.success) {
+                            Toast.success(window.i18n.t('settings.clearAllLogsSuccess'));
+                        } else {
+                            Toast.error(window.i18n.t('settings.clearAllLogsFailed') + ': ' + result.error);
+                        }
+                    } catch (error) {
+                        console.error('清除日志数据失败:', error);
+                        Toast.error(window.i18n.t('settings.clearAllLogsFailed'));
+                    } finally {
+                        clearAllLogsBtn.disabled = false;
+                    }
+                });
+            });
+        }
+
+        // 自动检查更新开关
+        const autoCheckUpdateToggle = document.getElementById('auto-check-update-toggle');
+        if (autoCheckUpdateToggle) {
+            autoCheckUpdateToggle.addEventListener('change', () => {
+                this.saveConfig({ autoCheckUpdate: autoCheckUpdateToggle.checked });
+            });
+        }
+
+        const preventSleepToggle = document.getElementById('prevent-sleep-toggle');
+        if (preventSleepToggle) {
+            preventSleepToggle.addEventListener('change', () => {
+                this.saveConfig({ preventSleep: preventSleepToggle.checked });
+                if (window.electronAPI && window.electronAPI.setPreventSleep) {
+                    window.electronAPI.setPreventSleep(preventSleepToggle.checked);
+                }
+            });
+        }
+
+        // 检查更新按钮
+        const checkUpdateBtn = document.getElementById('check-update-btn');
+        if (checkUpdateBtn) {
+            checkUpdateBtn.addEventListener('click', () => {
+                this.checkForUpdate();
+            });
+        }
+
+        // 更新弹窗事件
+        const updateModalCloseBtn = document.getElementById('update-modal-close-btn');
+        if (updateModalCloseBtn) {
+            updateModalCloseBtn.addEventListener('click', () => this.hideUpdateModal());
+        }
+
+        const updateCancelBtn = document.getElementById('update-cancel-btn');
+        if (updateCancelBtn) {
+            updateCancelBtn.addEventListener('click', () => this.hideUpdateModal());
+        }
+
+        const updateDownloadBtn = document.getElementById('update-download-btn');
+        if (updateDownloadBtn) {
+            updateDownloadBtn.addEventListener('click', () => {
+                if (this.updatePendingFilePath) {
+                    this.installUpdate(this.updatePendingFilePath);
+                } else {
+                    this.downloadUpdate();
+                }
+            });
+        }
+
+        const updateModalOverlay = document.getElementById('update-modal-overlay');
+        if (updateModalOverlay) {
+            updateModalOverlay.addEventListener('click', (e) => {
+                if (e.target === updateModalOverlay) {
+                    this.hideUpdateModal();
+                }
+            });
+        }
     }
     
     // 初始化自定义下拉框
@@ -1862,7 +2896,6 @@ class XKAutoTesterApp {
     positionDropdown(selected, options) {
         const rect = selected.getBoundingClientRect();
         
-        // 如果元素不可见，使用默认位置
         if (rect.width === 0 && rect.height === 0) {
             options.style.top = '50%';
             options.style.left = '50%';
@@ -1872,14 +2905,28 @@ class XKAutoTesterApp {
         }
         
         const viewportHeight = window.innerHeight;
-        const optionsHeight = 200;
+        options.classList.add('show');
+        const actualOptionsHeight = options.offsetHeight || 200;
         
-        let top = rect.bottom + 4;
+        const gap = 4;
+        const threshold = 2;
+        let top;
         
-        if (top + optionsHeight > viewportHeight - 20) {
-            top = rect.top - optionsHeight - 4;
-            if (top < 0) {
-                top = 10;
+        const spaceBelow = viewportHeight - rect.bottom - gap;
+        const spaceAbove = rect.top - gap;
+        const requiredSpaceBelow = actualOptionsHeight * threshold;
+        
+        if (spaceAbove >= actualOptionsHeight && spaceBelow < requiredSpaceBelow) {
+            top = rect.top - actualOptionsHeight - gap;
+        } else if (spaceBelow >= actualOptionsHeight) {
+            top = rect.bottom + gap;
+        } else if (spaceAbove >= actualOptionsHeight) {
+            top = rect.top - actualOptionsHeight - gap;
+        } else {
+            if (spaceBelow >= spaceAbove) {
+                top = rect.bottom + gap;
+            } else {
+                top = Math.max(10, rect.top - actualOptionsHeight - gap);
             }
         }
         
@@ -2130,6 +3177,106 @@ class XKAutoTesterApp {
 
     }
     
+    setupTransparentAreaClickThrough() {
+        let isIgnoringMouseEvents = false;
+        let isDragging = false;
+        const appElement = document.getElementById('app');
+        const appNav = document.querySelector('.app-nav');
+        
+        if (!appElement) {
+            console.error('找不到 #app 元素');
+            return;
+        }
+        
+        // 检查坐标是否在透明区域（#app 边界外）
+        const isInTransparentArea = (x, y) => {
+            const rect = appElement.getBoundingClientRect();
+            return x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
+        };
+        
+        // 检查坐标是否在拖拽区域（app-nav 内但不在 no-drag 区域）
+        const isInDraggableArea = (x, y) => {
+            if (!appNav) return false;
+            
+            const navRect = appNav.getBoundingClientRect();
+            // 不在 app-nav 范围内
+            if (x < navRect.left || x > navRect.right || y < navRect.top || y > navRect.bottom) {
+                return false;
+            }
+            
+            // 检查是否在 no-drag 区域内
+            const noDragElements = appNav.querySelectorAll('.nav-left, .nav-tabs, .nav-right');
+            for (const el of noDragElements) {
+                const elRect = el.getBoundingClientRect();
+                if (x >= elRect.left && x <= elRect.right && y >= elRect.top && y <= elRect.bottom) {
+                    return false;
+                }
+            }
+            
+            return true;
+        };
+        
+        // 使用 mousemove 来精确检测鼠标位置
+        const checkMousePosition = (e) => {
+            const x = e.clientX;
+            const y = e.clientY;
+            const inTransparent = isInTransparentArea(x, y);
+            
+            if (inTransparent && !isIgnoringMouseEvents) {
+                // 鼠标在透明区域，启用点击穿透
+                isIgnoringMouseEvents = true;
+                window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+            } else if (!inTransparent && isIgnoringMouseEvents) {
+                // 鼠标在 #app 内部，禁用点击穿透
+                isIgnoringMouseEvents = false;
+                window.electronAPI.setIgnoreMouseEvents(false);
+            }
+            
+            // 处理窗口拖拽
+            if (isDragging) {
+                // 使用屏幕坐标进行窗口移动
+                window.electronAPI.moveWindowDrag(e.screenX, e.screenY);
+            }
+        };
+        
+        // 监听 mousemove 事件
+        document.addEventListener('mousemove', checkMousePosition);
+        
+        // 自定义窗口拖拽 - mousedown
+        document.addEventListener('mousedown', (e) => {
+            if (isInDraggableArea(e.clientX, e.clientY)) {
+                isDragging = true;
+                // 传递屏幕坐标
+                window.electronAPI.startWindowDrag(e.screenX, e.screenY);
+                e.preventDefault();
+            }
+        });
+        
+        // 自定义窗口拖拽 - mouseup
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                window.electronAPI.endWindowDrag();
+            }
+        });
+        
+        // 当鼠标离开整个文档时，启用点击穿透
+        document.addEventListener('mouseleave', () => {
+            if (!isIgnoringMouseEvents) {
+                isIgnoringMouseEvents = true;
+                window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+            }
+        });
+        
+        // 当鼠标进入文档时，检查位置
+        document.addEventListener('mouseenter', (e) => {
+            if (isIgnoringMouseEvents && !isInTransparentArea(e.clientX, e.clientY)) {
+                isIgnoringMouseEvents = false;
+                window.electronAPI.setIgnoreMouseEvents(false);
+            }
+        });
+    }
+    
     // 切换导航标签
     switchTab(tab) {
         // 获取目标页面ID
@@ -2153,12 +3300,25 @@ class XKAutoTesterApp {
         if (pageElement) {
             pageElement.classList.add('active');
         }
+        
+        // 处理页面封装页面切换
+        if (targetPage === 'page-package') {
+            if (!this.ppApps || this.ppApps.length === 0) {
+                this.initPagePackage();
+            } else {
+                this.ppUpdateBadge('app', this.ppApps.length);
+            }
+        } else {
+            // 切换到其他页面时，重置页面封装状态
+            this.ppResetState();
+        }
     }
 
     displayTestFiles(files) {
         const container = document.getElementById('test-files-list');
         container.innerHTML = '';
 
+        const fragment = document.createDocumentFragment();
         files.forEach(file => {
             const fileElement = document.createElement('div');
             fileElement.className = 'test-file-item';
@@ -2168,8 +3328,9 @@ class XKAutoTesterApp {
                 <span>${file.name}</span>
             `;
 
-            container.appendChild(fileElement);
+            fragment.appendChild(fileElement);
         });
+        container.appendChild(fragment);
     }
 
     findTestFileItemByPath(filePath) {
@@ -2241,38 +3402,26 @@ class XKAutoTesterApp {
 
     // 显示设备管理模态框
     async showDeviceManagementModal() {
-        // 清除所有Toast消息，避免弹窗显示时能看到未消失的toast
         Toast.clearAll();
         
-        // 显示模态框
-        const modalOverlay = document.getElementById('device-modal-overlay');
-        if (modalOverlay) {
-            modalOverlay.classList.remove('hidden');
-        }
+        this.modals.device.open();
 
-        // 显示扫描状态
         this.showDeviceScanningState();
 
-        // 扫描设备
         await this.scanDevices();
         
-        // 如果有保存的设备状态，自动选择对应设备并显示设备信息卡片
         if (this.deviceStatusSaved && this.selectedDevice) {
             setTimeout(() => {
                 const deviceToSelect = document.querySelector(`.device-item[data-device-id="${this.selectedDevice}"]`);
                 if (deviceToSelect) {
-                    // 模拟点击事件，自动选择设备
                     deviceToSelect.click();
                 }
             }, 100);
         }
         
-        // 添加开放5555端口按钮事件监听
         const openPortBtn = document.getElementById('open-port-btn');
         if (openPortBtn) {
-            // 移除旧的事件监听，避免重复绑定
             openPortBtn.removeEventListener('click', this.boundOpenPort5555);
-            // 添加新的事件监听
             openPortBtn.addEventListener('click', this.boundOpenPort5555);
         }
     }
@@ -2321,15 +3470,10 @@ class XKAutoTesterApp {
 
     // 隐藏设备管理模态框
     hideDeviceModal() {
-        const modalOverlay = document.getElementById('device-modal-overlay');
-        if (modalOverlay) {
-            modalOverlay.classList.add('hidden');
-        }
+        this.modals.device.close();
         
-        // 隐藏新增设备输入框和结果提示
         this.hideAddDeviceInput();
         
-        // 清除设备列表中的选中状态
         const deviceListElement = document.getElementById('device-list');
         if (deviceListElement) {
             const selectedDeviceElement = deviceListElement.querySelector('.device-item.selected');
@@ -2337,6 +3481,344 @@ class XKAutoTesterApp {
                 selectedDeviceElement.classList.remove('selected');
                 selectedDeviceElement.style.backgroundColor = '';
             }
+        }
+    }
+
+    // 显示编辑设备连接标识弹窗
+    async showEditDeviceIdModal(fileName, filePath) {
+        this._editDeviceIdFileName = fileName;
+        this._editDeviceIdFilePath = filePath;
+        
+        const modalOverlay = document.getElementById('edit-device-id-modal-overlay');
+        const deviceIdInput = document.getElementById('edit-device-id-input');
+        const androidVersionInput = document.getElementById('edit-android-version-input');
+        const blePortInput = document.getElementById('edit-ble-port-input');
+        const blePortGroup = document.getElementById('ble-mock-port-group');
+        const portManageBtn = document.getElementById('edit-port-manage-btn');
+        
+        // 获取当前设备ID、安卓版本和蓝牙端口
+        let isAndroid = false;
+        let hasBleSteps = false;
+        
+        try {
+            const result = await window.electronAPI.testCase.get(fileName);
+            if (result && result.success && result.data) {
+                const deviceName = result.data.deviceConfig?.deviceName || '';
+                const platformVersion = result.data.deviceConfig?.platformVersion || '';
+                const blePort = result.data.bleDevice?.port || '';
+                isAndroid = result.data.platform && result.data.platform.toLowerCase() === 'android';
+                hasBleSteps = result.data.steps && result.data.steps.some(step => step.type === 'ble');
+                
+                if (deviceIdInput) {
+                    deviceIdInput.value = (deviceName && deviceName !== '{{DEVICE_NAME}}') ? deviceName : '';
+                }
+                
+                if (androidVersionInput) {
+                    androidVersionInput.value = (platformVersion && platformVersion !== '{{PLATFORM_VERSION}}') ? platformVersion : '';
+                }
+                
+                if (blePortInput) {
+                    blePortInput.value = blePort || '';
+                }
+            }
+        } catch (error) {
+            console.error('获取测试用例设备信息失败:', error);
+            if (deviceIdInput) {
+                deviceIdInput.value = '';
+            }
+            if (androidVersionInput) {
+                androidVersionInput.value = '';
+            }
+            if (blePortInput) {
+                blePortInput.value = '';
+            }
+        }
+        
+        // 根据条件显示/隐藏蓝牙端口输入框和端口管理按钮
+        if (blePortGroup) {
+            blePortGroup.style.display = hasBleSteps ? 'block' : 'none';
+        }
+        if (portManageBtn) {
+            portManageBtn.style.display = hasBleSteps ? 'inline-flex' : 'none';
+        }
+        
+        // 保存是否有蓝牙步骤的标记
+        this._editDeviceIdHasBle = hasBleSteps;
+        
+        this.modals.editDeviceId.open();
+    }
+
+    // 隐藏编辑设备连接标识弹窗
+    hideEditDeviceIdModal() {
+        this.modals.editDeviceId.close();
+        this._editDeviceIdFileName = null;
+        this._editDeviceIdFilePath = null;
+        this._editDeviceIdHasBle = false;
+    }
+
+    // 为编辑设备ID显示设备管理弹窗
+    async showDeviceManagementModalForEdit() {
+        // 先隐藏编辑设备ID弹窗
+        const editModalOverlay = document.getElementById('edit-device-id-modal-overlay');
+        if (editModalOverlay) {
+            editModalOverlay.classList.add('hidden');
+        }
+        
+        // 显示设备管理弹窗
+        await this.showDeviceManagementModal();
+        
+        // 修改确认按钮的行为
+        const confirmBtn = document.getElementById('device-modal-confirm-btn');
+        if (confirmBtn) {
+            // 移除原有事件监听
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+            
+            // 添加新的事件监听
+            newConfirmBtn.addEventListener('click', () => {
+                this.onDeviceIdSelectionConfirm();
+            });
+        }
+    }
+
+    // 设备ID选择确认处理
+    onDeviceIdSelectionConfirm() {
+        const selectedDeviceElement = document.querySelector('.device-item.selected');
+        
+        if (!selectedDeviceElement) {
+            const modalContainer = document.querySelector('#device-modal-overlay .modal-container');
+            Toast.error(window.i18n.t('testExecution.deviceSelection.deviceRequired'), { container: modalContainer });
+            return;
+        }
+
+        const deviceId = selectedDeviceElement.getAttribute('data-device-id');
+        
+        if (!deviceId) {
+            const modalContainer = document.querySelector('#device-modal-overlay .modal-container');
+            Toast.error(window.i18n.t('testExecution.deviceSelection.deviceRequired'), { container: modalContainer });
+            return;
+        }
+
+        // 获取安卓版本
+        const androidVersionElement = document.getElementById('modal-device-android-version');
+        const androidVersion = androidVersionElement ? androidVersionElement.textContent.trim() : '';
+        
+        // 隐藏设备管理弹窗
+        this.hideDeviceModal();
+        
+        // 显示编辑设备ID弹窗并填入设备ID和安卓版本
+        const editModalOverlay = document.getElementById('edit-device-id-modal-overlay');
+        const deviceIdInput = document.getElementById('edit-device-id-input');
+        const androidVersionInput = document.getElementById('edit-android-version-input');
+        
+        if (deviceIdInput) {
+            deviceIdInput.value = deviceId;
+        }
+        
+        if (androidVersionInput && androidVersion && androidVersion !== '-') {
+            androidVersionInput.value = androidVersion;
+        }
+        
+        if (editModalOverlay) {
+            editModalOverlay.classList.remove('hidden');
+        }
+    }
+
+    // 确认编辑设备连接标识
+    async confirmEditDeviceId() {
+        const deviceIdInput = document.getElementById('edit-device-id-input');
+        const androidVersionInput = document.getElementById('edit-android-version-input');
+        const blePortInput = document.getElementById('edit-ble-port-input');
+        const deviceId = deviceIdInput ? deviceIdInput.value.trim() : '';
+        const androidVersion = androidVersionInput ? androidVersionInput.value.trim() : '';
+        const blePort = blePortInput ? blePortInput.value.trim() : '';
+        
+        if (!this._editDeviceIdFileName) {
+            return;
+        }
+        
+        try {
+            // 获取测试用例数据
+            const result = await window.electronAPI.testCase.get(this._editDeviceIdFileName);
+            if (result && result.success && result.data) {
+                const caseData = result.data;
+                
+                // 更新设备配置
+                if (!caseData.deviceConfig) {
+                    caseData.deviceConfig = {};
+                }
+                caseData.deviceConfig.deviceName = deviceId || '{{DEVICE_NAME}}';
+                caseData.deviceConfig.platformVersion = androidVersion || '{{PLATFORM_VERSION}}';
+                
+                // 更新蓝牙端口配置
+                if (this._editDeviceIdHasBle) {
+                    if (!caseData.bleDevice) {
+                        caseData.bleDevice = {};
+                    }
+                    caseData.bleDevice.port = blePort || '';
+                }
+                
+                // 从文件路径中提取输出目录
+                let outputDir = this.selectedDirectory;
+                if (this._editDeviceIdFilePath) {
+                    const pathParts = this._editDeviceIdFilePath.split(/[\\/]/);
+                    outputDir = pathParts.slice(0, -1).join('/');
+                }
+                
+                // 保存并重新生成Python文件
+                const saveResult = await window.electronAPI.testCase.saveAndGenerate(caseData, outputDir);
+                
+                if (saveResult.success) {
+                    // 更新UI显示 - 设备ID
+                    const deviceInfoElement = document.querySelector(`.test-file-device-info[data-file-name="${this._editDeviceIdFileName}"][data-type="device"]`);
+                    if (deviceInfoElement) {
+                        const deviceNameDisplay = deviceInfoElement.querySelector('.device-name-display');
+                        if (deviceNameDisplay) {
+                            if (deviceId) {
+                                deviceNameDisplay.textContent = deviceId;
+                                deviceInfoElement.classList.remove('device-not-set');
+                                deviceInfoElement.classList.add('device-set');
+                            } else {
+                                deviceNameDisplay.textContent = window.i18n.t('testExecution.deviceSelection.notSet');
+                                deviceInfoElement.classList.remove('device-set');
+                                deviceInfoElement.classList.add('device-not-set');
+                            }
+                        }
+                    }
+                    
+                    // 更新UI显示 - 蓝牙端口
+                    const blePortElement = document.querySelector(`.test-file-device-info[data-file-name="${this._editDeviceIdFileName}"][data-type="ble-port"]`);
+                    if (blePortElement) {
+                        const blePortDisplay = blePortElement.querySelector('.ble-port-display');
+                        if (blePortDisplay) {
+                            if (blePort) {
+                                blePortDisplay.textContent = blePort;
+                                blePortElement.classList.remove('device-not-set');
+                                blePortElement.classList.add('device-set');
+                            } else {
+                                blePortDisplay.textContent = window.i18n.t('testExecution.deviceSelection.notSet');
+                                blePortElement.classList.remove('device-set');
+                                blePortElement.classList.add('device-not-set');
+                            }
+                        }
+                    }
+                    
+                    // 隐藏弹窗
+                    this.hideEditDeviceIdModal();
+                    
+                    // 显示成功提示
+                    Toast.success(window.i18n.t('testExecution.deviceSelection.updateSuccess'));
+                } else {
+                    Toast.error(window.i18n.t('testExecution.deviceSelection.updateFailed') + ': ' + saveResult.error);
+                }
+            }
+        } catch (error) {
+            console.error('更新设备连接标识失败:', error);
+            Toast.error(window.i18n.t('testExecution.deviceSelection.updateFailed') + ': ' + error.message);
+        }
+    }
+
+    // 从设备管理弹窗选择设备后回调
+    onDeviceIdSelectionFromManagement(deviceId) {
+        const deviceIdInput = document.getElementById('edit-device-id-input');
+        if (deviceIdInput) {
+            deviceIdInput.value = deviceId;
+        }
+    }
+
+    // 显示端口管理弹窗
+    async showPortManagementModal() {
+        const scanningElement = document.getElementById('port-scanning');
+        const portListElement = document.getElementById('port-list');
+        const confirmBtn = document.getElementById('port-modal-confirm-btn');
+        
+        this.modals.port.open();
+        
+        if (scanningElement) scanningElement.style.display = 'flex';
+        if (portListElement) portListElement.classList.add('hidden');
+        if (confirmBtn) confirmBtn.disabled = true;
+        
+        try {
+            // 调用后端获取串口列表
+            const result = await window.electronAPI.getSerialPorts();
+            
+            if (scanningElement) scanningElement.style.display = 'none';
+            if (portListElement) portListElement.classList.remove('hidden');
+            
+            if (result && result.success && result.data && result.data.length > 0) {
+                // 渲染端口列表
+                portListElement.innerHTML = '';
+                result.data.forEach(port => {
+                    const portItem = document.createElement('div');
+                    portItem.className = 'device-item';
+                    portItem.setAttribute('data-port-id', port.deviceId);
+                    portItem.innerHTML = `
+                        <div style="display: flex; align-items: center;">
+                            ${this.getIconHtml('cable', 'margin-right: 8px;')}
+                            <div>
+                                <div style="font-weight: 500;">${port.deviceId}</div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">${port.name || ''}</div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    portItem.addEventListener('click', () => {
+                        // 移除其他选中状态
+                        portListElement.querySelectorAll('.device-item').forEach(item => {
+                            item.classList.remove('selected');
+                        });
+                        // 添加选中状态
+                        portItem.classList.add('selected');
+                        if (confirmBtn) confirmBtn.disabled = false;
+                    });
+                    
+                    portListElement.appendChild(portItem);
+                });
+            } else {
+                portListElement.innerHTML = `
+                    <div style="padding: 16px; text-align: center; color: var(--text-secondary);">
+                        ${window.i18n.t('testExecution.deviceSelection.noPortsFound') || '未找到串口设备'}
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('获取串口列表失败:', error);
+            if (scanningElement) scanningElement.style.display = 'none';
+            if (portListElement) {
+                portListElement.classList.remove('hidden');
+                portListElement.innerHTML = `
+                    <div style="padding: 16px; text-align: center; color: var(--text-secondary);">
+                        ${window.i18n.t('testExecution.deviceSelection.scanPortsFailed') || '获取串口列表失败'}
+                    </div>
+                `;
+            }
+        }
+    }
+
+    // 隐藏端口管理弹窗
+    hidePortManagementModal() {
+        this.modals.port.close();
+    }
+
+    // 确认端口选择
+    confirmPortSelection() {
+        const selectedPortElement = document.querySelector('#port-list .device-item.selected');
+        
+        if (!selectedPortElement) {
+            const modalContainer = document.querySelector('#port-modal-overlay .modal-container');
+            Toast.error(window.i18n.t('testExecution.deviceSelection.portRequired') || '请选择一个端口', { container: modalContainer });
+            return;
+        }
+
+        const portId = selectedPortElement.getAttribute('data-port-id');
+        
+        // 隐藏端口管理弹窗
+        this.hidePortManagementModal();
+        
+        // 填入蓝牙端口输入框
+        const blePortInput = document.getElementById('edit-ble-port-input');
+        if (blePortInput && portId) {
+            blePortInput.value = portId;
         }
     }
 
@@ -2445,9 +3927,10 @@ class XKAutoTesterApp {
                     const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
                     deviceElement.style.backgroundColor = `${primaryColor}20`;
                     
-                    // 启用确认按钮
-                    if (confirmButton) {
-                        confirmButton.disabled = false;
+                    // 启用确认按钮（直接获取最新引用）
+                    const currentConfirmBtn = document.getElementById('device-modal-confirm-btn');
+                    if (currentConfirmBtn) {
+                        currentConfirmBtn.disabled = false;
                     }
                     
                     // 控制开放5555端口按钮状态
@@ -3322,11 +4805,373 @@ class XKAutoTesterApp {
         }
     }
 
+    /**
+     * 检查测试计划是否包含Android平台的测试用例
+     * @param {Object} testPlan - 测试计划对象
+     * @returns {Promise<{required: boolean, cases: Array}>}
+     */
+    async checkAndroidDeviceRequired(testPlan) {
+        if (!testPlan || !testPlan.testFiles || testPlan.testFiles.length === 0) {
+            return { required: false, cases: [] };
+        }
+
+        const androidCases = [];
+        
+        for (const testFile of testPlan.testFiles) {
+            try {
+                // 获取测试文件对应的JSON用例数据
+                // testFile.name 包含 .py 扩展名，需要移除
+                let fileName = testFile.name || testFile.path;
+                // 移除 .py 扩展名
+                if (fileName.endsWith('.py')) {
+                    fileName = fileName.slice(0, -3);
+                }
+                // 如果是完整路径，只取文件名
+                if (fileName.includes('/') || fileName.includes('\\')) {
+                    fileName = fileName.split(/[\\/]/).pop();
+                }
+                
+                const result = await window.electronAPI.testCase.get(fileName);
+                
+                if (result && result.success && result.data) {
+                    const caseData = result.data;
+                    // 检查平台是否为Android或未设置(默认为Android)
+                    const platform = caseData.platform || 'android';
+                    if (platform.toLowerCase() === 'android') {
+                        androidCases.push({
+                            fileName: fileName,
+                            filePath: testFile.path,  // 保存完整文件路径
+                            caseData: caseData
+                        });
+                    }
+                }
+            } catch (error) {
+                console.warn(`检查测试文件平台失败: ${testFile.name}`, error);
+            }
+        }
+
+        return {
+            required: androidCases.length > 0,
+            cases: androidCases
+        };
+    }
+
+    /**
+     * 检查Android用例的DEVICE_NAME是否为占位符或未设置
+     * @param {Array} androidCases - Android测试用例数组
+     * @returns {{hasPlaceholder: boolean, existingDevice: string|null}}
+     */
+    checkDeviceNamePlaceholder(androidCases) {
+        if (!androidCases || androidCases.length === 0) {
+            return { hasPlaceholder: true, existingDevice: null };
+        }
+
+        let hasPlaceholder = false;
+        let existingDevice = null;
+
+        for (const caseItem of androidCases) {
+            const deviceName = caseItem.caseData?.deviceConfig?.deviceName;
+            
+            if (!deviceName || deviceName === '' || deviceName === '{{DEVICE_NAME}}') {
+                hasPlaceholder = true;
+            } else if (deviceName && !existingDevice) {
+                existingDevice = deviceName;
+            }
+        }
+
+        return { hasPlaceholder, existingDevice };
+    }
+
+    /**
+     * 显示设备选择弹窗并处理设备选择
+     * @param {Array} androidCases - Android测试用例数组
+     * @returns {Promise<boolean>} - 是否成功选择设备
+     */
+    async showDeviceSelectionForTest(androidCases) {
+        return new Promise((resolve) => {
+            // 保存回调引用
+            this._deviceSelectionResolve = resolve;
+            this._pendingAndroidCases = androidCases;
+            
+            // 显示设备管理弹窗
+            this.showDeviceManagementModal();
+            
+            // 修改确认按钮的行为
+            const confirmBtn = document.getElementById('device-modal-confirm-btn');
+            if (confirmBtn) {
+                // 移除原有事件监听
+                const newConfirmBtn = confirmBtn.cloneNode(true);
+                confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+                
+                // 添加新的事件监听
+                newConfirmBtn.addEventListener('click', () => {
+                    this.onDeviceSelectionConfirm();
+                });
+            }
+        });
+    }
+
+    /**
+     * 设备选择确认处理
+     */
+    async onDeviceSelectionConfirm() {
+        const selectedDeviceElement = document.querySelector('.device-item.selected');
+        
+        if (!selectedDeviceElement) {
+            const modalContainer = document.querySelector('#device-modal-overlay .modal-container');
+            Toast.error(window.i18n.t('testExecution.deviceSelection.deviceRequired'), { container: modalContainer });
+            return;
+        }
+
+        const deviceId = selectedDeviceElement.getAttribute('data-device-id');
+        
+        if (!deviceId) {
+            const modalContainer = document.querySelector('#device-modal-overlay .modal-container');
+            Toast.error(window.i18n.t('testExecution.deviceSelection.deviceRequired'), { container: modalContainer });
+            return;
+        }
+
+        // 获取设备的Android版本
+        let platformVersion = '';
+        try {
+            const androidVersionResult = await this.executeAdbCommand('getprop ro.build.version.release', deviceId);
+            if (androidVersionResult.success) {
+                platformVersion = androidVersionResult.output.trim() || '';
+            }
+        } catch (error) {
+            console.warn('获取Android版本失败:', error);
+        }
+
+        // 更新所有Android用例的DEVICE_NAME和PLATFORM_VERSION并重新生成Python文件
+        if (this._pendingAndroidCases && this._pendingAndroidCases.length > 0) {
+            for (const caseItem of this._pendingAndroidCases) {
+                try {
+                    // 更新用例数据
+                    if (!caseItem.caseData.deviceConfig) {
+                        caseItem.caseData.deviceConfig = {};
+                    }
+                    caseItem.caseData.deviceConfig.deviceName = deviceId;
+                    if (platformVersion) {
+                        caseItem.caseData.deviceConfig.platformVersion = platformVersion;
+                    }
+                    
+                    // 从测试文件路径中提取输出目录
+                    const filePath = caseItem.filePath;
+                    let outputDir = this.selectedDirectory;
+                    
+                    // 如果有文件路径，从中提取目录
+                    if (filePath) {
+                        const pathParts = filePath.split(/[\\/]/);
+                        outputDir = pathParts.slice(0, -1).join('/');
+                    }
+                    
+                    // 如果没有找到目录，使用当前选中的测试目录
+                    if (!outputDir) {
+                        outputDir = this.selectedDirectory;
+                    }
+                    
+                    // 保存并重新生成Python文件
+                    const result = await window.electronAPI.testCase.saveAndGenerate(caseItem.caseData, outputDir);
+                    
+                    if (!result.success) {
+                        console.error(`保存并生成测试用例失败: ${caseItem.fileName}`, result.error);
+                    }
+                } catch (error) {
+                    console.error(`更新测试用例设备信息失败: ${caseItem.fileName}`, error);
+                }
+            }
+        }
+
+        // 隐藏弹窗
+        this.hideDeviceModal();
+
+        // 解析Promise
+        if (this._deviceSelectionResolve) {
+            this._deviceSelectionResolve(true);
+            this._deviceSelectionResolve = null;
+            this._pendingAndroidCases = null;
+        }
+    }
+
+    /**
+     * 显示替换设备确认弹窗
+     * @param {string} currentDevice - 当前设备名称
+     * @returns {Promise<boolean>} - 是否要替换设备
+     */
+    async showReplaceDeviceConfirm(currentDevice) {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('confirm-modal-overlay');
+            const titleEl = document.getElementById('confirm-modal-title');
+            const messageEl = document.getElementById('confirm-modal-message');
+            const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
+            const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
+
+            if (!modal || !confirmBtn || !cancelBtn) {
+                console.error('确认弹窗元素未找到');
+                resolve(false);
+                return;
+            }
+
+            if (titleEl) {
+                titleEl.textContent = window.i18n.t('testExecution.deviceSelection.replaceConfirmTitle');
+            }
+            if (messageEl) {
+                messageEl.textContent = window.i18n.t('testExecution.deviceSelection.replaceConfirmMessage', { device: currentDevice });
+            }
+            confirmBtn.textContent = window.i18n.t('testExecution.deviceSelection.replaceDevice');
+            cancelBtn.textContent = window.i18n.t('testExecution.deviceSelection.keepCurrent');
+
+            // 显示弹窗
+            modal.classList.remove('hidden');
+
+            // 处理确认按钮
+            const handleConfirm = () => {
+                modal.classList.add('hidden');
+                confirmBtn.removeEventListener('click', handleConfirm);
+                cancelBtn.removeEventListener('click', handleCancel);
+                resolve(true);
+            };
+
+            // 处理取消按钮
+            const handleCancel = () => {
+                modal.classList.add('hidden');
+                confirmBtn.removeEventListener('click', handleConfirm);
+                cancelBtn.removeEventListener('click', handleCancel);
+                resolve(false);
+            };
+
+            confirmBtn.addEventListener('click', handleConfirm);
+            cancelBtn.addEventListener('click', handleCancel);
+        });
+    }
+
+    /**
+     * 检查安卓用例是否已填写设备信息
+     * @returns {Promise<{valid: boolean, message: string}>}
+     */
+    async checkAndroidDeviceConfig() {
+        if (!this.selectedTestFiles || this.selectedTestFiles.length === 0) {
+            return { valid: true, message: '' };
+        }
+
+        const unconfiguredFiles = [];
+
+        for (const file of this.selectedTestFiles) {
+            let fileName = file.name || file.path;
+            if (fileName.endsWith('.py')) {
+                fileName = fileName.slice(0, -3);
+            }
+            if (fileName.includes('/') || fileName.includes('\\')) {
+                fileName = fileName.split(/[\\/]/).pop();
+            }
+
+            try {
+                const result = await window.electronAPI.testCase.get(fileName);
+                if (result && result.success && result.data) {
+                    const caseData = result.data;
+                    const platform = caseData.platform;
+                    
+                    // 只检查安卓平台用例
+                    if (platform && platform.toLowerCase() === 'android') {
+                        const deviceName = caseData.deviceConfig?.deviceName;
+                        // 检查设备名称是否为空或占位符
+                        if (!deviceName || deviceName === '{{DEVICE_NAME}}' || deviceName.trim() === '') {
+                            unconfiguredFiles.push(file.name || file.path);
+                        }
+                    }
+                }
+            } catch (error) {
+                // 忽略单个文件的错误
+            }
+        }
+
+        if (unconfiguredFiles.length > 0) {
+            const fileList = unconfiguredFiles.length > 3 
+                ? unconfiguredFiles.slice(0, 3).join(', ') + '...'
+                : unconfiguredFiles.join(', ');
+            return {
+                valid: false,
+                message: window.i18n.t('testExecution.deviceSelection.deviceNotConfigured', { files: fileList })
+            };
+        }
+
+        return { valid: true, message: '' };
+    }
+
+    /**
+     * 检查蓝牙用例是否已填写端口信息
+     * @returns {Promise<{valid: boolean, message: string}>}
+     */
+    async checkBlePortConfig() {
+        if (!this.selectedTestFiles || this.selectedTestFiles.length === 0) {
+            return { valid: true, message: '' };
+        }
+
+        const unconfiguredFiles = [];
+
+        for (const file of this.selectedTestFiles) {
+            let fileName = file.name || file.path;
+            if (fileName.endsWith('.py')) {
+                fileName = fileName.slice(0, -3);
+            }
+            if (fileName.includes('/') || fileName.includes('\\')) {
+                fileName = fileName.split(/[\\/]/).pop();
+            }
+
+            try {
+                const result = await window.electronAPI.testCase.get(fileName);
+                if (result && result.success && result.data) {
+                    const caseData = result.data;
+                    const steps = caseData.steps || [];
+                    
+                    // 检查是否有蓝牙步骤
+                    const hasBleSteps = steps.some(step => step.type === 'ble');
+                    
+                    if (hasBleSteps) {
+                        const blePort = caseData.bleDevice?.port;
+                        // 检查蓝牙端口是否为空
+                        if (!blePort || blePort.trim() === '') {
+                            unconfiguredFiles.push(file.name || file.path);
+                        }
+                    }
+                }
+            } catch (error) {
+                // 忽略单个文件的错误
+            }
+        }
+
+        if (unconfiguredFiles.length > 0) {
+            const fileList = unconfiguredFiles.length > 3 
+                ? unconfiguredFiles.slice(0, 3).join(', ') + '...'
+                : unconfiguredFiles.join(', ');
+            return {
+                valid: false,
+                message: window.i18n.t('testExecution.deviceSelection.blePortNotConfigured', { files: fileList })
+            };
+        }
+
+        return { valid: true, message: '' };
+    }
+
     async runTests(scheduledPlanInfo = null) {
         if (this.isRunning || !this.currentTestPlan) {
             if (!this.currentTestPlan) {
                 this.showError(window.i18n.t('testExecution.selectTestPlanFirst'));
             }
+            return;
+        }
+
+        // 检查安卓用例是否已填写设备信息
+        const deviceCheckResult = await this.checkAndroidDeviceConfig();
+        if (!deviceCheckResult.valid) {
+            Toast.warning(deviceCheckResult.message);
+            return;
+        }
+
+        // 检查蓝牙用例是否已填写端口信息
+        const blePortCheckResult = await this.checkBlePortConfig();
+        if (!blePortCheckResult.valid) {
+            Toast.warning(blePortCheckResult.message);
             return;
         }
 
@@ -3630,35 +5475,46 @@ class XKAutoTesterApp {
     }
 
     appendOutput(text) {
-        const output = document.getElementById('test-output');
-        // 如果有欢迎消息，先清除
-        if (output.querySelector('.welcome-message')) {
-            output.innerHTML = '';
-        }
-        // 添加有内容时的滚动条样式
-        output.classList.add('has-content');
-        
-        const line = document.createElement('div');
-        line.textContent = text;
-        line.className = 'output-line';
-        output.appendChild(line);
-        output.scrollTop = output.scrollHeight;
+        this._outputBuffer.push({ text, isError: false });
+        this._scheduleOutputFlush();
     }
 
     appendError(text) {
+        this._outputBuffer.push({ text, isError: true });
+        this._scheduleOutputFlush();
+    }
+
+    _scheduleOutputFlush() {
+        if (this._outputRafId) return;
+        this._outputRafId = requestAnimationFrame(() => {
+            this._flushOutputBuffer();
+            this._outputRafId = null;
+        });
+    }
+
+    _flushOutputBuffer() {
+        if (this._outputBuffer.length === 0) return;
+        
         const output = document.getElementById('test-output');
-        // 如果有欢迎消息，先清除
+        if (!output) { this._outputBuffer.length = 0; return; }
+        
         if (output.querySelector('.welcome-message')) {
             output.innerHTML = '';
         }
-        // 添加有内容时的滚动条样式
         output.classList.add('has-content');
         
-        const line = document.createElement('div');
-        line.textContent = text;
-        line.className = 'output-line error';
-        line.style.color = 'var(--error)';
-        output.appendChild(line);
+        const fragment = document.createDocumentFragment();
+        const buffer = this._outputBuffer.splice(0);
+        
+        for (const item of buffer) {
+            const line = document.createElement('div');
+            line.textContent = item.text;
+            line.className = 'output-line' + (item.isError ? ' error' : '');
+            if (item.isError) line.style.color = 'var(--error)';
+            fragment.appendChild(line);
+        }
+        
+        output.appendChild(fragment);
         output.scrollTop = output.scrollHeight;
     }
 
@@ -3773,6 +5629,7 @@ class XKAutoTesterApp {
 
 
 
+        const fragment = document.createDocumentFragment();
         uniqueMarkers.forEach(marker => {
             const label = document.createElement('label');
             label.className = 'checkbox-container';
@@ -3780,7 +5637,7 @@ class XKAutoTesterApp {
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.id = `${marker.name}-tests`;
-            checkbox.checked = true; // 默认选中所有标记
+            checkbox.checked = true;
             
             const checkmark = document.createElement('span');
             checkmark.className = 'checkmark';
@@ -3791,18 +5648,16 @@ class XKAutoTesterApp {
             label.appendChild(checkmark);
             label.appendChild(text);
             
-            container.appendChild(label);
+            fragment.appendChild(label);
         });
+        container.appendChild(fragment);
         
 
     }
 
     async loadTestPlans() {
         try {
-
             this.testPlans = await window.electronAPI.getTestPlans();
-
-
             this.displayTestPlans();
         } catch (error) {
             console.error('加载测试计划失败:', error);
@@ -3823,10 +5678,16 @@ class XKAutoTesterApp {
         }
 
 
+        const fragment = document.createDocumentFragment();
         this.testPlans.forEach(plan => {
             const planElement = document.createElement('div');
             planElement.className = 'test-plan-item';
             planElement.setAttribute('data-plan-name', plan.name);
+            
+            // 检查是否是当前选中的计划，如果是则添加selected类
+            if (this.currentTestPlan && (this.currentTestPlan.id === plan.id || this.currentTestPlan.name === plan.name)) {
+                planElement.classList.add('selected');
+            }
             
             // 构建测试计划详细信息
             const fileCount = plan.testFiles ? plan.testFiles.length : 0;
@@ -3840,13 +5701,18 @@ class XKAutoTesterApp {
             const loopInfo = window.i18n.t('testExecution.loopInfo', { count: loopCount });
             const continueInfo = !continueOnFailure ? `<span class="continue-info">${this.getIconHtml('warning')}<span>${window.i18n.t('testExecution.stopOnFailure')}</span></span>` : '';
             
+            const descriptionHtml = plan.description ? `<div style="font-size: 12px; color: var(--text-secondary); margin-left: 1px;">${plan.description}</div>` : '';
+            
             planElement.innerHTML = `
                 ${this.getIconHtml('assignment')}
-                <div>
-                    <div style="font-weight: 500;">${plan.name}</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);">${plan.description || (window.i18n ? window.i18n.t('testExecution.noDescription') : '无描述')}</div>
-                    <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 4px;">
-                        >>> ${fileInfo} | >>> ${typeInfo}
+                <div class="test-plan-content">
+                    <div class="test-plan-header">
+                        <div style="font-weight: 500;">${plan.name}</div>
+                    </div>
+                    ${descriptionHtml}
+                    <div class="test-plan-meta">
+                        <span class="meta-item">${this.getIconHtml('description')}<span>${fileInfo}</span></span>
+                        <span class="meta-item">${this.getIconHtml('category')}<span>${typeInfo}</span></span>
                     </div>
                     <div class="test-plan-meta">
                         <span class="loop-info">${this.getIconHtml('repeat')}<span>${loopInfo}</span></span>
@@ -3859,8 +5725,9 @@ class XKAutoTesterApp {
                 this.selectTestPlan(plan, planElement);
             });
 
-            container.appendChild(planElement);
+            fragment.appendChild(planElement);
         });
+        container.appendChild(fragment);
     }
 
     displayTestPlansPlaceholder(message) {
@@ -4145,6 +6012,12 @@ class XKAutoTesterApp {
             downloadBtn.addEventListener('click', () => this.downloadSelectedFiles());
         }
         
+        // 安装APK按钮
+        const installApkBtn = document.getElementById('install-apk-btn');
+        if (installApkBtn) {
+            installApkBtn.addEventListener('click', () => this.installApk());
+        }
+        
         // 全选复选框
         const selectAllCheckbox = document.getElementById('select-all');
         if (selectAllCheckbox) {
@@ -4184,295 +6057,8 @@ class XKAutoTesterApp {
         // 添加下载进度事件监听
         if (window.electronAPI && window.electronAPI.onDownloadProgress) {
             window.electronAPI.onDownloadProgress((event, progress) => {
-                this.updateDownloadProgress(progress);
+                this.progressIndicator.update(progress);
             });
-        }
-        
-        // 添加进度条关闭按钮事件监听
-        const closeBtn = document.getElementById('download-progress-close');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => this.hideDownloadProgress());
-        }
-    }
-    
-    // 显示下载进度条
-    showDownloadProgress() {
-        const progressContainer = document.getElementById('download-progress-container');
-        if (progressContainer) {
-            // 重置进度条状态
-            const progressBar = document.getElementById('download-progress-bar');
-            if (progressBar) {
-                progressBar.style.width = '0%';
-            }
-            
-            // 重置百分比
-            const percentageElement = document.getElementById('download-percentage');
-            if (percentageElement) {
-                percentageElement.textContent = '0%';
-            }
-            
-            // 重置文件名
-            const filenameElement = document.getElementById('download-filename');
-            if (filenameElement) {
-                filenameElement.textContent = '准备下载...';
-            }
-            
-            // 重置文件个数信息
-            const fileCountElement = document.getElementById('download-file-count');
-            if (fileCountElement) {
-                if (this.totalDownloadFiles > 1) {
-                    // 如果是多文件下载，显示当前下载的文件索引和总文件数
-                    fileCountElement.textContent = `文件: ${this.currentDownloadIndex} / ${this.totalDownloadFiles}`;
-                } else {
-                    // 如果是单文件下载，显示默认值
-                    fileCountElement.textContent = '文件: 0 / 0';
-                }
-            }
-            
-            // 清空错误信息
-            this.clearDownloadError();
-            
-            // 隐藏倒计时元素
-            const countdownElement = document.getElementById('download-countdown');
-            if (countdownElement) {
-                countdownElement.style.display = 'none';
-            }
-            
-            // 清除可能存在的定时器
-            if (this.downloadProgressTimer) {
-                clearTimeout(this.downloadProgressTimer);
-                this.downloadProgressTimer = null;
-            }
-            if (this.countdownUpdateTimer) {
-                clearInterval(this.countdownUpdateTimer);
-                this.countdownUpdateTimer = null;
-            }
-            
-            // 显示进度条容器
-            progressContainer.classList.remove('hidden');
-            
-            // 隐藏关闭按钮
-            const closeButton = document.getElementById('download-progress-close');
-            if (closeButton) {
-                closeButton.style.display = 'none';
-            }
-        }
-    }
-    
-    // 隐藏下载进度条
-    hideDownloadProgress() {
-        const progressContainer = document.getElementById('download-progress-container');
-        if (progressContainer) {
-            progressContainer.classList.add('hidden');
-        }
-        // 清空错误信息
-        this.clearDownloadError();
-    }
-    
-    // 更新下载进度
-    updateDownloadProgress(progress) {
-        // 显示进度条
-        this.showDownloadProgress();
-        
-        // 计算整体进度（考虑多文件下载）
-        let overallPercentage = progress.percentage;
-        if (this.totalDownloadFiles > 1) {
-            // 多文件下载时，计算整体进度
-            // currentDownloadIndex从1开始，表示当前正在下载的文件索引
-            // 已完成的文件数 = currentDownloadIndex - 1
-            const completedFiles = this.currentDownloadIndex - 1;
-            const fileProgress = (completedFiles / this.totalDownloadFiles) * 100;
-            const currentFileProgress = (progress.percentage / 100) * (100 / this.totalDownloadFiles);
-            overallPercentage = Math.min(100, fileProgress + currentFileProgress);
-        }
-        
-        // 更新下载状态
-        const filenameElement = document.getElementById('download-filename');
-        if (filenameElement) {
-            if (overallPercentage === 100) {
-                filenameElement.textContent = '下载完成';
-            } else {
-                filenameElement.textContent = '正在下载';
-            }
-        }
-        
-        // 更新进度条
-        const progressBar = document.getElementById('download-progress-bar');
-        if (progressBar) {
-            progressBar.style.width = `${overallPercentage}%`;
-        }
-        
-        // 更新百分比
-        const percentageElement = document.getElementById('download-percentage');
-        if (percentageElement) {
-            percentageElement.textContent = `${Math.round(overallPercentage)}%`;
-        }
-        
-        // 更新文件个数信息
-        const fileCountElement = document.getElementById('download-file-count');
-        if (fileCountElement) {
-            if (this.totalDownloadFiles > 1) {
-                // 多文件下载时，显示当前文件索引和总文件数
-                fileCountElement.textContent = `文件: ${this.currentDownloadIndex} / ${this.totalDownloadFiles}`;
-            } else {
-                // 单文件下载时，显示文件进度
-                const transferred = progress.transferred || 0;
-                const totalSize = progress.totalSize || 1;
-                fileCountElement.textContent = `文件: ${transferred} / ${totalSize}`;
-            }
-        }
-        
-        // 显示或隐藏倒计时
-        const countdownElement = document.getElementById('download-countdown');
-        const closeButton = document.getElementById('download-progress-close');
-        
-        if (progress.error) {
-            this.showDownloadError(progress.error);
-            // 有错误时隐藏倒计时，显示关闭按钮
-            if (countdownElement) {
-                countdownElement.style.display = 'none';
-            }
-            if (closeButton) {
-                closeButton.style.display = 'flex';
-            }
-        } else if (overallPercentage === 100) {
-            // 下载成功，显示倒计时和关闭按钮
-            if (countdownElement) {
-                countdownElement.style.display = 'inline';
-            }
-            if (closeButton) {
-                closeButton.style.display = 'flex';
-            }
-            
-            // 清除之前可能存在的定时器
-            if (this.downloadProgressTimer) {
-                clearTimeout(this.downloadProgressTimer);
-            }
-            if (this.countdownUpdateTimer) {
-                clearInterval(this.countdownUpdateTimer);
-            }
-            
-            // 倒计时总秒数
-            let countdownSeconds = 5;
-            
-            // 更新倒计时显示
-            const updateCountdown = () => {
-                if (countdownElement) {
-                    countdownElement.textContent = `${countdownSeconds}秒后自动关闭`;
-                }
-                
-                if (countdownSeconds <= 0) {
-                    this.hideDownloadProgress();
-                    // 清除定时器引用
-                    if (this.countdownUpdateTimer) {
-                        clearInterval(this.countdownUpdateTimer);
-                        this.countdownUpdateTimer = null;
-                    }
-                    this.downloadProgressTimer = null;
-                } else {
-                    countdownSeconds--;
-                }
-            };
-            
-            // 立即更新一次
-            updateCountdown();
-            
-            // 设置倒计时更新定时器（每秒更新一次）
-            this.countdownUpdateTimer = setInterval(updateCountdown, 1000);
-            
-            // 设置最终关闭的定时器
-            this.downloadProgressTimer = setTimeout(() => {
-                this.hideDownloadProgress();
-                // 清除定时器引用
-                if (this.countdownUpdateTimer) {
-                    clearInterval(this.countdownUpdateTimer);
-                    this.countdownUpdateTimer = null;
-                }
-                this.downloadProgressTimer = null;
-            }, 5000);
-        } else {
-            // 下载中，隐藏倒计时和关闭按钮
-            if (countdownElement) {
-                countdownElement.style.display = 'none';
-            }
-            if (closeButton) {
-                closeButton.style.display = 'none';
-            }
-        }
-    }
-    
-    // 显示下载错误信息
-    showDownloadError(errorMessage) {
-        const errorContainer = document.getElementById('download-error');
-        const errorMessageElement = document.getElementById('download-error-message');
-        const errorTooltipElement = document.getElementById('download-error-tooltip');
-        const filenameElement = document.getElementById('download-filename');
-        
-        if (errorContainer && errorMessageElement && errorTooltipElement) {
-            // 更新下载状态文案为"下载失败"
-            if (filenameElement) {
-                filenameElement.textContent = '下载失败';
-            }
-            
-            // 过滤掉不需要显示的行，但保留执行的ADB命令信息
-            let filteredError = errorMessage;
-            if (filteredError.includes('pull: building fle list')) {
-                filteredError = filteredError.replace(/pull: building fle list[.\s]*/g, '');
-            }
-            
-            // 将完整错误信息显示在悬浮窗中，确保包含执行的ADB命令
-            errorTooltipElement.textContent = filteredError;
-            
-            // 主显示区域只显示简洁的错误提示
-            let simpleError = window.i18n.t('fileManager.adbCommandFailed');
-            const errorLines = filteredError.split('\n');
-            
-            // 优先查找详细错误信息
-            let foundDetailedError = false;
-            for (const line of errorLines) {
-                if (line.includes('详细错误:')) {
-                    simpleError = line.replace('详细错误:', '').trim();
-                    foundDetailedError = true;
-                    break;
-                }
-            }
-            
-            // 如果没有找到详细错误信息，尝试查找ADB命令信息
-            if (!foundDetailedError) {
-                for (const line of errorLines) {
-                    if (line.includes('执行的ADB命令:')) {
-                        simpleError = window.i18n.t('fileManager.adbCommandFailed');
-                        break;
-                    }
-                }
-            }
-            
-            // 将换行符替换为<br>标签，以便在HTML中正确显示换行
-            const formattedError = simpleError.replace(/\n/g, '<br>');
-            errorMessageElement.innerHTML = formattedError;
-            errorContainer.classList.remove('hidden');
-            
-            // 显示toast提示，说明是哪个阶段失败的
-            let toastMessage = window.i18n.t('fileManager.downloadFailed');
-            if (errorMessage.includes('创建zip文件失败')) {
-                toastMessage = window.i18n.t('fileManager.zipCreationFailed');
-            } else if (errorMessage.includes('执行的ADB命令:')) {
-                toastMessage = window.i18n.t('fileManager.adbCommandFailed');
-            }
-            Toast.error(toastMessage);
-        }
-    }
-    
-    // 隐藏下载错误信息
-    clearDownloadError() {
-        const errorContainer = document.getElementById('download-error');
-        const errorMessageElement = document.getElementById('download-error-message');
-        const errorTooltipElement = document.getElementById('download-error-tooltip');
-        
-        if (errorContainer && errorMessageElement && errorTooltipElement) {
-            errorMessageElement.textContent = '';
-            errorTooltipElement.textContent = '';
-            errorContainer.classList.add('hidden');
         }
     }
     
@@ -5046,30 +6632,29 @@ class XKAutoTesterApp {
     
     // 渲染路径片段
     renderPathSegments(container, segments, startIndex, endIndex) {
+        const fragment = document.createDocumentFragment();
         for (let i = startIndex; i < endIndex; i++) {
             const segment = segments[i];
             
-            // 添加路径分隔符（除了第一个）
             if (i > startIndex) {
                 const separator = document.createElement('span');
                 separator.className = 'path-separator';
                 separator.textContent = '/';
-                container.appendChild(separator);
+                fragment.appendChild(separator);
             }
             
-            // 创建可点击的路径片段
             const segmentElement = document.createElement('span');
             segmentElement.className = `path-segment ${i === endIndex - 1 ? 'active' : ''}`;
             segmentElement.textContent = segment.displayName;
             segmentElement.setAttribute('data-path', segment.path);
             
-            // 添加点击事件
             segmentElement.addEventListener('click', () => {
                 this.navigateToPath(segment.path);
             });
             
-            container.appendChild(segmentElement);
+            fragment.appendChild(segmentElement);
         }
+        container.appendChild(fragment);
     }
     
     // 导航到指定路径
@@ -5199,45 +6784,95 @@ class XKAutoTesterApp {
         this.contextMenuTarget = file;
         const menu = this.contextMenu;
         if (!menu) return;
-        
+
         // 先显示菜单以获取其尺寸
         menu.classList.remove('hidden');
-        
-        const menuWidth = menu.offsetWidth || 180;
+
+        // 强制浏览器重排以获取准确的菜单尺寸
+        menu.offsetHeight; // 触发重排
+
+        const menuWidth = menu.offsetWidth || 140;
         const menuHeight = menu.offsetHeight || 120;
         const windowWidth = window.innerWidth;
         const windowHeight = window.innerHeight;
         
+        // 边界安全距离（增加宽容度）
+        const horizontalPadding = 20; // 水平方向留白
+        const verticalPadding = 20;   // 垂直方向留白
+        const bottomSafeZone = 50;    // 底部安全区域（提前触发向上弹出）
+
         let x, y;
-        
+
         if (triggerElement) {
             // 如果有触发元素，从元素下方弹出
             const rect = triggerElement.getBoundingClientRect();
-            x = rect.left;
-            y = rect.bottom + 4; // 4px 间距
             
-            // 确保菜单不会超出窗口右边缘
-            if (x + menuWidth > windowWidth) {
-                x = windowWidth - menuWidth - 10;
+            // 计算可用空间
+            const spaceBelow = windowHeight - rect.bottom - verticalPadding;
+            const spaceAbove = rect.top - verticalPadding;
+            
+            // 判断是否应该向上弹出（更宽容的条件）
+            // 如果下方空间不足菜单高度 + 安全区域，则向上弹出
+            if (spaceBelow < menuHeight + bottomSafeZone && spaceAbove > menuHeight) {
+                // 在按钮上方显示
+                y = rect.top - menuHeight - 4;
+            } else {
+                // 默认在按钮下方显示
+                y = rect.bottom + 4;
+                
+                // 如果上方空间足够但下方不足，强制向上
+                if (spaceBelow < menuHeight && spaceAbove >= menuHeight) {
+                    y = rect.top - menuHeight - 4;
+                }
             }
-            
-            // 确保菜单不会超出窗口下边缘
-            if (y + menuHeight > windowHeight) {
-                y = rect.top - menuHeight - 4; // 在按钮上方显示
+
+            // 水平位置：默认左对齐到按钮（向左偏移）
+            const horizontalOffset = 45; // 向左偏移量（px）
+            x = rect.left - horizontalOffset;
+
+            // 确保菜单不会超出窗口右边缘（增加水平边距）
+            if (x + menuWidth > windowWidth - horizontalPadding) {
+                x = windowWidth - menuWidth - horizontalPadding;
+            }
+
+            // 确保菜单不会超出窗口左边缘
+            if (x < horizontalPadding) {
+                x = horizontalPadding;
+            }
+
+            // 最终确保垂直方向不超出边界
+            if (y < verticalPadding) {
+                y = verticalPadding;
+            }
+            if (y + menuHeight > windowHeight - verticalPadding) {
+                y = windowHeight - menuHeight - verticalPadding;
             }
         } else {
             // 使用鼠标位置
             x = event.clientX;
             y = event.clientY;
-            
-            if (x + menuWidth > windowWidth) {
-                x = windowWidth - menuWidth - 10;
+
+            // 右边界检测（增加边距）
+            if (x + menuWidth > windowWidth - horizontalPadding) {
+                x = windowWidth - menuWidth - horizontalPadding;
             }
-            if (y + menuHeight > windowHeight) {
-                y = windowHeight - menuHeight - 10;
+
+            // 左边界检测
+            if (x < horizontalPadding) {
+                x = horizontalPadding;
+            }
+
+            // 下边界检测
+            if (y + menuHeight > windowHeight - verticalPadding) {
+                y = windowHeight - menuHeight - verticalPadding;
+            }
+
+            // 上边界检测
+            if (y < verticalPadding) {
+                y = verticalPadding;
             }
         }
-        
+
         // 设置菜单位置
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
@@ -5259,13 +6894,20 @@ class XKAutoTesterApp {
         
         switch (action) {
             case 'download':
-                if (!window.electronAPI || !window.electronAPI.selectDirectory) {
-                    console.error('electronAPI未定义或selectDirectory方法不存在');
-                    return;
+                let downloadDir = await this.resolveDownloadDirectory();
+
+                if (!downloadDir) {
+                    if (!window.electronAPI || !window.electronAPI.selectDirectory) {
+                        console.error('electronAPI未定义或selectDirectory方法不存在');
+                        return;
+                    }
+                    const result = await window.electronAPI.selectDirectory();
+                    if (!result.canceled && result.filePaths.length > 0) {
+                        downloadDir = result.filePaths[0];
+                    }
                 }
-                const result = await window.electronAPI.selectDirectory();
-                if (!result.canceled && result.filePaths.length > 0) {
-                    const downloadDir = result.filePaths[0];
+
+                if (downloadDir) {
                     await this.downloadFile(file, downloadDir);
                 }
                 break;
@@ -5355,6 +6997,57 @@ class XKAutoTesterApp {
         }
     }
     
+    async resolveDownloadDirectory() {
+        try {
+            if (window.electronAPI && window.electronAPI.getConfig) {
+                const config = await window.electronAPI.getConfig();
+                const defaultDownloadPath = config?.APP_SETTINGS?.default_download_directory;
+
+                if (defaultDownloadPath) {
+                    if (window.electronAPI && window.electronAPI.checkPathExists) {
+                        const exists = await window.electronAPI.checkPathExists(defaultDownloadPath);
+                        if (exists) {
+                            return defaultDownloadPath;
+                        }
+                    }
+
+                    if (window.electronAPI && window.electronAPI.createDirectory) {
+                        const createResult = await window.electronAPI.createDirectory(defaultDownloadPath);
+                        if (createResult.success) {
+                            return defaultDownloadPath;
+                        }
+                    }
+
+                    if (window.electronAPI && window.electronAPI.showDialog) {
+                        const dialogResult = await window.electronAPI.showDialog({
+                            type: 'warning',
+                            title: window.i18n ? window.i18n.t('fileManager.directoryNotFound') : '目录不存在',
+                            message: window.i18n
+                                ? window.i18n.t('fileManager.directoryNotFoundMessage', { path: defaultDownloadPath })
+                                : `默认下载目录 "${defaultDownloadPath}" 不存在且无法创建，是否清除该路径设置？`,
+                            buttons: [
+                                window.i18n ? window.i18n.t('common.clear') : '清除',
+                                window.i18n ? window.i18n.t('common.cancel') : '取消'
+                            ],
+                            defaultId: 0,
+                            cancelId: 1
+                        });
+
+                        if (dialogResult.response === 0) {
+                            const currentConfig = await window.electronAPI.getConfig();
+                            const updatedSettings = { ...currentConfig.APP_SETTINGS, default_download_directory: '' };
+                            await window.electronAPI.saveConfig({ APP_SETTINGS: updatedSettings });
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('解析下载目录失败:', error);
+        }
+
+        return null;
+    }
+
     // 下载选中的文件
     async downloadSelectedFiles() {
         if (this.selectedFiles.length === 0) {
@@ -5362,25 +7055,8 @@ class XKAutoTesterApp {
         }
         
         try {
-            let downloadDir = null;
+            let downloadDir = await this.resolveDownloadDirectory();
             
-            // 首先检查默认下载路径是否存在
-            if (window.electronAPI && window.electronAPI.getConfig) {
-                const config = await window.electronAPI.getConfig();
-                const defaultDownloadPath = config?.APP_SETTINGS?.default_download_directory;
-                
-                if (defaultDownloadPath) {
-                    // 检查路径是否存在
-                    if (window.electronAPI && window.electronAPI.checkPathExists) {
-                        const exists = await window.electronAPI.checkPathExists(defaultDownloadPath);
-                        if (exists) {
-                            downloadDir = defaultDownloadPath;
-                        }
-                    }
-                }
-            }
-            
-            // 如果默认下载路径不存在或无效，弹出选择目录对话框
             if (!downloadDir) {
                 if (!window.electronAPI || !window.electronAPI.selectDirectory) {
                     console.error('electronAPI未定义或selectDirectory方法不存在');
@@ -5391,21 +7067,20 @@ class XKAutoTesterApp {
                 if (!result.canceled && result.filePaths.length > 0) {
                     downloadDir = result.filePaths[0];
                 } else {
-                    // 用户取消选择，直接返回
                     return;
                 }
             }
             
             // 初始化多文件下载状态
-            this.currentDownloadIndex = 0;
-            this.totalDownloadFiles = this.selectedFiles.length;
+            this.progressIndicator.setTotalFiles(this.selectedFiles.length);
+            this.progressIndicator.setCurrentFileIndex(0);
             
             // 开始下载前显示进度条，只显示一次
-            this.showDownloadProgress();
+            this.progressIndicator.show('准备下载...', 'download');
             
             for (const file of this.selectedFiles) {
                 // 先递增索引，再开始下载，这样在计算进度时就能正确反映当前正在下载的文件
-                this.currentDownloadIndex++;
+                this.progressIndicator.setCurrentFileIndex(this.progressIndicator.currentFileIndex + 1);
                 await this.downloadFile(file, downloadDir);
             }
         } catch (error) {
@@ -5432,29 +7107,82 @@ class XKAutoTesterApp {
         }
     }
     
+    // 安装APK
+    async installApk() {
+        try {
+            // 检查是否选择了设备
+            if (!this.selectedDevice) {
+                Toast.error(window.i18n.t('fileManager.selectDeviceFirst'));
+                return;
+            }
+            
+            // 检查electronAPI是否可用
+            if (!window.electronAPI || !window.electronAPI.selectApkFile) {
+                console.error('electronAPI未定义或selectApkFile方法不存在');
+                return;
+            }
+            
+            // 打开文件选择器（APK文件，单选）
+            const result = await window.electronAPI.selectApkFile();
+            if (result.canceled || result.filePaths.length === 0) {
+                return;
+            }
+            
+            const apkPath = result.filePaths[0];
+            const fileName = apkPath.split(/[\\/]/).pop();
+            
+            // 显示进度条
+            this.progressIndicator.show(window.i18n.t('fileManager.preparingInstall'), 'install');
+            this.progressIndicator.setTotalFiles(1);
+            this.progressIndicator.setCurrentFileIndex(0);
+            
+            // 注册进度监听器
+            const removeListener = window.electronAPI.onInstallProgress((progress) => {
+                this.progressIndicator.update(progress);
+            });
+            
+            // 调用安装API
+            try {
+                const installResult = await window.electronAPI.installApk(apkPath, this.selectedDevice);
+                
+                if (installResult.success) {
+                    Toast.success(window.i18n.t('fileManager.installSuccess'));
+                } else {
+                    Toast.error(installResult.error || window.i18n.t('fileManager.installFailed'));
+                }
+            } catch (error) {
+                this.progressIndicator.update({
+                    percentage: 100,
+                    status: 'error',
+                    message: window.i18n.t('fileManager.installFailed'),
+                    fileName: fileName,
+                    error: error.message
+                });
+            } finally {
+                removeListener();
+            }
+        } catch (error) {
+            console.error('安装APK失败:', error);
+        }
+    }
+    
     // 重命名文件
     renameFile(file) {
         this.contextMenuTarget = file;
         
-        // 显示自定义重命名模态框
-        const modalOverlay = document.getElementById('rename-modal-overlay');
         const renameInput = document.getElementById('rename-input');
         const renameForm = document.getElementById('rename-modal-form');
         
-        // 设置默认文件名
         renameInput.value = file.name;
         renameInput.focus();
         renameInput.select();
         
-        // 显示模态框
-        modalOverlay.classList.remove('hidden');
+        this.modals.rename.open();
         
-        // 保存按钮事件处理
         const saveBtn = document.getElementById('rename-modal-save-btn');
         const cancelBtn = document.getElementById('rename-modal-cancel-btn');
         const closeBtn = document.getElementById('rename-modal-close-btn');
         
-        // 保存按钮点击事件
         const handleSave = () => {
             const newName = renameInput.value.trim();
             if (newName && newName !== file.name) {
@@ -5471,19 +7199,15 @@ class XKAutoTesterApp {
                         console.error('重命名操作失败:', error);
                     })
                     .finally(() => {
-                        // 隐藏模态框
-                        modalOverlay.classList.add('hidden');
+                        this.modals.rename.close();
                     });
             } else {
-                // 隐藏模态框
-                modalOverlay.classList.add('hidden');
+                this.modals.rename.close();
             }
         };
         
-        // 取消按钮点击事件
         const handleCancel = () => {
-            // 隐藏模态框
-            modalOverlay.classList.add('hidden');
+            this.modals.rename.close();
         };
         
         // 表单提交事件
@@ -5507,25 +7231,15 @@ class XKAutoTesterApp {
     
     // 显示控制参数模态框
     async showControlParamsModal() {
-        // 显示模态框
-        const modalOverlay = document.getElementById('control-params-overlay');
-        if (modalOverlay) {
-            modalOverlay.classList.remove('hidden');
-        }
+        this.modals.controlParams.open();
         
-        // 确保下拉框已初始化
         this.initializeCustomSelects();
 
-        // 加载控制参数
         await this.loadControlParams();
     }
 
-    // 隐藏控制参数模态框
     hideControlParamsModal() {
-        const modalOverlay = document.getElementById('control-params-overlay');
-        if (modalOverlay) {
-            modalOverlay.classList.add('hidden');
-        }
+        this.modals.controlParams.close();
     }
 
     // 加载控制参数
@@ -5612,29 +7326,26 @@ class XKAutoTesterApp {
     // 开始屏幕控制
     async startScreenControl() {
         try {
-            // 显示正在启动中的toast提示
             Toast.info(window.i18n.t('screenControl.starting'));
-            
+
             if (!this.selectedDevice) {
-                this.showError(this.translate('selectDeviceFirst'));
+                Toast.error(window.i18n.t('screenControl.noDevice'));
                 return;
             }
-            
-            // 获取配置
+
             const config = await window.electronAPI.getConfig();
             const scrcpyParams = config.SCRCPY_PARAMS || {};
-            
-            // 调用electronAPI启动scrcpy
+
             const result = await window.electronAPI.startScrcpy(this.selectedDevice, scrcpyParams);
-            
+
             if (result.success) {
-                // 屏幕控制已启动，不显示输出
+                Toast.success(window.i18n.t('screenControl.started'));
             } else {
-                this.appendError(`❌ ${window.i18n.t('screenControl.startFailed')}: ${result.error}`);
+                Toast.error(`${window.i18n.t('screenControl.startFailed')}: ${result.error}`);
             }
         } catch (error) {
             console.error('启动屏幕控制失败:', error);
-            this.appendError(`❌ ${window.i18n.t('screenControl.startFailed')}: ${error.message}`);
+            Toast.error(`${window.i18n.t('screenControl.startFailed')}: ${error.message}`);
         }
     }
 
@@ -5777,10 +7488,9 @@ class XKAutoTesterApp {
 
     async displayModalTestFiles() {
         const container = document.getElementById('modal-test-files');
-        container.innerHTML = '';
-
+        
         if (!this.selectedDirectory) {
-            // 未选择目录时显示提示
+            container.innerHTML = '';
             const placeholderElement = document.createElement('div');
             placeholderElement.className = 'no-files';
             placeholderElement.innerHTML = window.i18n.t('testExecution.selectTestDirectoryFirst');
@@ -5788,11 +7498,23 @@ class XKAutoTesterApp {
             return;
         }
 
-        // 调用后端API实时扫描tests文件夹
+        container.innerHTML = `<div class="modal-test-files-loading"><div class="modal-test-files-spinner"></div></div>`;
+        container.style.cssText = '';
+
+        // 强制显示加载动画至少0.5秒
+        const startTime = Date.now();
+        
         const testFiles = await window.electronAPI.scanTestFiles(this.selectedDirectory);
+        
+        // 计算已经过去的时间，确保至少等待0.5秒
+        const elapsed = Date.now() - startTime;
+        const remainingTime = Math.max(0, 500 - elapsed);
+        if (remainingTime > 0) {
+            await new Promise(resolve => setTimeout(resolve, remainingTime));
+        }
 
         if (testFiles.length === 0) {
-            // 没有测试文件时显示提示
+            container.innerHTML = '';
             const placeholderElement = document.createElement('div');
             placeholderElement.className = 'no-files';
             placeholderElement.innerHTML = window.i18n.t('testExecution.noTestFilesInDir');
@@ -5800,15 +7522,91 @@ class XKAutoTesterApp {
             return;
         }
 
-        testFiles.forEach(file => {
+        container.innerHTML = '';
+
+        for (const file of testFiles) {
             const fileElement = document.createElement('div');
             fileElement.className = 'modal-test-file-item';
+            
+            // 获取测试用例的平台信息和蓝牙步骤信息
+            let platform = null;
+            let deviceName = '';
+            let hasBleSteps = false;
+            let blePort = '';
+            let fileName = file.name;
+            if (fileName.endsWith('.py')) {
+                fileName = fileName.slice(0, -3);
+            }
+            
+            try {
+                const result = await window.electronAPI.testCase.get(fileName);
+                if (result && result.success && result.data) {
+                    platform = result.data.platform || null;
+                    deviceName = result.data.deviceConfig?.deviceName || '';
+                    blePort = result.data.bleDevice?.port || '';
+                    hasBleSteps = result.data.steps && result.data.steps.some(step => step.type === 'ble');
+                }
+            } catch (error) {
+                // 忽略错误，使用默认值
+            }
+            
+            // 显示编辑按钮的条件: 安卓平台 或 有蓝牙步骤
+            const isAndroid = platform && platform.toLowerCase() === 'android';
+            const hasDeviceName = deviceName && deviceName !== '{{DEVICE_NAME}}' && deviceName.trim() !== '';
+            const showEditBtn = isAndroid || hasBleSteps;
+            
+            // 构建设备信息显示（安卓用例显示设备ID，蓝牙用例显示端口）
+            let deviceInfoHtml = '';
+            let editBtnHtml = '';
+            if (showEditBtn) {
+                // 构建设备信息行
+                let infoItems = [];
+                
+                // 安卓设备信息
+                if (isAndroid) {
+                    const deviceDisplay = hasDeviceName ? deviceName : window.i18n.t('testExecution.deviceSelection.notSet');
+                    const deviceStatusClass = hasDeviceName ? 'device-set' : 'device-not-set';
+                    infoItems.push(`
+                        <span class="test-file-device-info ${deviceStatusClass}" data-file-name="${fileName}" data-type="device">
+                            ${this.getIconHtml('devices')}
+                            <span class="device-name-display">${deviceDisplay}</span>
+                        </span>
+                    `);
+                }
+                
+                // 蓝牙端口信息
+                if (hasBleSteps) {
+                    const portDisplay = blePort || window.i18n.t('testExecution.deviceSelection.notSet');
+                    const portStatusClass = blePort ? 'device-set' : 'device-not-set';
+                    infoItems.push(`
+                        <span class="test-file-device-info ${portStatusClass}" data-file-name="${fileName}" data-type="ble-port">
+                            ${this.getIconHtml('cable')}
+                            <span class="ble-port-display">${portDisplay}</span>
+                        </span>
+                    `);
+                }
+                
+                if (infoItems.length > 0) {
+                    deviceInfoHtml = `<div class="test-file-device-row">${infoItems.join('')}</div>`;
+                }
+                
+                editBtnHtml = `
+                    <button type="button" class="edit-device-btn" data-file-name="${fileName}" data-file-path="${file.path}" data-has-ble="${hasBleSteps}" data-is-android="${isAndroid}">
+                        ${this.getIconHtml('edit')}
+                    </button>
+                `;
+            }
+            
             fileElement.innerHTML = `
-                <input type="checkbox" id="modal-file-${file.name}" value="${file.path}">
-                <label for="modal-file-${file.name}">
-                    ${this.getIconHtml('description')}
-                    ${file.name}
-                </label>
+                <div class="test-file-main-row">
+                    <input type="checkbox" id="modal-file-${file.name}" value="${file.path}">
+                    <label for="modal-file-${file.name}">
+                        ${this.getIconHtml('description')}
+                        ${file.name}
+                    </label>
+                </div>
+                ${deviceInfoHtml}
+                ${editBtnHtml}
             `;
 
             // 不默认选中文件，等待preselectModalItems设置选中状态
@@ -5820,8 +7618,38 @@ class XKAutoTesterApp {
                 this.updateModalTestTypes();
             });
 
+            // 为整个文件项添加点击事件，点击时切换复选框状态
+            fileElement.addEventListener('click', (e) => {
+                // 排除编辑按钮的点击
+                if (e.target.closest('.edit-device-btn')) {
+                    return;
+                }
+                // 排除复选框本身的点击（避免双重切换）
+                if (e.target.type === 'checkbox') {
+                    return;
+                }
+                // 排除label元素的点击（label会自动触发复选框切换）
+                if (e.target.closest('label')) {
+                    return;
+                }
+                // 切换复选框状态
+                checkbox.checked = !checkbox.checked;
+                // 触发change事件以更新测试类型
+                checkbox.dispatchEvent(new Event('change'));
+            });
+
+            // 为编辑按钮添加事件监听
+            const editBtn = fileElement.querySelector('.edit-device-btn');
+            if (editBtn) {
+                editBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.showEditDeviceIdModal(fileName, file.path);
+                });
+            }
+
             container.appendChild(fileElement);
-        });
+        }
 
         // 初始显示测试类型
         this.updateModalTestTypes();
@@ -5841,48 +7669,49 @@ class XKAutoTesterApp {
     }
     
     async updateModalTestTypes(selectedTypes = null) {
-        // 防重复调用机制：如果正在更新模态框测试类型，等待完成
         if (this.updatingModalTypes) {
 
             return await this.updatingModalTypes;
         }
         
         const container = document.getElementById('modal-test-types');
-        container.innerHTML = '';
-
-        // 获取弹窗中选择的文件
+        
         const selectedFiles = this.getModalSelectedTestFiles();
         
-        // 添加调试日志
-
-
-
-        
         if (selectedFiles.length === 0) {
-            // 没有选中文件时，显示占位提示
-            const placeholder = document.createElement('div');
-            placeholder.className = 'placeholder-message';
-            placeholder.textContent = window.i18n.t('testExecution.selectTestFileFirst');
-            container.appendChild(placeholder);
+            container.textContent = window.i18n.t('testExecution.selectTestFileFirst');
+            container.style.cssText = 'display: flex; justify-content: center; align-items: center; height: 100%; text-align: center; color: var(--text-secondary); font-size: 13px; padding: 13px;';
             return;
         }
 
-        try {
+        // 显示加载动画（参考设备管理设备信息卡片的加载动画样式）
+        container.innerHTML = `<div class="modal-test-types-loading"><div class="modal-test-types-spinner"></div></div>`;
+        container.style.cssText = '';
 
+        try {
             
-            // 设置更新状态
             this.updatingModalTypes = (async () => {
-                // 从选中的文件中提取pytest标记
+                // 强制显示加载动画至少0.5秒
+                const startTime = Date.now();
+                
                 const markers = await this.extractMarkersFromModalSelectedFiles(selectedFiles);
                 
+                // 计算已经过去的时间，确保至少等待0.5秒
+                const elapsed = Date.now() - startTime;
+                const remainingTime = Math.max(0, 500 - elapsed);
+                if (remainingTime > 0) {
+                    await new Promise(resolve => setTimeout(resolve, remainingTime));
+                }
+                
+                container.innerHTML = '';
+                
                 if (markers.length === 0) {
-                    // 选中的文件没有标记时，显示占位提示
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'placeholder-message';
-                    placeholder.textContent = window.i18n.t('testExecution.noMarkers');
-                    container.appendChild(placeholder);
+                    // 直接显示文字，设置灰色小字号样式
+                    container.textContent = window.i18n.t('testExecution.noMarkers');
+                    container.style.cssText = 'display: flex; justify-content: center; align-items: center; height: 100%; text-align: center; color: var(--text-secondary); font-size: 13px; padding: 13px;';
                 } else {
-                    // 前端去重：使用Set确保标记名称唯一
+                    // 重置容器样式
+                    container.style.cssText = '';
                     const uniqueMarkers = [];
                     const seenNames = new Set();
                     
@@ -5893,11 +7722,9 @@ class XKAutoTesterApp {
                         }
                     });
                     
-                    // 显示从文件中提取的标记（已去重）
                     uniqueMarkers.forEach(marker => {
                         const item = document.createElement('div');
                         item.className = 'modal-test-type-item';
-                        // 根据当前语言设置翻译标记描述
                         const translatedDescription = window.i18n ? window.i18n.t('testTypes.' + marker.name) : marker.description;
                         item.innerHTML = `
                             <input type="checkbox" id="modal-type-${marker.name}" value="${marker.name}">
@@ -5907,15 +7734,12 @@ class XKAutoTesterApp {
                             </label>
                         `;
 
-                        // 根据传入的selectedTypes设置选中状态，如果没有传入则默认选中所有
                         const checkbox = item.querySelector('input[type="checkbox"]');
                         if (selectedTypes && selectedTypes.includes(marker.name)) {
                             checkbox.checked = true;
                         } else if (selectedTypes === null) {
-                            // 新建计划时默认选中所有
                             checkbox.checked = true;
                         } else {
-                            // 编辑计划时根据计划中的类型设置
                             checkbox.checked = false;
                         }
 
@@ -5929,18 +7753,16 @@ class XKAutoTesterApp {
             await this.updatingModalTypes;
         } catch (error) {
             console.error('提取标记失败:', error);
+            container.innerHTML = '';
             const placeholder = document.createElement('div');
             placeholder.className = 'placeholder-message';
             placeholder.textContent = window.i18n.t('testExecution.extractMarkersFailed');
             container.appendChild(placeholder);
         } finally {
-            // 清除更新状态
             this.updatingModalTypes = null;
             
-            // 更新测试类型警告
             this.updateTestTypeWarning();
             
-            // 监听测试类型选择变化，更新警告
             const typeCheckboxes = document.querySelectorAll('#modal-test-types input[type="checkbox"]');
             typeCheckboxes.forEach(checkbox => {
                 checkbox.addEventListener('change', () => {
@@ -5956,27 +7778,22 @@ class XKAutoTesterApp {
     }
 
     async showNewPlanModal() {
-        document.getElementById('modal-overlay').classList.remove('hidden');
+        this.modals.plan.open();
         document.getElementById('modal-title').textContent = window.i18n.t('testExecution.newTestPlan');
         document.getElementById('plan-name').value = '';
         document.getElementById('plan-description').value = '';
         
-        // 初始化循环设置默认值
         document.getElementById('loop-count').value = 1;
         document.getElementById('continue-on-failure').checked = true;
         
-        // 显示当前目录下的测试文件和测试类型
         await this.displayModalTestFiles();
         await this.displayModalTestTypes();
         
-        // 显示保存按钮，隐藏更新按钮
         document.getElementById('save-plan-btn').classList.remove('hidden');
         document.getElementById('update-plan-btn').classList.add('hidden');
         
-        // 重置错误提示
         this.hidePlanNameError();
         
-        // 添加输入事件监听，输入时隐藏错误提示
         const planNameInput = document.getElementById('plan-name');
         planNameInput.addEventListener('input', () => {
             this.hidePlanNameError();
@@ -5984,11 +7801,10 @@ class XKAutoTesterApp {
     }
 
     hideModal() {
-        document.getElementById('modal-overlay').classList.add('hidden');
+        this.modals.plan.close();
     }
 
     showConfirmModal(title, message, onConfirm) {
-        const overlay = document.getElementById('confirm-modal-overlay');
         const titleElement = document.getElementById('confirm-modal-title');
         const messageElement = document.getElementById('confirm-modal-message');
         
@@ -6000,11 +7816,11 @@ class XKAutoTesterApp {
         }
         
         this.confirmCallback = onConfirm;
-        overlay.classList.remove('hidden');
+        this.modals.confirm.open();
     }
 
     hideConfirmModal() {
-        document.getElementById('confirm-modal-overlay').classList.add('hidden');
+        this.modals.confirm.close();
         this.confirmCallback = null;
     }
 
@@ -6013,6 +7829,227 @@ class XKAutoTesterApp {
             this.confirmCallback();
         }
         this.hideConfirmModal();
+    }
+
+    async checkForUpdate() {
+        try {
+            const checkUpdateBtn = document.getElementById('check-update-btn');
+            if (checkUpdateBtn) {
+                checkUpdateBtn.disabled = true;
+            }
+
+            const result = await window.electronAPI.checkForUpdate();
+
+            if (result.success && result.data.hasUpdate) {
+                this.showUpdateModal(result.data);
+            } else if (result.success && !result.data.hasUpdate) {
+                Toast.success(window.i18n.t('settings.alreadyLatest'));
+            } else {
+                const errorCode = result.errorCode || 'unknown';
+                const specificMessage = window.i18n.t(`settings.updateErrorCodes.${errorCode}`);
+                const fallbackMessage = window.i18n.t('settings.checkUpdateFailed');
+                Toast.error(`${fallbackMessage}: ${specificMessage}`);
+            }
+        } catch (error) {
+            console.error('检查更新失败:', error);
+            const specificMessage = window.i18n.t('settings.updateErrorCodes.unknown');
+            const fallbackMessage = window.i18n.t('settings.checkUpdateFailed');
+            Toast.error(`${fallbackMessage}: ${specificMessage}`);
+        } finally {
+            const checkUpdateBtn = document.getElementById('check-update-btn');
+            if (checkUpdateBtn) {
+                checkUpdateBtn.disabled = false;
+            }
+        }
+    }
+
+    showUpdateModal(updateData) {
+        const currentVersionEl = document.getElementById('update-current-version');
+        const newVersionEl = document.getElementById('update-new-version');
+        const changelogEl = document.getElementById('update-changelog');
+        const progressContainer = document.getElementById('update-progress-container');
+        const downloadBtn = document.getElementById('update-download-btn');
+
+        if (currentVersionEl) {
+            currentVersionEl.textContent = `v${updateData.currentVersion}`;
+        }
+        if (newVersionEl) {
+            newVersionEl.textContent = `v${updateData.latestVersion}`;
+        }
+        if (changelogEl) {
+            changelogEl.innerHTML = this.renderMarkdown(updateData.releaseNotes || '');
+        }
+        if (progressContainer) {
+            progressContainer.classList.add('hidden');
+        }
+        if (downloadBtn) {
+            downloadBtn.textContent = window.i18n.t('settings.downloadUpdate');
+            downloadBtn.disabled = false;
+            downloadBtn.classList.remove('disabled');
+        }
+
+        this.updateData = updateData;
+        this.updatePendingFilePath = null;
+
+        this.modals.update.open();
+    }
+
+    hideUpdateModal() {
+        this.modals.update.close();
+        this.updateData = null;
+        this.updatePendingFilePath = null;
+        this.removeUpdateProgressListener = null;
+    }
+
+    async downloadUpdate() {
+        const downloadBtn = document.getElementById('update-download-btn');
+        const progressContainer = document.getElementById('update-progress-container');
+        const progressFill = document.getElementById('update-progress-fill');
+        const progressText = document.getElementById('update-progress-text');
+
+        if (downloadBtn) {
+            downloadBtn.textContent = window.i18n.t('settings.downloading');
+            downloadBtn.disabled = true;
+            downloadBtn.classList.add('disabled');
+        }
+
+        if (progressContainer) {
+            progressContainer.classList.remove('hidden');
+        }
+        if (progressFill) {
+            progressFill.style.width = '0%';
+        }
+        if (progressText) {
+            progressText.textContent = '0%';
+        }
+
+        const speedEl = document.getElementById('update-progress-speed');
+        if (speedEl) {
+            speedEl.textContent = '';
+        }
+
+        if (this.removeUpdateProgressListener) {
+            this.removeUpdateProgressListener();
+        }
+
+        this.removeUpdateProgressListener = window.electronAPI.onUpdateDownloadProgress((progress) => {
+            const percent = Math.round(progress.percent);
+            if (progressFill) {
+                progressFill.style.width = `${percent}%`;
+            }
+            if (progressText) {
+                progressText.textContent = `${percent}%`;
+            }
+            const speedEl = document.getElementById('update-progress-speed');
+            if (speedEl && progress.speed !== undefined) {
+                speedEl.textContent = this.formatDownloadSpeed(progress.speed);
+            }
+        });
+
+        try {
+            const result = await window.electronAPI.downloadUpdate(this.updateData.downloadUrl, this.updateData.fileName);
+
+            if (this.removeUpdateProgressListener) {
+                this.removeUpdateProgressListener();
+                this.removeUpdateProgressListener = null;
+            }
+
+            if (result.success) {
+                this.updatePendingFilePath = result.data.filePath;
+                if (downloadBtn) {
+                    downloadBtn.textContent = window.i18n.t('settings.clickToUpdate');
+                    downloadBtn.disabled = false;
+                    downloadBtn.classList.remove('disabled');
+                }
+                const speedEl = document.getElementById('update-progress-speed');
+                if (speedEl) {
+                    speedEl.textContent = '';
+                }
+            } else {
+                Toast.error(result.error || window.i18n.t('settings.downloadFailed'));
+                this.updatePendingFilePath = null;
+                if (downloadBtn) {
+                    downloadBtn.textContent = window.i18n.t('settings.downloadUpdate');
+                    downloadBtn.disabled = false;
+                    downloadBtn.classList.remove('disabled');
+                }
+            }
+        } catch (error) {
+            console.error('下载更新失败:', error);
+            Toast.error(window.i18n.t('settings.downloadFailed'));
+            this.updatePendingFilePath = null;
+
+            if (this.removeUpdateProgressListener) {
+                this.removeUpdateProgressListener();
+                this.removeUpdateProgressListener = null;
+            }
+
+            if (downloadBtn) {
+                downloadBtn.textContent = window.i18n.t('settings.downloadUpdate');
+                downloadBtn.disabled = false;
+                downloadBtn.classList.remove('disabled');
+            }
+        }
+    }
+
+    async installUpdate(filePath) {
+        try {
+            await window.electronAPI.installUpdate(filePath);
+        } catch (error) {
+            console.error('安装更新失败:', error);
+            Toast.error(window.i18n.t('settings.downloadFailed'));
+        }
+    }
+
+    renderMarkdown(text) {
+        if (!text) return '';
+        let html = text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+        html = html.replace(/^## (.+)$/gm, '<h4>$1</h4>');
+        html = html.replace(/^# (.+)$/gm, '<h4>$1</h4>');
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/^\- (.+)$/gm, '<li>$1</li>');
+
+        html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => {
+            return '<ul>' + match + '</ul>';
+        });
+
+        html = html.replace(/\n/g, '<br>');
+
+        html = html.replace(/<br><h4>/g, '<h4>');
+        html = html.replace(/<\/h4><br>/g, '</h4>');
+        html = html.replace(/<br><ul>/g, '<ul>');
+        html = html.replace(/<\/ul><br>/g, '</ul>');
+
+        return html;
+    }
+
+    formatDownloadSpeed(bytesPerSecond) {
+        if (bytesPerSecond <= 0) return '';
+        if (bytesPerSecond < 1024) {
+            return `${Math.round(bytesPerSecond)} B/s`;
+        } else if (bytesPerSecond < 1024 * 1024) {
+            return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+        } else {
+            return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
+        }
+    }
+
+    async autoCheckForUpdate() {
+        try {
+            const config = await window.electronAPI.getConfig();
+            if (config && config.APP_SETTINGS && config.APP_SETTINGS.autoCheckUpdate === true) {
+                setTimeout(() => {
+                    this.checkForUpdate();
+                }, 3000);
+            }
+        } catch (error) {
+            console.error('自动检查更新失败:', error);
+        }
     }
 
     getModalSelectedTestFiles() {
@@ -6132,7 +8169,7 @@ class XKAutoTesterApp {
     }
 
     async showEditPlanModal(plan) {
-        document.getElementById('modal-overlay').classList.remove('hidden');
+        this.modals.plan.open();
         document.getElementById('modal-title').textContent = window.i18n.t('testExecution.editTestPlan');
         
         // 填充现有数据
@@ -6404,7 +8441,6 @@ class XKAutoTesterApp {
     }
 
     async showReportModal(testPlan) {
-        const modalOverlay = document.getElementById('report-modal-overlay');
         const planNameElement = document.getElementById('report-plan-name');
         const runsListElement = document.getElementById('report-runs-list');
         const noRunsElement = document.getElementById('report-no-runs');
@@ -6423,7 +8459,7 @@ class XKAutoTesterApp {
         runsListElement.classList.remove('hidden');
         noRunsElement.classList.add('hidden');
         
-        modalOverlay.classList.remove('hidden');
+        this.modals.report.open();
         
         try {
             const result = await window.electronAPI.getTestPlanRuns(testPlan.name);
@@ -6560,8 +8596,7 @@ class XKAutoTesterApp {
     }
 
     hideReportModal() {
-        const modalOverlay = document.getElementById('report-modal-overlay');
-        modalOverlay.classList.add('hidden');
+        this.modals.report.close();
         this.selectedReportRun = null;
         
         // 重置按钮状态
@@ -6705,6 +8740,7 @@ class XKAutoTesterApp {
 
         section.classList.remove('hidden');
 
+        const fragment = document.createDocumentFragment();
         this.scheduledPlans.forEach(plan => {
             const planElement = document.createElement('div');
             planElement.className = 'scheduled-plan-item';
@@ -6720,11 +8756,13 @@ class XKAutoTesterApp {
 
             planElement.innerHTML = `
                 ${this.getIconHtml('schedule')}
-                <div>
-                    <div style="font-weight: 500;">${plan.name}</div>
+                <div class="test-plan-content">
+                    <div class="test-plan-header">
+                        <div style="font-weight: 500;">${plan.name}</div>
+                    </div>
                     <div style="font-size: 12px; color: var(--text-secondary);">${planNames}</div>
-                    <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 4px;">
-                        <span class="scheduled-time">${formattedTime}</span>
+                    <div class="test-plan-meta">
+                        <span class="scheduled-time"><span>${formattedTime}</span></span>
                         <span class="scheduled-status ${status.class}">${status.text}</span>
                     </div>
                 </div>
@@ -6734,8 +8772,9 @@ class XKAutoTesterApp {
                 this.selectScheduledPlan(plan, planElement);
             });
 
-            container.appendChild(planElement);
+            fragment.appendChild(planElement);
         });
+        container.appendChild(fragment);
     }
 
     formatDateTime(date) {
@@ -6832,7 +8871,6 @@ class XKAutoTesterApp {
     }
 
     async showNewScheduledPlanModal() {
-        const modalOverlay = document.getElementById('scheduled-plan-modal-overlay');
         const modalTitle = document.getElementById('scheduled-plan-modal-title');
         const nameInput = document.getElementById('scheduled-plan-name');
         const timeInput = document.getElementById('scheduled-plan-time');
@@ -6848,7 +8886,7 @@ class XKAutoTesterApp {
         document.getElementById('save-scheduled-plan-btn').classList.remove('hidden');
         document.getElementById('update-scheduled-plan-btn').classList.add('hidden');
 
-        modalOverlay.classList.remove('hidden');
+        this.modals.scheduledPlan.open();
     }
 
     initDateTimePicker(inputElement) {
@@ -7213,6 +9251,7 @@ class XKAutoTesterApp {
             return;
         }
 
+        const fragment = document.createDocumentFragment();
         this.testPlans.forEach(plan => {
             const isSelected = selectedPlanIds.includes(plan.id || plan.name);
             const planElement = document.createElement('div');
@@ -7221,8 +9260,9 @@ class XKAutoTesterApp {
                 <input type="checkbox" id="scheduled-plan-${plan.id || plan.name}" value="${plan.id || plan.name}" ${isSelected ? 'checked' : ''}>
                 <label for="scheduled-plan-${plan.id || plan.name}">${plan.name}</label>
             `;
-            container.appendChild(planElement);
+            fragment.appendChild(planElement);
         });
+        container.appendChild(fragment);
     }
 
     getSelectedTestPlansFromModal() {
@@ -7241,7 +9281,7 @@ class XKAutoTesterApp {
     }
 
     hideScheduledPlanModal() {
-        document.getElementById('scheduled-plan-modal-overlay').classList.add('hidden');
+        this.modals.scheduledPlan.close();
     }
 
     editScheduledPlan() {
@@ -7253,7 +9293,6 @@ class XKAutoTesterApp {
     }
 
     async showEditScheduledPlanModal(plan) {
-        const modalOverlay = document.getElementById('scheduled-plan-modal-overlay');
         const modalTitle = document.getElementById('scheduled-plan-modal-title');
         const nameInput = document.getElementById('scheduled-plan-name');
         const timeInput = document.getElementById('scheduled-plan-time');
@@ -7275,7 +9314,7 @@ class XKAutoTesterApp {
         document.getElementById('save-scheduled-plan-btn').classList.add('hidden');
         document.getElementById('update-scheduled-plan-btn').classList.remove('hidden');
 
-        modalOverlay.classList.remove('hidden');
+        this.modals.scheduledPlan.open();
     }
 
     formatDateTimeForInput(date) {
@@ -7335,6 +9374,34 @@ class XKAutoTesterApp {
             console.error('保存定时计划失败:', error);
             Toast.error(window.i18n.t('scheduledPlan.saveFailed') + ': ' + error.message);
         }
+    }
+
+    /**
+     * 检查定时计划中的所有测试计划是否包含Android用例
+     * @param {Array} selectedTestPlans - 选中的测试计划数组
+     * @returns {Promise<{required: boolean, cases: Array, planNames: Array}>}
+     */
+    async checkAndroidDeviceRequiredForScheduledPlan(selectedTestPlans) {
+        if (!selectedTestPlans || selectedTestPlans.length === 0) {
+            return { required: false, cases: [], planNames: [] };
+        }
+
+        const allAndroidCases = [];
+        const planNames = [];
+
+        for (const testPlan of selectedTestPlans) {
+            const checkResult = await this.checkAndroidDeviceRequired(testPlan);
+            if (checkResult.required) {
+                allAndroidCases.push(...checkResult.cases);
+                planNames.push(testPlan.name);
+            }
+        }
+
+        return {
+            required: allAndroidCases.length > 0,
+            cases: allAndroidCases,
+            planNames: planNames
+        };
     }
 
     async updateScheduledPlan() {
@@ -7529,6 +9596,4147 @@ class XKAutoTesterApp {
         Toast.warning(
             window.i18n.t('scheduledPlan.expiredNotification', { name: data.planName })
         );
+    }
+
+    // ===== 页面封装功能 =====
+
+    async initPagePackage() {
+        if (this.ppInitialized) return;
+        this.ppInitialized = true;
+        await this.ppLoadApps();
+        this.ppInitCascadeSelects();
+        this.ppInitModals();
+        this.ppInitTabs();
+    }
+
+    ppInitTabs() {
+        const tabs = document.querySelectorAll('.pp-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.dataset.tab;
+                
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                document.querySelectorAll('.pp-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                
+                const targetContent = document.getElementById(`pp-${targetTab}-content`);
+                if (targetContent) {
+                    targetContent.classList.add('active');
+                }
+            });
+        });
+    }
+
+    async ppLoadApps() {
+        try {
+            const result = await window.electronAPI.pagePackage.getApps();
+            if (result.success) {
+                this.ppApps = result.data;
+                this.ppRenderAppOptions();
+                this.ppUpdateBadge('app', this.ppApps.length);
+            }
+        } catch (error) {
+            console.error('加载应用列表失败:', error);
+        }
+    }
+
+    ppInitCascadeSelects() {
+        const appWrapper = document.getElementById('pp-app-select-wrapper');
+        if (appWrapper) {
+            this.ppInitCascadeSelect(appWrapper, 'app');
+        }
+        
+        const pageWrapper = document.getElementById('pp-page-select-wrapper');
+        if (pageWrapper) {
+            this.ppInitCascadeSelect(pageWrapper, 'page');
+        }
+        
+        const elementWrapper = document.getElementById('pp-element-select-wrapper');
+        if (elementWrapper) {
+            this.ppInitCascadeSelect(elementWrapper, 'element');
+        }
+    }
+
+    ppInitCascadeSelect(wrapper, type) {
+        const select = wrapper.querySelector('.cascade-select');
+        const selected = wrapper.querySelector('.cascade-select__selected');
+        const searchInput = wrapper.querySelector('.cascade-select__search');
+        const addBtn = wrapper.querySelector('.cascade-select__btn.add');
+        const editBtn = wrapper.querySelector('.cascade-select__btn.edit');
+        const deleteBtn = wrapper.querySelector('.cascade-select__btn.delete');
+        const card = wrapper.closest('.pp-card');
+        
+        selected.addEventListener('click', (e) => {
+            if (select.classList.contains('disabled')) return;
+            const isOpen = select.classList.toggle('open');
+            if (card) {
+                card.classList.toggle('dropdown-open', isOpen);
+            }
+            document.querySelectorAll('.cascade-select.open').forEach(s => {
+                if (s !== select) {
+                    s.classList.remove('open');
+                    const otherCard = s.closest('.pp-card');
+                    if (otherCard) otherCard.classList.remove('dropdown-open');
+                }
+            });
+        });
+        
+        searchInput.addEventListener('input', (e) => {
+            const keyword = e.target.value.toLowerCase();
+            this.ppFilterOptions(type, keyword);
+        });
+        
+        addBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.ppShowAddModal(type);
+        });
+        
+        editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.ppShowEditModal(type);
+        });
+        
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.ppConfirmDelete(type);
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (!wrapper.contains(e.target)) {
+                select.classList.remove('open');
+                if (card) card.classList.remove('dropdown-open');
+            }
+        });
+    }
+
+    ppRenderAppOptions() {
+        const wrapper = document.getElementById('pp-app-select-wrapper');
+        const optionsContainer = wrapper.querySelector('.cascade-select__options');
+        
+        if (this.ppApps.length === 0) {
+            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n ? window.i18n.t('pagePackage.noApps') : '暂无应用'}</div>`;
+            return;
+        }
+        
+        optionsContainer.innerHTML = this.ppApps.map(app => `
+            <div class="cascade-select__option" data-id="${app.id}">${app.name}</div>
+        `).join('');
+        
+        optionsContainer.querySelectorAll('.cascade-select__option:not(.empty)').forEach(option => {
+            option.addEventListener('click', () => {
+                this.ppSelectApp(option.dataset.id);
+            });
+        });
+        
+        this.ppUpdateButtonStates('app');
+    }
+
+    async ppSelectApp(appId) {
+        const app = this.ppApps.find(a => a.id === appId);
+        if (!app) return;
+        
+        this.ppSelectedApp = app;
+        
+        const wrapper = document.getElementById('pp-app-select-wrapper');
+        const textSpan = wrapper.querySelector('.cascade-select__text');
+        textSpan.textContent = app.name;
+        textSpan.classList.remove('placeholder');
+        
+        wrapper.querySelectorAll('.cascade-select__option').forEach(opt => {
+            opt.classList.toggle('selected', opt.dataset.id === appId);
+        });
+        
+        wrapper.querySelector('.cascade-select').classList.remove('open');
+        
+        // 设置应用卡片为选中状态
+        document.getElementById('pp-app-card').classList.add('selected');
+        
+        // 重置页面和元素选择
+        this.ppSelectedPage = null;
+        this.ppSelectedElement = null;
+        this.ppResetPageSelect();
+        this.ppResetElementSelect();
+        
+        // 加载该应用下的页面
+        await this.ppLoadPages(appId);
+        
+        // 展开页面卡片
+        this.ppExpandCard('page');
+        
+        this.ppUpdateButtonStates('app');
+    }
+
+    async ppLoadPages(appId) {
+        if (!appId) {
+            this.ppPages = [];
+            this.ppRenderPageOptions();
+            this.ppUpdateBadge('page', 0);
+            return;
+        }
+        
+        try {
+            const result = await window.electronAPI.pagePackage.getPages(appId);
+            if (result.success) {
+                this.ppPages = result.data || [];
+                this.ppRenderPageOptions();
+                this.ppUpdateBadge('page', this.ppPages.length);
+            }
+        } catch (error) {
+            console.error('加载页面列表失败:', error);
+            this.ppPages = [];
+            this.ppRenderPageOptions();
+        }
+    }
+
+    ppRenderPageOptions() {
+        const wrapper = document.getElementById('pp-page-select-wrapper');
+        const select = wrapper.querySelector('.cascade-select');
+        const optionsContainer = wrapper.querySelector('.cascade-select__options');
+        
+        if (this.ppSelectedApp) {
+            select.classList.remove('disabled');
+        } else {
+            select.classList.add('disabled');
+        }
+        
+        if (this.ppPages.length === 0) {
+            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n ? window.i18n.t('pagePackage.noPages') : '暂无页面'}</div>`;
+            return;
+        }
+        
+        optionsContainer.innerHTML = this.ppPages.map(page => `
+            <div class="cascade-select__option" data-id="${page.id}">${page.name}</div>
+        `).join('');
+        
+        optionsContainer.querySelectorAll('.cascade-select__option:not(.empty)').forEach(option => {
+            option.addEventListener('click', () => {
+                this.ppSelectPage(option.dataset.id);
+            });
+        });
+        
+        this.ppUpdateButtonStates('page');
+    }
+
+    async ppSelectPage(pageId) {
+        const page = this.ppPages.find(p => p.id === pageId);
+        if (!page) return;
+        
+        this.ppSelectedPage = page;
+        
+        const wrapper = document.getElementById('pp-page-select-wrapper');
+        const textSpan = wrapper.querySelector('.cascade-select__text');
+        textSpan.textContent = page.name;
+        textSpan.classList.remove('placeholder');
+        
+        wrapper.querySelectorAll('.cascade-select__option').forEach(opt => {
+            opt.classList.toggle('selected', opt.dataset.id === pageId);
+        });
+        
+        wrapper.querySelector('.cascade-select').classList.remove('open');
+        
+        // 设置页面卡片为选中状态
+        document.getElementById('pp-page-card').classList.add('selected');
+        
+        // 重置元素选择
+        this.ppSelectedElement = null;
+        this.ppResetElementSelect();
+        
+        // 加载该页面下的元素
+        await this.ppLoadElements(this.ppSelectedApp.id, pageId);
+        
+        // 展开元素卡片
+        this.ppExpandCard('element');
+        
+        this.ppUpdateButtonStates('page');
+    }
+
+    async ppLoadElements(appId, pageId) {
+        if (!appId || !pageId) {
+            this.ppElements = [];
+            this.ppRenderElementOptions();
+            this.ppUpdateBadge('element', 0);
+            return;
+        }
+        
+        try {
+            const result = await window.electronAPI.pagePackage.getElements(appId, pageId);
+            if (result.success) {
+                this.ppElements = result.data || [];
+                this.ppRenderElementOptions();
+                this.ppUpdateBadge('element', this.ppElements.length);
+            }
+        } catch (error) {
+            console.error('加载元素列表失败:', error);
+            this.ppElements = [];
+            this.ppRenderElementOptions();
+        }
+    }
+
+    ppRenderElementOptions() {
+        const wrapper = document.getElementById('pp-element-select-wrapper');
+        const select = wrapper.querySelector('.cascade-select');
+        const optionsContainer = wrapper.querySelector('.cascade-select__options');
+        
+        if (this.ppSelectedPage) {
+            select.classList.remove('disabled');
+        } else {
+            select.classList.add('disabled');
+        }
+        
+        if (this.ppElements.length === 0) {
+            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n ? window.i18n.t('pagePackage.noElements') : '暂无元素'}</div>`;
+            return;
+        }
+        
+        optionsContainer.innerHTML = this.ppElements.map(element => `
+            <div class="cascade-select__option" data-id="${element.id}">${element.name}</div>
+        `).join('');
+        
+        optionsContainer.querySelectorAll('.cascade-select__option:not(.empty)').forEach(option => {
+            option.addEventListener('click', () => {
+                this.ppSelectElement(option.dataset.id);
+            });
+        });
+        
+        this.ppUpdateButtonStates('element');
+    }
+
+    ppSelectElement(elementId) {
+        const element = this.ppElements.find(e => e.id === elementId);
+        if (!element) return;
+        
+        this.ppSelectedElement = element;
+        
+        const wrapper = document.getElementById('pp-element-select-wrapper');
+        const textSpan = wrapper.querySelector('.cascade-select__text');
+        textSpan.textContent = element.name;
+        textSpan.classList.remove('placeholder');
+        
+        wrapper.querySelectorAll('.cascade-select__option').forEach(opt => {
+            opt.classList.toggle('selected', opt.dataset.id === elementId);
+        });
+        
+        wrapper.querySelector('.cascade-select').classList.remove('open');
+        
+        // 设置元素卡片为选中状态
+        document.getElementById('pp-element-card').classList.add('selected');
+
+        this.ppUpdateBadge('element', this.ppElements.length);
+
+        this.ppUpdateButtonStates('element');
+    }
+
+    ppResetAppSelect() {
+        const wrapper = document.getElementById('pp-app-select-wrapper');
+        const textSpan = wrapper.querySelector('.cascade-select__text');
+        textSpan.textContent = window.i18n ? window.i18n.t('pagePackage.selectApp') : '请选择应用';
+        textSpan.classList.add('placeholder');
+        wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
+        
+        // 收起所有卡片
+        this.ppCollapseCard('page');
+        this.ppCollapseCard('element');
+        
+        // 移除选中状态
+        document.getElementById('pp-app-card').classList.remove('selected');
+        document.getElementById('pp-page-card').classList.remove('selected');
+        document.getElementById('pp-element-card').classList.remove('selected');
+        
+        // 更新按钮状态
+        this.ppUpdateButtonStates('app');
+    }
+
+    ppResetPageSelect() {
+        const wrapper = document.getElementById('pp-page-select-wrapper');
+        const textSpan = wrapper.querySelector('.cascade-select__text');
+        textSpan.textContent = window.i18n ? window.i18n.t('pagePackage.selectPage') : '请选择页面';
+        textSpan.classList.add('placeholder');
+        wrapper.querySelector('.cascade-select').classList.add('disabled');
+        wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
+        
+        // 收起页面和元素卡片
+        this.ppCollapseCard('page');
+        this.ppCollapseCard('element');
+        
+        // 移除选中状态
+        document.getElementById('pp-page-card').classList.remove('selected');
+        document.getElementById('pp-element-card').classList.remove('selected');
+    }
+
+    ppResetElementSelect() {
+        const wrapper = document.getElementById('pp-element-select-wrapper');
+        const textSpan = wrapper.querySelector('.cascade-select__text');
+        textSpan.textContent = window.i18n ? window.i18n.t('pagePackage.selectElement') : '请选择元素';
+        textSpan.classList.add('placeholder');
+        wrapper.querySelector('.cascade-select').classList.add('disabled');
+        wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
+        
+        // 收起元素卡片
+        this.ppCollapseCard('element');
+        
+        // 移除选中状态
+        document.getElementById('pp-element-card').classList.remove('selected');
+    }
+
+    ppExpandCard(type) {
+        const card = document.getElementById(`pp-${type}-card`);
+        if (card) {
+            card.classList.remove('collapsed');
+            card.classList.add('expanded');
+        }
+    }
+
+    ppCollapseCard(type) {
+        const card = document.getElementById(`pp-${type}-card`);
+        if (card) {
+            card.classList.remove('expanded');
+            card.classList.add('collapsed');
+        }
+    }
+
+    ppUpdateBadge(type, count) {
+        const badge = document.getElementById(`pp-${type}-badge`);
+        const countSpan = document.getElementById(`pp-${type}-count`);
+        if (badge && countSpan) {
+            if (count > 0) {
+                badge.style.display = 'block';
+                countSpan.textContent = count;
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+    }
+
+    ppUpdateButtonStates(type) {
+        let wrapper, hasSelection;
+        
+        switch (type) {
+            case 'app':
+                wrapper = document.getElementById('pp-app-select-wrapper');
+                hasSelection = !!this.ppSelectedApp;
+                break;
+            case 'page':
+                wrapper = document.getElementById('pp-page-select-wrapper');
+                hasSelection = !!this.ppSelectedPage;
+                break;
+            case 'element':
+                wrapper = document.getElementById('pp-element-select-wrapper');
+                hasSelection = !!this.ppSelectedElement;
+                break;
+        }
+        
+        if (wrapper) {
+            const editBtn = wrapper.querySelector('.cascade-select__btn.edit');
+            const deleteBtn = wrapper.querySelector('.cascade-select__btn.delete');
+            if (editBtn) editBtn.disabled = !hasSelection;
+            if (deleteBtn) deleteBtn.disabled = !hasSelection;
+        }
+    }
+
+    ppFilterOptions(type, keyword) {
+        let options, filtered;
+        
+        switch (type) {
+            case 'app':
+                options = this.ppApps;
+                filtered = options.filter(app => app.name.toLowerCase().includes(keyword));
+                this.ppRenderFilteredOptions('app', filtered);
+                break;
+            case 'page':
+                options = this.ppPages;
+                filtered = options.filter(page => page.name.toLowerCase().includes(keyword));
+                this.ppRenderFilteredOptions('page', filtered);
+                break;
+            case 'element':
+                options = this.ppElements;
+                filtered = options.filter(element => 
+                    element.name.toLowerCase().includes(keyword) || 
+                    (element.value && element.value.toLowerCase().includes(keyword))
+                );
+                this.ppRenderFilteredOptions('element', filtered);
+                break;
+        }
+    }
+
+    ppRenderFilteredOptions(type, items) {
+        const wrapperId = `pp-${type}-select-wrapper`;
+        const wrapper = document.getElementById(wrapperId);
+        const optionsContainer = wrapper.querySelector('.cascade-select__options');
+        
+        if (items.length === 0) {
+            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n ? window.i18n.t('pagePackage.noResults') : '无匹配结果'}</div>`;
+            return;
+        }
+        
+        const selectedId = this.ppGetSelectedId(type);
+        optionsContainer.innerHTML = items.map(item => `
+            <div class="cascade-select__option ${selectedId === item.id ? 'selected' : ''}" data-id="${item.id}">${item.name}</div>
+        `).join('');
+        
+        optionsContainer.querySelectorAll('.cascade-select__option:not(.empty)').forEach(option => {
+            option.addEventListener('click', () => {
+                const id = option.dataset.id;
+                switch (type) {
+                    case 'app': this.ppSelectApp(id); break;
+                    case 'page': this.ppSelectPage(id); break;
+                    case 'element': this.ppSelectElement(id); break;
+                }
+            });
+        });
+    }
+
+    ppGetSelectedId(type) {
+        switch (type) {
+            case 'app': return this.ppSelectedApp?.id;
+            case 'page': return this.ppSelectedPage?.id;
+            case 'element': return this.ppSelectedElement?.id;
+        }
+    }
+
+    // ===== 弹窗逻辑 =====
+
+    ppInitModals() {
+        this.ppInitAppModal();
+        this.ppInitPageModal();
+        this.ppInitElementModal();
+    }
+
+    ppInitAppModal() {
+        const overlay = document.getElementById('pp-app-modal-overlay');
+        if (!overlay) return;
+        
+        const closeBtn = overlay.querySelector('.pp-modal-close');
+        const cancelBtn = overlay.querySelector('.pp-modal-cancel');
+        const saveBtn = document.getElementById('pp-app-save-btn');
+        
+        closeBtn.addEventListener('click', () => this.ppCloseModal('app'));
+        cancelBtn.addEventListener('click', () => this.ppCloseModal('app'));
+        saveBtn.addEventListener('click', () => this.ppSaveApp());
+        
+        this.initApkDropZone();
+    }
+
+    initApkDropZone() {
+        const dropZone = document.getElementById('apk-drop-zone');
+        if (!dropZone) return;
+
+        const content = dropZone.querySelector('.apk-drop-zone-content');
+        const loading = document.getElementById('apk-drop-loading');
+        const success = document.getElementById('apk-drop-success');
+        const errorEl = document.getElementById('apk-drop-error');
+        const errorMessage = document.getElementById('apk-error-message');
+
+        const showState = (state) => {
+            content.classList.toggle('hidden', state !== 'default');
+            loading.classList.toggle('hidden', state !== 'loading');
+            success.classList.toggle('hidden', state !== 'success');
+            errorEl.classList.toggle('hidden', state !== 'error');
+            dropZone.classList.remove('drag-over');
+        };
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const files = e.dataTransfer.files;
+            if (files.length === 0) {
+                showState('default');
+                return;
+            }
+
+            const file = files[0];
+            const filePath = window.electronAPI.getFilePath(file);
+            
+            if (!filePath.toLowerCase().endsWith('.apk')) {
+                showState('error');
+                if (errorMessage) {
+                    errorMessage.textContent = window.i18n ? window.i18n.t('pagePackage.apkInvalidFile') : '请拖放APK文件';
+                }
+                setTimeout(() => showState('default'), 3000);
+                return;
+            }
+
+            showState('loading');
+
+            try {
+                const result = await window.electronAPI.apk.parse(filePath);
+                
+                if (result.success && result.data) {
+                    const data = result.data;
+                    
+                    if (data.packageName) {
+                        document.getElementById('pp-package-input').value = data.packageName;
+                    }
+                    
+                    if (data.activityName) {
+                        document.getElementById('pp-activity-input').value = data.activityName;
+                    }
+
+                    const appInput = document.getElementById('pp-app-input');
+                    if (appInput && !appInput.value.trim() && data.applicationLabel) {
+                        appInput.value = data.applicationLabel;
+                    }
+                    
+                    showState('success');
+                    setTimeout(() => showState('default'), 2000);
+                } else {
+                    showState('error');
+                    if (errorMessage) {
+                        errorMessage.textContent = result.error || (window.i18n ? window.i18n.t('pagePackage.apkParseFailed') : '解析失败');
+                    }
+                    setTimeout(() => showState('default'), 3000);
+                }
+            } catch (error) {
+                console.error('APK解析错误:', error);
+                showState('error');
+                if (errorMessage) {
+                    errorMessage.textContent = error.message || (window.i18n ? window.i18n.t('pagePackage.apkParseFailed') : '解析失败');
+                }
+                setTimeout(() => showState('default'), 3000);
+            }
+        });
+
+        dropZone.addEventListener('click', async () => {
+            try {
+                const result = await window.electronAPI.selectApkFile();
+                if (result && result.filePaths && result.filePaths.length > 0) {
+                    const filePath = result.filePaths[0];
+
+                    showState('loading');
+
+                    try {
+                        const parseResult = await window.electronAPI.apk.parse(filePath);
+                        
+                        if (parseResult.success && parseResult.data) {
+                            const data = parseResult.data;
+                            
+                            if (data.packageName) {
+                                document.getElementById('pp-package-input').value = data.packageName;
+                            }
+                            
+                            if (data.activityName) {
+                                document.getElementById('pp-activity-input').value = data.activityName;
+                            }
+
+                            const appInput = document.getElementById('pp-app-input');
+                            if (appInput && !appInput.value.trim() && data.applicationLabel) {
+                                appInput.value = data.applicationLabel;
+                            }
+                            
+                            showState('success');
+                            setTimeout(() => showState('default'), 2000);
+                        } else {
+                            showState('error');
+                            if (errorMessage) {
+                                errorMessage.textContent = parseResult.error || (window.i18n ? window.i18n.t('pagePackage.apkParseFailed') : '解析失败');
+                            }
+                            setTimeout(() => showState('default'), 3000);
+                        }
+                    } catch (parseError) {
+                        console.error('APK解析错误:', parseError);
+                        showState('error');
+                        if (errorMessage) {
+                            errorMessage.textContent = parseError.message || (window.i18n ? window.i18n.t('pagePackage.apkParseFailed') : '解析失败');
+                        }
+                        setTimeout(() => showState('default'), 3000);
+                    }
+                }
+            } catch (error) {
+                console.error('选择文件错误:', error);
+            }
+        });
+    }
+
+    ppInitPageModal() {
+        const overlay = document.getElementById('pp-page-modal-overlay');
+        if (!overlay) return;
+        
+        const closeBtn = overlay.querySelector('.pp-modal-close');
+        const cancelBtn = overlay.querySelector('.pp-modal-cancel');
+        const saveBtn = document.getElementById('pp-page-save-btn');
+        
+        closeBtn.addEventListener('click', () => this.ppCloseModal('page'));
+        cancelBtn.addEventListener('click', () => this.ppCloseModal('page'));
+        saveBtn.addEventListener('click', () => this.ppSavePage());
+    }
+
+    ppInitElementModal() {
+        const overlay = document.getElementById('pp-element-modal-overlay');
+        if (!overlay) return;
+        
+        const closeBtn = overlay.querySelector('.pp-modal-close');
+        const cancelBtn = overlay.querySelector('.pp-modal-cancel');
+        const saveBtn = document.getElementById('pp-element-save-btn');
+        
+        closeBtn.addEventListener('click', () => this.ppCloseModal('element'));
+        cancelBtn.addEventListener('click', () => this.ppCloseModal('element'));
+        saveBtn.addEventListener('click', () => this.ppSaveElement());
+        
+        // 初始化定位器下拉框
+        this.initializeCustomSelects();
+    }
+
+    ppShowAddModal(type) {
+        this.ppIsEditing = false;
+        this.ppEditingType = type;
+        
+        switch (type) {
+            case 'app':
+                document.getElementById('pp-app-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.newApp') : '新增应用';
+                document.getElementById('pp-app-input').value = '';
+                this.initializeCustomSelects();
+                this.ppSetPlatformValue('android');
+                document.getElementById('pp-package-input').value = '';
+                document.getElementById('pp-activity-input').value = '';
+                this.modals.ppApp.open();
+                document.getElementById('pp-app-input').focus();
+                break;
+            case 'page':
+                if (!this.ppSelectedApp) {
+                    Toast.warning(window.i18n ? window.i18n.t('pagePackage.selectAppFirst') : '请先选择应用');
+                    return;
+                }
+                document.getElementById('pp-page-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.newPage') : '新增页面';
+                document.getElementById('pp-page-input').value = '';
+                this.modals.ppPage.open();
+                document.getElementById('pp-page-input').focus();
+                break;
+            case 'element':
+                if (!this.ppSelectedPage) {
+                    Toast.warning(window.i18n ? window.i18n.t('pagePackage.selectPageFirst') : '请先选择页面');
+                    return;
+                }
+                document.getElementById('pp-element-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.newElement') : '新增元素';
+                document.getElementById('pp-element-name-input').value = '';
+                document.getElementById('pp-element-value-input').value = '';
+                this.modals.ppElement.open();
+                document.getElementById('pp-element-name-input').focus();
+                break;
+        }
+    }
+
+    ppShowEditModal(type) {
+        this.ppIsEditing = true;
+        this.ppEditingType = type;
+        
+        switch (type) {
+            case 'app':
+                if (!this.ppSelectedApp) return;
+                document.getElementById('pp-app-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.editApp') : '编辑应用';
+                document.getElementById('pp-app-input').value = this.ppSelectedApp.name;
+                this.initializeCustomSelects();
+                this.ppSetPlatformValue(this.ppSelectedApp.platform || 'android');
+                document.getElementById('pp-package-input').value = this.ppSelectedApp.packageName || '';
+                document.getElementById('pp-activity-input').value = this.ppSelectedApp.activityName || '';
+                this.modals.ppApp.open();
+                document.getElementById('pp-app-input').focus();
+                break;
+            case 'page':
+                if (!this.ppSelectedPage) return;
+                document.getElementById('pp-page-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.editPage') : '编辑页面';
+                document.getElementById('pp-page-input').value = this.ppSelectedPage.name;
+                this.modals.ppPage.open();
+                document.getElementById('pp-page-input').focus();
+                break;
+            case 'element':
+                if (!this.ppSelectedElement) return;
+                document.getElementById('pp-element-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.editElement') : '编辑元素';
+                document.getElementById('pp-element-name-input').value = this.ppSelectedElement.name;
+                document.getElementById('pp-element-value-input').value = this.ppSelectedElement.value;
+                this.ppSetLocatorValue(this.ppSelectedElement.locator);
+                this.modals.ppElement.open();
+                document.getElementById('pp-element-name-input').focus();
+                break;
+        }
+    }
+
+    ppSetLocatorValue(locator) {
+        const wrapper = document.getElementById('pp-element-locator-wrapper');
+        if (!wrapper) return;
+        
+        const options = wrapper.querySelectorAll('.custom-select__option');
+        options.forEach(opt => {
+            opt.classList.toggle('selected', opt.dataset.value === locator);
+        });
+        const selectedSpan = wrapper.querySelector('.custom-select__text');
+        const selectedOption = wrapper.querySelector(`.custom-select__option[data-value="${locator}"]`);
+        if (selectedOption && selectedSpan) {
+            selectedSpan.textContent = selectedOption.querySelector('span').textContent;
+        }
+    }
+
+    ppCloseModal(type) {
+        const modalMap = {
+            app: this.modals.ppApp,
+            page: this.modals.ppPage,
+            element: this.modals.ppElement
+        };
+        if (modalMap[type]) {
+            modalMap[type].close();
+        }
+    }
+
+    async ppSaveApp() {
+        const name = document.getElementById('pp-app-input').value.trim();
+        const platform = this.ppGetPlatformSelectValue();
+        const packageName = document.getElementById('pp-package-input').value.trim();
+        const activityName = document.getElementById('pp-activity-input').value.trim();
+        
+        if (!name) {
+            Toast.error(window.i18n ? window.i18n.t('pagePackage.nameRequired') : '请输入名称');
+            return;
+        }
+        
+        try {
+            let result;
+            const appData = { name, platform, packageName, activityName };
+            if (this.ppIsEditing) {
+                result = await window.electronAPI.pagePackage.updateApp(this.ppSelectedApp.id, appData);
+            } else {
+                result = await window.electronAPI.pagePackage.addApp(appData);
+            }
+            
+            if (result.success) {
+                Toast.success(window.i18n ? window.i18n.t('pagePackage.saveSuccess') : '保存成功');
+                this.ppCloseModal('app');
+                await this.ppLoadApps();
+                if (this.ppIsEditing) {
+                    this.ppSelectedApp.name = name;
+                    this.ppSelectedApp.platform = platform;
+                    this.ppSelectedApp.packageName = packageName;
+                    this.ppSelectedApp.activityName = activityName;
+                    const wrapper = document.getElementById('pp-app-select-wrapper');
+                    wrapper.querySelector('.cascade-select__text').textContent = name;
+                }
+            } else {
+                Toast.error(result.error || '保存失败');
+            }
+        } catch (error) {
+            console.error('保存应用失败:', error);
+            Toast.error('保存失败');
+        }
+    }
+
+    async ppSavePage() {
+        const name = document.getElementById('pp-page-input').value.trim();
+        if (!name) {
+            Toast.error(window.i18n ? window.i18n.t('pagePackage.nameRequired') : '请输入名称');
+            return;
+        }
+        
+        try {
+            let result;
+            if (this.ppIsEditing) {
+                result = await window.electronAPI.pagePackage.updatePage(this.ppSelectedApp.id, this.ppSelectedPage.id, name);
+            } else {
+                result = await window.electronAPI.pagePackage.addPage(this.ppSelectedApp.id, name);
+            }
+            
+            if (result.success) {
+                Toast.success(window.i18n ? window.i18n.t('pagePackage.saveSuccess') : '保存成功');
+                this.ppCloseModal('page');
+                await this.ppLoadPages(this.ppSelectedApp.id);
+                if (this.ppIsEditing) {
+                    this.ppSelectedPage.name = name;
+                    const wrapper = document.getElementById('pp-page-select-wrapper');
+                    wrapper.querySelector('.cascade-select__text').textContent = name;
+                }
+            } else {
+                Toast.error(result.error || '保存失败');
+            }
+        } catch (error) {
+            console.error('保存页面失败:', error);
+            Toast.error('保存失败');
+        }
+    }
+
+    async ppSaveElement() {
+        const name = document.getElementById('pp-element-name-input').value.trim();
+        const value = document.getElementById('pp-element-value-input').value.trim();
+        const locator = this.ppGetLocatorSelectValue();
+        
+        if (!name) {
+            Toast.error(window.i18n ? window.i18n.t('pagePackage.nameRequired') : '请输入名称');
+            return;
+        }
+        if (!value) {
+            Toast.error(window.i18n ? window.i18n.t('pagePackage.valueRequired') : '请输入定位值');
+            return;
+        }
+        
+        const elementData = { name, locator, value };
+        
+        try {
+            let result;
+            if (this.ppIsEditing) {
+                result = await window.electronAPI.pagePackage.updateElement(
+                    this.ppSelectedApp.id, 
+                    this.ppSelectedPage.id, 
+                    this.ppSelectedElement.id, 
+                    elementData
+                );
+            } else {
+                result = await window.electronAPI.pagePackage.addElement(
+                    this.ppSelectedApp.id, 
+                    this.ppSelectedPage.id, 
+                    elementData
+                );
+            }
+            
+            if (result.success) {
+                Toast.success(window.i18n ? window.i18n.t('pagePackage.saveSuccess') : '保存成功');
+                this.ppCloseModal('element');
+                await this.ppLoadElements(this.ppSelectedApp.id, this.ppSelectedPage.id);
+                if (this.ppIsEditing) {
+                    Object.assign(this.ppSelectedElement, elementData);
+                    const wrapper = document.getElementById('pp-element-select-wrapper');
+                    wrapper.querySelector('.cascade-select__text').textContent = name;
+                }
+            } else {
+                Toast.error(result.error || '保存失败');
+            }
+        } catch (error) {
+            console.error('保存元素失败:', error);
+            Toast.error('保存失败');
+        }
+    }
+
+    ppGetLocatorSelectValue() {
+        const wrapper = document.getElementById('pp-element-locator-wrapper');
+        if (!wrapper) return 'id';
+        
+        const selectedOption = wrapper.querySelector('.custom-select__option.selected');
+        return selectedOption ? selectedOption.dataset.value : 'id';
+    }
+
+    ppGetPlatformSelectValue() {
+        const wrapper = document.getElementById('pp-platform-wrapper');
+        if (!wrapper) return 'android';
+        
+        const selectedOption = wrapper.querySelector('.custom-select__option.selected');
+        return selectedOption ? selectedOption.dataset.value : 'android';
+    }
+
+    ppSetPlatformValue(platform) {
+        const wrapper = document.getElementById('pp-platform-wrapper');
+        if (!wrapper) return;
+        
+        const options = wrapper.querySelectorAll('.custom-select__option');
+        options.forEach(opt => {
+            opt.classList.toggle('selected', opt.dataset.value === platform);
+        });
+        const selectedSpan = wrapper.querySelector('.custom-select__text');
+        const selectedOption = wrapper.querySelector(`.custom-select__option[data-value="${platform}"]`);
+        if (selectedOption && selectedSpan) {
+            selectedSpan.textContent = selectedOption.querySelector('span').textContent;
+        }
+    }
+
+    async ppConfirmDelete(type) {
+        let message, itemName;
+        
+        switch (type) {
+            case 'app':
+                if (!this.ppSelectedApp) return;
+                itemName = this.ppSelectedApp.name;
+                message = window.i18n ? 
+                    window.i18n.t('pagePackage.deleteAppConfirm', { name: itemName }) : 
+                    `确定要删除应用 "${itemName}" 吗？这将同时删除所有关联的页面和元素。`;
+                break;
+            case 'page':
+                if (!this.ppSelectedPage) return;
+                itemName = this.ppSelectedPage.name;
+                message = window.i18n ? 
+                    window.i18n.t('pagePackage.deletePageConfirm', { name: itemName }) : 
+                    `确定要删除页面 "${itemName}" 吗？这将同时删除所有关联的元素。`;
+                break;
+            case 'element':
+                if (!this.ppSelectedElement) return;
+                itemName = this.ppSelectedElement.name;
+                message = window.i18n ? 
+                    window.i18n.t('pagePackage.deleteElementConfirm', { name: itemName }) : 
+                    `确定要删除元素 "${itemName}" 吗？`;
+                break;
+        }
+        
+        this.showConfirmModal(
+            window.i18n ? window.i18n.t('pagePackage.deleteConfirm') : '删除确认',
+            message,
+            async () => {
+                await this.ppDeleteItem(type);
+            }
+        );
+    }
+
+    async ppDeleteItem(type) {
+        try {
+            let result;
+            
+            switch (type) {
+                case 'app':
+                    result = await window.electronAPI.pagePackage.deleteApp(this.ppSelectedApp.id);
+                    if (result.success) {
+                        this.ppSelectedApp = null;
+                        this.ppSelectedPage = null;
+                        this.ppSelectedElement = null;
+                        await this.ppLoadApps();
+                        this.ppResetAppSelect();
+                        this.ppResetPageSelect();
+                        this.ppResetElementSelect();
+                        document.getElementById('pp-app-card').classList.remove('selected');
+                    }
+                    break;
+                case 'page':
+                    result = await window.electronAPI.pagePackage.deletePage(this.ppSelectedApp.id, this.ppSelectedPage.id);
+                    if (result.success) {
+                        this.ppSelectedPage = null;
+                        this.ppSelectedElement = null;
+                        await this.ppLoadPages(this.ppSelectedApp.id);
+                        this.ppResetElementSelect();
+                        document.getElementById('pp-page-card').classList.remove('selected');
+                    }
+                    break;
+                case 'element':
+                    result = await window.electronAPI.pagePackage.deleteElement(
+                        this.ppSelectedApp.id, 
+                        this.ppSelectedPage.id, 
+                        this.ppSelectedElement.id
+                    );
+                    if (result.success) {
+                        this.ppSelectedElement = null;
+                        await this.ppLoadElements(this.ppSelectedApp.id, this.ppSelectedPage.id);
+                        document.getElementById('pp-element-card').classList.remove('selected');
+                    }
+                    break;
+            }
+            
+            if (result.success) {
+                Toast.success(window.i18n ? window.i18n.t('pagePackage.deleteSuccess') : '删除成功');
+            } else {
+                Toast.error(result.error || '删除失败');
+            }
+        } catch (error) {
+            console.error('删除失败:', error);
+            Toast.error('删除失败');
+        }
+    }
+
+    // 页面切换时重置状态
+    ppResetState() {
+        this.ppSelectedApp = null;
+        this.ppSelectedPage = null;
+        this.ppSelectedElement = null;
+        
+        // 重置应用下拉框显示
+        const appWrapper = document.getElementById('pp-app-select-wrapper');
+        if (appWrapper) {
+            const textSpan = appWrapper.querySelector('.cascade-select__text');
+            textSpan.textContent = window.i18n ? window.i18n.t('pagePackage.selectApp') : '请选择应用';
+            textSpan.classList.add('placeholder');
+            appWrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
+        }
+        
+        this.ppResetPageSelect();
+        this.ppResetElementSelect();
+        
+        // 移除所有卡片选中状态
+        document.getElementById('pp-app-card')?.classList.remove('selected');
+        document.getElementById('pp-page-card')?.classList.remove('selected');
+        document.getElementById('pp-element-card')?.classList.remove('selected');
+        
+        // 隐藏徽章
+        this.ppUpdateBadge('app', 0);
+        this.ppUpdateBadge('page', 0);
+        this.ppUpdateBadge('element', 0);
+    }
+
+    // ===== 测试用例步骤管理 =====
+
+    /**
+     * 初始化测试用例编辑器
+     */
+    async tcInitEditor() {
+        // 加载应用列表
+        await this.tcLoadApps();
+        // 加载蓝牙设备列表（用于测试步骤中的蓝牙操作）
+        await this.tcLoadBleDevices();
+        // 加载Markers列表
+        await this.tcLoadMarkers();
+        // 初始化平台选择下拉框
+        this.tcInitPlatformSelect();
+        // 初始化应用选择下拉框
+        this.tcInitAppSelect();
+        // 初始化Markers下拉框
+        this.tcInitMarkersSelect();
+        // 初始化折叠区域
+        this.tcInitCollapsible();
+    }
+
+    /**
+     * 加载Markers列表
+     */
+    async tcLoadMarkers() {
+        try {
+            const markers = await window.electronAPI.getPytestMarkers();
+            this.tcMarkers = markers || [];
+        } catch (error) {
+            console.error('加载Markers失败:', error);
+            this.tcMarkers = [];
+        }
+    }
+
+    /**
+     * 初始化Markers下拉框
+     */
+    tcInitMarkersSelect() {
+        const select = document.getElementById('tc-markers-select');
+        if (!select) return;
+
+        if (select.dataset.initialized === 'true') return;
+
+        const selected = select.querySelector('.custom-select__selected');
+        const options = select.querySelector('.custom-select__options');
+
+        if (!selected || !options) return;
+
+        document.body.appendChild(options);
+
+        select.dataset.initialized = 'true';
+
+        selected.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+                if (opt !== options) opt.classList.remove('show');
+            });
+            const mainContent = document.querySelector('.main-content');
+            const isShowing = options.classList.contains('show');
+            if (!isShowing) {
+                this.positionDropdown(selected, options);
+                options.classList.add('show');
+                if (mainContent) {
+                    mainContent.classList.add('dropdown-open');
+                    mainContent.addEventListener('wheel', this.preventScroll, { passive: false });
+                }
+            } else {
+                options.classList.remove('show');
+                if (mainContent) {
+                    mainContent.classList.remove('dropdown-open');
+                    mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                }
+            }
+        });
+
+        this.tcRenderMarkersOptions();
+    }
+
+    /**
+     * 渲染Markers选项
+     */
+    tcRenderMarkersOptions() {
+        const optionsContainer = document.getElementById('tc-markers-options');
+        if (!optionsContainer) return;
+
+        if (this.tcMarkers.length === 0) {
+            optionsContainer.innerHTML = `<div class="custom-select__option disabled"><span>${window.i18n ? window.i18n.t('testExecution.noMarkers') : '暂无标记'}</span></div>`;
+            return;
+        }
+
+        optionsContainer.innerHTML = this.tcMarkers.map(marker => `
+            <div class="custom-select__option" data-value="${marker.name}" data-description="${marker.description || ''}">
+                <span>${marker.name}</span>
+            </div>
+        `).join('');
+
+        optionsContainer.querySelectorAll('.custom-select__option:not(.disabled)').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const value = option.dataset.value;
+                
+                this.tcSelectedMarkers = this.tcSelectedMarkers || [];
+                
+                if (option.classList.contains('selected')) {
+                    option.classList.remove('selected');
+                    this.tcSelectedMarkers = this.tcSelectedMarkers.filter(m => m !== value);
+                } else {
+                    option.classList.add('selected');
+                    this.tcSelectedMarkers.push(value);
+                }
+
+                this.tcUpdateMarkersDisplay();
+            });
+        });
+    }
+
+    /**
+     * 更新Markers显示（徽章形式）
+     */
+    tcUpdateMarkersDisplay() {
+        const selectedContainer = document.querySelector('#tc-markers-selected');
+        if (!selectedContainer) return;
+
+        // 清除所有现有内容（徽章和占位符）
+        selectedContainer.innerHTML = '';
+
+        if (this.tcSelectedMarkers.length === 0) {
+            const placeholderSpan = document.createElement('span');
+            placeholderSpan.className = 'custom-select__text';
+            placeholderSpan.setAttribute('data-i18n', 'placeholders.selectMarkers');
+            placeholderSpan.textContent = window.i18n ? window.i18n.t('placeholders.selectMarkers') : '请选择标记';
+            selectedContainer.appendChild(placeholderSpan);
+        } else {
+            this.tcSelectedMarkers.forEach(marker => {
+                const badge = document.createElement('span');
+                badge.className = 'marker-badge';
+                badge.setAttribute('data-value', marker);
+                badge.textContent = marker;
+                selectedContainer.appendChild(badge);
+
+                badge.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.tcSelectedMarkers = this.tcSelectedMarkers.filter(m => m !== marker);
+                    const option = document.querySelector(`#tc-markers-options .custom-select__option[data-value="${marker}"]`);
+                    if (option) option.classList.remove('selected');
+                    this.tcUpdateMarkersDisplay();
+                });
+            });
+        }
+    }
+
+    /**
+     * 加载应用列表
+     */
+    async tcLoadApps() {
+        try {
+            const result = await window.electronAPI.pagePackage.getApps();
+            if (result.success) {
+                this.tcApps = result.data || [];
+                this.tcRenderAppOptions();
+            }
+        } catch (error) {
+            console.error('加载应用列表失败:', error);
+        }
+    }
+
+    /**
+     * 加载蓝牙设备列表（用于测试步骤中的蓝牙操作）
+     */
+    async tcLoadBleDevices() {
+        try {
+            const result = await window.electronAPI.bleDeviceDiscovery.getDevices();
+            if (result.success) {
+                this.tcBleDevices = result.data || [];
+            }
+        } catch (error) {
+            console.error('加载蓝牙设备列表失败:', error);
+        }
+    }
+
+    /**
+     * 初始化应用选择下拉框
+     */
+    tcInitAppSelect() {
+        // 使用custom-select组件，初始化在tcRenderAppOptions中完成
+        const select = document.getElementById('tc-app-select');
+        if (!select) return;
+
+        // 跳过已初始化的下拉框
+        if (select.dataset.initialized === 'true') return;
+
+        const selected = select.querySelector('.custom-select__selected');
+        const options = select.querySelector('.custom-select__options');
+
+        if (!selected || !options) return;
+
+        // 将下拉框选项移到 body 下
+        document.body.appendChild(options);
+
+        select.dataset.initialized = 'true';
+
+        // 点击选中区域切换下拉框显示/隐藏
+        selected.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // 关闭其他下拉框
+            document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+                if (opt !== options) {
+                    opt.classList.remove('show');
+                }
+            });
+
+            const mainContent = document.querySelector('.main-content');
+            const isShowing = options.classList.contains('show');
+            if (!isShowing) {
+                this.positionDropdown(selected, options);
+                options.classList.add('show');
+                // 禁止页面滚动
+                if (mainContent) {
+                    mainContent.classList.add('dropdown-open');
+                    mainContent.addEventListener('wheel', this.preventScroll, { passive: false });
+                }
+            } else {
+                options.classList.remove('show');
+                // 恢复页面滚动
+                if (mainContent) {
+                    mainContent.classList.remove('dropdown-open');
+                    mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                }
+            }
+        });
+    }
+
+    /**
+     * 渲染应用选项
+     */
+    tcRenderAppOptions() {
+        const optionsContainer = document.getElementById('tc-app-options');
+        if (!optionsContainer) return;
+
+        if (this.tcApps.length === 0) {
+            optionsContainer.innerHTML = `<div class="custom-select__option disabled"><span>${window.i18n ? window.i18n.t('pagePackage.noApps') : '暂无应用'}</span></div>`;
+            return;
+        }
+
+        optionsContainer.innerHTML = this.tcApps.map(app => `
+            <div class="custom-select__option" data-value="${app.id}" data-name="${app.name}">
+                <span>${app.name}</span>
+            </div>
+        `).join('');
+
+        // 绑定点击事件
+        optionsContainer.querySelectorAll('.custom-select__option:not(.disabled)').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const appId = option.dataset.value;
+                this.tcSelectApp(appId);
+
+                // 更新选中状态
+                optionsContainer.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
+                option.classList.add('selected');
+
+                // 更新显示文本
+                const selectedSpan = document.querySelector('#tc-app-selected .custom-select__text');
+                if (selectedSpan) {
+                    selectedSpan.textContent = option.dataset.name;
+                }
+
+                // 隐藏下拉框
+                optionsContainer.classList.remove('show');
+                const mainContent = document.querySelector('.main-content');
+                if (mainContent) {
+                    mainContent.classList.remove('dropdown-open');
+                    mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                }
+            });
+        });
+    }
+
+    /**
+     * 过滤应用选项（已弃用，custom-select不支持搜索）
+     */
+    tcFilterAppOptions(keyword) {
+        // 保留空实现以兼容
+    }
+
+    /**
+     * 渲染平台选项
+     */
+    tcRenderPlatformOptions() {
+        const optionsContainer = document.getElementById('tc-platform-options');
+        if (!optionsContainer) return;
+
+        const platforms = [
+            { value: 'android', label: 'Android' }
+        ];
+
+        optionsContainer.innerHTML = platforms.map(platform => `
+            <div class="custom-select__option${this.tcSelectedPlatform === platform.value ? ' selected' : ''}" data-value="${platform.value}">
+                <span>${platform.label}</span>
+            </div>
+        `).join('');
+
+        // 绑定点击事件
+        optionsContainer.querySelectorAll('.custom-select__option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const platformValue = option.dataset.value;
+                this.tcSelectPlatform(platformValue);
+
+                // 更新选中状态
+                optionsContainer.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
+                option.classList.add('selected');
+
+                // 更新显示文本
+                const selectedSpan = document.querySelector('#tc-platform-selected .custom-select__text');
+                if (selectedSpan) {
+                    const platform = platforms.find(p => p.value === platformValue);
+                    selectedSpan.textContent = platform ? platform.label : platformValue;
+                }
+
+                // 隐藏下拉框
+                optionsContainer.classList.remove('show');
+                const mainContent = document.querySelector('.main-content');
+                if (mainContent) {
+                    mainContent.classList.remove('dropdown-open');
+                    mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                }
+            });
+        });
+    }
+
+    /**
+     * 选择平台
+     */
+    tcSelectPlatform(platformValue) {
+        this.tcSelectedPlatform = platformValue;
+    }
+
+    /**
+     * 选择应用
+     */
+    tcSelectApp(appId) {
+        const app = this.tcApps.find(a => a.id === appId);
+        if (!app) return;
+
+        this.tcSelectedApp = app;
+
+        // 自动填充Allure Epic
+        const epicInput = document.getElementById('tc-allure-epic');
+        if (epicInput && !epicInput.value) {
+            epicInput.value = app.name;
+        }
+
+        // 启用测试步骤卡片
+        this.tcUpdateStepsSectionState(true);
+    }
+
+    /**
+     * 更新测试步骤卡片的禁用状态
+     */
+    tcUpdateStepsSectionState(enabled) {
+        const stepsSection = document.getElementById('tc-steps-section');
+        const addStepBtn = document.getElementById('tc-add-step-btn');
+        const addStepBottomBtn = document.getElementById('tc-add-step-bottom-btn');
+        const stepsContainer = document.getElementById('tc-steps-container');
+
+        if (stepsSection) {
+            if (enabled) {
+                stepsSection.classList.remove('disabled');
+            } else {
+                stepsSection.classList.add('disabled');
+            }
+        }
+
+        if (addStepBtn) {
+            addStepBtn.disabled = !enabled;
+        }
+
+        if (addStepBottomBtn) {
+            addStepBottomBtn.disabled = !enabled;
+        }
+
+        if (stepsContainer) {
+            if (enabled) {
+                stepsContainer.classList.remove('hidden');
+            } else {
+                stepsContainer.classList.add('hidden');
+            }
+        }
+    }
+
+    /**
+     * 初始化折叠区域
+     */
+    tcInitCollapsible() {
+        const headers = document.querySelectorAll('.tc-collapsible-header');
+        headers.forEach(header => {
+            if (header.dataset.initialized === 'true') return;
+            header.dataset.initialized = 'true';
+            header.addEventListener('click', () => {
+                const section = header.closest('.tc-section-collapsible');
+                section.classList.toggle('collapsed');
+            });
+        });
+    }
+
+    /**
+     * 初始化平台选择下拉框
+     */
+    tcInitPlatformSelect() {
+        const select = document.getElementById('tc-platform-select-wrapper-select');
+        if (!select) return;
+        if (select.dataset.initialized === 'true') return;
+        
+        const selected = select.querySelector('.custom-select__selected');
+        const options = select.querySelector('.custom-select__options');
+        if (!selected || !options) return;
+        
+        document.body.appendChild(options);
+        select.dataset.initialized = 'true';
+        
+        selected.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+                if (opt !== options) {
+                    opt.classList.remove('show');
+                }
+            });
+            const mainContent = document.querySelector('.main-content');
+            const isShowing = options.classList.contains('show');
+            if (!isShowing) {
+                this.positionDropdown(selected, options);
+                options.classList.add('show');
+                if (mainContent) {
+                    mainContent.classList.add('dropdown-open');
+                    mainContent.addEventListener('wheel', this.preventScroll, { passive: false });
+                }
+            } else {
+                options.classList.remove('show');
+                if (mainContent) {
+                    mainContent.classList.remove('dropdown-open');
+                    mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                }
+            }
+        });
+        
+        // 绑定选项点击事件
+        options.querySelectorAll('.custom-select__option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const platformValue = option.dataset.value;
+                this.tcSelectPlatform(platformValue);
+
+                // 更新选中状态
+                options.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
+                option.classList.add('selected');
+
+                // 更新显示文本
+                const selectedSpan = select.querySelector('.custom-select__text');
+                if (selectedSpan) {
+                    const platformLabel = option.querySelector('span');
+                    selectedSpan.textContent = platformLabel ? platformLabel.textContent : platformValue;
+                }
+
+                // 隐藏下拉框
+                options.classList.remove('show');
+                const mainContent = document.querySelector('.main-content');
+                if (mainContent) {
+                    mainContent.classList.remove('dropdown-open');
+                    mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                }
+            });
+        });
+    }
+
+    /**
+     * 添加测试步骤
+     */
+    tcAddStep() {
+        const stepId = `step_${Date.now()}`;
+        const newStep = {
+            id: stepId,
+            order: this.tcSteps.length + 1,
+            name: `步骤 ${this.tcSteps.length + 1}`,
+            type: 'element',
+            config: {
+                pageId: null,
+                pageName: null,
+                elementId: null,
+                elementName: null,
+                locator: null,
+                locatorValue: null,
+                operation: 'click',
+                operationValue: {}
+            }
+        };
+
+        this.tcSteps.push(newStep);
+        this.tcRenderSteps();
+        this.tcHideStepsEmpty();
+
+        // 滚动到新步骤
+        setTimeout(() => {
+            const stepCard = document.querySelector(`[data-step-id="${stepId}"]`);
+            if (stepCard) {
+                stepCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // 聚焦步骤名称输入框
+                const nameInput = stepCard.querySelector('.tc-step-name-input');
+                if (nameInput) nameInput.focus();
+            }
+        }, 100);
+    }
+
+    /**
+     * 隐藏步骤空状态
+     */
+    tcHideStepsEmpty() {
+        const emptyDiv = document.getElementById('tc-steps-empty');
+        const listDiv = document.getElementById('tc-steps-list');
+        const bottomBtn = document.getElementById('tc-add-step-bottom-btn');
+        if (emptyDiv) emptyDiv.classList.add('hidden');
+        if (listDiv) listDiv.classList.remove('hidden');
+        if (bottomBtn) bottomBtn.classList.remove('hidden');
+    }
+
+    /**
+     * 显示步骤空状态
+     */
+    tcShowStepsEmpty() {
+        const emptyDiv = document.getElementById('tc-steps-empty');
+        const listDiv = document.getElementById('tc-steps-list');
+        const bottomBtn = document.getElementById('tc-add-step-bottom-btn');
+        if (emptyDiv) emptyDiv.classList.remove('hidden');
+        if (listDiv) listDiv.classList.add('hidden');
+        if (bottomBtn) bottomBtn.classList.add('hidden');
+    }
+
+    /**
+     * 渲染步骤列表
+     */
+    tcRenderSteps() {
+        const container = document.getElementById('tc-steps-list');
+        if (!container) return;
+
+        if (window.DeviceCascadeSelect && window.DeviceCascadeSelect.destroyAll) {
+            window.DeviceCascadeSelect.destroyAll();
+        }
+
+        document.querySelectorAll('.custom-select__options[data-moved]').forEach(opt => {
+            opt.remove();
+        });
+
+        container.innerHTML = '';
+
+        // 按顺序排序
+        const sortedSteps = [...this.tcSteps].sort((a, b) => a.order - b.order);
+
+        sortedSteps.forEach((step, index) => {
+            const stepCard = this.tcCreateStepCard(step, index + 1);
+            container.appendChild(stepCard);
+        });
+
+        sortedSteps.forEach(step => {
+            if (step.type === 'ble') {
+                const card = container.querySelector(`[data-step-id="${step.id}"]`);
+                if (card) {
+                    this.tcInitBleCascadeSelect(card, step);
+                }
+            }
+        });
+
+        this.tcInitStepDragDrop();
+        this.initializeIcons();
+        this.tcInitStepSelects(container);
+    }
+
+    /**
+     * 生成custom-select组件HTML
+     * @param {string} selectId - 选择器ID
+     * @param {Array} options - 选项数组 [{value, label, selected}]
+     * @param {string} placeholder - 占位文本
+     * @param {string} stepId - 步骤ID
+     * @param {number} index - 多选元素索引（可选）
+     * @returns {string} HTML字符串
+     */
+    tcGenerateCustomSelect(selectId, options, placeholder = '请选择', stepId = '', index = -1) {
+        const selectedOption = options.find(opt => opt.selected);
+        const selectedText = selectedOption ? selectedOption.label : placeholder;
+        
+        const uniqueSuffix = index >= 0 ? `-${stepId}-${index}` : `-${stepId}`;
+        const uniqueId = `${selectId}${uniqueSuffix}`;
+        
+        let optionsHtml = '';
+        options.forEach(opt => {
+            optionsHtml += `<div class="custom-select__option${opt.selected ? ' selected' : ''}" data-value="${opt.value}"><span>${opt.label}</span></div>`;
+        });
+
+        return `
+            <div class="custom-select-wrapper tc-step-select-wrapper" data-step-id="${stepId}" data-index="${index}">
+                <div class="custom-select" id="${uniqueId}" data-select-id="${selectId}" data-step-id="${stepId}" data-index="${index}">
+                    <div class="custom-select__selected" id="${uniqueId}-selected">
+                        <span class="custom-select__text">${selectedText}</span>
+                    </div>
+                    <div class="custom-select__options" id="${uniqueId}-options">
+                        ${optionsHtml}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 初始化步骤内的custom-select组件
+     */
+    tcInitStepSelects(container) {
+        const selectWrappers = container.querySelectorAll('.tc-step-select-wrapper');
+        
+        selectWrappers.forEach(wrapper => {
+            const select = wrapper.querySelector('.custom-select');
+            const selected = select.querySelector('.custom-select__selected');
+            const options = select.querySelector('.custom-select__options');
+            
+            if (!selected || !options) return;
+            
+            // 检查是否已经初始化过
+            if (select.dataset.initialized) return;
+            select.dataset.initialized = 'true';
+            
+            // 检查是否已经有相同ID的options在body下，如果有则先移除
+            const existingOptions = document.body.querySelector(`#${options.id}`);
+            if (existingOptions && existingOptions !== options) {
+                existingOptions.remove();
+            }
+            
+            // 将下拉选项移到body下以便正确定位
+            if (!options.dataset.moved) {
+                document.body.appendChild(options);
+                options.dataset.moved = 'true';
+            }
+            
+            // 点击选中区域
+            selected.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                
+                // 关闭其他下拉框
+                document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+                    if (opt !== options) {
+                        opt.classList.remove('show');
+                    }
+                });
+                
+                const mainContent = document.querySelector('.main-content');
+                const isShowing = options.classList.contains('show');
+                if (!isShowing) {
+                    this.positionDropdown(selected, options);
+                    options.classList.add('show');
+                    // 禁止页面滚动
+                    if (mainContent) {
+                        mainContent.classList.add('dropdown-open');
+                        mainContent.addEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                } else {
+                    options.classList.remove('show');
+                    // 恢复页面滚动
+                    if (mainContent) {
+                        mainContent.classList.remove('dropdown-open');
+                        mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                }
+            });
+            
+            // 绑定选项点击事件
+            const optionItems = options.querySelectorAll('.custom-select__option');
+            optionItems.forEach(option => {
+                option.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    
+                    const value = option.dataset.value;
+                    const text = option.querySelector('span').textContent;
+                    const stepId = select.dataset.stepId;
+                    const selectId = select.dataset.selectId;
+                    const index = wrapper.dataset.index !== undefined ? parseInt(wrapper.dataset.index) : -1;
+                    
+                    // 更新选中状态
+                    optionItems.forEach(opt => opt.classList.remove('selected'));
+                    option.classList.add('selected');
+                    
+                    // 更新显示文本
+                    const selectedSpan = selected.querySelector('.custom-select__text');
+                    if (selectedSpan) {
+                        selectedSpan.textContent = text;
+                    }
+                    
+                    // 隐藏下拉框
+                    options.classList.remove('show');
+                    
+                    // 恢复页面滚动
+                    const mainContent = document.querySelector('.main-content');
+                    if (mainContent) {
+                        mainContent.classList.remove('dropdown-open');
+                        mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+                    }
+                    
+                    // 触发变更事件处理
+                    this.tcHandleSelectChange(selectId, value, stepId, index);
+                });
+            });
+        });
+    }
+
+    /**
+     * 处理下拉框变更
+     */
+    tcHandleSelectChange(selectId, value, stepId, index = -1) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const config = step.config || {};
+        
+        switch (selectId) {
+            // 元素操作相关
+            case 'tc-page-select':
+                config.pageId = value;
+                config.elementId = '';
+                const selectedPage = this.tcSelectedApp?.pages?.find(p => p.id === value);
+                config.pageName = selectedPage?.name || '';
+                this.tcUpdateElementSelect(stepId, value);
+                break;
+            case 'tc-element-select':
+                config.elementId = value;
+                const pageForElement = this.tcSelectedApp?.pages?.find(p => p.id === config.pageId);
+                const selectedElement = pageForElement?.elements?.find(el => el.id === value);
+                if (selectedElement) {
+                    config.elementName = selectedElement.name;
+                    config.locator = selectedElement.locator;
+                    config.locatorValue = selectedElement.value;
+                }
+                break;
+            case 'tc-multi-element-select':
+                // 多选元素选择
+                config.selectedElements = config.selectedElements || [];
+                if (index >= 0 && index < config.selectedElements.length) {
+                    // 将元素ID转换为对象格式
+                    const currentElem = config.selectedElements[index];
+                    if (typeof currentElem === 'string') {
+                        config.selectedElements[index] = {
+                            elementId: value,
+                            operation: 'click',
+                            operationValue: {}
+                        };
+                    } else {
+                        currentElem.elementId = value;
+                    }
+                }
+                break;
+            case 'tc-multi-operation-select':
+                // 多选元素的操作类型选择
+                config.selectedElements = config.selectedElements || [];
+                if (index >= 0 && index < config.selectedElements.length) {
+                    let currentElem = config.selectedElements[index];
+                    // 如果当前元素是字符串，转换为对象格式
+                    if (typeof currentElem === 'string') {
+                        config.selectedElements[index] = {
+                            elementId: currentElem,
+                            operation: value,
+                            operationValue: {}
+                        };
+                    } else if (typeof currentElem === 'object') {
+                        currentElem.operation = value;
+                        currentElem.operationValue = {};
+                    }
+                    // 重新渲染该元素的操作值区域
+                    this.tcUpdateMultiOperationValue(stepId, index, value);
+                }
+                break;
+            case 'tc-multi-input-type-select':
+                // 多选元素的输入类型选择
+                config.selectedElements = config.selectedElements || [];
+                if (index >= 0 && index < config.selectedElements.length) {
+                    const currentElem = config.selectedElements[index];
+                    if (typeof currentElem === 'object') {
+                        currentElem.operationValue = currentElem.operationValue || {};
+                        currentElem.operationValue.inputType = value;
+                    }
+                    // 重新渲染输入值区域
+                    this.tcUpdateMultiInputValueArea(stepId, index, value);
+                }
+                break;
+            case 'tc-multi-random-precision':
+                // 多选元素的随机精度选择
+                config.selectedElements = config.selectedElements || [];
+                if (index >= 0 && index < config.selectedElements.length) {
+                    const currentElem = config.selectedElements[index];
+                    if (typeof currentElem === 'object') {
+                        currentElem.operationValue = currentElem.operationValue || {};
+                        currentElem.operationValue.randomConfig = currentElem.operationValue.randomConfig || {};
+                        currentElem.operationValue.randomConfig.precision = parseInt(value);
+                    }
+                }
+                break;
+            case 'tc-multi-faker-locale':
+                // 多选元素的Faker语言选择
+                config.selectedElements = config.selectedElements || [];
+                if (index >= 0 && index < config.selectedElements.length) {
+                    const currentElem = config.selectedElements[index];
+                    if (typeof currentElem === 'object') {
+                        currentElem.operationValue = currentElem.operationValue || {};
+                        currentElem.operationValue.fakerConfig = currentElem.operationValue.fakerConfig || {};
+                        currentElem.operationValue.fakerConfig.locale = value;
+                        currentElem.operationValue.fakerConfig.provider = 'person.name';
+                    }
+                    // 重新渲染Faker配置
+                    this.tcUpdateMultiInputValueArea(stepId, index, 'faker');
+                }
+                break;
+            case 'tc-multi-faker-provider':
+                // 多选元素的Faker类型选择
+                config.selectedElements = config.selectedElements || [];
+                if (index >= 0 && index < config.selectedElements.length) {
+                    const currentElem = config.selectedElements[index];
+                    if (typeof currentElem === 'object') {
+                        currentElem.operationValue = currentElem.operationValue || {};
+                        currentElem.operationValue.fakerConfig = currentElem.operationValue.fakerConfig || {};
+                        currentElem.operationValue.fakerConfig.provider = value;
+                    }
+                    // 更新示例显示
+                    this.tcUpdateMultiFakerExample(stepId, index, value);
+                }
+                break;
+            case 'tc-operation-select':
+                config.operation = value;
+                config.operationValue = {};
+                this.tcUpdateOperationValue(stepId);
+                break;
+            case 'tc-input-type-select':
+                config.operationValue = config.operationValue || {};
+                config.operationValue.inputType = value;
+                this.tcUpdateInputValueArea(stepId, value);
+                break;
+            case 'tc-random-precision':
+                config.operationValue = config.operationValue || {};
+                config.operationValue.randomConfig = config.operationValue.randomConfig || {};
+                config.operationValue.randomConfig.precision = parseInt(value);
+                break;
+            case 'tc-faker-locale':
+                config.operationValue = config.operationValue || {};
+                config.operationValue.fakerConfig = config.operationValue.fakerConfig || {};
+                config.operationValue.fakerConfig.locale = value;
+                this.tcUpdateFakerProviders(stepId, value);
+                break;
+            case 'tc-faker-provider':
+                config.operationValue = config.operationValue || {};
+                config.operationValue.fakerConfig = config.operationValue.fakerConfig || {};
+                config.operationValue.fakerConfig.provider = value;
+                this.tcUpdateFakerExampleDisplay(stepId, value);
+                break;
+            case 'tc-faker-category':
+                config.operationValue = config.operationValue || {};
+                config.operationValue.fakerConfig = config.operationValue.fakerConfig || {};
+                config.operationValue.fakerConfig.category = value;
+                this.tcUpdateFakerMethods(stepId, value);
+                break;
+            case 'tc-faker-method':
+                config.operationValue = config.operationValue || {};
+                config.operationValue.fakerConfig = config.operationValue.fakerConfig || {};
+                config.operationValue.fakerConfig.method = value;
+                break;
+                
+            // 蓝牙操作相关
+            case 'tc-ble-method-select':
+                config.deviceConfig = config.deviceConfig || {};
+                config.deviceConfig.methodName = value;
+                delete config.deviceConfig.params;
+                this.tcUpdateBleDataConfig(stepId);
+                break;
+                
+            case 'tc-target-value-type':
+                config.compareConfig = config.compareConfig || {};
+                config.compareConfig.targetValueType = value;
+                if (value === 'custom') {
+                    config.compareConfig.targetValue = '';
+                }
+                this.tcUpdateTargetValueConfig(stepId, value);
+                break;
+            case 'tc-compare-element-page':
+                config.compareConfig = config.compareConfig || {};
+                config.compareConfig.pageId = value;
+                config.compareConfig.elementId = '';
+                config.compareConfig.elementName = '';
+                this.tcUpdateCompareElementSelect(stepId, value);
+                break;
+            case 'tc-compare-element-select':
+                config.compareConfig = config.compareConfig || {};
+                config.compareConfig.elementId = value;
+                const pageForCompareElement = this.tcSelectedApp?.pages?.find(p => p.id === config.compareConfig?.pageId);
+                const foundCompareElement = pageForCompareElement?.elements?.find(el => el.id === value);
+                if (foundCompareElement) {
+                    config.compareConfig.elementName = foundCompareElement.name;
+                    config.compareConfig.locator = foundCompareElement.locator;
+                    config.compareConfig.locatorValue = foundCompareElement.value;
+                }
+                break;
+            default:
+                if (selectId.startsWith('tc-ble-param-')) {
+                    const paramKey = selectId.replace('tc-ble-param-', '');
+                    config.deviceConfig = config.deviceConfig || {};
+                    config.deviceConfig.params = config.deviceConfig.params || {};
+                    config.deviceConfig.params[paramKey] = value;
+                }
+                break;
+        }
+    }
+
+    /**
+     * 更新元素选择下拉框
+     */
+    tcUpdateElementSelect(stepId, pageId) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const app = this.tcSelectedApp;
+        let elementOptions = [{value: '', label: '请选择元素', selected: true}];
+        
+        if (pageId && app) {
+            const page = app.pages?.find(p => p.id === pageId);
+            if (page && page.elements) {
+                elementOptions = [{value: '', label: '请选择元素', selected: true}];
+                page.elements.forEach(element => {
+                    elementOptions.push({value: element.id, label: element.name, selected: false});
+                });
+            }
+        }
+        
+        const wrapper = document.querySelector(`#tc-element-select-${stepId}`)?.closest('.custom-select-wrapper');
+        if (wrapper) {
+            wrapper.outerHTML = this.tcGenerateCustomSelect('tc-element-select', elementOptions, '请选择元素', stepId);
+            const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
+            if (card) {
+                this.tcInitStepSelects(card);
+            }
+        }
+    }
+
+    /**
+     * 更新操作值区域
+     */
+    tcUpdateOperationValue(stepId) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const container = document.querySelector(`.tc-operation-value-group[data-step-id="${stepId}"]`);
+        if (container) {
+            container.innerHTML = this.tcRenderOperationValue(step);
+            this.initializeIcons();
+            const card = container.closest('.tc-step-card');
+            if (card) {
+                this.tcInitStepSelects(card);
+                this.tcBindOperationValueEvents(card, step);
+            }
+        }
+    }
+
+    /**
+     * 更新多选元素的操作值区域
+     */
+    tcUpdateMultiOperationValue(stepId, index, operation) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const selectedElements = step.config?.selectedElements || [];
+        let elemConfig = selectedElements[index];
+        
+        // 如果元素配置是字符串，先转换为对象格式
+        if (typeof elemConfig === 'string') {
+            selectedElements[index] = {
+                elementId: elemConfig,
+                operation: operation,
+                operationValue: {}
+            };
+            elemConfig = selectedElements[index];
+        }
+        
+        if (!elemConfig || typeof elemConfig !== 'object') return;
+        
+        const container = document.querySelector(`.tc-multi-operation-value-group[data-step-id="${stepId}"][data-index="${index}"]`);
+        if (container) {
+            container.innerHTML = this.tcRenderMultiOperationValue(step, index, operation, elemConfig.operationValue || {});
+            this.initializeIcons();
+            const card = container.closest('.tc-step-card');
+            if (card) {
+                this.tcInitStepSelects(card);
+                this.tcBindMultiSelectEvents(card, step);
+            }
+        }
+    }
+
+    /**
+     * 更新多选元素的输入值区域
+     */
+    tcUpdateMultiInputValueArea(stepId, index, inputType) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const selectedElements = step.config?.selectedElements || [];
+        const elemConfig = selectedElements[index];
+        if (!elemConfig || typeof elemConfig !== 'object') return;
+        
+        const container = document.querySelector(`.tc-input-value-container[data-step-id="${stepId}"][data-index="${index}"]`);
+        if (container) {
+            container.innerHTML = this.tcRenderMultiInputValueArea(step, index, inputType, elemConfig.operationValue || {});
+            this.initializeIcons();
+            const card = container.closest('.tc-step-card');
+            if (card) {
+                this.tcInitStepSelects(card);
+                this.tcBindMultiSelectEvents(card, step);
+            }
+        }
+    }
+
+    /**
+     * 更新多选元素的Faker示例显示
+     */
+    tcUpdateMultiFakerExample(stepId, index, provider) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const selectedElements = step.config?.selectedElements || [];
+        const elemConfig = selectedElements[index];
+        if (!elemConfig || typeof elemConfig !== 'object') return;
+        
+        const fakerConfig = elemConfig.operationValue?.fakerConfig || {};
+        const locale = fakerConfig.locale || 'zh_CN';
+        
+        const providers = {
+            'zh_CN': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '姓名', example: '张三' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '手机号', example: '13812345678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '邮箱', example: 'zhangsan@example.com' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '城市', example: '北京市' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '地址', example: '朝阳区xxx街道' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '公司名称', example: '科技有限公司' }
+            ],
+            'en_US': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : 'Name', example: 'John Smith' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : 'Phone', example: '+1-555-123-4567' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'Email', example: 'john@example.com' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : 'City', example: 'New York' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : 'Address', example: '123 Main St' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : 'Company Name', example: 'Tech Corp' }
+            ],
+            'ja_JP': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '名前', example: '田中太郎' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '電話番号', example: '090-1234-5678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'メール', example: 'tanaka@example.jp' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '都市', example: '東京都' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '住所', example: '渋谷区xxx' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '会社名', example: '株式会社テック' }
+            ],
+            'ko_KR': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '이름', example: '김철수' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '전화번호', example: '010-1234-5678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '이메일', example: 'kim@example.kr' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '도시', example: '서울특별시' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '주소', example: '강남구 xxx' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '회사명', example: '테크주식회사' }
+            ]
+        };
+        
+        const currentProviders = providers[locale] || providers['zh_CN'];
+        const currentProvider = currentProviders.find(p => p.value === provider) || currentProviders[0];
+        
+        const exampleValue = document.querySelector(`.tc-multi-operation-value-group[data-step-id="${stepId}"][data-index="${index}"] .tc-faker-example-value`);
+        if (exampleValue) {
+            exampleValue.textContent = currentProvider?.example || '';
+        }
+    }
+
+    /**
+     * 更新输入值区域
+     */
+    tcUpdateInputValueArea(stepId, inputType) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const container = document.querySelector(`.tc-input-value-container[data-step-id="${stepId}"]`);
+        if (container) {
+            container.innerHTML = this.tcRenderInputValueArea(step, inputType);
+            const card = container.closest('.tc-step-card');
+            if (card) {
+                this.tcInitStepSelects(card);
+                this.tcBindInputValueEvents(card, step);
+            }
+        }
+    }
+
+    /**
+     * 更新Faker方法下拉框
+     */
+    tcUpdateFakerMethods(stepId, category) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const methods = this.tcGetFakerMethods(category);
+        const methodOptions = methods.map((m, i) => ({
+            value: m.value,
+            label: m.label,
+            selected: i === 0
+        }));
+        
+        const wrapper = document.querySelector(`#tc-faker-method-${stepId}`)?.closest('.custom-select-wrapper');
+        if (wrapper) {
+            wrapper.outerHTML = this.tcGenerateCustomSelect('tc-faker-method', methodOptions, '请选择方法', stepId);
+            const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
+            if (card) {
+                this.tcInitStepSelects(card);
+            }
+        }
+    }
+
+    /**
+     * 更新Faker类型下拉框（当语言变更时）
+     */
+    tcUpdateFakerProviders(stepId, locale) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const providers = {
+            'zh_CN': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '姓名', example: '张三' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '手机号', example: '13812345678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '邮箱', example: 'zhangsan@example.com' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '城市', example: '北京市' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '地址', example: '朝阳区xxx街道' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '公司名称', example: '科技有限公司' }
+            ],
+            'en_US': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : 'Name', example: 'John Smith' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : 'Phone', example: '+1-555-123-4567' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'Email', example: 'john@example.com' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : 'City', example: 'New York' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : 'Address', example: '123 Main St' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : 'Company Name', example: 'Tech Corp' }
+            ],
+            'ja_JP': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '名前', example: '田中太郎' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '電話番号', example: '090-1234-5678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'メール', example: 'tanaka@example.jp' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '都市', example: '東京都' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '住所', example: '渋谷区xxx' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '会社名', example: '株式会社テック' }
+            ],
+            'ko_KR': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '이름', example: '김철수' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '전화번호', example: '010-1234-5678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '이메일', example: 'kim@example.kr' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '도시', example: '서울특별시' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '주소', example: '강남구 xxx' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '회사명', example: '테크주식회사' }
+            ]
+        };
+        
+        const currentProviders = providers[locale] || providers['zh_CN'];
+        const providerOptions = currentProviders.map((p, i) => ({
+            value: p.value,
+            label: p.label,
+            selected: i === 0
+        }));
+        
+        step.config.operationValue.fakerConfig.provider = currentProviders[0].value;
+        
+        const wrapper = document.querySelector(`#tc-faker-provider-${stepId}`)?.closest('.custom-select-wrapper');
+        if (wrapper) {
+            wrapper.outerHTML = this.tcGenerateCustomSelect('tc-faker-provider', providerOptions, window.i18n ? window.i18n.t('testCase.fakerType') : '请选择类型', stepId);
+            const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
+            if (card) {
+                this.tcInitStepSelects(card);
+            }
+        }
+        
+        const exampleValue = document.querySelector(`[data-step-id="${stepId}"].tc-step-card .tc-faker-example-value`);
+        if (exampleValue) {
+            exampleValue.textContent = currentProviders[0].example;
+        }
+    }
+
+    tcUpdateFakerExampleDisplay(stepId, provider) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        
+        const fakerConfig = step.config?.operationValue?.fakerConfig || {};
+        const locale = fakerConfig.locale || 'zh_CN';
+        
+        const examplesZh = {
+            'person.name': '张三',
+            'person.phone': '13812345678',
+            'person.email': 'zhangsan@example.com',
+            'address.city': '北京市',
+            'address.address': '朝阳区xxx街道',
+            'company.name': '科技有限公司'
+        };
+        const examplesEn = {
+            'person.name': 'John Smith',
+            'person.phone': '+1-555-123-4567',
+            'person.email': 'john@example.com',
+            'address.city': 'New York',
+            'address.address': '123 Main St',
+            'company.name': 'Tech Corp'
+        };
+        const examplesJa = {
+            'person.name': '田中太郎',
+            'person.phone': '090-1234-5678',
+            'person.email': 'tanaka@example.jp',
+            'address.city': '東京都',
+            'address.address': '渋谷区xxx',
+            'company.name': '株式会社テック'
+        };
+        const examplesKo = {
+            'person.name': '김철수',
+            'person.phone': '010-1234-5678',
+            'person.email': 'kim@example.kr',
+            'address.city': '서울특별시',
+            'address.address': '강남구 xxx',
+            'company.name': '테크주식회사'
+        };
+        
+        const examplesMap = {
+            'zh_CN': examplesZh,
+            'en_US': examplesEn,
+            'ja_JP': examplesJa,
+            'ko_KR': examplesKo
+        };
+        
+        const examples = examplesMap[locale] || examplesZh;
+        
+        const exampleValue = document.querySelector(`[data-step-id="${stepId}"].tc-step-card .tc-faker-example-value`);
+        if (exampleValue) {
+            exampleValue.textContent = examples[provider] || '';
+        }
+    }
+
+    /**
+     * 更新蓝牙操作配置
+     */
+    tcUpdateBleDataConfig(stepId) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+
+        const config = step.config || {};
+        const deviceConfig = config.deviceConfig || {};
+
+        const bleConfig = document.querySelector(`.tc-ble-config[data-step-id="${stepId}"]`);
+        if (!bleConfig) return;
+
+        const card = bleConfig.closest('.tc-step-card');
+        if (!card) return;
+
+        let methodOptionsHtml = '';
+        let paramsHtml = '';
+
+        if (deviceConfig.deviceId && this.tcBleDevices.length > 0) {
+            const device = this.tcBleDevices.find(d => d.deviceId === deviceConfig.deviceId);
+            if (device && device.methods) {
+                const methodOptions = device.methods.map(m => ({
+                    value: m.name,
+                    label: m.displayName || m.name,
+                    selected: deviceConfig.methodName === m.name
+                }));
+                methodOptionsHtml = `
+                    <div class="form-group">
+                        <label>${window.i18n ? window.i18n.t('testCase.bleMethod') : '操作方法'}</label>
+                        ${this.tcGenerateCustomSelect('tc-ble-method-select', methodOptions, window.i18n ? window.i18n.t('testCase.bleMethodPlaceholder') : '请选择方法', stepId)}
+                    </div>
+                `;
+
+                if (deviceConfig.methodName) {
+                    const method = device.methods.find(m => m.name === deviceConfig.methodName);
+                    if (method && method.params) {
+                        paramsHtml = this.tcRenderDeviceParams(method.params, deviceConfig.params || {}, stepId);
+                    }
+                }
+            }
+        }
+
+        const deviceSelectContainer = bleConfig.querySelector(`.tc-ble-device-select-container[data-step-id="${stepId}"]`);
+
+        const existingMethodGroup = bleConfig.querySelector('.form-group:has(.tc-step-select-wrapper [data-select-id="tc-ble-method-select"])');
+        if (existingMethodGroup) {
+            const methodSelect = existingMethodGroup.querySelector('.custom-select');
+            if (methodSelect) {
+                const methodOptionsId = methodSelect.querySelector('.custom-select__options')?.id;
+                if (methodOptionsId) {
+                    const bodyOptions = document.body.querySelector(`#${methodOptionsId}`);
+                    if (bodyOptions) bodyOptions.remove();
+                }
+            }
+            existingMethodGroup.remove();
+        }
+
+        const existingParamsContainer = bleConfig.querySelector(`.tc-ble-params-container[data-step-id="${stepId}"]`);
+        if (existingParamsContainer) {
+            existingParamsContainer.querySelectorAll('.custom-select').forEach(cs => {
+                const optId = cs.querySelector('.custom-select__options')?.id;
+                if (optId) {
+                    const bodyOpt = document.body.querySelector(`#${optId}`);
+                    if (bodyOpt) bodyOpt.remove();
+                }
+            });
+            existingParamsContainer.remove();
+        }
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = `
+            ${methodOptionsHtml}
+            <div class="tc-ble-params-container" data-step-id="${stepId}">
+                ${paramsHtml}
+            </div>
+        `;
+
+        const insertAfter = deviceSelectContainer ? deviceSelectContainer.closest('.form-group') : null;
+        const referenceNode = insertAfter ? insertAfter.nextSibling : null;
+
+        while (tempDiv.firstChild) {
+            bleConfig.insertBefore(tempDiv.firstChild, referenceNode);
+        }
+
+        this.tcInitStepSelects(card);
+        this.tcBindBleEvents(card, step);
+    }
+
+    /**
+     * 创建步骤卡片DOM
+     */
+    tcCreateStepCard(step, order) {
+        const card = document.createElement('div');
+        card.className = 'tc-step-card';
+        card.setAttribute('data-step-id', step.id);
+        card.setAttribute('data-step-order', step.order);
+
+        card.innerHTML = `
+            <div class="tc-step-drag-handle tc-step-drag-handle-top" data-drag-handle="true">
+                <div class="tc-drag-grip">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+            <div class="tc-step-header">
+                <div class="tc-step-number">${order}</div>
+                <div class="tc-step-name">
+                    <input type="text" class="glass-input tc-step-name-input"
+                           value="${step.name}" data-step-id="${step.id}">
+                </div>
+                <div class="tc-step-actions">
+                    <button type="button" class="tc-step-btn tc-step-copy-btn" data-step-id="${step.id}" title="复制">
+                        ${this.getIconHtml('content_copy')}
+                    </button>
+                    <button type="button" class="tc-step-btn tc-step-delete-btn" data-step-id="${step.id}" title="删除">
+                        ${this.getIconHtml('delete')}
+                    </button>
+                </div>
+            </div>
+            <div class="tc-step-body">
+                ${this.tcRenderStepConfig(step)}
+            </div>
+            <div class="tc-step-drag-handle tc-step-drag-handle-bottom" data-drag-handle="true">
+                <div class="tc-drag-grip">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+        `;
+
+        // 绑定事件
+        this.tcBindStepCardEvents(card, step);
+
+        return card;
+    }
+
+    /**
+     * 渲染步骤配置区域
+     */
+    tcRenderStepConfig(step) {
+        let configHtml = `
+            <div class="tc-step-type-selector">
+                <label>步骤类型</label>
+                <div class="tc-type-tabs">
+                    <button type="button" class="tc-type-tab ${step.type === 'element' ? 'active' : ''}" data-type="element">
+                        ${this.getIconHtml('touch_app')}
+                        <span>元素操作</span>
+                    </button>
+                    <button type="button" class="tc-type-tab ${step.type === 'page' ? 'active' : ''}" data-type="page">
+                        ${this.getIconHtml('pageview')}
+                        <span>页面操作</span>
+                    </button>
+                    <button type="button" class="tc-type-tab ${step.type === 'ble' ? 'active' : ''}" data-type="ble">
+                        ${this.getIconHtml('bluetooth')}
+                        <span>蓝牙操作</span>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // 根据类型渲染配置
+        switch (step.type) {
+            case 'element':
+                configHtml += this.tcRenderElementConfig(step);
+                break;
+            case 'ble':
+                configHtml += this.tcRenderBleConfig(step);
+                break;
+            case 'page':
+                configHtml += this.tcRenderPageConfig(step);
+                break;
+        }
+
+        return configHtml;
+    }
+
+    /**
+     * 渲染元素操作配置
+     */
+    tcRenderElementConfig(step) {
+        const config = step.config || {};
+        const app = this.tcSelectedApp;
+        const multiSelect = config.multiSelect || false;
+        const clickCount = config.multiClickCount || 1;
+        const selectedElements = config.selectedElements || [];
+
+        // 获取页面选项
+        let pageOptions = [{value: '', label: '请选择页面', selected: !config.pageId}];
+        if (app && app.pages) {
+            app.pages.forEach(page => {
+                pageOptions.push({value: page.id, label: page.name, selected: config.pageId === page.id});
+            });
+        }
+
+        // 获取元素选项
+        let elementOptions = [{value: '', label: '请选择元素', selected: true}];
+        if (config.pageId && app) {
+            const page = app.pages?.find(p => p.id === config.pageId);
+            if (page && page.elements) {
+                elementOptions = [{value: '', label: '请选择元素', selected: !config.elementId}];
+                page.elements.forEach(element => {
+                    elementOptions.push({value: element.id, label: element.name, selected: config.elementId === element.id});
+                });
+            }
+        }
+
+        // 操作类型选项
+        const operationOptions = [
+            {value: 'click', label: '点击', selected: config.operation === 'click' || !config.operation},
+            {value: 'sendText', label: '发送文本', selected: config.operation === 'sendText'},
+            {value: 'swipeUp', label: '向上滑动(页面向下)', selected: config.operation === 'swipeUp'},
+            {value: 'swipeDown', label: '向下滑动(页面向上)', selected: config.operation === 'swipeDown'}
+        ];
+
+        // 渲染多选元素列表
+        let multiElementsHtml = '';
+        if (multiSelect && selectedElements.length > 0) {
+            selectedElements.forEach((elemConfig, index) => {
+                const elemId = typeof elemConfig === 'string' ? elemConfig : elemConfig.elementId;
+                const elemOperation = typeof elemConfig === 'object' ? (elemConfig.operation || 'click') : 'click';
+                const elemOperationValue = typeof elemConfig === 'object' ? (elemConfig.operationValue || {}) : {};
+                
+                const elemOptions = this.tcGetElementOptionsForPage(config.pageId, elemId);
+                const elemOperationOptions = [
+                    {value: 'click', label: '点击', selected: elemOperation === 'click' || !elemOperation},
+                    {value: 'sendText', label: '发送文本', selected: elemOperation === 'sendText'},
+                    {value: 'swipeUp', label: '向上滑动(页面向下)', selected: elemOperation === 'swipeUp'},
+                    {value: 'swipeDown', label: '向下滑动(页面向上)', selected: elemOperation === 'swipeDown'}
+                ];
+                
+                multiElementsHtml += `
+                    <div class="tc-multi-element-item" data-index="${index}" data-step-id="${step.id}">
+                        <div class="tc-multi-element-header">
+                            <span class="tc-multi-element-number">${index + 1}</span>
+                            ${this.tcGenerateCustomSelect('tc-multi-element-select', elemOptions, '请选择元素', step.id, index)}
+                            <button type="button" class="tc-multi-element-remove-btn" data-step-id="${step.id}" data-index="${index}">
+                                <span class="svg-icon" data-icon="close"></span>
+                            </button>
+                        </div>
+                        <div class="tc-multi-element-body">
+                            <div class="form-group">
+                                <label>操作类型</label>
+                                ${this.tcGenerateCustomSelect('tc-multi-operation-select', elemOperationOptions, '请选择操作', step.id, index)}
+                            </div>
+                            <div class="form-group tc-multi-operation-value-group" data-step-id="${step.id}" data-index="${index}">
+                                ${this.tcRenderMultiOperationValue(step, index, elemOperation, elemOperationValue)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        return `
+            <div class="tc-step-config tc-element-config">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>页面选择</label>
+                        ${this.tcGenerateCustomSelect('tc-page-select', pageOptions, '请选择页面', step.id)}
+                    </div>
+                    <div class="form-group tc-element-select-group" data-step-id="${step.id}">
+                        <div class="tc-element-select-header">
+                            <label>元素选择</label>
+                        </div>
+                        <label class="tc-multi-select-toggle">
+                            <input type="checkbox" class="tc-multi-select-checkbox" data-step-id="${step.id}" ${multiSelect ? 'checked' : ''}>
+                            <span>元素多选</span>
+                        </label>
+                        <div class="tc-single-element-select ${multiSelect ? 'hidden' : ''}">
+                            ${this.tcGenerateCustomSelect('tc-element-select', elementOptions, '请选择元素', step.id)}
+                        </div>
+                        <div class="tc-multi-element-config ${multiSelect ? '' : 'hidden'}">
+                            <div class="tc-multi-element-count-row">
+                                <span class="tc-multi-element-count-label">点击数量</span>
+                                <input type="number" class="glass-input tc-multi-click-count" data-step-id="${step.id}"
+                                       value="${clickCount}" min="1" max="${selectedElements.length || 1}">
+                                <span class="tc-multi-element-hint">从 ${selectedElements.length || 0} 个元素中随机选择</span>
+                            </div>
+                            <div class="tc-multi-elements-list" data-step-id="${step.id}">
+                                ${multiElementsHtml}
+                            </div>
+                            <button type="button" class="tc-add-multi-element-btn" data-step-id="${step.id}">
+                                <span class="svg-icon" data-icon="add"></span>
+                                <span>添加元素</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row tc-single-operation-row ${multiSelect ? 'hidden' : ''}">
+                    <div class="form-group">
+                        <label>操作类型</label>
+                        ${this.tcGenerateCustomSelect('tc-operation-select', operationOptions, '请选择操作', step.id)}
+                    </div>
+                    <div class="form-group tc-operation-value-group" data-step-id="${step.id}">
+                        ${this.tcRenderOperationValue(step)}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 渲染多选元素的操作值输入区域
+     */
+    tcRenderMultiOperationValue(step, index, operation, operationValue) {
+        switch (operation) {
+            case 'click':
+                const clickCount = operationValue.clickCount || 1;
+                return `
+                    <label>点击次数</label>
+                    <input type="number" class="glass-input tc-multi-click-count-input" data-step-id="${step.id}" data-index="${index}"
+                           value="${clickCount}" min="1" max="10">
+                `;
+
+            case 'sendText':
+                return this.tcRenderMultiSendTextConfig(step, index, operationValue);
+
+            case 'swipeUp':
+            case 'swipeDown':
+                const swipeDuration = operationValue.swipeDuration || 500;
+                return `
+                    <label>滑动时间(ms)</label>
+                    <input type="number" class="glass-input tc-multi-swipe-duration" data-step-id="${step.id}" data-index="${index}"
+                           value="${swipeDuration}" min="100" step="100">
+                `;
+
+            default:
+                return '';
+        }
+    }
+
+    /**
+     * 渲染多选元素的发送文本配置
+     */
+    tcRenderMultiSendTextConfig(step, index, operationValue) {
+        const inputType = operationValue.inputType || 'custom';
+        const inputOptions = [
+            {value: 'custom', label: '自定义', selected: inputType === 'custom'},
+            {value: 'random', label: '随机数', selected: inputType === 'random'},
+            {value: 'faker', label: 'Faker', selected: inputType === 'faker'}
+        ];
+
+        return `
+            <label>键入内容</label>
+            <div class="tc-sendtext-config">
+                <div class="tc-input-type-selector">
+                    ${this.tcGenerateCustomSelect('tc-multi-input-type-select', inputOptions, '请选择类型', step.id, index)}
+                </div>
+                <div class="tc-input-value-container" data-step-id="${step.id}" data-index="${index}">
+                    ${this.tcRenderMultiInputValueArea(step, index, inputType, operationValue)}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 渲染多选元素的输入值区域
+     */
+    tcRenderMultiInputValueArea(step, index, inputType, operationValue) {
+        switch (inputType) {
+            case 'custom':
+                return `
+                    <input type="text" class="glass-input tc-multi-custom-input" data-step-id="${step.id}" data-index="${index}"
+                           value="${operationValue.inputValue || ''}" placeholder="输入文本内容">
+                `;
+
+            case 'random':
+                const randomConfig = operationValue.randomConfig || {};
+                const precisionOptions = [
+                    {value: '0', label: '整数', selected: randomConfig.precision === 0 || !randomConfig.precision},
+                    {value: '1', label: '1位小数', selected: randomConfig.precision === 1},
+                    {value: '2', label: '2位小数', selected: randomConfig.precision === 2},
+                    {value: '3', label: '3位小数', selected: randomConfig.precision === 3},
+                    {value: '4', label: '4位小数', selected: randomConfig.precision === 4},
+                    {value: '5', label: '5位小数', selected: randomConfig.precision === 5}
+                ];
+                return `
+                    <div class="tc-random-config">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>最小值</label>
+                                <input type="number" class="glass-input tc-multi-random-min" data-step-id="${step.id}" data-index="${index}"
+                                       value="${randomConfig.minValue || 0}" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label>最大值</label>
+                                <input type="number" class="glass-input tc-multi-random-max" data-step-id="${step.id}" data-index="${index}"
+                                       value="${randomConfig.maxValue || 100}" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label>精度</label>
+                                ${this.tcGenerateCustomSelect('tc-multi-random-precision', precisionOptions, '请选择精度', step.id, index)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+            case 'faker':
+                return this.tcRenderMultiFakerConfig(step, index, operationValue);
+
+            default:
+                return '';
+        }
+    }
+
+    /**
+     * 渲染多选元素的Faker配置
+     */
+    tcRenderMultiFakerConfig(step, index, operationValue) {
+        const fakerConfig = operationValue.fakerConfig || {};
+
+        const locales = [
+            { value: 'zh_CN', label: window.i18n ? window.i18n.t('testCase.fakerLocales.zh_CN') : '中文' },
+            { value: 'en_US', label: window.i18n ? window.i18n.t('testCase.fakerLocales.en_US') : 'English' },
+            { value: 'ja_JP', label: window.i18n ? window.i18n.t('testCase.fakerLocales.ja_JP') : '日本語' },
+            { value: 'ko_KR', label: window.i18n ? window.i18n.t('testCase.fakerLocales.ko_KR') : '한국어' }
+        ];
+
+        const providers = {
+            'zh_CN': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '姓名', example: '张三' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '手机号', example: '13812345678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '邮箱', example: 'zhangsan@example.com' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '城市', example: '北京市' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '地址', example: '朝阳区xxx街道' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '公司名称', example: '科技有限公司' }
+            ],
+            'en_US': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : 'Name', example: 'John Smith' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : 'Phone', example: '+1-555-123-4567' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'Email', example: 'john@example.com' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : 'City', example: 'New York' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : 'Address', example: '123 Main St' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : 'Company Name', example: 'Tech Corp' }
+            ],
+            'ja_JP': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '名前', example: '田中太郎' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '電話番号', example: '090-1234-5678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'メール', example: 'tanaka@example.jp' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '都市', example: '東京都' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '住所', example: '渋谷区xxx' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '会社名', example: '株式会社テック' }
+            ],
+            'ko_KR': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '이름', example: '김철수' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '전화번호', example: '010-1234-5678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '이메일', example: 'kim@example.kr' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '도시', example: '서울특별시' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '주소', example: '강남구 xxx' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '회사명', example: '테크주식회사' }
+            ]
+        };
+
+        const selectedLocale = fakerConfig.locale || 'zh_CN';
+        const selectedProvider = fakerConfig.provider || 'person.name';
+        const currentProviders = providers[selectedLocale] || providers['zh_CN'];
+        const currentProvider = currentProviders.find(p => p.value === selectedProvider) || currentProviders[0];
+
+        const localeOptions = locales.map(l => ({
+            value: l.value,
+            label: l.label,
+            selected: selectedLocale === l.value
+        }));
+
+        const providerOptions = currentProviders.map(p => ({
+            value: p.value,
+            label: p.label,
+            selected: selectedProvider === p.value
+        }));
+
+        const languageLabel = window.i18n ? window.i18n.t('testCase.fakerLocale') : '语言';
+        const typeLabel = window.i18n ? window.i18n.t('testCase.fakerType') : '类型';
+        const exampleLabel = window.i18n ? window.i18n.t('testCase.fakerExample') : '示例';
+
+        return `
+            <div class="tc-faker-config">
+                <div class="tc-faker-row">
+                    <div class="tc-faker-field">
+                        <label>${languageLabel}</label>
+                        ${this.tcGenerateCustomSelect('tc-multi-faker-locale', localeOptions, window.i18n ? window.i18n.t('testCase.fakerLocale') : '请选择语言', step.id, index)}
+                    </div>
+                    <div class="tc-faker-field">
+                        <label>${typeLabel}</label>
+                        ${this.tcGenerateCustomSelect('tc-multi-faker-provider', providerOptions, window.i18n ? window.i18n.t('testCase.fakerType') : '请选择类型', step.id, index)}
+                    </div>
+                </div>
+                <div class="tc-faker-example">
+                    <span class="tc-faker-example-label">${exampleLabel}:</span>
+                    <span class="tc-faker-example-value">${currentProvider?.example || ''}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 获取指定页面的元素选项
+     */
+    tcGetElementOptionsForPage(pageId, selectedValue) {
+        const app = this.tcSelectedApp;
+        let elementOptions = [{value: '', label: '请选择元素', selected: !selectedValue}];
+        if (pageId && app) {
+            const page = app.pages?.find(p => p.id === pageId);
+            if (page && page.elements) {
+                page.elements.forEach(element => {
+                    elementOptions.push({value: element.id, label: element.name, selected: selectedValue === element.id});
+                });
+            }
+        }
+        return elementOptions;
+    }
+
+
+    /**
+     * 渲染操作值输入区域
+     */
+    tcRenderOperationValue(step) {
+        const config = step.config || {};
+        const operation = config.operation || 'click';
+
+        switch (operation) {
+            case 'click':
+                const clickCount = config.operationValue?.clickCount || 1;
+                return `
+                    <label>点击次数</label>
+                    <input type="number" class="glass-input tc-click-count" data-step-id="${step.id}"
+                           value="${clickCount}" min="1" max="10">
+                `;
+
+            case 'sendText':
+                return this.tcRenderSendTextConfig(step);
+
+            case 'swipeUp':
+            case 'swipeDown':
+                const duration = config.operationValue?.swipeDuration || 500;
+                return `
+                    <label>滑动时间(ms)</label>
+                    <input type="number" class="glass-input tc-swipe-duration" data-step-id="${step.id}"
+                           value="${duration}" min="100" step="100">
+                `;
+
+            default:
+                return '';
+        }
+    }
+
+    /**
+     * 渲染发送文本配置
+     */
+    tcRenderSendTextConfig(step) {
+        const config = step.config || {};
+        const opValue = config.operationValue || {};
+        const inputType = opValue.inputType || 'custom';
+
+        // 输入类型选项
+        const inputTypeOptions = [
+            {value: 'custom', label: '自定义', selected: inputType === 'custom'},
+            {value: 'random', label: '随机数', selected: inputType === 'random'},
+            {value: 'faker', label: 'Faker', selected: inputType === 'faker'}
+        ];
+
+        return `
+            <label>键入内容</label>
+            <div class="tc-sendtext-config">
+                <div class="tc-input-type-selector">
+                    ${this.tcGenerateCustomSelect('tc-input-type-select', inputTypeOptions, '请选择类型', step.id)}
+                </div>
+                <div class="tc-input-value-container" data-step-id="${step.id}">
+                    ${this.tcRenderInputValueArea(step, inputType)}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 渲染输入值区域
+     */
+    tcRenderInputValueArea(step, inputType) {
+        const opValue = step.config?.operationValue || {};
+
+        switch (inputType) {
+            case 'custom':
+                return `
+                    <input type="text" class="glass-input tc-custom-input" data-step-id="${step.id}"
+                           value="${opValue.inputValue || ''}" placeholder="输入文本内容">
+                `;
+
+            case 'random':
+                const randomConfig = opValue.randomConfig || {};
+                const precisionOptions = [
+                    {value: '0', label: '整数', selected: randomConfig.precision === 0 || !randomConfig.precision},
+                    {value: '1', label: '1位小数', selected: randomConfig.precision === 1},
+                    {value: '2', label: '2位小数', selected: randomConfig.precision === 2},
+                    {value: '3', label: '3位小数', selected: randomConfig.precision === 3},
+                    {value: '4', label: '4位小数', selected: randomConfig.precision === 4},
+                    {value: '5', label: '5位小数', selected: randomConfig.precision === 5}
+                ];
+                return `
+                    <div class="tc-random-config">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>最小值</label>
+                                <input type="number" class="glass-input tc-random-min" data-step-id="${step.id}"
+                                       value="${randomConfig.minValue || 0}" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label>最大值</label>
+                                <input type="number" class="glass-input tc-random-max" data-step-id="${step.id}"
+                                       value="${randomConfig.maxValue || 100}" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label>精度</label>
+                                ${this.tcGenerateCustomSelect('tc-random-precision', precisionOptions, '请选择精度', step.id)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+            case 'faker':
+                return this.tcRenderFakerConfig(step);
+
+            default:
+                return '';
+        }
+    }
+
+    /**
+     * 渲染Faker配置
+     */
+    tcRenderFakerConfig(step) {
+        const opValue = step.config?.operationValue || {};
+        const fakerConfig = opValue.fakerConfig || {};
+
+        const locales = [
+            { value: 'zh_CN', label: window.i18n ? window.i18n.t('testCase.fakerLocales.zh_CN') : '中文' },
+            { value: 'en_US', label: window.i18n ? window.i18n.t('testCase.fakerLocales.en_US') : 'English' },
+            { value: 'ja_JP', label: window.i18n ? window.i18n.t('testCase.fakerLocales.ja_JP') : '日本語' },
+            { value: 'ko_KR', label: window.i18n ? window.i18n.t('testCase.fakerLocales.ko_KR') : '한국어' }
+        ];
+
+        const providers = {
+            'zh_CN': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '姓名', example: '张三' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '手机号', example: '13812345678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '邮箱', example: 'zhangsan@example.com' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '城市', example: '北京市' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '地址', example: '朝阳区xxx街道' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '公司名称', example: '科技有限公司' }
+            ],
+            'en_US': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : 'Name', example: 'John Smith' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : 'Phone', example: '+1-555-123-4567' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'Email', example: 'john@example.com' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : 'City', example: 'New York' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : 'Address', example: '123 Main St' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : 'Company Name', example: 'Tech Corp' }
+            ],
+            'ja_JP': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '名前', example: '田中太郎' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '電話番号', example: '090-1234-5678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'メール', example: 'tanaka@example.jp' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '都市', example: '東京都' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '住所', example: '渋谷区xxx' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '会社名', example: '株式会社テック' }
+            ],
+            'ko_KR': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '이름', example: '김철수' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '전화번호', example: '010-1234-5678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '이메일', example: 'kim@example.kr' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '도시', example: '서울특별시' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '주소', example: '강남구 xxx' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '회사명', example: '테크주식회사' }
+            ]
+        };
+
+        const selectedLocale = fakerConfig.locale || 'zh_CN';
+        const selectedProvider = fakerConfig.provider || 'person.name';
+        const currentProviders = providers[selectedLocale] || providers['zh_CN'];
+        const currentProvider = currentProviders.find(p => p.value === selectedProvider) || currentProviders[0];
+
+        const localeOptions = locales.map(l => ({
+            value: l.value,
+            label: l.label,
+            selected: selectedLocale === l.value
+        }));
+
+        const providerOptions = currentProviders.map(p => ({
+            value: p.value,
+            label: p.label,
+            selected: selectedProvider === p.value
+        }));
+
+        const languageLabel = window.i18n ? window.i18n.t('testCase.fakerLocale') : '语言';
+        const typeLabel = window.i18n ? window.i18n.t('testCase.fakerType') : '类型';
+        const exampleLabel = window.i18n ? window.i18n.t('testCase.fakerExample') : '示例';
+
+        return `
+            <div class="tc-faker-config">
+                <div class="tc-faker-row">
+                    <div class="tc-faker-field">
+                        <label>${languageLabel}</label>
+                        ${this.tcGenerateCustomSelect('tc-faker-locale', localeOptions, window.i18n ? window.i18n.t('testCase.fakerLocale') : '请选择语言', step.id)}
+                    </div>
+                    <div class="tc-faker-field">
+                        <label>${typeLabel}</label>
+                        ${this.tcGenerateCustomSelect('tc-faker-provider', providerOptions, window.i18n ? window.i18n.t('testCase.fakerType') : '请选择类型', step.id)}
+                    </div>
+                </div>
+                <div class="tc-faker-example">
+                    <span class="tc-faker-example-label">${exampleLabel}:</span>
+                    <span class="tc-faker-example-value">${currentProvider?.example || ''}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 渲染蓝牙操作配置
+     */
+    tcRenderBleConfig(step) {
+        const config = step.config || {};
+        const deviceConfig = config.deviceConfig || {};
+
+        let methodOptionsHtml = '';
+        let paramsHtml = '';
+
+        if (deviceConfig.deviceId && this.tcBleDevices.length > 0) {
+            const device = this.tcBleDevices.find(d => d.deviceId === deviceConfig.deviceId);
+            if (device && device.methods) {
+                const methodOptions = device.methods.map(m => ({
+                    value: m.name,
+                    label: m.displayName || m.name,
+                    selected: deviceConfig.methodName === m.name
+                }));
+                methodOptionsHtml = `
+                    <div class="form-group">
+                        <label>${window.i18n ? window.i18n.t('testCase.bleMethod') : '操作方法'}</label>
+                        ${this.tcGenerateCustomSelect('tc-ble-method-select', methodOptions, window.i18n ? window.i18n.t('testCase.bleMethodPlaceholder') : '请选择方法', step.id)}
+                    </div>
+                `;
+
+                if (deviceConfig.methodName) {
+                    const method = device.methods.find(m => m.name === deviceConfig.methodName);
+                    if (method && method.params) {
+                        paramsHtml = this.tcRenderDeviceParams(method.params, deviceConfig.params || {}, step.id);
+                    }
+                }
+            }
+        }
+
+        return `
+            <div class="tc-step-config tc-ble-config" data-step-id="${step.id}">
+                <div class="form-group">
+                    <label>${window.i18n ? window.i18n.t('testCase.bleDeviceSelect') : '蓝牙设备'}</label>
+                    <div class="tc-ble-device-select-container" data-step-id="${step.id}"></div>
+                </div>
+                ${methodOptionsHtml}
+                <div class="tc-ble-params-container" data-step-id="${step.id}">
+                    ${paramsHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    tcRenderDeviceParams(params, paramValues, stepId) {
+        if (!params || params.length === 0) return '';
+
+        const fieldsHtml = params.map(param => {
+            const value = paramValues[param.key] !== undefined ? paramValues[param.key] : (param.default !== undefined ? param.default : '');
+
+            if (param.type === 'select') {
+                const options = (param.options || []).map(opt => ({
+                    value: String(opt.value),
+                    label: opt.label,
+                    selected: String(value) === String(opt.value)
+                }));
+                return `
+                    <div class="form-group">
+                        <label>${param.label}</label>
+                        ${this.tcGenerateCustomSelect(`tc-ble-param-${param.key}`, options, param.placeholder || '请选择', stepId)}
+                    </div>
+                `;
+            } else if (param.type === 'number') {
+                const step = param.step || 'any';
+                const precisionAttr = param.precision !== undefined ? ` data-precision="${param.precision}"` : '';
+                return `
+                    <div class="form-group">
+                        <label>${param.label}</label>
+                        <input type="number" class="glass-input tc-ble-param-input" data-step-id="${stepId}" data-param-key="${param.key}"
+                               value="${value}" step="${step}" placeholder="${param.placeholder || ''}"${precisionAttr}>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="form-group">
+                        <label>${param.label}</label>
+                        <input type="text" class="glass-input tc-ble-param-input" data-step-id="${stepId}" data-param-key="${param.key}"
+                               value="${value}" placeholder="${param.placeholder || ''}">
+                    </div>
+                `;
+            }
+        }).join('');
+
+        return `<div class="tc-ble-device-params"><div class="form-row">${fieldsHtml}</div></div>`;
+    }
+
+    /**
+     * 渲染蓝牙操作配置内容（用于动态更新）
+     */
+    tcRenderBleOperationConfigContent(step) {
+        const config = step.config || {};
+        const deviceConfig = config.deviceConfig || {};
+
+        let methodOptionsHtml = '';
+        let paramsHtml = '';
+
+        if (deviceConfig.deviceId && this.tcBleDevices.length > 0) {
+            const device = this.tcBleDevices.find(d => d.deviceId === deviceConfig.deviceId);
+            if (device && device.methods) {
+                const methodOptions = device.methods.map(m => ({
+                    value: m.name,
+                    label: m.displayName || m.name,
+                    selected: deviceConfig.methodName === m.name
+                }));
+                methodOptionsHtml = `
+                    <div class="form-group">
+                        <label>${window.i18n ? window.i18n.t('testCase.bleMethod') : '操作方法'}</label>
+                        ${this.tcGenerateCustomSelect('tc-ble-method-select', methodOptions, window.i18n ? window.i18n.t('testCase.bleMethodPlaceholder') : '请选择方法', step.id)}
+                    </div>
+                `;
+
+                if (deviceConfig.methodName) {
+                    const method = device.methods.find(m => m.name === deviceConfig.methodName);
+                    if (method && method.params) {
+                        paramsHtml = this.tcRenderDeviceParams(method.params, deviceConfig.params || {}, step.id);
+                    }
+                }
+            }
+        }
+
+        return `
+            <div class="tc-ble-device-select-container" data-step-id="${step.id}"></div>
+            ${methodOptionsHtml}
+            <div class="tc-ble-params-container" data-step-id="${step.id}">
+                ${paramsHtml}
+            </div>
+        `;
+    }
+
+    /**
+     * 渲染页面操作配置
+     */
+    tcRenderPageConfig(step) {
+        const config = step.config || {};
+        const operationType = config.operationType || 'compare';
+
+        const operationTypeOptions = [
+            {value: 'compare', label: window.i18n ? window.i18n.t('testCase.pageCompare') : '对比', selected: operationType === 'compare'}
+        ];
+
+        const app = this.tcSelectedApp;
+        let compareElementPageOptions = [{value: '', label: window.i18n ? window.i18n.t('pagePackage.selectPage') : '请选择页面', selected: !config.compareConfig?.pageId}];
+        if (app && app.pages) {
+            app.pages.forEach(page => {
+                compareElementPageOptions.push({value: page.id, label: page.name, selected: config.compareConfig?.pageId === page.id});
+            });
+        }
+
+        let compareElementOptions = [{value: '', label: window.i18n ? window.i18n.t('pagePackage.selectElement') : '请选择元素', selected: true}];
+        if (config.compareConfig?.pageId && app) {
+            const page = app.pages?.find(p => p.id === config.compareConfig.pageId);
+            if (page && page.elements) {
+                compareElementOptions = [{value: '', label: window.i18n ? window.i18n.t('pagePackage.selectElement') : '请选择元素', selected: !config.compareConfig.elementId}];
+                page.elements.forEach(element => {
+                    compareElementOptions.push({value: element.id, label: element.name, selected: config.compareConfig.elementId === element.id});
+                });
+            }
+        }
+
+        const compareConfig = config.compareConfig || {};
+        const targetValueType = compareConfig.targetValueType || 'custom';
+
+        const bleRandomRangeSteps = this.tcSteps.filter(s => 
+            s.type === 'ble' && (s.config?.deviceConfig?.methodName === 'send_random_data' || s.config?.deviceConfig?.methodName === 'send_custom_data')
+        );
+        const targetValueOptions = [
+            {value: 'custom', label: window.i18n ? window.i18n.t('testCase.bleCustomData') : '自定义', selected: targetValueType === 'custom'}
+        ];
+        bleRandomRangeSteps.forEach(s => {
+            targetValueOptions.push({
+                value: s.id, 
+                label: `${s.name} ${window.i18n ? window.i18n.t('testCase.generatedRandomValue') : '生成的随机数值'}`,
+                selected: targetValueType === s.id
+            });
+        });
+
+        const isRandomRangeTarget = targetValueType !== 'custom' && targetValueType !== '';
+        const showCustomInput = targetValueType === 'custom';
+        const toleranceDisabled = !isRandomRangeTarget && compareConfig.targetValue && isNaN(parseFloat(compareConfig.targetValue));
+
+        return `
+            <div class="tc-step-config tc-page-config">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>${window.i18n ? window.i18n.t('testCase.pageOperationType') : '操作类型'}</label>
+                        ${this.tcGenerateCustomSelect('tc-page-operation-type', operationTypeOptions, window.i18n ? window.i18n.t('testCase.selectOperationType') : '请选择操作类型', step.id)}
+                    </div>
+                </div>
+                <div class="tc-page-compare-config" data-step-id="${step.id}">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${window.i18n ? window.i18n.t('testCase.targetValueType') : '目标值类型'}</label>
+                            ${this.tcGenerateCustomSelect('tc-target-value-type', targetValueOptions, window.i18n ? window.i18n.t('testCase.selectTargetValueType') : '请选择目标值类型', step.id)}
+                        </div>
+                        <div class="form-group tc-custom-target-value-group ${showCustomInput ? '' : 'hidden'}">
+                            <label>${window.i18n ? window.i18n.t('testCase.targetValue') : '目标值'}</label>
+                            <input type="text" class="glass-input tc-compare-target-value" data-step-id="${step.id}"
+                                   value="${compareConfig.targetValue || ''}" placeholder="${window.i18n ? window.i18n.t('testCase.enterTargetValue') : '输入目标值'}">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${window.i18n ? window.i18n.t('testCase.pageSelect') : '页面选择'}</label>
+                            ${this.tcGenerateCustomSelect('tc-compare-element-page', compareElementPageOptions, window.i18n ? window.i18n.t('pagePackage.selectPage') : '请选择页面', step.id)}
+                        </div>
+                        <div class="form-group">
+                            <label>${window.i18n ? window.i18n.t('testCase.compareElement') : '对比元素'}</label>
+                            ${this.tcGenerateCustomSelect('tc-compare-element-select', compareElementOptions, window.i18n ? window.i18n.t('pagePackage.selectElement') : '请选择元素', step.id)}
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${window.i18n ? window.i18n.t('testCase.pageCompareTolerance') : '容差值'}</label>
+                            <input type="number" class="glass-input tc-compare-tolerance" data-step-id="${step.id}"
+                                   value="${compareConfig.tolerance || ''}" step="0.1" min="0"
+                                   placeholder="${window.i18n ? window.i18n.t('testCase.tolerancePlaceholder') : '不输入默认对比字符串差异'}"
+                                   ${toleranceDisabled ? 'disabled' : ''}>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 绑定步骤卡片事件
+     */
+    tcBindStepCardEvents(card, step) {
+        const stepId = step.id;
+
+        // 步骤名称变更
+        const nameInput = card.querySelector('.tc-step-name-input');
+        if (nameInput) {
+            nameInput.addEventListener('change', (e) => {
+                step.name = e.target.value;
+            });
+        }
+
+        // 复制按钮
+        const copyBtn = card.querySelector('.tc-step-copy-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => this.tcCopyStep(stepId));
+        }
+
+        // 删除按钮
+        const deleteBtn = card.querySelector('.tc-step-delete-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => this.tcDeleteStep(stepId));
+        }
+
+        // 步骤类型切换
+        const typeTabs = card.querySelectorAll('.tc-type-tab');
+        typeTabs.forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                typeTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                const bleContainer = card.querySelector('.tc-ble-device-select-container');
+                if (bleContainer && bleContainer.id && window.DeviceCascadeSelect && window.DeviceCascadeSelect.instances[bleContainer.id]) {
+                    window.DeviceCascadeSelect.instances[bleContainer.id].destroy();
+                }
+
+                step.type = tab.dataset.type;
+                const body = card.querySelector('.tc-step-body');
+                body.innerHTML = this.tcRenderStepConfig(step);
+                this.tcBindStepCardEvents(card, step);
+                this.initializeIcons();
+                this.tcInitStepSelects(card);
+                if (step.type === 'ble') {
+                    this.tcInitBleCascadeSelect(card, step);
+                }
+            });
+        });
+
+        // 元素操作相关事件
+        this.tcBindElementEvents(card, step);
+
+        // 蓝牙操作相关事件
+        this.tcBindBleEvents(card, step);
+
+        // 页面操作相关事件
+        this.tcBindPageEvents(card, step);
+    }
+
+    /**
+     * 绑定元素操作事件
+     */
+    tcBindElementEvents(card, step) {
+        // 操作值事件
+        this.tcBindOperationValueEvents(card, step);
+        
+        // 多选功能事件绑定
+        this.tcBindMultiSelectEvents(card, step);
+    }
+
+    /**
+     * 绑定多选功能事件
+     */
+    tcBindMultiSelectEvents(card, step) {
+        const stepId = step.id;
+        
+        // 多选复选框
+        const multiSelectCheckbox = card.querySelector('.tc-multi-select-checkbox');
+        if (multiSelectCheckbox) {
+            multiSelectCheckbox.addEventListener('change', (e) => {
+                step.config.multiSelect = e.target.checked;
+                if (e.target.checked) {
+                    // 初始化多选元素列表
+                    step.config.selectedElements = step.config.selectedElements || [];
+                    if (step.config.selectedElements.length === 0) {
+                        step.config.selectedElements = [''];
+                    }
+                    step.config.multiClickCount = 1;
+                } else {
+                    // 清空多选相关数据
+                    step.config.selectedElements = [];
+                    step.config.multiClickCount = 1;
+                }
+                // 重新渲染元素选择区域
+                this.tcReRenderElementSelect(card, step);
+                // 控制操作类型行的显示/隐藏
+                const singleOperationRow = card.querySelector('.tc-single-operation-row');
+                if (singleOperationRow) {
+                    if (e.target.checked) {
+                        singleOperationRow.classList.add('hidden');
+                    } else {
+                        singleOperationRow.classList.remove('hidden');
+                    }
+                }
+                this.initializeIcons();
+                this.tcInitStepSelects(card);
+                // 重新绑定事件
+                this.tcBindMultiSelectEvents(card, step);
+            });
+        }
+        
+        // 点击数量输入
+        const multiClickCountInput = card.querySelector('.tc-multi-click-count');
+        if (multiClickCountInput) {
+            multiClickCountInput.addEventListener('change', (e) => {
+                const maxCount = step.config.selectedElements?.length || 1;
+                let value = parseInt(e.target.value) || 1;
+                value = Math.max(1, Math.min(value, maxCount));
+                step.config.multiClickCount = value;
+                e.target.value = value;
+            });
+        }
+        
+        // 添加元素按钮
+        const addElementBtn = card.querySelector('.tc-add-multi-element-btn');
+        if (addElementBtn) {
+            addElementBtn.addEventListener('click', () => {
+                step.config.selectedElements = step.config.selectedElements || [];
+                step.config.selectedElements.push('');
+                // 更新点击数量最大值
+                const countInput = card.querySelector('.tc-multi-click-count');
+                if (countInput) {
+                    countInput.max = step.config.selectedElements.length;
+                }
+                // 重新渲染
+                this.tcReRenderElementSelect(card, step);
+                this.initializeIcons();
+                this.tcInitStepSelects(card);
+                // 重新绑定事件
+                this.tcBindMultiSelectEvents(card, step);
+            });
+        }
+        
+        // 删除元素按钮
+        const removeBtns = card.querySelectorAll('.tc-multi-element-remove-btn');
+        removeBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = parseInt(e.currentTarget.dataset.index);
+                step.config.selectedElements = step.config.selectedElements || [];
+                step.config.selectedElements.splice(index, 1);
+                // 更新点击数量
+                const countInput = card.querySelector('.tc-multi-click-count');
+                if (countInput && step.config.multiClickCount > step.config.selectedElements.length) {
+                    step.config.multiClickCount = step.config.selectedElements.length || 1;
+                    countInput.value = step.config.multiClickCount;
+                    countInput.max = step.config.selectedElements.length || 1;
+                }
+                // 重新渲染
+                this.tcReRenderElementSelect(card, step);
+                this.initializeIcons();
+                this.tcInitStepSelects(card);
+                // 重新绑定事件
+                this.tcBindMultiSelectEvents(card, step);
+            });
+        });
+
+        // 多选元素的点击次数输入
+        const multiClickCountInputs = card.querySelectorAll('.tc-multi-click-count-input');
+        multiClickCountInputs.forEach(input => {
+            input.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const currentElem = step.config.selectedElements?.[index];
+                if (typeof currentElem === 'object') {
+                    currentElem.operationValue = currentElem.operationValue || {};
+                    currentElem.operationValue.clickCount = parseInt(e.target.value) || 1;
+                }
+            });
+        });
+
+        // 多选元素的滑动时间输入
+        const multiSwipeDurations = card.querySelectorAll('.tc-multi-swipe-duration');
+        multiSwipeDurations.forEach(input => {
+            input.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const currentElem = step.config.selectedElements?.[index];
+                if (typeof currentElem === 'object') {
+                    currentElem.operationValue = currentElem.operationValue || {};
+                    currentElem.operationValue.swipeDuration = parseInt(e.target.value) || 500;
+                }
+            });
+        });
+
+        // 多选元素的自定义输入
+        const multiCustomInputs = card.querySelectorAll('.tc-multi-custom-input');
+        multiCustomInputs.forEach(input => {
+            input.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const currentElem = step.config.selectedElements?.[index];
+                if (typeof currentElem === 'object') {
+                    currentElem.operationValue = currentElem.operationValue || {};
+                    currentElem.operationValue.inputValue = e.target.value;
+                }
+            });
+        });
+
+        // 多选元素的随机范围配置
+        const multiRandomMins = card.querySelectorAll('.tc-multi-random-min');
+        const multiRandomMaxs = card.querySelectorAll('.tc-multi-random-max');
+        multiRandomMins.forEach(input => {
+            input.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const currentElem = step.config.selectedElements?.[index];
+                if (typeof currentElem === 'object') {
+                    currentElem.operationValue = currentElem.operationValue || {};
+                    currentElem.operationValue.randomConfig = currentElem.operationValue.randomConfig || {};
+                    currentElem.operationValue.randomConfig.minValue = parseFloat(e.target.value) || 0;
+                }
+            });
+        });
+        multiRandomMaxs.forEach(input => {
+            input.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const currentElem = step.config.selectedElements?.[index];
+                if (typeof currentElem === 'object') {
+                    currentElem.operationValue = currentElem.operationValue || {};
+                    currentElem.operationValue.randomConfig = currentElem.operationValue.randomConfig || {};
+                    currentElem.operationValue.randomConfig.maxValue = parseFloat(e.target.value) || 100;
+                }
+            });
+        });
+    }
+
+    /**
+     * 重新渲染元素选择区域
+     */
+    tcReRenderElementSelect(card, step) {
+        const config = step.config || {};
+        const multiSelect = config.multiSelect || false;
+        const clickCount = config.multiClickCount || 1;
+        const selectedElements = config.selectedElements || [];
+        const app = this.tcSelectedApp;
+        
+        // 获取元素选项
+        let elementOptions = [{value: '', label: '请选择元素', selected: true}];
+        if (config.pageId && app) {
+            const page = app.pages?.find(p => p.id === config.pageId);
+            if (page && page.elements) {
+                elementOptions = [{value: '', label: '请选择元素', selected: !config.elementId}];
+                page.elements.forEach(element => {
+                    elementOptions.push({value: element.id, label: element.name, selected: config.elementId === element.id});
+                });
+            }
+        }
+        
+        // 渲染多选元素列表
+        let multiElementsHtml = '';
+        if (multiSelect && selectedElements.length > 0) {
+            selectedElements.forEach((elemConfig, index) => {
+                const elemId = typeof elemConfig === 'string' ? elemConfig : elemConfig.elementId;
+                const elemOperation = typeof elemConfig === 'object' ? (elemConfig.operation || 'click') : 'click';
+                const elemOperationValue = typeof elemConfig === 'object' ? (elemConfig.operationValue || {}) : {};
+                
+                const elemOptions = this.tcGetElementOptionsForPage(config.pageId, elemId);
+                const elemOperationOptions = [
+                    {value: 'click', label: '点击', selected: elemOperation === 'click' || !elemOperation},
+                    {value: 'sendText', label: '发送文本', selected: elemOperation === 'sendText'},
+                    {value: 'swipeUp', label: '向上滑动(页面向下)', selected: elemOperation === 'swipeUp'},
+                    {value: 'swipeDown', label: '向下滑动(页面向上)', selected: elemOperation === 'swipeDown'}
+                ];
+                
+                multiElementsHtml += `
+                    <div class="tc-multi-element-item" data-index="${index}" data-step-id="${step.id}">
+                        <div class="tc-multi-element-header">
+                            <span class="tc-multi-element-number">${index + 1}</span>
+                            ${this.tcGenerateCustomSelect('tc-multi-element-select', elemOptions, '请选择元素', step.id, index)}
+                            <button type="button" class="tc-multi-element-remove-btn" data-step-id="${step.id}" data-index="${index}">
+                                <span class="svg-icon" data-icon="close"></span>
+                            </button>
+                        </div>
+                        <div class="tc-multi-element-body">
+                            <div class="form-group">
+                                <label>操作类型</label>
+                                ${this.tcGenerateCustomSelect('tc-multi-operation-select', elemOperationOptions, '请选择操作', step.id, index)}
+                            </div>
+                            <div class="form-group tc-multi-operation-value-group" data-step-id="${step.id}" data-index="${index}">
+                                ${this.tcRenderMultiOperationValue(step, index, elemOperation, elemOperationValue)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        const elementSelectGroup = card.querySelector('.tc-element-select-group');
+        if (elementSelectGroup) {
+            elementSelectGroup.innerHTML = `
+                <div class="tc-element-select-header">
+                    <label>元素选择</label>
+                </div>
+                <label class="tc-multi-select-toggle">
+                    <input type="checkbox" class="tc-multi-select-checkbox" data-step-id="${step.id}" ${multiSelect ? 'checked' : ''}>
+                    <span>元素多选</span>
+                </label>
+                <div class="tc-single-element-select ${multiSelect ? 'hidden' : ''}">
+                    ${this.tcGenerateCustomSelect('tc-element-select', elementOptions, '请选择元素', step.id)}
+                </div>
+                <div class="tc-multi-element-config ${multiSelect ? '' : 'hidden'}">
+                    <div class="tc-multi-element-count-row">
+                        <span class="tc-multi-element-count-label">点击数量</span>
+                        <input type="number" class="glass-input tc-multi-click-count" data-step-id="${step.id}"
+                               value="${clickCount}" min="1" max="${selectedElements.length || 1}">
+                        <span class="tc-multi-element-hint">从 ${selectedElements.length || 0} 个元素中随机选择</span>
+                    </div>
+                    <div class="tc-multi-elements-list" data-step-id="${step.id}">
+                        ${multiElementsHtml}
+                    </div>
+                    <button type="button" class="tc-add-multi-element-btn" data-step-id="${step.id}">
+                        <span class="svg-icon" data-icon="add"></span>
+                        <span>添加元素</span>
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * 绑定操作值事件
+     */
+    tcBindOperationValueEvents(card, step) {
+        // 点击次数
+        const clickCount = card.querySelector('.tc-click-count');
+        if (clickCount) {
+            clickCount.addEventListener('change', (e) => {
+                step.config.operationValue = step.config.operationValue || {};
+                step.config.operationValue.clickCount = parseInt(e.target.value) || 1;
+            });
+        }
+
+        // 滑动时间
+        const swipeDuration = card.querySelector('.tc-swipe-duration');
+        if (swipeDuration) {
+            swipeDuration.addEventListener('change', (e) => {
+                step.config.operationValue = step.config.operationValue || {};
+                step.config.operationValue.swipeDuration = parseInt(e.target.value) || 500;
+            });
+        }
+
+        // 自定义输入
+        const customInput = card.querySelector('.tc-custom-input');
+        if (customInput) {
+            customInput.addEventListener('change', (e) => {
+                step.config.operationValue = step.config.operationValue || {};
+                step.config.operationValue.inputValue = e.target.value;
+            });
+        }
+
+        this.tcBindInputValueEvents(card, step);
+    }
+
+    /**
+     * 绑定输入值事件
+     */
+    tcBindInputValueEvents(card, step) {
+        // 自定义输入
+        const customInput = card.querySelector('.tc-custom-input');
+        if (customInput) {
+            customInput.addEventListener('change', (e) => {
+                step.config.operationValue = step.config.operationValue || {};
+                step.config.operationValue.inputValue = e.target.value;
+            });
+        }
+
+        // 随机范围配置
+        const minInput = card.querySelector('.tc-random-min');
+        const maxInput = card.querySelector('.tc-random-max');
+        if (minInput) {
+            minInput.addEventListener('change', (e) => {
+                step.config.operationValue = step.config.operationValue || {};
+                step.config.operationValue.randomConfig = step.config.operationValue.randomConfig || {};
+                step.config.operationValue.randomConfig.minValue = parseFloat(e.target.value) || 0;
+            });
+        }
+        if (maxInput) {
+            maxInput.addEventListener('change', (e) => {
+                step.config.operationValue = step.config.operationValue || {};
+                step.config.operationValue.randomConfig = step.config.operationValue.randomConfig || {};
+                step.config.operationValue.randomConfig.maxValue = parseFloat(e.target.value) || 100;
+            });
+        }
+    }
+
+    /**
+     * 更新Faker类型选项（通过card元素）
+     */
+    tcUpdateFakerProvidersByCard(card, step, locale) {
+        const providerSelect = card.querySelector('.tc-faker-provider');
+        if (!providerSelect) return;
+
+        const providers = {
+            'zh_CN': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '姓名', example: '张三' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '手机号', example: '13812345678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '邮箱', example: 'zhangsan@example.com' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '城市', example: '北京市' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '地址', example: '朝阳区xxx街道' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '公司名称', example: '科技有限公司' }
+            ],
+            'en_US': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : 'Name', example: 'John Smith' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : 'Phone', example: '+1-555-123-4567' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'Email', example: 'john@example.com' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : 'City', example: 'New York' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : 'Address', example: '123 Main St' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : 'Company Name', example: 'Tech Corp' }
+            ],
+            'ja_JP': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '名前', example: '田中太郎' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '電話番号', example: '090-1234-5678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'メール', example: 'tanaka@example.jp' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '都市', example: '東京都' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '住所', example: '渋谷区xxx' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '会社名', example: '株式会社テック' }
+            ],
+            'ko_KR': [
+                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '이름', example: '김철수' },
+                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '전화번호', example: '010-1234-5678' },
+                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '이메일', example: 'kim@example.kr' },
+                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '도시', example: '서울특별시' },
+                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '주소', example: '강남구 xxx' },
+                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '회사명', example: '테크주식회사' }
+            ]
+        };
+
+        const currentProviders = providers[locale] || providers['zh_CN'];
+        providerSelect.innerHTML = currentProviders.map(p =>
+            `<option value="${p.value}">${p.label}</option>`
+        ).join('');
+
+        if (currentProviders.length > 0) {
+            this.tcUpdateFakerExample(card, currentProviders[0].value);
+        }
+    }
+
+    /**
+     * 更新Faker示例
+     */
+    tcUpdateFakerExample(card, provider) {
+        const exampleSpan = card.querySelector('.tc-faker-example-value');
+        if (!exampleSpan) return;
+
+        const examples = {
+            'person.name': '张三',
+            'person.phone': '13812345678',
+            'person.email': 'zhangsan@example.com',
+            'address.city': '北京市',
+            'address.address': '朝阳区xxx街道',
+            'company.name': '科技有限公司'
+        };
+
+        exampleSpan.textContent = examples[provider] || '';
+    }
+
+    /**
+     * 绑定蓝牙操作事件
+     */
+    tcBindBleEvents(card, step) {
+        const paramInputs = card.querySelectorAll('.tc-ble-param-input');
+        paramInputs.forEach(input => {
+            input.addEventListener('input', (e) => {
+                const precision = e.target.dataset.precision;
+                if (precision !== undefined && e.target.type === 'number') {
+                    const value = e.target.value;
+                    if (value.includes('.')) {
+                        const parts = value.split('.');
+                        const maxDecimals = parseInt(precision);
+                        if (parts[1] && parts[1].length > maxDecimals) {
+                            parts[1] = parts[1].substring(0, maxDecimals);
+                            e.target.value = parts.join('.');
+                        }
+                    }
+                }
+            });
+
+            input.addEventListener('change', (e) => {
+                const paramKey = e.target.dataset.paramKey;
+                if (paramKey) {
+                    step.config = step.config || {};
+                    step.config.deviceConfig = step.config.deviceConfig || {};
+                    step.config.deviceConfig.params = step.config.deviceConfig.params || {};
+                    step.config.deviceConfig.params[paramKey] = e.target.type === 'number' ? parseFloat(e.target.value) : e.target.value;
+                }
+            });
+        });
+    }
+
+    tcInitBleCascadeSelect(card, step) {
+        const container = card.querySelector(`.tc-ble-device-select-container[data-step-id="${step.id}"]`);
+        if (!container || this.tcBleDevices.length === 0) return;
+
+        if (!container.id) {
+            container.id = `ble-select-${step.id}`;
+        }
+
+        const stepId = step.id;
+        const cascadeSelect = new DeviceCascadeSelect(container.id, {
+            placeholder: window.i18n ? window.i18n.t('testCase.bleDeviceSelect') : '请选择设备',
+            typePlaceholder: window.i18n ? window.i18n.t('testCase.bleDeviceType') : '选择类型',
+            modelPlaceholder: window.i18n ? window.i18n.t('testCase.bleDeviceModel') : '选择型号',
+            onSelect: (device) => {
+                const s = this.tcSteps.find(st => st.id === stepId);
+                if (s) {
+                    s.config = s.config || {};
+                    s.config.deviceConfig = {
+                        deviceId: device.deviceId,
+                        deviceName: device.name
+                    };
+                    this.tcUpdateBleDataConfig(stepId);
+                }
+            }
+        });
+
+        cascadeSelect.render(this.tcBleDevices);
+
+        const config = step.config || {};
+        const deviceConfig = config.deviceConfig || {};
+        if (deviceConfig.deviceId) {
+            const device = this.tcBleDevices.find(d => d.deviceId === deviceConfig.deviceId);
+            if (device) {
+                cascadeSelect.select(device, true);
+            }
+        }
+    }
+
+    /**
+     * 绑定页面操作事件
+     */
+    tcBindPageEvents(card, step) {
+        const targetValue = card.querySelector('.tc-compare-target-value');
+        const tolerance = card.querySelector('.tc-compare-tolerance');
+        const compareConfig = step.config.compareConfig || {};
+        const targetValueType = compareConfig.targetValueType || 'custom';
+
+        const updateToleranceState = (isRandomRange) => {
+            if (tolerance) {
+                if (isRandomRange) {
+                    tolerance.disabled = false;
+                } else {
+                    const value = targetValue ? targetValue.value : '';
+                    const isNumeric = !isNaN(parseFloat(value)) && isFinite(value);
+                    if (value && !isNumeric) {
+                        tolerance.disabled = true;
+                        tolerance.value = '';
+                        step.config.compareConfig = step.config.compareConfig || {};
+                        delete step.config.compareConfig.tolerance;
+                    } else {
+                        tolerance.disabled = false;
+                    }
+                }
+            }
+        };
+
+        if (targetValue) {
+            targetValue.addEventListener('input', (e) => {
+                if (targetValueType === 'custom') {
+                    updateToleranceState(false);
+                }
+            });
+            targetValue.addEventListener('change', (e) => {
+                step.config.compareConfig = step.config.compareConfig || {};
+                step.config.compareConfig.targetValue = e.target.value;
+                if (targetValueType === 'custom') {
+                    updateToleranceState(false);
+                }
+            });
+        }
+
+        if (tolerance) {
+            tolerance.addEventListener('change', (e) => {
+                step.config.compareConfig = step.config.compareConfig || {};
+                if (e.target.value !== '') {
+                    step.config.compareConfig.tolerance = parseFloat(e.target.value);
+                } else {
+                    delete step.config.compareConfig.tolerance;
+                }
+            });
+        }
+
+        updateToleranceState(targetValueType !== 'custom' && targetValueType !== '');
+    }
+
+    tcUpdateTargetValueConfig(stepId, targetValueType) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+
+        const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
+        if (!card) return;
+
+        const customTargetValueGroup = card.querySelector('.tc-custom-target-value-group');
+        const tolerance = card.querySelector('.tc-compare-tolerance');
+
+        if (customTargetValueGroup) {
+            if (targetValueType === 'custom') {
+                customTargetValueGroup.classList.remove('hidden');
+            } else {
+                customTargetValueGroup.classList.add('hidden');
+            }
+        }
+
+        if (tolerance) {
+            const isRandomRange = targetValueType !== 'custom' && targetValueType !== '';
+            if (isRandomRange) {
+                tolerance.disabled = false;
+            } else {
+                const targetValue = card.querySelector('.tc-compare-target-value');
+                const value = targetValue ? targetValue.value : '';
+                const isNumeric = !isNaN(parseFloat(value)) && isFinite(value);
+                if (value && !isNumeric) {
+                    tolerance.disabled = true;
+                    tolerance.value = '';
+                    step.config.compareConfig = step.config.compareConfig || {};
+                    delete step.config.compareConfig.tolerance;
+                } else {
+                    tolerance.disabled = false;
+                }
+            }
+        }
+    }
+
+    tcUpdateCompareElementSelect(stepId, pageId) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+
+        const app = this.tcSelectedApp;
+        let elementOptions = [{value: '', label: '请选择元素', selected: true}];
+
+        if (pageId && app) {
+            const page = app.pages?.find(p => p.id === pageId);
+            if (page && page.elements) {
+                elementOptions = [{value: '', label: '请选择元素', selected: true}];
+                page.elements.forEach(element => {
+                    elementOptions.push({value: element.id, label: element.name, selected: false});
+                });
+            }
+        }
+
+        const wrapper = document.querySelector(`#tc-compare-element-select-${stepId}`)?.closest('.custom-select-wrapper');
+        if (wrapper) {
+            wrapper.outerHTML = this.tcGenerateCustomSelect('tc-compare-element-select', elementOptions, '请选择元素', stepId);
+            const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
+            if (card) {
+                this.tcInitStepSelects(card);
+            }
+        }
+    }
+
+    /**
+     * 初始化拖拽排序
+     */
+    tcInitStepDragDrop() {
+        const cards = document.querySelectorAll('.tc-step-card');
+
+        cards.forEach(card => {
+            const dragHandles = card.querySelectorAll('.tc-step-drag-handle');
+
+            dragHandles.forEach(handle => {
+                handle.draggable = true;
+
+                handle.addEventListener('dragstart', (e) => {
+                    this.tcDraggedStep = card;
+                    card.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setDragImage(card, 0, 0);
+                });
+
+                handle.addEventListener('dragend', () => {
+                    card.classList.remove('dragging');
+                    this.tcDraggedStep = null;
+                    this.tcUpdateStepOrders();
+                });
+            });
+
+            card.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+
+                if (this.tcDraggedStep && this.tcDraggedStep !== card) {
+                    const container = document.getElementById('tc-steps-list');
+                    const cards = [...container.querySelectorAll('.tc-step-card:not(.dragging)')];
+                    const nextCard = cards.find(c => {
+                        const rect = c.getBoundingClientRect();
+                        return e.clientY < rect.top + rect.height / 2;
+                    });
+
+                    if (nextCard) {
+                        container.insertBefore(this.tcDraggedStep, nextCard);
+                    } else {
+                        container.appendChild(this.tcDraggedStep);
+                    }
+                }
+            });
+        });
+    }
+
+    /**
+     * 更新步骤顺序
+     */
+    tcUpdateStepOrders() {
+        const container = document.getElementById('tc-steps-list');
+        const cards = container.querySelectorAll('.tc-step-card');
+
+        cards.forEach((card, index) => {
+            const stepId = card.getAttribute('data-step-id');
+            const step = this.tcSteps.find(s => s.id === stepId);
+            if (step) {
+                step.order = index + 1;
+            }
+
+            // 更新显示的序号
+            const numberEl = card.querySelector('.tc-step-number');
+            if (numberEl) {
+                numberEl.textContent = index + 1;
+            }
+        });
+    }
+
+    /**
+     * 删除步骤
+     */
+    tcDeleteStep(stepId) {
+        this.tcSteps = this.tcSteps.filter(s => s.id !== stepId);
+        this.tcRenderSteps();
+
+        if (this.tcSteps.length === 0) {
+            this.tcShowStepsEmpty();
+        }
+    }
+
+    /**
+     * 复制步骤
+     */
+    tcCopyStep(stepId) {
+        const originalStep = this.tcSteps.find(s => s.id === stepId);
+        if (!originalStep) return;
+
+        const newStepId = `step_${Date.now()}`;
+        const newStep = {
+            ...JSON.parse(JSON.stringify(originalStep)),
+            id: newStepId,
+            name: `${originalStep.name} (副本)`,
+            order: this.tcSteps.length + 1
+        };
+
+        this.tcSteps.push(newStep);
+        this.tcRenderSteps();
+    }
+
+    /**
+     * 收集表单数据
+     */
+    tcCollectFormData() {
+        const fileName = document.getElementById('tc-file-name')?.value?.trim() || '';
+        const caseName = document.getElementById('tc-case-name')?.value?.trim() || '';
+        const description = document.getElementById('tc-description')?.value?.trim() || '';
+        const epic = document.getElementById('tc-allure-epic')?.value?.trim() || '';
+        const feature = document.getElementById('tc-allure-feature')?.value?.trim() || '';
+        const story = document.getElementById('tc-allure-story')?.value?.trim() || '';
+
+        // 从下拉框获取选中的markers
+        const markers = this.tcSelectedMarkers || [];
+
+        // 从步骤中提取蓝牙设备信息
+        let bleDevice = null;
+        const sortedSteps = [...this.tcSteps].sort((a, b) => a.order - b.order);
+        for (const step of sortedSteps) {
+            if (step.type === 'ble') {
+                const config = step.config || {};
+                const deviceConfig = config.deviceConfig || {};
+                if (deviceConfig.deviceId) {
+                    const device = this.tcBleDevices.find(d => d.deviceId === deviceConfig.deviceId);
+                    if (device) {
+                        const bleConfig = device.bleConfig || {};
+                        bleDevice = {
+                            uuids: bleConfig.uuids || '',
+                            uuidn: bleConfig.uuidn || '',
+                            uuidw: bleConfig.uuidw || '',
+                            bleName: bleConfig.bleName || '',
+                            advData: bleConfig.advData || '',
+                            port: deviceConfig.port || '',
+                            deviceId: device.deviceId,
+                            deviceName: device.name,
+                            methodName: deviceConfig.methodName,
+                            methodParams: deviceConfig.params || {}
+                        };
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 合并蓝牙设备配置：优先使用加载的配置中的端口
+        // 注意：测试步骤中没有填入端口的地方，端口只通过"编辑设备标识弹窗"填写
+        if (bleDevice && this.tcLoadedBleDevice) {
+            // 始终使用加载的配置中的端口（因为步骤中没有端口输入）
+            if (this.tcLoadedBleDevice.port) {
+                bleDevice.port = this.tcLoadedBleDevice.port;
+            }
+        }
+
+        // 如果步骤中没有蓝牙设备信息，但之前加载了蓝牙设备配置，保留它
+        if (!bleDevice && this.tcLoadedBleDevice) {
+            bleDevice = this.tcLoadedBleDevice;
+        }
+
+        // 保留原有的设备配置（编辑时保留设备连接标识）
+        const deviceConfig = this.tcLoadedDeviceConfig || null;
+
+        return {
+            fileName,
+            name: caseName || fileName,
+            description,
+            platform: this.tcSelectedPlatform || 'android',
+            targetApp: this.tcSelectedApp,
+            steps: sortedSteps,
+            deviceConfig,
+            bleDevice,
+            allureConfig: {
+                epic,
+                feature,
+                story,
+                markers
+            }
+        };
+    }
+
+    /**
+     * 重置编辑器
+     */
+    tcResetEditor() {
+        this.tcSteps = [];
+        this.tcSelectedApp = null;
+        this.tcSelectedPlatform = 'android';
+        this.tcSelectedMarkers = [];
+        this.tcLoadedDeviceConfig = null;
+        this.tcLoadedBleDevice = null;
+
+        // 重置表单
+        const form = document.getElementById('tc-case-form');
+        if (form) form.reset();
+
+        // 重置平台选择
+        const platformSelectedSpan = document.querySelector('#tc-platform-select-wrapper-select .custom-select__text');
+        if (platformSelectedSpan) {
+            platformSelectedSpan.textContent = window.i18n ? window.i18n.t('testCase.platforms.android') : 'Android';
+        }
+        const platformOptions = document.getElementById('tc-platform-select-wrapper-options');
+        if (platformOptions) {
+            platformOptions.querySelectorAll('.custom-select__option').forEach(opt => {
+                opt.classList.toggle('selected', opt.getAttribute('data-value') === 'android');
+            });
+        }
+
+        // 重置应用选择
+        const appSelectedSpan = document.querySelector('#tc-app-selected .custom-select__text');
+        if (appSelectedSpan) {
+            appSelectedSpan.textContent = window.i18n ? window.i18n.t('testCase.selectApp') : '请选择目标应用';
+        }
+        // 清除选中状态
+        const appOptions = document.getElementById('tc-app-options');
+        if (appOptions) {
+            appOptions.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
+        }
+
+        // 重置Markers选择
+        this.tcSelectedMarkers = [];
+        // 清除Markers选中状态
+        const markersOptions = document.getElementById('tc-markers-options');
+        if (markersOptions) {
+            markersOptions.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
+        }
+        // 更新Markers显示
+        this.tcUpdateMarkersDisplay();
+
+        // 重置测试步骤卡片状态为禁用
+        this.tcUpdateStepsSectionState(false);
+
+        // 显示空状态
+        this.tcShowStepsEmpty();
     }
 }
 

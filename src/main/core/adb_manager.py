@@ -184,13 +184,14 @@ class ADBManager:
         通过多种方式尝试与Electron前端通信
         """
         try:
-            # 方法1: 通过环境变量或文件标记触发Electron弹窗
             import os
             import json
             from pathlib import Path
             
-            # 创建弹窗触发文件
-            dialog_trigger_file = Path(__file__).parent.parent.parent.parent / "logs" / "unauthorized_dialog.json"
+            user_data = os.environ.get('XKAUTOTESTER_USER_DATA')
+            data_root = Path(user_data) if user_data else Path(__file__).parent.parent.parent.parent
+            
+            dialog_trigger_file = data_root / "logs" / "unauthorized_dialog.json"
             dialog_trigger_file.parent.mkdir(parents=True, exist_ok=True)
             
             dialog_data = {

@@ -31,7 +31,13 @@ const IPC_CHANNELS = {
     
     // 配置
     GET_CONFIG: 'get-config',
-    SAVE_CONFIG: 'save-config'
+    SAVE_CONFIG: 'save-config',
+    
+    // 更新
+    CHECK_FOR_UPDATE: 'check-for-update',
+    DOWNLOAD_UPDATE: 'download-update',
+    INSTALL_UPDATE: 'install-update',
+    ON_DOWNLOAD_PROGRESS: 'on-download-progress'
 };
 
 module.exports = { IPC_CHANNELS };

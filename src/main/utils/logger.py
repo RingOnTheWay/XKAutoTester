@@ -4,11 +4,17 @@
 """
 import logging
 import logging.handlers
+import os
 from pathlib import Path
 import datetime
 from main.utils.config import config_manager
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+
+def _get_data_root():
+    user_data = os.environ.get('XKAUTOTESTER_USER_DATA')
+    if user_data:
+        return Path(user_data)
+    return Path(__file__).parent.parent.parent.parent
 
 
 class Logger:
@@ -36,7 +42,7 @@ class Logger:
         formatter = logging.Formatter(log_format)
         
         # 日志文件路径固定为项目根目录下的logs/XKAT
-        logs_dir = PROJECT_ROOT / "logs" / "XKAT"
+        logs_dir = _get_data_root() / "logs" / "XKAT"
         
         # 确保logs/XKAT文件夹存在
         logs_dir.mkdir(parents=True, exist_ok=True)
