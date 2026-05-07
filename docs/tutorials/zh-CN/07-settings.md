@@ -19,8 +19,6 @@
 
 所有设置持久化存储在 `config/config.json`。
 
-![设置主界面](../images/07-settings-main.png)
-
 ---
 
 ## 目录设置
@@ -33,8 +31,6 @@
 2. 路径显示在输入框中
 3. 点击「清除」恢复为空（下载时手动选择）
 
-![默认下载路径](../images/07-download-path.png)
-
 ### 配置存放位置
 
 自定义用户数据（测试用例、计划、页面封装、蓝牙设备等）的存储路径：
@@ -46,10 +42,7 @@
 
 **首次设置时**，系统会将默认配置从安装目录复制到新路径，并完成数据迁移。
 
-> [!WARNING]
 > 更改配置存放位置会触发应用重启，请确保当前没有正在执行的测试。
-
-![配置存放位置](../images/07-config-storage.png)
 
 ---
 
@@ -63,8 +56,6 @@
 | **关闭** | Material Design 亮色主题 |
 
 切换立即生效，无需重启。
-
-![暗色模式](../images/07-dark-mode.png)
 
 ### 主题色
 
@@ -82,8 +73,6 @@
 
 主题色应用于导航栏、按钮、进度条等 UI 元素。
 
-![主题色设置](../images/07-theme-color.png)
-
 ### 语言
 
 | 选项 | 值 |
@@ -92,8 +81,6 @@
 | English | `en-US` |
 
 切换后界面文本即时更新（通过 i18next 实现），无需刷新。
-
-![语言设置](../images/07-language.png)
 
 ---
 
@@ -109,8 +96,6 @@ XKAutoTester 支持测试完成后通过 DingTalk（钉钉）机器人推送报�
 | **钉钉** | 通过 DingTalk 机器人 Webhook 推送 |
 
 选择「钉钉」后，下方将显示 Access Token 和 Secret 输入框。
-
-![通知平台选择](../images/07-notification-platform.png)
 
 ### 配置 DingTalk 机器人
 
@@ -133,8 +118,6 @@ XKAutoTester 支持测试完成后通过 DingTalk（钉钉）机器人推送报�
 - 执行耗时
 - 报告链接（如有）
 
-![钉钉通知配置](../images/07-dingtalk-config.png)
-
 ---
 
 ## 数据管理
@@ -150,8 +133,6 @@ XKAutoTester 支持测试完成后通过 DingTalk（钉钉）机器人推送报�
 
 点击「清空」按钮删除应用程序运行日志文件。
 
-![数据管理](../images/07-data-management.png)
-
 ---
 
 ## 运行设置
@@ -163,10 +144,7 @@ XKAutoTester 支持测试完成后通过 DingTalk（钉钉）机器人推送报�
 | **开启** | 测试执行期间，通过 `powerSaveBlocker` API 阻止 Windows 进入睡眠/休眠 |
 | **关闭** | 系统睡眠策略不受影响 |
 
-> [!TIP]
 > 长时间执行的测试计划（特别是定时计划）建议开启此选项。
-
-![防睡眠设置](../images/07-prevent-sleep.png)
 
 ---
 
@@ -187,10 +165,6 @@ XKAutoTester 支持测试完成后通过 DingTalk（钉钉）机器人推送报�
 2. 如果有新版本，弹出「版本更新」弹窗，显示新版本号和 Changelog
 3. 点击「下载更新」下载新版本安装包（带进度条）
 4. 下载完成后点击安装，应用将自动重启完成更新
-
-![检查更新](../images/07-check-update.png)
-
-![更新弹窗](../images/07-update-modal.png)
 
 ---
 

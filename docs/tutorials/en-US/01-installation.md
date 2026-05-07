@@ -8,14 +8,14 @@
 
 XKAutoTester depends on the following core components:
 
-| Component | Role |
-|-----------|------|
+| Component         | Role                                                           |
+| ----------------- | -------------------------------------------------------------- |
 | **Python 3.12.4** | Test script execution engine, driving Appium / Pytest / Allure |
-| **Node.js 22+** | Electron desktop app runtime |
-| **uv** | Python dependency manager (replaces pip) |
-| **JDK 17+** | Allure report generation dependency |
-| **Android SDK** | ADB tools + aapt2 for APK parsing |
-| **Scrcpy** | Device screen mirroring & control |
+| **Node.js 22+**   | Electron desktop app runtime                                   |
+| **uv**            | Python dependency manager (replaces pip)                       |
+| **JDK 17+**       | Allure report generation dependency                            |
+| **Android SDK**   | ADB tools + aapt2 for APK parsing                              |
+| **Scrcpy**        | Device screen mirroring & control                              |
 
 > [!NOTE]
 > The installer (Setup) bundles all the above environments, **no manual configuration required**. The following steps apply only to **development mode** execution.
@@ -25,8 +25,6 @@ XKAutoTester depends on the following core components:
 ## Method 1: Run via Installer (Recommended)
 
 Download the latest `XKAutoTester Setup vX.X.X.exe` from [GitHub Releases](https://github.com/RingOnTheWay/XKAutoTester/releases), run the installer, and launch the app.
-
-![Installer Interface](../images/01-installer.png)
 
 ---
 
@@ -110,8 +108,6 @@ npm start
 
 The app first displays a splash screen, then enters the main interface after environment checks pass.
 
-![Splash Screen](../images/01-splash.png)
-
 ---
 
 ## First-time Setup
@@ -120,15 +116,13 @@ The app first displays a splash screen, then enters the main interface after env
 
 The main interface contains 5 functional tabs:
 
-| Tab | Function |
-|-----|----------|
-| **Test Execution** | Test plan management, execution, report viewing |
-| **Page Package** | App-Page-Element three-level locator management |
-| **Test Case** | Visual case editor, automatic Python code generation |
+| Tab                    | Function                                                               |
+| ---------------------- | ---------------------------------------------------------------------- |
+| **Test Execution**     | Test plan management, execution, report viewing                        |
+| **Page Package**       | App-Page-Element three-level locator management                        |
+| **Test Case**          | Visual case editor, automatic Python code generation                   |
 | **Android Connection** | Device connection, file management, APK installation, scrcpy mirroring |
-| **Settings** | Language/theme/notifications/data path/updates |
-
-![Main Interface](../images/01-main-interface.png)
+| **Settings**           | Language/theme/notifications/data path/updates                         |
 
 ### Configure Notifications (Optional)
 
@@ -142,14 +136,14 @@ In Settings → Directory → Config Storage Path, customize the storage locatio
 
 ## Troubleshooting
 
-| Symptom | Cause | Solution |
-|---------|-------|----------|
-| "Python not found" on startup | Python not installed or version mismatch | Install Python 3.12.4 and add to PATH |
-| "Node.js not found" on startup | Node.js not installed | Install Node.js 22+ |
-| Allure report fails to generate | JDK not installed | Install JDK 17+ and set JAVA_HOME |
-| ADB cannot recognize devices | Android SDK not configured | Install platform-tools and add to PATH |
-| "uv not found" on startup | uv not installed | Run `pip install uv` |
-| npm install fails | Node.js version too old | Upgrade to Node.js 22+ |
+| Symptom                         | Cause                                    | Solution                               |
+| ------------------------------- | ---------------------------------------- | -------------------------------------- |
+| "Python not found" on startup   | Python not installed or version mismatch | Install Python 3.12.4 and add to PATH  |
+| "Node.js not found" on startup  | Node.js not installed                    | Install Node.js 22+                    |
+| Allure report fails to generate | JDK not installed                        | Install JDK 17+ and set JAVA_HOME      |
+| ADB cannot recognize devices    | Android SDK not configured               | Install platform-tools and add to PATH |
+| "uv not found" on startup       | uv not installed                         | Run `pip install uv`                   |
+| npm install fails               | Node.js version too old                  | Upgrade to Node.js 22+                 |
 
 ---
 

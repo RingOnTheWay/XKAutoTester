@@ -59,8 +59,6 @@ After directory selection:
 
 Click **New Plan** (unlocked after directory selection) to open the plan editor modal.
 
-![New Plan Modal](../images/04-new-plan-modal.png)
-
 ### 2.2 Configure Plan Parameters
 
 | Parameter | Description | Required |
@@ -72,10 +70,7 @@ Click **New Plan** (unlocked after directory selection) to open the plan editor 
 | **Loop Count** | Number of execution cycles (default 1, range 1~999) | Yes |
 | **Continue on Failure** | If checked, continue subsequent cycles after a failure | No |
 
-> [!WARNING]
 > If no test type is selected, the system executes all tests in the directory without marker filtering.
-
-![Plan Configuration](../images/04-plan-config.png)
 
 ### 2.3 Save the Plan
 
@@ -89,8 +84,6 @@ In the **Test Type** card, check the markers to execute:
 
 - All available markers come from `config/pytest.ini`
 - Check states pass as Pytest parameters (`-m "marker1 or marker2"`)
-
-![Test Type Selection](../images/04-test-type-select.png)
 
 ---
 
@@ -131,8 +124,6 @@ Click **View Report** to open the report selection modal.
 
 The modal lists **all historical run records** for the currently selected test plan.
 
-![Report Selection Modal](../images/04-report-modal.png)
-
 ### 5.2 Select a Run Record
 
 - Each record shows the execution timestamp
@@ -144,8 +135,6 @@ The Allure report includes:
 - Categorized by Suite/Epic/Feature/Story
 - Detailed steps and screenshots per test case
 - Error stack traces for failed cases
-
-![Allure Report](../images/04-allure-report.png)
 
 ### 5.3 Stop the Allure Server
 

@@ -57,8 +57,6 @@ Drag an APK file into the **APK Drop Zone**; the system uses aapt2 to automatica
 
 On success, the panel turns green ("Parse Success") and form fields auto-fill.
 
-![APK Parsing](../images/03-apk-parse.png)
-
 > [!TIP]
 > APK parsing avoids manual lookup of package names and Activities, reducing human error.
 
@@ -74,8 +72,6 @@ Click **Save** to write app information to `config/page_package.json`.
 
 Select the newly created app in the app dropdown — the page selector unlocks.
 
-![Select App](../images/03-select-app.png)
-
 ### 2.2 Open the Page Modal
 
 Click the **+** button in the page selector dropdown to open the **New Page** modal.
@@ -85,8 +81,6 @@ Click the **+** button in the page selector dropdown to open the **New Page** mo
 | Field | Description | Example |
 |-------|-------------|---------|
 | **Page Name** | Screen name | `Login Page`, `Home Page`, `Settings Page` |
-
-![Add Page](../images/03-add-page.png)
 
 ### 2.4 Save the Page
 
@@ -124,8 +118,6 @@ Click the **+** button in the element selector dropdown to open the **New Elemen
 
 > Recommended priority: `id` > `accessibility_id` > `xpath` > `class_name` > `css`
 
-![Add Element](../images/03-add-element.png)
-
 ### 3.4 Save the Element
 
 Click **Save** to attach the element under the current page.
@@ -149,8 +141,6 @@ After selecting an item, the edit/delete buttons unlock.
 ### Search / Filter
 
 Each dropdown has a search input at the top; enter keywords to filter the list in real-time.
-
-![Search Filter](../images/03-search.png)
 
 ### Count Badges
 

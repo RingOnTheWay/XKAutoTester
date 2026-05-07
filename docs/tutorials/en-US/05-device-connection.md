@@ -76,8 +76,6 @@ After successfully selecting a device, the **Device Info Card** unlocks, showing
 | **Storage Usage** | `adb shell df` |
 | **Memory Usage** | `adb shell dumpsys meminfo` |
 
-![Device Info](../images/05-device-info.png)
-
 ---
 
 ## Step 3: Screen Control (Scrcpy)
@@ -104,8 +102,6 @@ Click **Control Params** to open the parameter configuration modal:
 
 These parameters inherit defaults from global settings in `config/config.json` → `SCRCPY_PARAMS`.
 
-![Control Params Modal](../images/05-control-params.png)
-
 ---
 
 ## Step 4: File Management
@@ -121,8 +117,6 @@ The right panel provides a file manager for the Android device, similar to a des
 | **Refresh** | **Refresh** button |
 | **Path jump** | Click the `...` button in the path display area for a path hierarchy menu |
 | **Select all** | Click the header checkbox |
-
-![File Manager](../images/05-file-manager.png)
 
 ### 4.2 File Operations
 
@@ -144,8 +138,6 @@ Downloads show a real-time progress bar:
 - Progress percentage + current file / total files
 - 5-second countdown auto-close for the progress panel
 - Error details shown on download failure
-
-![Download Progress](../images/05-download-progress.png)
 
 ---
 
@@ -172,8 +164,6 @@ Click **Port Management** to auto-scan available system serial ports (COM ports)
 ### Select a Port
 
 Choose the port occupied by the BLE mock device from the scanned list and confirm to associate it with the current test configuration.
-
-![Port Management](../images/05-port-management.png)
 
 Full BLE device configuration (name, baud rate, data format, etc.) is in `config/ble_device.json`.
 

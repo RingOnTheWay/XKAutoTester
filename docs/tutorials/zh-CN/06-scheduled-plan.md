@@ -15,8 +15,6 @@
 - 循环执行：支持 1~999 次循环，可配置失败后是否继续
 - 防系统休眠：可在执行期间禁止系统进入睡眠
 
-![定时计划界面](../images/06-scheduled-plan-main.png)
-
 ---
 
 ## 调度架构
@@ -61,8 +59,6 @@ IPC 通知渲染进程 (scheduled-test-start / scheduled-plan-expired)
 
 在「测试执行」Tab 左侧面板的「定时计划」区域，点击「新建定时」按钮。
 
-![新建定时计划](../images/06-new-scheduled-plan.png)
-
 ### 2.2 配置定时参数
 
 | 参数 | 说明 | 是否必填 |
@@ -71,8 +67,6 @@ IPC 通知渲染进程 (scheduled-test-start / scheduled-plan-expired)
 | **执行时间** | 目标执行的日期和时间 | 是 |
 | **选择测试计划** | 勾选到期时要执行的测试计划（支持多选） | 至少选一个 |
 
-![定时计划弹窗](../images/06-scheduled-plan-modal.png)
-
 ### 2.3 时间选择器
 
 点击执行时间输入框，弹出日期时间选择器：
@@ -80,8 +74,6 @@ IPC 通知渲染进程 (scheduled-test-start / scheduled-plan-expired)
 - 选择日期（日历视图）
 - 选择时间（小时:分钟）
 - 确认后时间格式化显示在输入框中
-
-![时间选择器](../images/06-datetime-picker.png)
 
 ### 2.4 保存定时计划
 
@@ -94,8 +86,6 @@ IPC 通知渲染进程 (scheduled-test-start / scheduled-plan-expired)
 ### 查看所有定时计划
 
 左侧「定时计划」列表显示所有已创建的定时计划及其执行时间。
-
-![定时计划列表](../images/06-scheduled-plans-list.png)
 
 ### 编辑定时计划
 
@@ -119,8 +109,6 @@ IPC 通知渲染进程 (scheduled-test-start / scheduled-plan-expired)
 3. 通过 IPC 事件 `scheduled-test-start` 通知前端更新 UI 状态
 4. 测试日志实时输出到右侧面板
 5. 测试完成后生成 Allure 报告
-
-![自动执行通知](../images/06-auto-execution.png)
 
 ---
 
