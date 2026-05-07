@@ -15,8 +15,6 @@ The scheduled plan feature lets you set tests to execute automatically at a futu
 - Loop execution: supports 1~999 cycles, configurable continue-on-failure
 - Prevent system sleep: can block system sleep during execution
 
-![Scheduled Plan Interface](../images/06-scheduled-plan-main.png)
-
 ---
 
 ## Scheduling Architecture
@@ -61,8 +59,6 @@ See [04 - Test Execution & Reports](04-test-execution.md).
 
 In the Test Execution tab, left panel, **Scheduled Plan** area, click **New Scheduled Plan**.
 
-![New Scheduled Plan](../images/06-new-scheduled-plan.png)
-
 ### 2.2 Configure Parameters
 
 | Parameter | Description | Required |
@@ -71,8 +67,6 @@ In the Test Execution tab, left panel, **Scheduled Plan** area, click **New Sche
 | **Execution Time** | Target date and time | Yes |
 | **Select Test Plans** | Check test plans to execute when due (multi-select supported) | At least one |
 
-![Scheduled Plan Modal](../images/06-scheduled-plan-modal.png)
-
 ### 2.3 Time Picker
 
 Click the execution time input to open the datetime picker:
@@ -80,8 +74,6 @@ Click the execution time input to open the datetime picker:
 - Select date (calendar view)
 - Select time (hours:minutes)
 - Confirmed time displays formatted in the input
-
-![DateTime Picker](../images/06-datetime-picker.png)
 
 ### 2.4 Save the Scheduled Plan
 
@@ -94,8 +86,6 @@ Click **Save** to write the plan to `config/scheduled_plans.json`; the Scheduler
 ### View All Scheduled Plans
 
 The **Scheduled Plans** list on the left shows all created plans and their execution times.
-
-![Scheduled Plans List](../images/06-scheduled-plans-list.png)
 
 ### Edit a Scheduled Plan
 
@@ -119,8 +109,6 @@ When the system time reaches the scheduled plan's execution time:
 3. IPC event `scheduled-test-start` notifies the frontend to update UI state
 4. Test logs stream in real-time to the right panel
 5. Allure report generated after completion
-
-![Auto Execution Notification](../images/06-auto-execution.png)
 
 ---
 

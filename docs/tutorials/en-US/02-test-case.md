@@ -23,8 +23,6 @@ The **Test Case** tab provides a visual editor for Android test cases, supportin
 Select test directory → Create/Select case → Fill form → Add test steps → Save & generate code
 ```
 
-![Test Case Main Interface](../images/02-test-case-main.png)
-
 ---
 
 ## Step 1: Select Test Directory
@@ -34,13 +32,9 @@ Click **Select Test Directory** on the left panel to choose the folder for stori
 - The file list shows all `.json` test files in that directory
 - Click a filename to load the corresponding case editor on the right
 
-![Select Test Directory](../images/02-select-directory.png)
-
 ---
 
 ## Step 2: Create a New Test Case
-
-![Create New Button](../images/02-create-new.png)
 
 Click the **+** button in the center of the right panel to enter the editing form.
 
@@ -52,8 +46,6 @@ Click the **+** button in the center of the right panel to enter the editing for
 | **Case Name** | Friendly name, used as Allure report title | Free text |
 | **Description** | Case description | Free text |
 
-![Basic Info Form](../images/02-basic-info.png)
-
 ### 2.2 App & Platform
 
 | Field | Description |
@@ -62,8 +54,6 @@ Click the **+** button in the center of the right panel to enter the editing for
 | **App** | Select from apps registered in Page Package |
 
 > Selecting an app unlocks the Test Steps section; it remains disabled until an app is chosen.
-
-![App Platform Selection](../images/02-app-platform.png)
 
 ---
 
@@ -74,8 +64,6 @@ Test steps are the core execution units. Each step consists of an **action** (ho
 ### 3.1 Add a Step
 
 Click **Add Step** to insert a step card into the list.
-
-![Add Step](../images/02-add-step.png)
 
 ### 3.2 Action Types
 
@@ -124,8 +112,6 @@ Each step displays different property fields based on its action type:
 | **start_ble_mock** | **BLE Device Name** — select from configured BLE devices |
 | **start_app_permission** | **App Package Name** |
 
-![Test Step Configuration](../images/02-step-config.png)
-
 ### 3.4 Step Operations
 
 Each step card supports:
@@ -148,8 +134,6 @@ Expand the **Allure Configuration** collapsible panel to set report tags:
 | **Story** | Target feature | `Password Login` |
 | **Markers** | Pytest markers | `smoke`, `regression` |
 
-![Allure Configuration](../images/02-allure-config.png)
-
 > Marker options come from the markers list defined in `config/pytest.ini`.
 
 ---
@@ -162,8 +146,6 @@ Click **Save** in the bottom-right corner:
 2. Python test script auto-generated to the corresponding directory (based on `templates/test_case_template.py`)
 
 The generated Python code automatically integrates `TestInitializer`, which includes ADB connection, Appium startup, and BLE initialization (if configured).
-
-![Save Case](../images/02-save.png)
 
 ---
 
@@ -192,8 +174,6 @@ When test steps include `start_ble_mock` / `stop_ble_mock` actions, BLE device c
 1. In the test case form's device info, select "Add BLE Mock Port"
 2. Enter the serial port number (e.g. `COM7`), matching a device configured in `config/ble_device.json`
 3. Generated code will automatically include BLE device initialization logic
-
-![BLE Mock Configuration](../images/02-ble-config.png)
 
 ### BLE Device Management
 

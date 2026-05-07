@@ -8,14 +8,14 @@
 
 XKAutoTester 运行依赖以下核心组件：
 
-| 组件 | 角色 |
-|------|------|
+| 组件                | 角色                                   |
+| ----------------- | ------------------------------------ |
 | **Python 3.12.4** | 测试脚本执行引擎，驱动 Appium / Pytest / Allure |
-| **Node.js 22+** | Electron 桌面应用运行环境 |
-| **uv** | Python 依赖管理（替代 pip） |
-| **JDK 17+** | Allure 报告生成依赖 |
-| **Android SDK** | ADB 工具 + aapt2 APK 解析 |
-| **Scrcpy** | 设备屏幕镜像与控制 |
+| **Node.js 22+**   | Electron 桌面应用运行环境                    |
+| **uv**            | Python 依赖管理（替代 pip）                  |
+| **JDK 17+**       | Allure 报告生成依赖                        |
+| **Android SDK**   | ADB 工具 + aapt2 APK 解析                |
+| **Scrcpy**        | 设备屏幕镜像与控制                            |
 
 > [!NOTE]
 > 安装包（Setup 程序）已内置上述环境，**无需手动配置**。以下步骤仅适用于**开发模式**运行。
@@ -25,8 +25,6 @@ XKAutoTester 运行依赖以下核心组件：
 ## 方式一：安装包运行（推荐）
 
 从 [GitHub Releases](https://github.com/RingOnTheWay/XKAutoTester/releases) 下载最新版 `XKAutoTester Setup vX.X.X.exe`，运行安装程序后直接启动即可。
-
-![安装包界面](../images/01-installer.png)
 
 ---
 
@@ -110,8 +108,6 @@ npm start
 
 应用将首先显示启动画面（splash screen），环境检查通过后进入主界面。
 
-![启动画面](../images/01-splash.png)
-
 ---
 
 ## 首次启动引导
@@ -120,15 +116,13 @@ npm start
 
 主界面包含 5 个功能 Tab：
 
-| Tab | 功能 |
-|-----|------|
-| **测试执行** | 测试计划管理、执行、报告查看 |
-| **页面封装** | 应用-页面-元素三级元素定位器管理 |
-| **测试用例** | 可视化用例编辑、Python 代码自动生成 |
+| Tab      | 功能                         |
+| -------- | -------------------------- |
+| **测试执行** | 测试计划管理、执行、报告查看             |
+| **页面封装** | 应用-页面-元素三级元素定位器管理          |
+| **测试用例** | 可视化用例编辑、Python 代码自动生成      |
 | **安卓连接** | 设备连接、文件管理、APK 安装、Scrcpy 投屏 |
-| **设置** | 语言/主题/通知/数据路径/版本更新 |
-
-![主界面](../images/01-main-interface.png)
+| **设置**   | 语言/主题/通知/数据路径/版本更新         |
 
 ### 配置电信通知（可选）
 
@@ -142,14 +136,14 @@ npm start
 
 ## 环境问题排查
 
-| 现象 | 原因 | 解决方法 |
-|------|------|----------|
-| 启动时报 "Python not found" | Python 未安装或版本不匹配 | 安装 Python 3.12.4 并加入 PATH |
-| 启动时报 "Node.js not found" | Node.js 未安装 | 安装 Node.js 22+ |
-| Allure 报告无法生成 | JDK 未安装 | 安装 JDK 17+ 并设置 JAVA_HOME |
-| ADB 无法识别设备 | Android SDK 未配置 | 安装 platform-tools 并加入 PATH |
-| 启动时报 "uv not found" | uv 未安装 | 执行 `pip install uv` |
-| npm install 失败 | Node.js 版本过低 | 升级至 Node.js 22+ |
+| 现象                       | 原因               | 解决方法                       |
+| ------------------------ | ---------------- | -------------------------- |
+| 启动时报 "Python not found"  | Python 未安装或版本不匹配 | 安装 Python 3.12.4 并加入 PATH  |
+| 启动时报 "Node.js not found" | Node.js 未安装      | 安装 Node.js 22+             |
+| Allure 报告无法生成            | JDK 未安装          | 安装 JDK 17+ 并设置 JAVA_HOME   |
+| ADB 无法识别设备               | Android SDK 未配置  | 安装 platform-tools 并加入 PATH |
+| 启动时报 "uv not found"      | uv 未安装           | 执行 `pip install uv`        |
+| npm install 失败           | Node.js 版本过低     | 升级至 Node.js 22+            |
 
 ---
 

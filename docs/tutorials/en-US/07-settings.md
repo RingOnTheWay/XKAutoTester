@@ -19,8 +19,6 @@ The **Settings** tab centrally manages all configurable options across 6 categor
 
 All settings persisted in `config/config.json`.
 
-![Settings Main Interface](../images/07-settings-main.png)
-
 ---
 
 ## Directory Settings
@@ -33,8 +31,6 @@ Set the default save directory when downloading files from a device:
 2. The path appears in the input field
 3. Click **Clear** to reset (manual selection required on download)
 
-![Default Download Path](../images/07-download-path.png)
-
 ### Config Storage Location
 
 Customize the storage path for user data (test cases, plans, page packages, BLE devices, etc.):
@@ -46,10 +42,7 @@ Customize the storage path for user data (test cases, plans, page packages, BLE 
 
 **On first setup**, the system copies default configurations from the installation directory to the new path and completes data migration.
 
-> [!WARNING]
 > Changing the config storage location triggers an app restart. Ensure no tests are currently executing.
-
-![Config Storage Location](../images/07-config-storage.png)
 
 ---
 
@@ -63,8 +56,6 @@ Customize the storage path for user data (test cases, plans, page packages, BLE 
 | **Off** | Material Design light theme |
 
 Changes take effect immediately — no restart needed.
-
-![Dark Mode](../images/07-dark-mode.png)
 
 ### Theme Color
 
@@ -82,8 +73,6 @@ Changes take effect immediately — no restart needed.
 
 Theme color applies to navigation, buttons, progress bars, and other UI elements.
 
-![Theme Color Settings](../images/07-theme-color.png)
-
 ### Language
 
 | Option | Value |
@@ -92,8 +81,6 @@ Theme color applies to navigation, buttons, progress bars, and other UI elements
 | English | `en-US` |
 
 UI text updates instantly on switch (via i18next) — no refresh needed.
-
-![Language Settings](../images/07-language.png)
 
 ---
 
@@ -109,8 +96,6 @@ XKAutoTester can push test report summaries via DingTalk bot after test completi
 | **DingTalk** | Push via DingTalk bot Webhook |
 
 Selecting DingTalk reveals Access Token and Secret input fields below.
-
-![Notification Platform Selection](../images/07-notification-platform.png)
 
 ### Configure DingTalk Bot
 
@@ -133,8 +118,6 @@ After test completion, the system POSTs a test summary to the Webhook using HMAC
 - Execution duration
 - Report link (if available)
 
-![DingTalk Notification Configuration](../images/07-dingtalk-config.png)
-
 ---
 
 ## Data Management
@@ -150,8 +133,6 @@ Click **Clear** to delete all historical Allure report result files and free dis
 
 Click **Clear** to delete application runtime log files.
 
-![Data Management](../images/07-data-management.png)
-
 ---
 
 ## Run Settings
@@ -163,10 +144,7 @@ Click **Clear** to delete application runtime log files.
 | **On** | During test execution, the `powerSaveBlocker` API prevents Windows from entering sleep/hibernation |
 | **Off** | System sleep policy unaffected |
 
-> [!TIP]
 > Recommended for long-running test plans, especially scheduled plans.
-
-![Prevent Sleep Settings](../images/07-prevent-sleep.png)
 
 ---
 
@@ -187,10 +165,6 @@ Click **Check Now**:
 2. If a newer version exists, a **Version Update** modal appears, showing the new version and changelog
 3. Click **Download Update** to download the new installer (with progress bar)
 4. After download, click install; the app restarts automatically to complete the update
-
-![Check for Updates](../images/07-check-update.png)
-
-![Update Modal](../images/07-update-modal.png)
 
 ---
 
