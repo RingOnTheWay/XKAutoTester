@@ -1,6 +1,7 @@
 const path = require('path');
 const { spawn, exec } = require('child_process');
 const asyncFs = require('../utils/asyncFs');
+const Logger = require('../utils/logger');
 
 class AllureService {
   constructor(projectRoot, i18nService, userDataPath) {
@@ -14,6 +15,7 @@ class AllureService {
     this.allureOpenProcess = null;
     this.allureOpenOutput = '';
     this.cachedEnvOptions = null;
+    this.logger = new Logger(this._getLogsPath('XKAT'), 'Electron');
   }
 
   _getLogsPath(...subdirs) {
@@ -33,9 +35,9 @@ class AllureService {
     if (await asyncFs.exists(jdkBinDir)) {
       envOptions.JAVA_HOME = projectJdkDir;
       envOptions.PATH = `${jdkBinDir}${path.delimiter}${process.env.PATH || ''}`;
-      console.log(`[AllureService] Using built-in JDK: ${projectJdkDir}`);
+      await this.logger.info(`Using built-in JDK: ${projectJdkDir}`);
     } else {
-      console.log('[AllureService] Built-in JDK not found, using system Java');
+      await this.logger.info('Built-in JDK not found, using system Java');
     }
 
     this.cachedEnvOptions = envOptions;
@@ -91,41 +93,28 @@ class AllureService {
 
       return await this.openAllureReportDirectly(testPlanName);
     } catch (error) {
-      console.error('打开Allure报告失败:', error);
+      await this.logger.error(`打开Allure报告失败: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
 
   async openAllureReportDirectly(testPlanName) {
     try {
-      const logsDir = this._getLogsPath('XKAT');
-      await asyncFs.ensureDir(logsDir);
-
-      const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      const electronLogPath = path.join(logsDir, `XKAT-${currentTime}.log`);
+      await this.logger.ensureLogDir();
+      this.logger.resetLogPath();
       
-      const logMessage = async (message) => {
-        const timestamp = new Date().toISOString();
-        const logEntry = `[${timestamp}] [Electron] ${message}\n`;
-        try {
-          await asyncFs.appendFile(electronLogPath, logEntry);
-        } catch (err) {
-          console.error('写入Electron日志失败:', err);
-        }
-      };
-      
-      await logMessage(`Starting to open Allure report: ${testPlanName}`);
+      await this.logger.info(`Starting to open Allure report: ${testPlanName}`);
       
       const allureReportDir = this._getLogsPath('Allure', 'allure-reports', testPlanName);
       
       if (!(await asyncFs.exists(allureReportDir))) {
-        await logMessage(`Report directory does not exist: ${allureReportDir}`);
+        await this.logger.error(`Report directory does not exist: ${allureReportDir}`);
         return { success: false, error: '报告目录不存在' };
       }
 
       const indexHtmlPath = path.join(allureReportDir, 'index.html');
       if (!(await asyncFs.exists(indexHtmlPath))) {
-        await logMessage(`Report directory does not contain valid Allure report file`);
+        await this.logger.error('Report directory does not contain valid Allure report file');
         return { success: false, error: '报告目录不包含有效的Allure报告文件' };
       }
 
@@ -136,19 +125,19 @@ class AllureService {
       
       if (await asyncFs.exists(projectAllureBat)) {
         command = `"${projectAllureBat}" open "${allureReportDir}"`;
-        await logMessage('Using project allure.bat command');
+        await this.logger.info('Using project allure.bat command');
       } else if (await asyncFs.exists(projectAllure)) {
         command = `"${projectAllure}" open "${allureReportDir}"`;
-        await logMessage('Using project allure command');
+        await this.logger.info('Using project allure command');
       } else {
         command = `allure open "${allureReportDir}"`;
-        await logMessage('Using system allure command');
+        await this.logger.info('Using system allure command');
       }
 
-      await logMessage(`Opening report with allure open, command: ${command}`);
+      await this.logger.info(`Opening report with allure open, command: ${command}`);
       
       const envOptions = await this.buildEnvWithJdk();
-      await logMessage(`Using JAVA_HOME: ${envOptions.JAVA_HOME || 'system default'}`);
+      await this.logger.info(`Using JAVA_HOME: ${envOptions.JAVA_HOME || 'system default'}`);
       
       this.allureOpenProcess = spawn(command, {
         cwd: this.projectRoot,
@@ -164,11 +153,11 @@ class AllureService {
       this.allureOpenProcess.stdout.on('data', async (data) => {
         const output = data.toString();
         this.allureOpenOutput += output;
-        await logMessage(`allure open output: ${output}`);
+        await this.logger.stdout(output);
         
         const extractedPort = this.extractPortFromAllureOpenOutput(this.allureOpenOutput);
         if (extractedPort) {
-          await logMessage(`Extracted port number from output: ${extractedPort}`);
+          await this.logger.info(`Extracted port number from output: ${extractedPort}`);
           this.allureServerPort = extractedPort;
         }
       });
@@ -176,25 +165,25 @@ class AllureService {
       this.allureOpenProcess.stderr.on('data', async (data) => {
         const output = data.toString();
         this.allureOpenOutput += `[ERROR] ${output}`;
-        await logMessage(`allure open error: ${output}`);
+        await this.logger.stderr(output);
       });
 
       this.allureOpenProcess.on('close', async (code) => {
-        await logMessage(`allure open process exited with code: ${code}`);
+        await this.logger.info(`allure open process exited with code: ${code}`);
         this.allureOpenProcess = null;
         this.allureOpenOutput = '';
       });
 
       this.allureOpenProcess.on('error', async (error) => {
-        await logMessage(`allure open process error: ${error.message}`);
+        await this.logger.error(`allure open process error: ${error.message}`);
         this.allureOpenProcess = null;
       });
 
-      await logMessage('allure open process started successfully');
+      await this.logger.info('allure open process started successfully');
       
       return { success: true, message: '正在打开Allure报告...' };
     } catch (error) {
-      console.error('打开Allure报告失败:', error);
+      await this.logger.error(`打开Allure报告失败: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
@@ -216,26 +205,17 @@ class AllureService {
 
       return await this.openAllureReportDirectlyByPath(reportPath);
     } catch (error) {
-      console.error('打开报告失败:', error);
+      await this.logger.error(`打开报告失败: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
 
   async openAllureReportDirectlyByPath(reportPath) {
     try {
-      const logsDir = this._getLogsPath('XKAT');
-      await asyncFs.ensureDir(logsDir);
+      await this.logger.ensureLogDir();
+      this.logger.resetLogPath();
 
-      const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      const logPath = path.join(logsDir, `XKAT-${currentTime}.log`);
-      
-      const logMessage = async (message) => {
-        const timestamp = new Date().toISOString();
-        const logEntry = `[${timestamp}] [Electron] ${message}\n`;
-        await asyncFs.appendFile(logPath, logEntry);
-      };
-
-      await logMessage(`开始打开报告: ${reportPath}`);
+      await this.logger.info(`开始打开报告: ${reportPath}`);
       
       const projectAllureBat = path.join(this.projectRoot, 'env', 'allure', 'bin', 'allure.bat');
       const projectAllure = path.join(this.projectRoot, 'env', 'allure', 'bin', 'allure');
@@ -244,19 +224,19 @@ class AllureService {
       
       if (await asyncFs.exists(projectAllureBat)) {
         command = `"${projectAllureBat}" open "${reportPath}"`;
-        await logMessage('Using project allure.bat');
+        await this.logger.info('Using project allure.bat');
       } else if (await asyncFs.exists(projectAllure)) {
         command = `"${projectAllure}" open "${reportPath}"`;
-        await logMessage('Using project allure');
+        await this.logger.info('Using project allure');
       } else {
         command = `allure open "${reportPath}"`;
-        await logMessage('Using system allure');
+        await this.logger.info('Using system allure');
       }
       
-      await logMessage(`Command: ${command}`);
+      await this.logger.info(`Command: ${command}`);
       
       const envOptions = await this.buildEnvWithJdk();
-      await logMessage(`Using JAVA_HOME: ${envOptions.JAVA_HOME || 'system default'}`);
+      await this.logger.info(`Using JAVA_HOME: ${envOptions.JAVA_HOME || 'system default'}`);
 
       this.allureOpenProcess = spawn(command, {
         cwd: this.projectRoot,
@@ -270,7 +250,7 @@ class AllureService {
       const self = this;
       this.allureOpenProcess.stdout.on('data', async (data) => {
         const output = data.toString();
-        await asyncFs.appendFile(logPath, `[${new Date().toISOString()}] STDOUT: ${output}`);
+        await self.logger.stdout(output);
         
         const portMatch = output.match(/http:\/\/[0-9.]+:(\d+)/);
         if (portMatch) {
@@ -279,60 +259,48 @@ class AllureService {
       });
 
       this.allureOpenProcess.stderr.on('data', async (data) => {
-        await asyncFs.appendFile(logPath, `[${new Date().toISOString()}] STDERR: ${data.toString()}`);
+        await self.logger.stderr(data.toString());
       });
 
       this.allureOpenProcess.on('close', async (code) => {
-        await asyncFs.appendFile(logPath, `[${new Date().toISOString()}] 进程退出，代码: ${code}\n`);
-        this.allureOpenProcess = null;
-        this.allureServerPort = null;
+        await self.logger.info(`进程退出，代码: ${code}`);
+        self.allureOpenProcess = null;
+        self.allureServerPort = null;
       });
 
       this.allureOpenProcess.on('error', async (error) => {
-        await asyncFs.appendFile(logPath, `[${new Date().toISOString()}] 进程错误: ${error.message}\n`);
-        this.allureOpenProcess = null;
+        await self.logger.error(`进程错误: ${error.message}`);
+        self.allureOpenProcess = null;
       });
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       return { success: true, message: '正在打开Allure报告...' };
     } catch (error) {
+      await this.logger.error(`打开报告失败: ${error.message}`);
       return { success: false, error: `打开报告失败: ${error.message}` };
     }
   }
 
   async stopAllureServer() {
     try {
-      const logsDir = this._getLogsPath('XKAT');
-      await asyncFs.ensureDir(logsDir);
+      await this.logger.ensureLogDir();
+      this.logger.resetLogPath();
       
-      const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      const electronLogPath = path.join(logsDir, `XKAT-${currentTime}.log`);
-      
-      const logMessage = async (message) => {
-        const timestamp = new Date().toISOString();
-        const logEntry = `[${timestamp}] [Electron] ${message}\n`;
-        try {
-          await asyncFs.appendFile(electronLogPath, logEntry);
-        } catch (err) {
-          console.error('写入Electron日志失败:', err);
-        }
-      };
-      
-      await logMessage('开始停止Allure服务器进程');
+      await this.logger.info('开始停止Allure服务器进程');
       
       let stoppedProcesses = [];
       
       if (this.allureOpenProcess && !this.allureOpenProcess.killed) {
-        await logMessage('正在停止allure open进程...');
+        await this.logger.info('正在停止allure open进程...');
         this.allureOpenProcess.kill();
         this.allureOpenProcess = null;
         stoppedProcesses.push('allure open进程');
-        await logMessage('allure open进程已停止');
+        await this.logger.info('allure open进程已停止');
       }
       
       if (this.allureServerPort) {
-        await logMessage(`正在按端口 ${this.allureServerPort} 停止Allure服务器...`);
+        await this.logger.info(`正在按端口 ${this.allureServerPort} 停止Allure服务器...`);
         
         const result = await this.killProcessByPort(this.allureServerPort, 'Allure服务器');
         if (result.success && result.killedProcesses) {
@@ -350,13 +318,14 @@ class AllureService {
       
       if (stoppedProcesses.length > 0) {
         const message = `已停止: ${stoppedProcesses.join(', ')}`;
-        await logMessage(`停止服务器完成: ${message}`);
+        await this.logger.info(`停止服务器完成: ${message}`);
         return { success: true, message };
       } else {
-        await logMessage('没有找到需要停止的进程');
+        await this.logger.info('没有找到需要停止的进程');
         return { success: true, message: '没有正在运行的进程需要停止' };
       }
     } catch (error) {
+      await this.logger.error(`停止服务器失败: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
@@ -409,13 +378,13 @@ class AllureService {
           }
           deletedCount++;
         } catch (e) {
-          console.error(`删除 ${itemPath} 失败:`, e);
+          await this.logger.error(`删除 ${itemPath} 失败: ${e.message}`);
         }
       }
       
       return { success: true, message: `已清空 ${deletedCount} 个报告` };
     } catch (error) {
-      console.error('清空Allure报告数据失败:', error);
+      await this.logger.error(`清空Allure报告数据失败: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
@@ -448,7 +417,7 @@ class AllureService {
                 }
                 deletedCount++;
               } catch (e) {
-                console.error(`删除 ${itemPath} 失败:`, e);
+                await this.logger.error(`删除 ${itemPath} 失败: ${e.message}`);
               }
             }
           } else {
@@ -456,13 +425,13 @@ class AllureService {
             deletedCount++;
           }
         } catch (e) {
-          console.error(`处理 ${subDirPath} 失败:`, e);
+          await this.logger.error(`处理 ${subDirPath} 失败: ${e.message}`);
         }
       }
       
       return { success: true, message: `已清除 ${deletedCount} 个日志文件` };
     } catch (error) {
-      console.error('清除日志数据失败:', error);
+      await this.logger.error(`清除日志数据失败: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
@@ -478,7 +447,7 @@ class AllureService {
       
       return { exists: exists };
     } catch (error) {
-      console.error('检查报告存在性失败:', error);
+      await this.logger.error(`检查报告存在性失败: ${error.message}`);
       return { exists: false };
     }
   }
@@ -510,23 +479,14 @@ class AllureService {
   }
 
   async killProcessByPort(port, processName = 'allure open进程') {
-    const logsDir = this._getLogsPath('XKAT');
-    await asyncFs.ensureDir(logsDir);
-    
-    const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const logPath = path.join(logsDir, `XKAT-${currentTime}.log`);
-    
-    const logMessage = async (message) => {
-      const timestamp = new Date().toISOString();
-      const logEntry = `[${timestamp}] [Electron] ${message}\n`;
-      await asyncFs.appendFile(logPath, logEntry);
-    };
+    await this.logger.ensureLogDir();
+    this.logger.resetLogPath();
 
-    await logMessage(`开始按端口停止${processName}: ${port}`);
+    await this.logger.info(`开始按端口停止${processName}: ${port}`);
     
     try {
       const findCommand = `netstat -ano | findstr :${port} | findstr LISTENING`;
-      await logMessage(`执行命令查找端口进程: ${findCommand}`);
+      await this.logger.info(`执行命令查找端口进程: ${findCommand}`);
       
       const result = await new Promise((resolve, reject) => {
         exec(findCommand, { encoding: 'utf8' }, (err, stdout) => {
@@ -534,7 +494,7 @@ class AllureService {
           else resolve(stdout);
         });
       });
-      await logMessage(`查找结果: ${result}`);
+      await this.logger.info(`查找结果: ${result}`);
       
       if (result.trim()) {
         const lines = result.trim().split('\n');
@@ -544,10 +504,10 @@ class AllureService {
           const parts = line.trim().split(/\s+/);
           if (parts.length >= 5) {
             const pid = parts[parts.length - 1];
-            await logMessage(`找到进程PID: ${pid}`);
+            await this.logger.info(`找到进程PID: ${pid}`);
             
             const killCommand = `taskkill /PID ${pid} /F`;
-            await logMessage(`执行杀死进程命令: ${killCommand}`);
+            await this.logger.info(`执行杀死进程命令: ${killCommand}`);
             
             try {
               await new Promise((resolve, reject) => {
@@ -556,29 +516,29 @@ class AllureService {
                   else resolve();
                 });
               });
-              await logMessage(`成功杀死进程PID: ${pid}`);
+              await this.logger.info(`成功杀死进程PID: ${pid}`);
               killedProcesses.push(`端口${port}的进程(PID:${pid})`);
             } catch (killError) {
-              await logMessage(`杀死进程失败: ${killError.message}`);
+              await this.logger.error(`杀死进程失败: ${killError.message}`);
             }
           }
         }
         
         if (killedProcesses.length > 0) {
           const message = `已停止: ${killedProcesses.join(', ')}`;
-          await logMessage(`停止${processName}完成: ${message}`);
+          await this.logger.info(`停止${processName}完成: ${message}`);
           return { success: true, killedProcesses };
         } else {
-          await logMessage(`未找到监听端口 ${port} 的进程`);
+          await this.logger.info(`未找到监听端口 ${port} 的进程`);
           return { success: false, error: this.i18nService.t('main.processNotFound') };
         }
       } else {
-        await logMessage(`未找到监听端口 ${port} 的进程`);
+        await this.logger.info(`未找到监听端口 ${port} 的进程`);
         return { success: false, error: this.i18nService.t('main.processNotFound') };
       }
     } catch (error) {
       const errorMessage = this.i18nService.t('main.stopProcessFailed', { processName, error: error.message });
-      await logMessage(errorMessage);
+      await this.logger.error(errorMessage);
       return { success: false, error: error.message };
     }
   }
