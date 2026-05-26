@@ -76,14 +76,6 @@ class InspectorModal {
             nextBtn.addEventListener('click', () => this.navigateSearchResult(1));
         }
 
-        if (this.overlay) {
-            this.overlay.addEventListener('click', (e) => {
-                if (e.target === this.overlay) {
-                    this.close();
-                }
-            });
-        }
-
         this._bindHeaderDrag();
     }
 

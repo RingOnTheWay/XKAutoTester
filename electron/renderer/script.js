@@ -9142,12 +9142,6 @@ class XKAutoTesterApp {
             e.target.value = value;
         });
 
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) {
-                this.hideDateTimePicker();
-            }
-        });
-
         this.initializeDateTimePickerIcons(overlay);
     }
 
@@ -10790,7 +10784,13 @@ class XKAutoTesterApp {
                     if (result.success) {
                         this.ppSelectedElement = null;
                         await this.ppLoadElements(this.ppSelectedApp.id, this.ppSelectedPage.id);
+                        const elementWrapper = document.getElementById('pp-element-select-wrapper');
+                        const elementTextSpan = elementWrapper.querySelector('.cascade-select__text');
+                        elementTextSpan.textContent = window.i18n ? window.i18n.t('pagePackage.selectElement') : '请选择元素';
+                        elementTextSpan.classList.add('placeholder');
+                        elementWrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
                         document.getElementById('pp-element-card').classList.remove('selected');
+                        this.ppUpdateButtonStates('element');
                     }
                     break;
             }

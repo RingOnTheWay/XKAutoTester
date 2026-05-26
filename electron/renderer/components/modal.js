@@ -47,12 +47,6 @@ class Modal {
         this.close();
       });
     }
-
-    this.overlay.addEventListener('click', (e) => {
-      if (e.target === this.overlay) {
-        this.close();
-      }
-    });
   }
 
   _addEscListener() {
