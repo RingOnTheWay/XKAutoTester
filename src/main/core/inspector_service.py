@@ -45,7 +45,7 @@ class InspectorService:
         self._cached_source: str | None = None
         self._cached_tree: dict | None = None
 
-    def start_session(self, device_name: str, app_package: str, app_activity: str, platform_version: str = "") -> dict:
+    def start_session(self, device_name: str, app_package: str, app_activity: str, platform_version: str = "", no_reset: bool = True) -> dict:
         try:
             if self.driver is not None:
                 return {"success": False, "error": "Session already exists. Stop the current session first."}
@@ -71,8 +71,8 @@ class InspectorService:
             options.device_name = device_name
             options.app_package = app_package
             options.app_activity = app_activity
-            options.no_reset = True
-            options.set_capability("dontStopAppOnReset", True)
+            options.no_reset = no_reset
+            options.set_capability("dontStopAppOnReset", no_reset)
             AppiumServer.apply_default_capabilities(options)
 
             server_url = f"http://{AppiumServer.DEFAULT_HOST}:{INSPECTOR_PORT}"

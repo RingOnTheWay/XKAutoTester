@@ -105,18 +105,18 @@ class InspectorModal {
         });
     }
 
-    async open(deviceName, appPackage, appActivity) {
+    async open(deviceName, appPackage, appActivity, noReset = true) {
         if (!this.overlay) return;
 
         this.resetState();
-        this._sessionParams = { deviceName, appPackage, appActivity };
+        this._sessionParams = { deviceName, appPackage, appActivity, noReset };
         this.overlay.classList.remove('hidden');
         this._addEscListener();
         this.showLoading(true);
         this._subscribeProgress();
 
         try {
-            const result = await window.electronAPI.inspector.startSession(deviceName, appPackage, appActivity);
+            const result = await window.electronAPI.inspector.startSession(deviceName, appPackage, appActivity, '', noReset);
             if (!result || !result.success) {
                 throw new Error(result?.error || window.i18n?.t('inspector.startFailed') || 'Failed to start inspector session');
             }
@@ -149,6 +149,8 @@ class InspectorModal {
         }
 
         this.resetState();
+
+        document.dispatchEvent(new CustomEvent('inspector-closed'));
     }
 
     resetState() {

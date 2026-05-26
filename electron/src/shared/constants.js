@@ -44,7 +44,15 @@ const IPC_CHANNELS = {
     INSPECTOR_GET_PAGE_SOURCE: 'inspector:get-page-source',
     INSPECTOR_FIND_ELEMENT_LOCATORS: 'inspector:find-element-locators',
     INSPECTOR_REFRESH_SESSION: 'inspector:refresh-session',
-    INSPECTOR_STOP_SESSION: 'inspector:stop-session'
+    INSPECTOR_STOP_SESSION: 'inspector:stop-session',
+
+    EXPORT_CONFIG: 'export-config',
+    EXPORT_LOGS: 'export-logs',
+    IMPORT_CONFIG: 'import-config',
+    SELECT_EXPORT_PATH: 'select-export-path',
+    SELECT_IMPORT_PATH: 'select-import-path',
+    ON_EXPORT_PROGRESS: 'on-export-progress',
+    ON_IMPORT_PROGRESS: 'on-import-progress'
 };
 
 module.exports = { IPC_CHANNELS };

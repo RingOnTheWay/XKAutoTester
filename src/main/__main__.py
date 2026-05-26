@@ -109,6 +109,7 @@ class InspectorRunner:
                     app_package=params.get("app_package", ""),
                     app_activity=params.get("app_activity", ""),
                     platform_version=params.get("platform_version", ""),
+                    no_reset=params.get("no_reset", True),
                 )
             elif command == "get-screenshot":
                 return self.service.get_screenshot()

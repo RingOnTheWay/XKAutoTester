@@ -11,7 +11,7 @@ function register(ipcMain, services) {
   });
 
   registerHandlers(ipcMain, {
-    'inspector:start-session': (deviceName, appPackage, appActivity, platformVersion) => inspectorService.startSession(deviceName, appPackage, appActivity, platformVersion),
+    'inspector:start-session': (deviceName, appPackage, appActivity, platformVersion, noReset) => inspectorService.startSession(deviceName, appPackage, appActivity, platformVersion, noReset),
     'inspector:get-screenshot': () => inspectorService.getScreenshot(),
     'inspector:get-page-source': () => inspectorService.getPageSource(),
     'inspector:find-element-locators': (elementPath) => inspectorService.findElementLocators(elementPath),

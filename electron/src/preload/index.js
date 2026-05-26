@@ -278,7 +278,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   inspector: {
-    startSession: (deviceName, appPackage, appActivity, platformVersion) => ipcRenderer.invoke('inspector:start-session', deviceName, appPackage, appActivity, platformVersion),
+    startSession: (deviceName, appPackage, appActivity, platformVersion, noReset) => ipcRenderer.invoke('inspector:start-session', deviceName, appPackage, appActivity, platformVersion, noReset),
     getScreenshot: () => ipcRenderer.invoke('inspector:get-screenshot'),
     getPageSource: () => ipcRenderer.invoke('inspector:get-page-source'),
     findElementLocators: (elementPath) => ipcRenderer.invoke('inspector:find-element-locators', elementPath),
@@ -296,5 +296,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkInstallerRunning: () => ipcRenderer.invoke('check-installer-running'),
   recheckCP210xDriver: () => ipcRenderer.invoke('recheck-cp210x-driver'),
 
-  setPreventSleep: (enable) => ipcRenderer.invoke('set-prevent-sleep', enable)
+  setPreventSleep: (enable) => ipcRenderer.invoke('set-prevent-sleep', enable),
+
+  selectExportPath: (options) => ipcRenderer.invoke('select-export-path', options),
+  selectImportPath: () => ipcRenderer.invoke('select-import-path'),
+  exportConfig: (outputPath) => ipcRenderer.invoke('export-config', outputPath),
+  exportLogs: (outputPath) => ipcRenderer.invoke('export-logs', outputPath),
+  importConfig: (zipPath) => ipcRenderer.invoke('import-config', zipPath),
+  onExportProgress: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('on-export-progress', listener);
+    return () => ipcRenderer.removeListener('on-export-progress', listener);
+  },
+  onImportProgress: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('on-import-progress', listener);
+    return () => ipcRenderer.removeListener('on-import-progress', listener);
+  }
 });

@@ -19,7 +19,7 @@ class InspectorService {
         this._onProgress = callback;
     }
 
-    async startSession(deviceName, appPackage, appActivity, platformVersion = '') {
+    async startSession(deviceName, appPackage, appActivity, platformVersion = '', noReset = true) {
         if (this.pythonProcess) {
             await this.stopSession();
         }
@@ -78,7 +78,8 @@ class InspectorService {
                 device_name: deviceName,
                 app_package: appPackage,
                 app_activity: appActivity,
-                platform_version: platformVersion
+                platform_version: platformVersion,
+                no_reset: noReset
             });
 
             if (response.success && response.session_id) {

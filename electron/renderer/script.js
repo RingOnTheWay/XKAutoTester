@@ -42,6 +42,7 @@ class XKAutoTesterApp {
         this.ppEditingType = null;
         this.ppInitialized = false;
         this.inspectorModal = null;
+        this._ppElementModalNeedsReopen = false;
         
         // 文件管理器相关属性
         this.currentPath = '/storage/emulated/0'; // 默认路径
@@ -254,6 +255,10 @@ class XKAutoTesterApp {
             document.addEventListener('inspector-element-selected', (event) => {
                 const { locatorType, locatorValue } = event.detail;
                 this.ppFillLocatorFromInspector(locatorType, locatorValue);
+            });
+
+            document.addEventListener('inspector-closed', () => {
+                this._reopenElementModalIfNeeded();
             });
         } catch (error) {
             console.error('Failed to initialize Inspector:', error);
@@ -2781,6 +2786,8 @@ class XKAutoTesterApp {
                 });
             });
         }
+
+        this._initDataTransferButtons();
 
         // 自动检查更新开关
         const autoCheckUpdateToggle = document.getElementById('auto-check-update-toggle');
@@ -7932,6 +7939,170 @@ class XKAutoTesterApp {
         this.modals.confirm.open();
     }
 
+    _initDataTransferButtons() {
+        const exportConfigBtn = document.getElementById('export-config-btn');
+        if (exportConfigBtn) {
+            exportConfigBtn.addEventListener('click', () => this._handleExportConfig());
+        }
+
+        const exportLogsBtn = document.getElementById('export-logs-btn');
+        if (exportLogsBtn) {
+            exportLogsBtn.addEventListener('click', () => this._handleExportLogs());
+        }
+
+        const importConfigBtn = document.getElementById('import-config-btn');
+        if (importConfigBtn) {
+            importConfigBtn.addEventListener('click', () => this._handleImportConfig());
+        }
+    }
+
+    async _handleExportConfig() {
+        try {
+            const dialogResult = await window.electronAPI.selectExportPath({ type: 'config' });
+            if (dialogResult.canceled || !dialogResult.filePath) return;
+
+            const outputPath = dialogResult.filePath;
+            const progressModal = new ProgressModal();
+            progressModal.show(window.i18n.t('settings.exportConfig'), {
+                icon: 'upload_file',
+                initialMessage: window.i18n.t('settings.exportingConfig')
+            });
+
+            const removeListener = window.electronAPI.onExportProgress((data) => {
+                if (data.phase === 'error') {
+                    progressModal.showError(data.message);
+                } else {
+                    progressModal.updateProgress(data);
+                }
+            });
+
+            try {
+                const result = await window.electronAPI.exportConfig(outputPath);
+                if (result.success) {
+                    progressModal.showComplete(window.i18n.t('settings.exportConfigSuccess'));
+                    Toast.success(window.i18n.t('settings.exportConfigSuccess'));
+                } else {
+                    progressModal.showError(result.error);
+                    Toast.error(window.i18n.t('settings.exportConfigFailed') + ': ' + result.error);
+                }
+            } catch (error) {
+                progressModal.showError(error.message);
+                Toast.error(window.i18n.t('settings.exportConfigFailed'));
+            } finally {
+                removeListener();
+            }
+        } catch (error) {
+            console.error('导出配置失败:', error);
+            Toast.error(window.i18n.t('settings.exportConfigFailed'));
+        }
+    }
+
+    async _handleExportLogs() {
+        try {
+            const dialogResult = await window.electronAPI.selectExportPath({ type: 'logs' });
+            if (dialogResult.canceled || !dialogResult.filePath) return;
+
+            const outputPath = dialogResult.filePath;
+            const progressModal = new ProgressModal();
+            progressModal.show(window.i18n.t('settings.exportLogs'), {
+                icon: 'description',
+                initialMessage: window.i18n.t('settings.exportingLogs')
+            });
+
+            const removeListener = window.electronAPI.onExportProgress((data) => {
+                if (data.phase === 'error') {
+                    progressModal.showError(data.message);
+                } else {
+                    progressModal.updateProgress(data);
+                }
+            });
+
+            try {
+                const result = await window.electronAPI.exportLogs(outputPath);
+                if (result.success) {
+                    progressModal.showComplete(window.i18n.t('settings.exportLogsSuccess'));
+                    Toast.success(window.i18n.t('settings.exportLogsSuccess'));
+                } else {
+                    progressModal.showError(result.error);
+                    Toast.error(window.i18n.t('settings.exportLogsFailed') + ': ' + result.error);
+                }
+            } catch (error) {
+                progressModal.showError(error.message);
+                Toast.error(window.i18n.t('settings.exportLogsFailed'));
+            } finally {
+                removeListener();
+            }
+        } catch (error) {
+            console.error('导出日志失败:', error);
+            Toast.error(window.i18n.t('settings.exportLogsFailed'));
+        }
+    }
+
+    async _handleImportConfig() {
+        try {
+            const confirmTitle = window.i18n.t('settings.importConfig');
+            const confirmMessage = window.i18n.t('settings.importConfigConfirm');
+            this.showConfirmModal(confirmTitle, confirmMessage, async () => {
+                await this._doImportConfig();
+            });
+        } catch (error) {
+            console.error('导入配置失败:', error);
+            Toast.error(window.i18n.t('settings.importConfigFailed'));
+        }
+    }
+
+    async _doImportConfig() {
+        try {
+            const dialogResult = await window.electronAPI.selectImportPath();
+            if (dialogResult.canceled || !dialogResult.filePaths || dialogResult.filePaths.length === 0) return;
+
+            const zipPath = dialogResult.filePaths[0];
+            const progressModal = new ProgressModal();
+            progressModal.show(window.i18n.t('settings.importConfig'), {
+                icon: 'download',
+                initialMessage: window.i18n.t('settings.importingConfig')
+            });
+
+            const removeListener = window.electronAPI.onImportProgress((data) => {
+                if (data.phase === 'error') {
+                    progressModal.showError(data.message);
+                } else {
+                    progressModal.updateProgress(data);
+                }
+            });
+
+            try {
+                const result = await window.electronAPI.importConfig(zipPath);
+                if (result.success) {
+                    progressModal.showComplete(window.i18n.t('settings.importConfigSuccess'));
+                    Toast.success(window.i18n.t('settings.importConfigSuccess'));
+
+                    if (result.needRestart) {
+                        setTimeout(() => {
+                            progressModal.hide();
+                            const restartTitle = window.i18n.t('settings.importRestartTitle');
+                            const restartMessage = window.i18n.t('settings.importRestartMessage');
+                            this.showConfirmModal(restartTitle, restartMessage, async () => {
+                                await window.electronAPI.relaunchApp();
+                            });
+                        }, 1500);
+                    }
+                } else {
+                    progressModal.showError(result.error);
+                    Toast.error(window.i18n.t('settings.importConfigFailed') + ': ' + result.error);
+                }
+            } catch (error) {
+                progressModal.showError(error.message);
+                Toast.error(window.i18n.t('settings.importConfigFailed'));
+            } finally {
+                removeListener();
+            }
+        } catch (error) {
+            console.error('导入配置失败:', error);
+            Toast.error(window.i18n.t('settings.importConfigFailed'));
+        }
+    }
+
     hideConfirmModal() {
         this.modals.confirm.close();
         this.confirmCallback = null;
@@ -10418,13 +10589,85 @@ class XKAutoTesterApp {
             Toast.error(window.electronAPI.i18n.t('inspector.noAppInfo'));
             return;
         }
+
+        this.modals.ppElement.close();
+        this._ppElementModalNeedsReopen = true;
+
         let deviceName;
         try {
             deviceName = await this.showDeviceSelectionForInspector();
         } catch (e) {
+            this._reopenElementModalIfNeeded();
             return;
         }
-        await this.inspectorModal.open(deviceName, app.packageName, app.activityName);
+
+        const noReset = await this._showResetConfirmModal();
+        await this.inspectorModal.open(deviceName, app.packageName, app.activityName, noReset);
+    }
+
+    _reopenElementModalIfNeeded() {
+        if (this._ppElementModalNeedsReopen) {
+            this._ppElementModalNeedsReopen = false;
+            this.modals.ppElement.open();
+        }
+    }
+
+    _showResetConfirmModal() {
+        return new Promise((resolve) => {
+            const titleElement = document.getElementById('confirm-modal-title');
+            const messageElement = document.getElementById('confirm-modal-message');
+
+            if (titleElement) {
+                titleElement.textContent = window.i18n ? window.i18n.t('inspector.resetConfirmTitle') : '启动模式';
+            }
+            if (messageElement) {
+                const i18n = window.i18n;
+                messageElement.textContent = i18n ? i18n.t('inspector.resetConfirmQuestion') : '是否以临时无用户数据状态来启动应用？';
+            }
+
+            let resolved = false;
+            const resolveOnce = (value) => {
+                if (!resolved) {
+                    resolved = true;
+                    resolve(value);
+                }
+            };
+
+            const escHandler = (e) => {
+                if (e.key === 'Escape') {
+                    resolveOnce(true);
+                }
+            };
+            document.addEventListener('keydown', escHandler);
+
+            const overlayClickHandler = (e) => {
+                if (e.target === document.getElementById('confirm-modal-overlay')) {
+                    resolveOnce(true);
+                }
+            };
+            document.getElementById('confirm-modal-overlay')?.addEventListener('click', overlayClickHandler);
+
+            const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
+            const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
+
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+            newConfirmBtn.addEventListener('click', () => {
+                document.removeEventListener('keydown', escHandler);
+                this.modals.confirm.close();
+                resolveOnce(false);
+            });
+
+            const newCancelBtn = cancelBtn.cloneNode(true);
+            cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+            newCancelBtn.addEventListener('click', () => {
+                document.removeEventListener('keydown', escHandler);
+                this.modals.confirm.close();
+                resolveOnce(true);
+            });
+
+            this.modals.confirm.open();
+        });
     }
 
     ppFillLocatorFromInspector(locatorType, locatorValue) {
@@ -10437,6 +10680,7 @@ class XKAutoTesterApp {
         if (nameInput && !nameInput.value) {
             nameInput.focus();
         }
+        this._reopenElementModalIfNeeded();
     }
 
     ppShowAddModal(type) {

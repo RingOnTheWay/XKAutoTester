@@ -939,6 +939,39 @@
                         <div class="card-content">
                             <div class="setting-item">
                                 <div class="setting-label">
+                                    <span class="svg-icon" data-icon="upload_file"></span>
+                                    <span data-i18n="settings.exportConfig">导出配置</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="export-config-btn" class="material-button outlined small">
+                                        <span data-i18n="settings.export">导出</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="description"></span>
+                                    <span data-i18n="settings.exportLogs">导出日志</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="export-logs-btn" class="material-button outlined small">
+                                        <span data-i18n="settings.export">导出</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="download"></span>
+                                    <span data-i18n="settings.importConfig">导入配置</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="import-config-btn" class="material-button primary small">
+                                        <span data-i18n="settings.import">导入</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
                                     <span class="svg-icon" data-icon="delete_sweep"></span>
                                     <span data-i18n="settings.clearAllureReports">清空Allure报告数据</span>
                                 </div>
@@ -1619,6 +1652,7 @@
     
     <script src="components/toast.js"></script>
     <script src="components/progress-indicator.js"></script>
+    <script src="components/progress-modal.js"></script>
     <script src="../node_modules/lucide/dist/umd/lucide.min.js"></script>
     <script src="icons.js"></script>
     <script src="script.js"></script>

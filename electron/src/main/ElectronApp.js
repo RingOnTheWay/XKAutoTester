@@ -162,7 +162,8 @@ class ElectronApp {
           versionService: this.services.versionService,
           userDataService: this.services.userDataService,
           updateService: this.services.updateService,
-          inspectorService: this.services.inspectorService
+          inspectorService: this.services.inspectorService,
+          dataTransferService: this.services.dataTransferService
         });
       }
 

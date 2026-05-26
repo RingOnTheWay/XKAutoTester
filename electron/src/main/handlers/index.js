@@ -15,6 +15,7 @@ const versionHandlers = require('./versionHandlers');
 const updateHandlers = require('./updateHandlers');
 const powerHandlers = require('./powerHandlers');
 const inspectorHandlers = require('./inspectorHandlers');
+const dataTransferHandlers = require('./dataTransferHandlers');
 
 function registerAllHandlers(ipcMain, services) {
   windowHandlers.register(ipcMain, services);
@@ -34,6 +35,7 @@ function registerAllHandlers(ipcMain, services) {
   updateHandlers.register(ipcMain, services);
   powerHandlers.register(ipcMain, services);
   inspectorHandlers.register(ipcMain, services);
+  dataTransferHandlers.register(ipcMain, services);
 }
 
 module.exports = { registerAllHandlers };
