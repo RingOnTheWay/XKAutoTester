@@ -14,6 +14,7 @@ const adbHandlers = require('./adbHandlers');
 const versionHandlers = require('./versionHandlers');
 const updateHandlers = require('./updateHandlers');
 const powerHandlers = require('./powerHandlers');
+const inspectorHandlers = require('./inspectorHandlers');
 
 function registerAllHandlers(ipcMain, services) {
   windowHandlers.register(ipcMain, services);
@@ -32,6 +33,7 @@ function registerAllHandlers(ipcMain, services) {
   versionHandlers.register(ipcMain, services);
   updateHandlers.register(ipcMain, services);
   powerHandlers.register(ipcMain, services);
+  inspectorHandlers.register(ipcMain, services);
 }
 
 module.exports = { registerAllHandlers };

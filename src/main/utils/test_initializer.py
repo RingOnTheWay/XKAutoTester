@@ -52,10 +52,9 @@ class AppiumConfig:
 
 @dataclass
 class TestConfig:
-    """测试配置"""
     adb: ADBConfig
-    ble: BLEConfig
     appium: AppiumConfig
+    ble: Optional[BLEConfig] = None
 
 
 class TestInitializer:
@@ -104,9 +103,12 @@ class TestInitializer:
                 self.logger.warning(f"设备连接失败: {self.config.adb.device_name} - {connect_status}，跳过安卓相关测试")
                 pytest.skip(f"设备连接失败: {self.config.adb.device_name}")
             
-            if not self.adb_manager.ensure_bluetooth_enabled():
-                self.logger.warning("蓝牙开启失败，跳过安卓相关测试")
-                pytest.skip("蓝牙开启失败")
+            if self.config.ble is not None:
+                if not self.adb_manager.ensure_bluetooth_enabled():
+                    self.logger.warning("蓝牙开启失败，跳过安卓相关测试")
+                    pytest.skip("蓝牙开启失败")
+            else:
+                self.logger.info("未配置蓝牙设备，跳过蓝牙开启检查")
             
             self.logger.info("ADB初始化成功")
             return True
@@ -116,12 +118,10 @@ class TestInitializer:
             pytest.skip("ADB设备检测失败")
     
     def ble_init(self) -> bool:
-        """
-        蓝牙初始化：创建蓝牙设备对象并初始化
-        
-        Returns:
-            bool: 初始化是否成功
-        """
+        if self.config.ble is None:
+            self.logger.info("未配置蓝牙设备，跳过蓝牙初始化")
+            return True
+
         ble_config = self.config.ble
         self.logger.info(f"蓝牙设备名称: {ble_config.ble_name}")
         self.logger.info(f"自定义广播数据: {ble_config.adv_data}")

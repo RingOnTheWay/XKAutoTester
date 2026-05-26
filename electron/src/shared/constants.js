@@ -37,7 +37,14 @@ const IPC_CHANNELS = {
     CHECK_FOR_UPDATE: 'check-for-update',
     DOWNLOAD_UPDATE: 'download-update',
     INSTALL_UPDATE: 'install-update',
-    ON_DOWNLOAD_PROGRESS: 'on-download-progress'
+    ON_DOWNLOAD_PROGRESS: 'on-download-progress',
+
+    INSPECTOR_START_SESSION: 'inspector:start-session',
+    INSPECTOR_GET_SCREENSHOT: 'inspector:get-screenshot',
+    INSPECTOR_GET_PAGE_SOURCE: 'inspector:get-page-source',
+    INSPECTOR_FIND_ELEMENT_LOCATORS: 'inspector:find-element-locators',
+    INSPECTOR_REFRESH_SESSION: 'inspector:refresh-session',
+    INSPECTOR_STOP_SESSION: 'inspector:stop-session'
 };
 
 module.exports = { IPC_CHANNELS };

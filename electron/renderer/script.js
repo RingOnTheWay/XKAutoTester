@@ -41,6 +41,7 @@ class XKAutoTesterApp {
         this.ppIsEditing = false;
         this.ppEditingType = null;
         this.ppInitialized = false;
+        this.inspectorModal = null;
         
         // 文件管理器相关属性
         this.currentPath = '/storage/emulated/0'; // 默认路径
@@ -86,7 +87,8 @@ class XKAutoTesterApp {
         // 初始化模态框组件
         this.initModals();
 
-        // 初始化进度指示器
+        this.initInspector();
+
         this.progressIndicator = new ProgressIndicator();
 
         // 初始化SVG图标
@@ -201,6 +203,7 @@ class XKAutoTesterApp {
             await this.loadScript('components/custom-select.js');
             await this.loadScript('components/cascade-select.js');
             await this.loadScript('components/device-cascade-select.js');
+            await this.loadScript('components/inspector.js');
             
             this.initializeComponentIcons();
             this.updateComponentTranslations();
@@ -235,6 +238,26 @@ class XKAutoTesterApp {
             controlParams: new Modal({ id: 'control-params-overlay' }),
             scheduledPlan: new Modal({ id: 'scheduled-plan-modal-overlay', onOpen: () => this.onScheduledPlanModalOpen?.(), onClose: () => this.onScheduledPlanModalClose?.() })
         };
+    }
+
+    async initInspector() {
+        try {
+            const container = document.getElementById('inspector-modal-container');
+            if (container) {
+                const response = await fetch('components/inspector-modal.html');
+                const html = await response.text();
+                container.innerHTML = html;
+                this.initializeIcons();
+            }
+            this.inspectorModal = new InspectorModal();
+
+            document.addEventListener('inspector-element-selected', (event) => {
+                const { locatorType, locatorValue } = event.detail;
+                this.ppFillLocatorFromInspector(locatorType, locatorValue);
+            });
+        } catch (error) {
+            console.error('Failed to initialize Inspector:', error);
+        }
     }
 
     initializeCustomSelects() {
@@ -4993,6 +5016,98 @@ class XKAutoTesterApp {
         }
     }
 
+    _restoreInspectorDeviceZIndex() {
+        const overlay = document.getElementById('device-modal-overlay');
+        if (overlay) {
+            overlay.style.zIndex = '';
+        }
+    }
+
+    async showDeviceSelectionForInspector() {
+        return new Promise((resolve, reject) => {
+            this._inspectorDeviceResolve = resolve;
+            this._inspectorDeviceReject = reject;
+
+            const overlay = document.getElementById('device-modal-overlay');
+            if (overlay) {
+                overlay.style.zIndex = '1500';
+            }
+
+            this.showDeviceManagementModal();
+
+            const confirmBtn = document.getElementById('device-modal-confirm-btn');
+            if (confirmBtn) {
+                const newConfirmBtn = confirmBtn.cloneNode(true);
+                confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+                newConfirmBtn.addEventListener('click', () => {
+                    this.onInspectorDeviceConfirm();
+                });
+            }
+
+            const closeBtn = document.getElementById('device-modal-close-btn');
+            if (closeBtn) {
+                const newCloseBtn = closeBtn.cloneNode(true);
+                closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+                newCloseBtn.addEventListener('click', () => {
+                    this._restoreInspectorDeviceZIndex();
+                    this.hideDeviceModal();
+                    if (this._inspectorDeviceReject) {
+                        this._inspectorDeviceReject(new Error('cancelled'));
+                        this._inspectorDeviceResolve = null;
+                        this._inspectorDeviceReject = null;
+                    }
+                });
+            }
+
+            const cancelBtn = document.getElementById('device-modal-cancel-btn');
+            if (cancelBtn) {
+                const newCancelBtn = cancelBtn.cloneNode(true);
+                cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+                newCancelBtn.addEventListener('click', () => {
+                    const addDeviceInputContainer = document.getElementById('add-device-input-container');
+                    if (addDeviceInputContainer && !addDeviceInputContainer.classList.contains('hidden')) {
+                        this.hideAddDeviceInput();
+                    } else {
+                        this._restoreInspectorDeviceZIndex();
+                        this.hideDeviceModal();
+                        if (this._inspectorDeviceReject) {
+                            this._inspectorDeviceReject(new Error('cancelled'));
+                            this._inspectorDeviceResolve = null;
+                            this._inspectorDeviceReject = null;
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    onInspectorDeviceConfirm() {
+        const selectedDeviceElement = document.querySelector('.device-item.selected');
+
+        if (!selectedDeviceElement) {
+            const modalContainer = document.querySelector('#device-modal-overlay .modal-container');
+            Toast.error(window.i18n.t('testExecution.deviceSelection.deviceRequired'), { container: modalContainer });
+            return;
+        }
+
+        const deviceId = selectedDeviceElement.getAttribute('data-device-id');
+
+        if (!deviceId) {
+            const modalContainer = document.querySelector('#device-modal-overlay .modal-container');
+            Toast.error(window.i18n.t('testExecution.deviceSelection.deviceRequired'), { container: modalContainer });
+            return;
+        }
+
+        this._restoreInspectorDeviceZIndex();
+        this.hideDeviceModal();
+
+        if (this._inspectorDeviceResolve) {
+            this._inspectorDeviceResolve(deviceId);
+            this._inspectorDeviceResolve = null;
+            this._inspectorDeviceReject = null;
+        }
+    }
+
     /**
      * 显示替换设备确认弹窗
      * @param {string} currentDevice - 当前设备名称
@@ -5685,7 +5800,7 @@ class XKAutoTesterApp {
             planElement.setAttribute('data-plan-name', plan.name);
             
             // 检查是否是当前选中的计划，如果是则添加selected类
-            if (this.currentTestPlan && (this.currentTestPlan.id === plan.id || this.currentTestPlan.name === plan.name)) {
+            if (this.currentTestPlan && this.currentTestPlan.id === plan.id) {
                 planElement.classList.add('selected');
             }
             
@@ -7270,13 +7385,12 @@ class XKAutoTesterApp {
         const wrapper = document.getElementById(wrapperId);
         if (!wrapper) return;
         
-        const select = wrapper.querySelector('.custom-select');
-        if (!select) return;
+        const optionsEl = document.getElementById(`${wrapperId}-options`);
+        if (!optionsEl) return;
         
-        const options = select.querySelectorAll('.custom-select__option');
-        const selected = select.querySelector('.custom-select__text');
+        const selected = wrapper.querySelector('.custom-select__text');
         
-        options.forEach(option => {
+        optionsEl.querySelectorAll('.custom-select__option').forEach(option => {
             if (option.dataset.value === value) {
                 option.classList.add('selected');
                 if (selected) {
@@ -7288,12 +7402,11 @@ class XKAutoTesterApp {
         });
     }
 
-    // 获取自定义下拉框的值
     getCustomSelectValue(wrapperId) {
-        const wrapper = document.getElementById(wrapperId);
-        if (!wrapper) return null;
+        const optionsEl = document.getElementById(`${wrapperId}-options`);
+        if (!optionsEl) return null;
         
-        const selectedOption = wrapper.querySelector('.custom-select__option.selected');
+        const selectedOption = optionsEl.querySelector('.custom-select__option.selected');
         return selectedOption ? selectedOption.dataset.value : null;
     }
 
@@ -7366,7 +7479,7 @@ class XKAutoTesterApp {
 
     async selectTestPlan(plan, element) {
         // 检查是否是取消选中（再次点击已选中的计划）
-        if (this.currentTestPlan && this.currentTestPlan.name === plan.name) {
+        if (this.currentTestPlan && this.currentTestPlan.id === plan.id) {
             // 取消选中
             element.classList.remove('selected');
             this.currentTestPlan = null;
@@ -8134,21 +8247,41 @@ class XKAutoTesterApp {
             
             if (result.success) {
                 this.hideModal();
+
+                this.currentTestPlan = null;
                 await this.loadTestPlans();
 
-                
-                // 新建计划后自动选中新建的计划
                 const newPlan = this.testPlans.find(plan => plan.name === name);
                 if (newPlan) {
-                    // 找到对应的DOM元素并选中
-                    const planElements = document.querySelectorAll('.test-plan-item');
-                    for (const element of planElements) {
-                        const planName = element.querySelector('div > div:first-child').textContent;
-                        if (planName === name) {
-                            await this.selectTestPlan(newPlan, element);
-                            break;
+                    this.currentTestPlan = newPlan;
+
+                    const element = document.querySelector(`.test-plan-item[data-plan-name="${CSS.escape(name)}"]`);
+                    if (element) {
+                        document.querySelectorAll('.test-plan-item.selected').forEach(item => {
+                            item.classList.remove('selected');
+                        });
+                        element.classList.add('selected');
+                    }
+
+                    this.selectTestPlanDirectory(newPlan.testFiles || []);
+
+                    if (newPlan.testFiles && newPlan.testFiles.length > 0) {
+                        try {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            const testFiles = await window.electronAPI.scanTestFiles(this.selectedDirectory);
+                            this.displayTestFiles(testFiles);
+                            await new Promise(resolve => setTimeout(resolve, 200));
+                        } catch (error) {
+                            console.error('扫描测试文件失败:', error);
                         }
                     }
+
+                    this.selectTestPlanFiles(newPlan.testFiles || []);
+                    this.selectTestPlanTypes(newPlan.testTypes || []);
+                    this.disableTestDirectoryTab();
+                    this.disableTestTypeTab();
+                    this.updatePlanButtons();
+                    this.updateRunButtonState();
                 }
             } else {
                 this.showError(window.i18n.t('testExecution.saveTestPlanFailed') + ': ' + result.error);
@@ -8253,7 +8386,7 @@ class XKAutoTesterApp {
 
         try {
             const planData = {
-                id: this.currentTestPlan.id || this.currentTestPlan.name,
+                id: this.currentTestPlan.id,
                 name: name,
                 description: description,
                 created: this.currentTestPlan.created || new Date().toISOString(),
@@ -8270,40 +8403,28 @@ class XKAutoTesterApp {
 
                 
                 // 保存原始选中状态的计划ID
-                const originalPlanId = this.currentTestPlan.id || this.currentTestPlan.name;
+                const originalPlanId = this.currentTestPlan.id;
                 
                 // 重新加载计划列表
                 await this.loadTestPlans();
                 
-                // 找到更新后的计划（通过原始ID查找）
-                const updatedPlan = this.testPlans.find(plan => plan.id === originalPlanId || plan.name === originalPlanId);
+                const updatedPlan = this.testPlans.find(plan => plan.id === originalPlanId);
                 if (updatedPlan) {
                     // 更新当前选中的计划对象
                     this.currentTestPlan = updatedPlan;
                     
-                    // 重新选中更新后的计划
-                    const planElements = document.querySelectorAll('.test-plan-item');
-                    for (const element of planElements) {
-                        const planName = element.querySelector('div > div:first-child').textContent;
-                        if (planName === updatedPlan.name) {
-                            // 移除所有选中状态
-                            document.querySelectorAll('.test-plan-item.selected').forEach(item => {
-                                item.classList.remove('selected');
-                            });
-                            
-                            // 选中当前计划
-                            element.classList.add('selected');
-                            
-                            // 更新文件列表和测试类型卡片信息
-                            this.selectTestPlanFiles(updatedPlan.testFiles || []);
-                            this.selectTestPlanTypes(updatedPlan.testTypes || []);
-                            
-                            // 禁用测试目录和测试类型选项卡（保持置灰状态）
-                            this.disableTestDirectoryTab();
-                            this.disableTestTypeTab();
-                            
-                            break;
-                        }
+                    const element = document.querySelector(`.test-plan-item[data-plan-name="${CSS.escape(updatedPlan.name)}"]`);
+                    if (element) {
+                        document.querySelectorAll('.test-plan-item.selected').forEach(item => {
+                            item.classList.remove('selected');
+                        });
+                        element.classList.add('selected');
+                        
+                        this.selectTestPlanFiles(updatedPlan.testFiles || []);
+                        this.selectTestPlanTypes(updatedPlan.testTypes || []);
+                        
+                        this.disableTestDirectoryTab();
+                        this.disableTestTypeTab();
                     }
                 }
             } else {
@@ -8328,13 +8449,13 @@ class XKAutoTesterApp {
         
         this.showConfirmModal(title, message, async () => {
             try {
-                const result = await window.electronAPI.deleteTestPlan(planId || planName);
+                const result = await window.electronAPI.deleteTestPlan(planId);
                 
                 if (result.success) {
                     Toast.success(window.i18n.t('testExecution.deleteTestPlanSuccess'));
                     
                     // 级联删除：检查并更新包含此测试计划的定时计划
-                    await this.cascadeDeleteFromScheduledPlans(planId, planName);
+                    await this.cascadeDeleteFromScheduledPlans(planId);
                     
                     this.currentTestPlan = null;
                     
@@ -8368,7 +8489,7 @@ class XKAutoTesterApp {
         });
     }
     
-    async cascadeDeleteFromScheduledPlans(testPlanId, testPlanName) {
+    async cascadeDeleteFromScheduledPlans(testPlanId) {
         try {
             const scheduledPlans = await window.electronAPI.getScheduledPlans();
             const plansToUpdate = [];
@@ -8376,10 +8497,8 @@ class XKAutoTesterApp {
             
             for (const plan of scheduledPlans) {
                 if (plan.testPlans && plan.testPlans.length > 0) {
-                    // 检查是否包含被删除的测试计划
                     const remainingTestPlans = plan.testPlans.filter(tp => {
-                        const tpId = tp.id || tp.name;
-                        return tpId !== testPlanId && tpId !== testPlanName;
+                        return tp.id !== testPlanId;
                     });
                     
                     if (remainingTestPlans.length < plan.testPlans.length) {
@@ -9253,12 +9372,12 @@ class XKAutoTesterApp {
 
         const fragment = document.createDocumentFragment();
         this.testPlans.forEach(plan => {
-            const isSelected = selectedPlanIds.includes(plan.id || plan.name);
+            const isSelected = selectedPlanIds.includes(plan.id);
             const planElement = document.createElement('div');
             planElement.className = 'checkbox-item scheduled-plan-checkbox';
             planElement.innerHTML = `
-                <input type="checkbox" id="scheduled-plan-${plan.id || plan.name}" value="${plan.id || plan.name}" ${isSelected ? 'checked' : ''}>
-                <label for="scheduled-plan-${plan.id || plan.name}">${plan.name}</label>
+                <input type="checkbox" id="scheduled-plan-${plan.id}" value="${plan.id}" ${isSelected ? 'checked' : ''}>
+                <label for="scheduled-plan-${plan.id}">${plan.name}</label>
             `;
             fragment.appendChild(planElement);
         });
@@ -9269,10 +9388,10 @@ class XKAutoTesterApp {
         const selectedPlans = [];
         const checkboxes = document.querySelectorAll('#scheduled-test-plans-list input[type="checkbox"]:checked');
         checkboxes.forEach(checkbox => {
-            const plan = this.testPlans.find(p => (p.id || p.name) === checkbox.value);
+            const plan = this.testPlans.find(p => p.id === checkbox.value);
             if (plan) {
                 selectedPlans.push({
-                    id: plan.id || plan.name,
+                    id: plan.id,
                     name: plan.name
                 });
             }
@@ -9308,7 +9427,7 @@ class XKAutoTesterApp {
             timeInput.dataset.iso = date.toISOString();
         }
 
-        const selectedPlanIds = plan.testPlans ? plan.testPlans.map(p => p.id || p.name) : [];
+        const selectedPlanIds = plan.testPlans ? plan.testPlans.map(p => p.id) : [];
         await this.loadTestPlansForScheduledModal(selectedPlanIds);
 
         document.getElementById('save-scheduled-plan-btn').classList.add('hidden');
@@ -9542,8 +9661,8 @@ class XKAutoTesterApp {
             }
             
             for (const testPlanObj of data.testPlans) {
-                const testPlanId = testPlanObj.id || testPlanObj.name;
-                const testPlan = testPlans.find(p => p.id === testPlanId || p.name === testPlanId);
+                const testPlanId = testPlanObj.id;
+                const testPlan = testPlans.find(p => p.id === testPlanId);
                 
                 if (!testPlan) {
                     this.appendError(`>>> 测试计划 ${testPlanId} 不存在`);
@@ -10287,8 +10406,43 @@ class XKAutoTesterApp {
         cancelBtn.addEventListener('click', () => this.ppCloseModal('element'));
         saveBtn.addEventListener('click', () => this.ppSaveElement());
         
-        // 初始化定位器下拉框
         this.initializeCustomSelects();
+
+        const inspectorBtn = document.getElementById('pp-inspector-btn');
+        if (inspectorBtn) {
+            inspectorBtn.addEventListener('click', () => this.ppOpenInspector());
+        }
+    }
+
+    async ppOpenInspector() {
+        if (!this.ppSelectedApp) {
+            Toast.error(window.electronAPI.i18n.t('inspector.noAppSelected'));
+            return;
+        }
+        const app = this.ppApps.find(a => a.id === this.ppSelectedApp.id);
+        if (!app || !app.packageName || !app.activityName) {
+            Toast.error(window.electronAPI.i18n.t('inspector.noAppInfo'));
+            return;
+        }
+        let deviceName;
+        try {
+            deviceName = await this.showDeviceSelectionForInspector();
+        } catch (e) {
+            return;
+        }
+        await this.inspectorModal.open(deviceName, app.packageName, app.activityName);
+    }
+
+    ppFillLocatorFromInspector(locatorType, locatorValue) {
+        this.setCustomSelectValue('pp-element-locator-wrapper', locatorType);
+        const valueInput = document.getElementById('pp-element-value-input');
+        if (valueInput) {
+            valueInput.value = locatorValue;
+        }
+        const nameInput = document.getElementById('pp-element-name-input');
+        if (nameInput && !nameInput.value) {
+            nameInput.focus();
+        }
     }
 
     ppShowAddModal(type) {
@@ -10300,7 +10454,7 @@ class XKAutoTesterApp {
                 document.getElementById('pp-app-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.newApp') : '新增应用';
                 document.getElementById('pp-app-input').value = '';
                 this.initializeCustomSelects();
-                this.ppSetPlatformValue('android');
+                this.setCustomSelectValue('pp-platform-wrapper', 'android');
                 document.getElementById('pp-package-input').value = '';
                 document.getElementById('pp-activity-input').value = '';
                 this.modals.ppApp.open();
@@ -10324,6 +10478,7 @@ class XKAutoTesterApp {
                 document.getElementById('pp-element-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.newElement') : '新增元素';
                 document.getElementById('pp-element-name-input').value = '';
                 document.getElementById('pp-element-value-input').value = '';
+                this.setCustomSelectValue('pp-element-locator-wrapper', 'id');
                 this.modals.ppElement.open();
                 document.getElementById('pp-element-name-input').focus();
                 break;
@@ -10340,7 +10495,7 @@ class XKAutoTesterApp {
                 document.getElementById('pp-app-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.editApp') : '编辑应用';
                 document.getElementById('pp-app-input').value = this.ppSelectedApp.name;
                 this.initializeCustomSelects();
-                this.ppSetPlatformValue(this.ppSelectedApp.platform || 'android');
+                this.setCustomSelectValue('pp-platform-wrapper', this.ppSelectedApp.platform || 'android');
                 document.getElementById('pp-package-input').value = this.ppSelectedApp.packageName || '';
                 document.getElementById('pp-activity-input').value = this.ppSelectedApp.activityName || '';
                 this.modals.ppApp.open();
@@ -10358,7 +10513,7 @@ class XKAutoTesterApp {
                 document.getElementById('pp-element-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.editElement') : '编辑元素';
                 document.getElementById('pp-element-name-input').value = this.ppSelectedElement.name;
                 document.getElementById('pp-element-value-input').value = this.ppSelectedElement.value;
-                this.ppSetLocatorValue(this.ppSelectedElement.locator);
+                this.setCustomSelectValue('pp-element-locator-wrapper', this.ppSelectedElement.locator || 'id');
                 this.modals.ppElement.open();
                 document.getElementById('pp-element-name-input').focus();
                 break;
@@ -10368,15 +10523,28 @@ class XKAutoTesterApp {
     ppSetLocatorValue(locator) {
         const wrapper = document.getElementById('pp-element-locator-wrapper');
         if (!wrapper) return;
-        
-        const options = wrapper.querySelectorAll('.custom-select__option');
-        options.forEach(opt => {
-            opt.classList.toggle('selected', opt.dataset.value === locator);
-        });
+
+        const select = wrapper.querySelector('.custom-select');
+        if (!select) return;
+
+        let foundOption = null;
+
+        const optionsEl = document.getElementById('pp-element-locator-wrapper-options');
+        if (optionsEl) {
+            optionsEl.querySelectorAll('.custom-select__option').forEach(opt => {
+                if (opt.dataset.value === locator) {
+                    opt.classList.add('selected');
+                    foundOption = opt;
+                } else {
+                    opt.classList.remove('selected');
+                }
+            });
+        }
+
         const selectedSpan = wrapper.querySelector('.custom-select__text');
-        const selectedOption = wrapper.querySelector(`.custom-select__option[data-value="${locator}"]`);
-        if (selectedOption && selectedSpan) {
-            selectedSpan.textContent = selectedOption.querySelector('span').textContent;
+        if (foundOption && selectedSpan) {
+            const spanEl = foundOption.querySelector('span');
+            selectedSpan.textContent = spanEl ? spanEl.textContent : foundOption.textContent;
         }
     }
 
@@ -10393,7 +10561,7 @@ class XKAutoTesterApp {
 
     async ppSaveApp() {
         const name = document.getElementById('pp-app-input').value.trim();
-        const platform = this.ppGetPlatformSelectValue();
+        const platform = this.getCustomSelectValue('pp-platform-wrapper') || 'android';
         const packageName = document.getElementById('pp-package-input').value.trim();
         const activityName = document.getElementById('pp-activity-input').value.trim();
         
@@ -10468,7 +10636,7 @@ class XKAutoTesterApp {
     async ppSaveElement() {
         const name = document.getElementById('pp-element-name-input').value.trim();
         const value = document.getElementById('pp-element-value-input').value.trim();
-        const locator = this.ppGetLocatorSelectValue();
+        const locator = this.getCustomSelectValue('pp-element-locator-wrapper') || 'id';
         
         if (!name) {
             Toast.error(window.i18n ? window.i18n.t('pagePackage.nameRequired') : '请输入名称');
@@ -10517,18 +10685,18 @@ class XKAutoTesterApp {
     }
 
     ppGetLocatorSelectValue() {
-        const wrapper = document.getElementById('pp-element-locator-wrapper');
-        if (!wrapper) return 'id';
+        const optionsEl = document.getElementById('pp-element-locator-wrapper-options');
+        if (!optionsEl) return 'id';
         
-        const selectedOption = wrapper.querySelector('.custom-select__option.selected');
+        const selectedOption = optionsEl.querySelector('.custom-select__option.selected');
         return selectedOption ? selectedOption.dataset.value : 'id';
     }
 
     ppGetPlatformSelectValue() {
-        const wrapper = document.getElementById('pp-platform-wrapper');
-        if (!wrapper) return 'android';
+        const optionsEl = document.getElementById('pp-platform-wrapper-options');
+        if (!optionsEl) return 'android';
         
-        const selectedOption = wrapper.querySelector('.custom-select__option.selected');
+        const selectedOption = optionsEl.querySelector('.custom-select__option.selected');
         return selectedOption ? selectedOption.dataset.value : 'android';
     }
 
@@ -10536,12 +10704,14 @@ class XKAutoTesterApp {
         const wrapper = document.getElementById('pp-platform-wrapper');
         if (!wrapper) return;
         
-        const options = wrapper.querySelectorAll('.custom-select__option');
-        options.forEach(opt => {
-            opt.classList.toggle('selected', opt.dataset.value === platform);
-        });
+        const optionsEl = document.getElementById('pp-platform-wrapper-options');
+        if (optionsEl) {
+            optionsEl.querySelectorAll('.custom-select__option').forEach(opt => {
+                opt.classList.toggle('selected', opt.dataset.value === platform);
+            });
+        }
         const selectedSpan = wrapper.querySelector('.custom-select__text');
-        const selectedOption = wrapper.querySelector(`.custom-select__option[data-value="${platform}"]`);
+        const selectedOption = optionsEl?.querySelector(`.custom-select__option[data-value="${platform}"]`);
         if (selectedOption && selectedSpan) {
             selectedSpan.textContent = selectedOption.querySelector('span').textContent;
         }
@@ -11391,9 +11561,16 @@ class XKAutoTesterApp {
             case 'tc-page-select':
                 config.pageId = value;
                 config.elementId = '';
+                config.locator = null;
+                config.locatorValue = null;
+                if (config.operation === 'sendText') {
+                    config.operation = 'click';
+                    config.operationValue = {};
+                }
                 const selectedPage = this.tcSelectedApp?.pages?.find(p => p.id === value);
                 config.pageName = selectedPage?.name || '';
                 this.tcUpdateElementSelect(stepId, value);
+                this.tcUpdateOperationSelect(stepId);
                 break;
             case 'tc-element-select':
                 config.elementId = value;
@@ -11403,13 +11580,16 @@ class XKAutoTesterApp {
                     config.elementName = selectedElement.name;
                     config.locator = selectedElement.locator;
                     config.locatorValue = selectedElement.value;
+                    if (selectedElement.locator === 'click' && config.operation === 'sendText') {
+                        config.operation = 'click';
+                        config.operationValue = {};
+                    }
+                    this.tcUpdateOperationSelect(stepId);
                 }
                 break;
             case 'tc-multi-element-select':
-                // 多选元素选择
                 config.selectedElements = config.selectedElements || [];
                 if (index >= 0 && index < config.selectedElements.length) {
-                    // 将元素ID转换为对象格式
                     const currentElem = config.selectedElements[index];
                     if (typeof currentElem === 'string') {
                         config.selectedElements[index] = {
@@ -11419,7 +11599,13 @@ class XKAutoTesterApp {
                         };
                     } else {
                         currentElem.elementId = value;
+                        const elemLocatorType = this.tcGetElementLocatorType(config.pageId, value);
+                        if (elemLocatorType === 'click' && currentElem.operation === 'sendText') {
+                            currentElem.operation = 'click';
+                            currentElem.operationValue = {};
+                        }
                     }
+                    this.tcUpdateMultiOperationSelect(stepId, index);
                 }
                 break;
             case 'tc-multi-operation-select':
@@ -11613,6 +11799,23 @@ class XKAutoTesterApp {
     /**
      * 更新操作值区域
      */
+    tcUpdateOperationSelect(stepId) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        const config = step.config || {};
+        
+        const operationOptions = this.tcGetOperationOptionsForLocator(config.locator, config.operation);
+        const wrapper = document.querySelector(`#tc-operation-select-${stepId}`)?.closest('.custom-select-wrapper');
+        if (wrapper) {
+            wrapper.outerHTML = this.tcGenerateCustomSelect('tc-operation-select', operationOptions, '请选择操作', stepId);
+            const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
+            if (card) {
+                this.tcInitStepSelects(card);
+            }
+        }
+        this.tcUpdateOperationValue(stepId);
+    }
+
     tcUpdateOperationValue(stepId) {
         const step = this.tcSteps.find(s => s.id === stepId);
         if (!step) return;
@@ -11627,6 +11830,27 @@ class XKAutoTesterApp {
                 this.tcBindOperationValueEvents(card, step);
             }
         }
+    }
+
+    tcUpdateMultiOperationSelect(stepId, index) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+        const config = step.config || {};
+        const selectedElements = config.selectedElements || [];
+        const elemConfig = selectedElements[index];
+        if (!elemConfig || typeof elemConfig === 'string') return;
+        
+        const elemLocatorType = this.tcGetElementLocatorType(config.pageId, elemConfig.elementId);
+        const elemOperationOptions = this.tcGetOperationOptionsForLocator(elemLocatorType, elemConfig.operation);
+        const wrapper = document.querySelector(`#tc-multi-operation-select-${stepId}-${index}`)?.closest('.custom-select-wrapper');
+        if (wrapper) {
+            wrapper.outerHTML = this.tcGenerateCustomSelect('tc-multi-operation-select', elemOperationOptions, '请选择操作', stepId, index);
+            const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
+            if (card) {
+                this.tcInitStepSelects(card);
+            }
+        }
+        this.tcUpdateMultiOperationValue(stepId, index, elemConfig.operation);
     }
 
     /**
@@ -12113,12 +12337,7 @@ class XKAutoTesterApp {
         }
 
         // 操作类型选项
-        const operationOptions = [
-            {value: 'click', label: '点击', selected: config.operation === 'click' || !config.operation},
-            {value: 'sendText', label: '发送文本', selected: config.operation === 'sendText'},
-            {value: 'swipeUp', label: '向上滑动(页面向下)', selected: config.operation === 'swipeUp'},
-            {value: 'swipeDown', label: '向下滑动(页面向上)', selected: config.operation === 'swipeDown'}
-        ];
+        const operationOptions = this.tcGetOperationOptionsForLocator(config.locator, config.operation);
 
         // 渲染多选元素列表
         let multiElementsHtml = '';
@@ -12129,12 +12348,8 @@ class XKAutoTesterApp {
                 const elemOperationValue = typeof elemConfig === 'object' ? (elemConfig.operationValue || {}) : {};
                 
                 const elemOptions = this.tcGetElementOptionsForPage(config.pageId, elemId);
-                const elemOperationOptions = [
-                    {value: 'click', label: '点击', selected: elemOperation === 'click' || !elemOperation},
-                    {value: 'sendText', label: '发送文本', selected: elemOperation === 'sendText'},
-                    {value: 'swipeUp', label: '向上滑动(页面向下)', selected: elemOperation === 'swipeUp'},
-                    {value: 'swipeDown', label: '向下滑动(页面向上)', selected: elemOperation === 'swipeDown'}
-                ];
+                const elemLocatorType = this.tcGetElementLocatorType(config.pageId, elemId);
+                const elemOperationOptions = this.tcGetOperationOptionsForLocator(elemLocatorType, elemOperation);
                 
                 multiElementsHtml += `
                     <div class="tc-multi-element-item" data-index="${index}" data-step-id="${step.id}">
@@ -12415,6 +12630,29 @@ class XKAutoTesterApp {
             }
         }
         return elementOptions;
+    }
+
+    tcGetOperationOptionsForLocator(locatorType, currentOperation) {
+        const isClickLocator = locatorType === 'click';
+        const options = [
+            {value: 'click', label: '点击', selected: currentOperation === 'click' || !currentOperation},
+            {value: 'swipeUp', label: '向上滑动(页面向下)', selected: currentOperation === 'swipeUp'},
+            {value: 'swipeDown', label: '向下滑动(页面向上)', selected: currentOperation === 'swipeDown'}
+        ];
+        if (!isClickLocator) {
+            options.splice(1, 0, {value: 'sendText', label: '发送文本', selected: currentOperation === 'sendText'});
+        }
+        return options;
+    }
+
+    tcGetElementLocatorType(pageId, elementId) {
+        const app = this.tcSelectedApp;
+        if (pageId && elementId && app) {
+            const page = app.pages?.find(p => p.id === pageId);
+            const element = page?.elements?.find(el => el.id === elementId);
+            return element?.locator || null;
+        }
+        return null;
     }
 
 
@@ -13113,12 +13351,8 @@ class XKAutoTesterApp {
                 const elemOperationValue = typeof elemConfig === 'object' ? (elemConfig.operationValue || {}) : {};
                 
                 const elemOptions = this.tcGetElementOptionsForPage(config.pageId, elemId);
-                const elemOperationOptions = [
-                    {value: 'click', label: '点击', selected: elemOperation === 'click' || !elemOperation},
-                    {value: 'sendText', label: '发送文本', selected: elemOperation === 'sendText'},
-                    {value: 'swipeUp', label: '向上滑动(页面向下)', selected: elemOperation === 'swipeUp'},
-                    {value: 'swipeDown', label: '向下滑动(页面向上)', selected: elemOperation === 'swipeDown'}
-                ];
+                const elemLocatorType = this.tcGetElementLocatorType(config.pageId, elemId);
+                const elemOperationOptions = this.tcGetOperationOptionsForLocator(elemLocatorType, elemOperation);
                 
                 multiElementsHtml += `
                     <div class="tc-multi-element-item" data-index="${index}" data-step-id="${step.id}">
@@ -13746,7 +13980,7 @@ class XKAutoTesterApp {
 document.addEventListener('DOMContentLoaded', () => {
 
     try {
-        new XKAutoTesterApp();
+        const app = new XKAutoTesterApp();
         
         // 窗口控制按钮事件
         const minimizeBtn = document.getElementById('window-minimize');
@@ -13768,6 +14002,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (closeBtn) {
             closeBtn.addEventListener('click', () => {
+                if (app.inspectorModal) {
+                    app.inspectorModal.close();
+                }
                 window.electronAPI.closeWindow();
             });
         }

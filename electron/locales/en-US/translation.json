@@ -684,7 +684,8 @@
       "xpath": "XPath",
       "css": "CSS Selector",
       "accessibility_id": "Accessibility ID",
-      "class_name": "Class Name"
+      "class_name": "Class Name",
+      "click": "Tap Position"
     },
     "apkDropZone": "APK Recognition Area",
     "apkDropHint": "Drop APK file here",
@@ -705,5 +706,44 @@
       "noPackageName": "Unable to extract package name from APK, file may be corrupted or in an incorrect format"
     },
     "pagePackageTab": "Page Package"
+  },
+  "inspector": {
+    "title": "Element Inspector",
+    "identifyBtn": "Identify from Device",
+    "treeSearch": "Search elements...",
+    "refresh": "Refresh",
+    "loading": "Connecting to device...",
+    "stepStartingAppium": "Starting Appium server...",
+    "stepConnectingDevice": "Connecting to device...",
+    "stepLaunchingApp": "Launching app...",
+    "stepLoadingElements": "Loading element tree...",
+    "noLocators": "Select an element to view locators",
+    "confirmSelect": "Confirm Selection",
+    "cancel": "Cancel",
+    "locatorType": "Locator Type",
+    "locatorValue": "Locator Value",
+    "locatorDesc": "Description",
+    "noAppSelected": "Please select an app first",
+    "noAppInfo": "Current app is missing package name or activity",
+    "noDevice": "Please select a device in Android Connection first",
+    "sessionFailed": "Failed to connect to device",
+    "portConflict": "Appium port is in use, please stop running tests first",
+    "searchNoResult": "No matching elements found",
+    "locators": {
+      "id": "ID Locator",
+      "idDesc": "Locate by resource-id attribute",
+      "accessibilityId": "Accessibility ID",
+      "accessibilityIdDesc": "Locate by content-desc attribute",
+      "className": "Class Name",
+      "classNameDesc": "Locate by class name (may not be unique)",
+      "xpathText": "XPath (Text)",
+      "xpathTextDesc": "Locate by text content",
+      "xpathAuto": "XPath (Auto-generated)",
+      "xpathAutoDesc": "Auto-generated unique XPath path"
+    },
+    "nodeText": "Text",
+    "nodeDesc": "Description",
+    "nodeResourceId": "Resource ID",
+    "selectLocatorFirst": "Please select a locator type first"
   }
 }

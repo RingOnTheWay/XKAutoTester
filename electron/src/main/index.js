@@ -18,6 +18,7 @@ const ApkParserService = require('./services/ApkParserService');
 const VersionService = require('./services/VersionService');
 const UserDataService = require('./services/UserDataService');
 const UpdateService = require('./services/UpdateService');
+const InspectorService = require('./services/InspectorService');
 const { registerAllHandlers } = require('./handlers');
 
 const electronApp = new ElectronApp();
@@ -51,6 +52,7 @@ async function initializeServices() {
   const apkParserService = new ApkParserService(projectRoot);
   const versionService = new VersionService(projectRoot);
   const updateService = new UpdateService(versionService, userDataService);
+  const inspectorService = new InspectorService(projectRoot, i18nService, userDataPath);
   await apkParserService.initialize();
 
   const schedulerService = new SchedulerService();
@@ -74,6 +76,7 @@ async function initializeServices() {
     versionService,
     userDataService,
     updateService,
+    inspectorService,
     registerHandlers: registerAllHandlers
   });
 }

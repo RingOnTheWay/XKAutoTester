@@ -1454,12 +1454,16 @@
                         </div>
                         <div class="form-group">
                             <label for="pp-element-locator-select" data-i18n="pagePackage.locator">定位器</label>
-                            <div class="custom-select-wrapper" id="pp-element-locator-wrapper" data-options='[{"value":"id","label":"pagePackage.locators.id","default":true},{"value":"xpath","label":"pagePackage.locators.xpath"},{"value":"css","label":"pagePackage.locators.css"},{"value":"accessibility_id","label":"pagePackage.locators.accessibility_id"},{"value":"class_name","label":"pagePackage.locators.class_name"}]'></div>
+                            <div class="custom-select-wrapper" id="pp-element-locator-wrapper" data-options='[{"value":"id","label":"pagePackage.locators.id","default":true},{"value":"xpath","label":"pagePackage.locators.xpath"},{"value":"css","label":"pagePackage.locators.css"},{"value":"accessibility_id","label":"pagePackage.locators.accessibility_id"},{"value":"class_name","label":"pagePackage.locators.class_name"},{"value":"click","label":"pagePackage.locators.click"}]'></div>
                         </div>
                         <div class="form-group">
                             <label for="pp-element-value-input" data-i18n="pagePackage.locatorValue">定位值</label>
                             <input type="text" id="pp-element-value-input" class="glass-input">
                         </div>
+                        <button type="button" class="material-button outlined inspector-identify-btn" id="pp-inspector-btn" style="width: 100%;">
+                            <span class="svg-icon" data-icon="scan"></span>
+                            <span data-i18n="inspector.identifyBtn">从设备识别</span>
+                        </button>
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -1609,6 +1613,8 @@
                 </div>
             </div>
         </div>
+
+        <div id="inspector-modal-container"></div>
     </div>
     
     <script src="components/toast.js"></script>

@@ -161,7 +161,8 @@ class ElectronApp {
           apkParserService: this.services.apkParserService,
           versionService: this.services.versionService,
           userDataService: this.services.userDataService,
-          updateService: this.services.updateService
+          updateService: this.services.updateService,
+          inspectorService: this.services.inspectorService
         });
       }
 

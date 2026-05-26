@@ -277,6 +277,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDeviceDetail: (deviceId) => ipcRenderer.invoke('ble-device-discovery:get-device-detail', deviceId)
   },
 
+  inspector: {
+    startSession: (deviceName, appPackage, appActivity, platformVersion) => ipcRenderer.invoke('inspector:start-session', deviceName, appPackage, appActivity, platformVersion),
+    getScreenshot: () => ipcRenderer.invoke('inspector:get-screenshot'),
+    getPageSource: () => ipcRenderer.invoke('inspector:get-page-source'),
+    findElementLocators: (elementPath) => ipcRenderer.invoke('inspector:find-element-locators', elementPath),
+    refreshSession: () => ipcRenderer.invoke('inspector:refresh-session'),
+    stopSession: () => ipcRenderer.invoke('inspector:stop-session'),
+    onProgress: (callback) => {
+      const subscription = (event, stage) => callback(stage);
+      ipcRenderer.on('inspector:progress', subscription);
+      return () => ipcRenderer.removeListener('inspector:progress', subscription);
+    }
+  },
+
   // 驱动安装
   installDriver: (installerPath) => ipcRenderer.invoke('install-driver', installerPath),
   checkInstallerRunning: () => ipcRenderer.invoke('check-installer-running'),

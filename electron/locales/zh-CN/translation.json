@@ -686,7 +686,8 @@
       "xpath": "XPath",
       "css": "CSS Selector",
       "accessibility_id": "Accessibility ID",
-      "class_name": "Class Name"
+      "class_name": "Class Name",
+      "click": "Tap Position"
     },
     "apkDropZone": "APK识别区域",
     "apkDropHint": "拖放APK文件到此处",
@@ -707,5 +708,44 @@
       "noPackageName": "无法从APK中提取包名信息，文件可能已损坏或格式不正确"
     },
     "pagePackageTab": "页面封装"
+  },
+  "inspector": {
+    "title": "元素识别",
+    "identifyBtn": "从设备识别",
+    "treeSearch": "搜索元素...",
+    "refresh": "刷新",
+    "loading": "正在连接设备...",
+    "stepStartingAppium": "正在启动 Appium 服务器...",
+    "stepConnectingDevice": "正在连接设备...",
+    "stepLaunchingApp": "正在启动应用...",
+    "stepLoadingElements": "正在加载元素树...",
+    "noLocators": "请选择一个元素查看定位方式",
+    "confirmSelect": "确认选择",
+    "cancel": "取消",
+    "locatorType": "定位方式",
+    "locatorValue": "定位值",
+    "locatorDesc": "说明",
+    "noAppSelected": "请先选择应用",
+    "noAppInfo": "当前应用缺少包名或Activity信息",
+    "noDevice": "请先在安卓连接中选择设备",
+    "sessionFailed": "连接设备失败",
+    "portConflict": "Appium端口被占用，请先停止正在运行的测试",
+    "searchNoResult": "未找到匹配的元素",
+    "locators": {
+      "id": "ID定位",
+      "idDesc": "通过resource-id属性定位",
+      "accessibilityId": "Accessibility ID定位",
+      "accessibilityIdDesc": "通过content-desc属性定位",
+      "className": "Class Name定位",
+      "classNameDesc": "通过类名定位（可能不唯一）",
+      "xpathText": "XPath（文本）",
+      "xpathTextDesc": "通过文本内容定位",
+      "xpathAuto": "XPath（自动生成）",
+      "xpathAutoDesc": "自动生成的唯一XPath路径"
+    },
+    "nodeText": "文本",
+    "nodeDesc": "描述",
+    "nodeResourceId": "资源ID",
+    "selectLocatorFirst": "请先选择一种定位方式"
   }
 }

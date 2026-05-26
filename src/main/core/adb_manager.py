@@ -39,9 +39,95 @@ class ADBManager:
             logger.warning(f"ADB服务检查异常: {e}")
             return False
     
+    def _is_tcp_device(self) -> bool:
+        """
+        判断设备是否为TCP/IP连接（WiFi ADB）
+        
+        USB设备的device_name为纯序列号（如 70665345151351），
+        TCP/IP设备的device_name格式为 IP:端口（如 192.168.1.100:5555）
+        
+        Returns:
+            bool: 是否为TCP/IP连接设备
+        """
+        return ':' in self.device_name
+    
+    def _check_device_in_list(self, device_identifier: str = None) -> Tuple[bool, str]:
+        """
+        检查设备是否在adb devices列表中
+        
+        Args:
+            device_identifier: 要查找的设备标识，默认使用self.device_name
+            
+        Returns:
+            Tuple[bool, str]: (设备是否在列表中, 设备状态)
+        """
+        if device_identifier is None:
+            device_identifier = self.device_name
+        
+        try:
+            devices_result = subprocess.run(
+                ['adb', 'devices'], 
+                capture_output=True, text=True, timeout=5
+            )
+            
+            logger.info(f"ADB设备列表检查结果 - 标准输出: {devices_result.stdout}")
+            if devices_result.stderr:
+                logger.info(f"ADB设备列表检查结果 - 标准错误: {devices_result.stderr}")
+            
+            for line in devices_result.stdout.split('\n'):
+                line = line.strip()
+                if line.startswith(device_identifier):
+                    if 'unauthorized' in line:
+                        return False, 'unauthorized'
+                    elif 'device' in line:
+                        return True, 'device'
+                    elif 'offline' in line:
+                        return False, 'offline'
+            return False, 'not_found'
+        except Exception as e:
+            logger.warning(f"检查设备列表异常: {e}")
+            return False, str(e)
+    
+    def _wait_for_usb_authorization(self) -> Tuple[bool, str]:
+        """
+        等待USB设备授权
+        
+        Returns:
+            Tuple[bool, str]: (授权是否成功, 状态信息)
+        """
+        logger.info("请在设备上点击'同意'授权此电脑连接，系统将每2秒检查一次授权状态")
+        self._show_unauthorized_dialog()
+        
+        max_wait_time = 60
+        check_interval = 2
+        waited_time = 0
+        
+        while waited_time < max_wait_time:
+            logger.info(f"等待授权中... 已等待{waited_time}秒")
+            time.sleep(check_interval)
+            waited_time += check_interval
+            
+            found, status = self._check_device_in_list()
+            logger.info(f"授权检查结果 - 状态: {status}")
+            
+            if found and status == 'device':
+                logger.info(f"设备已授权: {self.device_name}")
+                return True, "设备连接成功并已授权"
+            elif status == 'unauthorized':
+                logger.info("设备仍处于未授权状态，继续等待...")
+            else:
+                logger.warning(f"设备未在设备列表中: {self.device_name}")
+        
+        logger.error(f"设备授权超时: 等待{max_wait_time}秒后设备仍未授权")
+        return False, "设备授权超时"
+    
     def connect_device(self) -> Tuple[bool, str]:
         """
         连接ADB设备
+        
+        根据设备标识自动判断连接类型：
+        - USB设备（无冒号）：直接检查设备列表，无需adb connect
+        - TCP/IP设备（有冒号）：通过adb connect连接
         
         Returns:
             Tuple[bool, str]: (连接是否成功, 连接状态信息)
@@ -49,134 +135,121 @@ class ADBManager:
         try:
             logger.info(f"尝试连接设备: {self.device_name}")
             
-            # 检查设备名称是否已包含端口号
-            if ':' in self.device_name:
-                # 如果已包含端口号，直接使用
-                device_address = self.device_name
+            if self._is_tcp_device():
+                return self._connect_tcp_device()
             else:
-                # 如果没有端口号，添加默认端口5555
-                device_address = f'{self.device_name}:5555'
-            
-            connect_result = subprocess.run(
-                ['adb', 'connect', device_address], 
-                capture_output=True, text=True, timeout=10
-            )
-            
-            stdout = connect_result.stdout
-            stderr = connect_result.stderr
-            
-            # 完整输出命令执行结果到日志
-            logger.info(f"ADB连接命令执行结果 - 标准输出: {stdout}")
-            if stderr:
-                logger.info(f"ADB连接命令执行结果 - 标准错误: {stderr}")
-            logger.info(f"ADB连接命令执行结果 - 返回码: {connect_result.returncode}")
-            
-            # 检查连接结果
-            if 'connected' in stdout or 'already' in stdout or 'failed to authenticate' in stdout:
-                logger.info(f"设备连接尝试结果: {stdout.strip()}")
-                
-                # 无论连接命令返回什么，都检查设备列表状态
-                devices_result = subprocess.run(
-                    ['adb', 'devices'], 
-                    capture_output=True, text=True, timeout=5
-                )
-                
-                logger.info(f"ADB设备列表检查结果 - 标准输出: {devices_result.stdout}")
-                if devices_result.stderr:
-                    logger.info(f"ADB设备列表检查结果 - 标准错误: {devices_result.stderr}")
-                
-                # 检查设备授权状态
-                device_line = device_address
-                
-                # 无论设备是否在列表中，都尝试断开并重新连接以触发授权
-                logger.info("断开设备连接以重新触发授权提示...")
-                disconnect_result = subprocess.run(
-                    ['adb', 'disconnect', device_address], 
-                    capture_output=True, text=True, timeout=5
-                )
-                logger.info(f"断开连接结果: {disconnect_result.stdout}")
-                
-                # 等待1秒后重新连接
-                time.sleep(1)
-                
-                logger.info("重新连接设备以触发授权提示...")
-                reconnect_result = subprocess.run(
-                    ['adb', 'connect', device_address], 
-                    capture_output=True, text=True, timeout=10
-                )
-                logger.info(f"重新连接结果: {reconnect_result.stdout}")
-                
-                # 再次检查设备列表
-                devices_result = subprocess.run(
-                    ['adb', 'devices'], 
-                    capture_output=True, text=True, timeout=5
-                )
-                logger.info(f"重新连接后设备列表 - 标准输出: {devices_result.stdout}")
-                
-                if device_line in devices_result.stdout:
-                    if 'unauthorized' in devices_result.stdout or 'failed to authenticate' in stdout:
-                        logger.warning(f"设备未授权: {self.device_name}")
-                        
-                        logger.info("请在设备上点击'同意'授权此电脑连接，系统将每2秒检查一次授权状态")
-                        
-                        # 尝试调用Electron弹窗提醒用户
-                        self._show_unauthorized_dialog()
-                        
-                        # 等待用户授权，最多等待1分钟
-                        max_wait_time = 60  # 60秒超时
-                        check_interval = 2  # 每2秒检查一次
-                        waited_time = 0
-                        
-                        while waited_time < max_wait_time:
-                            logger.info(f"等待授权中... 已等待{waited_time}秒")
-                            time.sleep(check_interval)
-                            waited_time += check_interval
-                            
-                            # 重新检查设备授权状态
-                            devices_result = subprocess.run(
-                                ['adb', 'devices'], 
-                                capture_output=True, text=True, timeout=5
-                            )
-                            
-                            logger.info(f"授权检查结果 - 标准输出: {devices_result.stdout}")
-                            
-                            if device_line in devices_result.stdout:
-                                if 'unauthorized' not in devices_result.stdout:
-                                    logger.info(f"设备已授权: {self.device_name}")
-                                    return True, "设备连接成功并已授权"
-                                else:
-                                    logger.info(f"设备仍处于未授权状态，继续等待...")
-                            else:
-                                logger.warning(f"设备未在设备列表中: {self.device_name}")
-                                # 设备不在列表中，再次尝试连接
-                                logger.info("设备未在列表中，再次尝试连接...")
-                                reconnect_result = subprocess.run(
-                                    ['adb', 'connect', device_address], 
-                                    capture_output=True, text=True, timeout=10
-                                )
-                                logger.info(f"再次连接结果: {reconnect_result.stdout}")
-                        
-                        # 超时处理
-                        logger.error(f"设备授权超时: 等待{max_wait_time}秒后设备仍未授权")
-                        return False, "设备授权超时"
-                        
-                    else:
-                        logger.info(f"设备已授权: {self.device_name}")
-                        return True, "设备连接成功并已授权"
-                else:
-                    logger.warning(f"设备未在设备列表中: {self.device_name}")
-                    return False, "设备未在设备列表中"
-                    
-            elif 'cannot connect' in stdout or '目标计算机积极拒绝' in stdout or '10061' in stdout:
-                logger.warning(f"设备连接被拒绝: {self.device_name}")
-                return False, "设备连接被拒绝"
-            else:
-                logger.warning(f"设备连接失败: {self.device_name}")
-                return False, "设备连接失败"
+                return self._connect_usb_device()
                 
         except Exception as e:
             logger.warning(f"ADB设备连接异常: {e}")
             return False, f"ADB设备连接异常: {e}"
+    
+    def _connect_tcp_device(self) -> Tuple[bool, str]:
+        """
+        连接TCP/IP（WiFi ADB）设备
+        
+        Returns:
+            Tuple[bool, str]: (连接是否成功, 连接状态信息)
+        """
+        if ':' in self.device_name:
+            device_address = self.device_name
+        else:
+            device_address = f'{self.device_name}:5555'
+        
+        connect_result = subprocess.run(
+            ['adb', 'connect', device_address], 
+            capture_output=True, text=True, timeout=10
+        )
+        
+        stdout = connect_result.stdout
+        stderr = connect_result.stderr
+        
+        logger.info(f"ADB连接命令执行结果 - 标准输出: {stdout}")
+        if stderr:
+            logger.info(f"ADB连接命令执行结果 - 标准错误: {stderr}")
+        logger.info(f"ADB连接命令执行结果 - 返回码: {connect_result.returncode}")
+        
+        if 'connected' in stdout or 'already' in stdout or 'failed to authenticate' in stdout:
+            logger.info(f"设备连接尝试结果: {stdout.strip()}")
+            
+            devices_result = subprocess.run(
+                ['adb', 'devices'], 
+                capture_output=True, text=True, timeout=5
+            )
+            
+            logger.info(f"ADB设备列表检查结果 - 标准输出: {devices_result.stdout}")
+            if devices_result.stderr:
+                logger.info(f"ADB设备列表检查结果 - 标准错误: {devices_result.stderr}")
+            
+            device_line = device_address
+            
+            logger.info("断开设备连接以重新触发授权提示...")
+            disconnect_result = subprocess.run(
+                ['adb', 'disconnect', device_address], 
+                capture_output=True, text=True, timeout=5
+            )
+            logger.info(f"断开连接结果: {disconnect_result.stdout}")
+            
+            time.sleep(1)
+            
+            logger.info("重新连接设备以触发授权提示...")
+            reconnect_result = subprocess.run(
+                ['adb', 'connect', device_address], 
+                capture_output=True, text=True, timeout=10
+            )
+            logger.info(f"重新连接结果: {reconnect_result.stdout}")
+            
+            devices_result = subprocess.run(
+                ['adb', 'devices'], 
+                capture_output=True, text=True, timeout=5
+            )
+            logger.info(f"重新连接后设备列表 - 标准输出: {devices_result.stdout}")
+            
+            if device_line in devices_result.stdout:
+                if 'unauthorized' in devices_result.stdout or 'failed to authenticate' in stdout:
+                    logger.warning(f"设备未授权: {self.device_name}")
+                    return self._wait_for_usb_authorization()
+                else:
+                    logger.info(f"设备已授权: {self.device_name}")
+                    return True, "设备连接成功并已授权"
+            else:
+                logger.warning(f"设备未在设备列表中: {self.device_name}")
+                return False, "设备未在设备列表中"
+                
+        elif 'cannot connect' in stdout or '目标计算机积极拒绝' in stdout or '10061' in stdout:
+            logger.warning(f"设备连接被拒绝: {self.device_name}")
+            return False, "设备连接被拒绝"
+        else:
+            logger.warning(f"设备连接失败: {self.device_name}")
+            return False, "设备连接失败"
+    
+    def _connect_usb_device(self) -> Tuple[bool, str]:
+        """
+        连接USB设备
+        
+        USB设备通过物理连接已被ADB识别，无需执行adb connect。
+        直接检查设备是否在adb devices列表中即可。
+        
+        Returns:
+            Tuple[bool, str]: (连接是否成功, 连接状态信息)
+        """
+        logger.info("检测到USB设备（非IP连接标识），跳过adb connect，直接检查设备状态")
+        
+        found, status = self._check_device_in_list()
+        
+        if found and status == 'device':
+            logger.info(f"USB设备已连接并已授权: {self.device_name}")
+            return True, "设备连接成功并已授权"
+        elif status == 'unauthorized':
+            logger.warning(f"USB设备未授权: {self.device_name}")
+            return self._wait_for_usb_authorization()
+        elif status == 'offline':
+            logger.warning(f"USB设备处于离线状态: {self.device_name}")
+            return False, "USB设备处于离线状态，请重新插拔USB连接"
+        else:
+            logger.warning(f"USB设备未在设备列表中: {self.device_name}")
+            logger.info("请检查USB连接是否正常，或在终端执行 adb devices 确认设备状态")
+            return False, "USB设备未在设备列表中，请检查USB连接"
     
     def _show_unauthorized_dialog(self):
         """

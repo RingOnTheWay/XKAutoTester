@@ -19,8 +19,10 @@ class TestPlanService extends JsonFileCrudService {
 
       const index = existingPlans.findIndex(p => p.name === planData.name);
       if (index >= 0) {
+        planData.id = existingPlans[index].id || this._generateId();
         existingPlans[index] = planData;
       } else {
+        planData.id = planData.id || this._generateId();
         existingPlans.push(planData);
       }
 
@@ -36,15 +38,12 @@ class TestPlanService extends JsonFileCrudService {
     try {
       let existingPlans = await this.getData();
 
-      const index = existingPlans.findIndex(p =>
-        (planData.id && (p.id === planData.id || p.name === planData.id)) ||
-        p.name === planData.name
-      );
+      const index = existingPlans.findIndex(p => p.id === planData.id);
 
       if (index >= 0) {
         const originalPlan = existingPlans[index];
         planData.created = originalPlan.created || planData.created;
-        planData.id = originalPlan.id || planData.id;
+        planData.id = originalPlan.id;
 
         existingPlans[index] = planData;
         await this.saveData(existingPlans);
@@ -62,7 +61,7 @@ class TestPlanService extends JsonFileCrudService {
     try {
       let existingPlans = await this.getData();
 
-      const index = existingPlans.findIndex(p => p.name === planId || p.id === planId);
+      const index = existingPlans.findIndex(p => p.id === planId);
       if (index >= 0) {
         existingPlans.splice(index, 1);
         await this.saveData(existingPlans);

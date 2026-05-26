@@ -65,6 +65,7 @@ const ICON_MAPPING = {
   list_alt: 'List',
   add_circle_outline: 'CirclePlus',
   expand_more: 'ChevronDown',
+  expand_less: 'ChevronUp',
   content_copy: 'Copy',
   drag_indicator: 'GripVertical',
   touch_app: 'Hand',
@@ -74,7 +75,8 @@ const ICON_MAPPING = {
   apk_file: 'FileCode',
   android: 'Smartphone',
   restore: 'RotateCcw',
-  prevent_sleep: 'Eye'
+  prevent_sleep: 'Eye',
+  scan: 'ScanSearch'
 };
 
 function lucideToSvg(iconData) {
