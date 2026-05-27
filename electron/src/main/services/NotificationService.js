@@ -41,11 +41,8 @@ class NotificationService {
           'Content-Type': 'application/json'
         }
       });
-      
-      console.log('钉钉通知发送响应:', response.data);
       return { success: true, data: response.data };
     } catch (error) {
-      console.error('发送钉钉通知失败:', error);
       return { success: false, error: error.message };
     }
   }

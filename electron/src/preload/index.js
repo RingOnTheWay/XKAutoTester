@@ -129,7 +129,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openReportByPath: (reportPath) => ipcRenderer.invoke('open-report-by-path', reportPath),
   
   // Allure服务器管理
-  stopAllureServer: () => ipcRenderer.invoke('stop-allure-server'),
   getAllureServerStatus: () => ipcRenderer.invoke('get-allure-server-status'),
   clearAllureReports: () => ipcRenderer.invoke('clear-allure-reports'),
   clearAllLogs: () => ipcRenderer.invoke('clear-all-logs'),

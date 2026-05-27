@@ -26,8 +26,10 @@ const IPC_CHANNELS = {
     // 报告相关
     VIEW_REPORT: 'view-report',
     CHECK_REPORT_EXISTS: 'check-report-exists',
-    STOP_ALLURE_SERVER: 'stop-allure-server',
+    OPEN_REPORT_BY_PATH: 'open-report-by-path',
     GET_ALLURE_SERVER_STATUS: 'get-allure-server-status',
+    CLEAR_ALLURE_REPORTS: 'clear-allure-reports',
+    CLEAR_ALL_LOGS: 'clear-all-logs',
     
     // 配置
     GET_CONFIG: 'get-config',

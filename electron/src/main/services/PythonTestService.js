@@ -107,12 +107,15 @@ class PythonTestService {
         this.stopUnauthorizedDialogMonitor();
         this.currentPythonProcess = null;
         
+        const testStats = this._parseTestStats(output);
+        
         const result = {
           success: code === 0,
           exitCode: code,
           output: output,
           error: errorOutput,
-          testPlanName: testPlanName
+          testPlanName: testPlanName,
+          testStats: testStats
         };
         resolve(result);
       });
@@ -139,6 +142,38 @@ class PythonTestService {
       console.error('停止测试失败:', error);
       return { success: false, message: '停止测试失败: ' + error.message };
     }
+  }
+
+  _parseTestStats(output) {
+    const stats = { passed: 0, failed: 0, skipped: 0, broken: 0, total: 0 };
+
+    if (!output) return stats;
+
+    const lines = output.split('\n');
+    let summaryLine = null;
+
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      if (/\d+\s+(passed|failed|skipped|broken)/i.test(line)) {
+        summaryLine = line;
+        break;
+      }
+    }
+
+    if (!summaryLine) return stats;
+
+    const passedMatch = summaryLine.match(/(\d+)\s+passed/i);
+    const failedMatch = summaryLine.match(/(\d+)\s+failed/i);
+    const skippedMatch = summaryLine.match(/(\d+)\s+skipped/i);
+    const brokenMatch = summaryLine.match(/(\d+)\s+broken/i);
+
+    stats.passed = passedMatch ? parseInt(passedMatch[1], 10) : 0;
+    stats.failed = failedMatch ? parseInt(failedMatch[1], 10) : 0;
+    stats.skipped = skippedMatch ? parseInt(skippedMatch[1], 10) : 0;
+    stats.broken = brokenMatch ? parseInt(brokenMatch[1], 10) : 0;
+    stats.total = stats.passed + stats.failed + stats.skipped + stats.broken;
+
+    return stats;
   }
 
   startUnauthorizedDialogMonitor() {

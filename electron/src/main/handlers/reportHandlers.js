@@ -7,7 +7,6 @@ function register(ipcMain, services) {
     'view-report': (testPlanName) => allureService.openAllureReport(testPlanName),
     'check-report-exists': (testPlanName) => allureService.checkReportExists(testPlanName),
     'open-report-by-path': (reportPath) => allureService.openReportByPath(reportPath),
-    'stop-allure-server': () => allureService.stopAllureServer(),
     'get-allure-server-status': () => allureService.getAllureServerStatus(),
     'clear-allure-reports': () => allureService.clearAllureReports(),
     'clear-all-logs': () => allureService.clearAllLogs(),

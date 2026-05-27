@@ -45,7 +45,8 @@ class ElectronTestRunner:
                 "success": success,
                 "summary": summary,
                 "test_plan_name": test_plan_name,
-                "exit_code": result.get("exit_code", 0)
+                "exit_code": result.get("exit_code", 0),
+                "test_stats": result.get("test_stats", {"passed": 0, "failed": 0, "skipped": 0, "broken": 0, "total": 0})
             }
 
         except Exception as e:

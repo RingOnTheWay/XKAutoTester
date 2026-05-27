@@ -187,6 +187,12 @@ class ElectronApp {
         this.services.schedulerService.stop();
       }
     });
+
+    app.on('will-quit', () => {
+      if (this.services.allureService) {
+        this.services.allureService.cleanupSync();
+      }
+    });
   }
 
   async restorePreventSleepSetting() {

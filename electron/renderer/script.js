@@ -925,11 +925,6 @@ class XKAutoTesterApp {
             viewReportBtn.textContent = window.i18n.t('testExecution.viewReport');
         }
         
-        const stopServerBtn = document.querySelector('#stop-allure-btn span:last-child');
-        if (stopServerBtn) {
-            stopServerBtn.textContent = window.i18n.t('testExecution.stopServer');
-        }
-        
         // 更新模态框文本
         const modalTitle = document.getElementById('modal-title');
         if (modalTitle && modalTitle.textContent === '新建测试计划') {
@@ -1036,11 +1031,6 @@ class XKAutoTesterApp {
 
         document.getElementById('view-report-btn').addEventListener('click', () => {
             this.viewReport();
-        });
-
-        // Allure服务器控制
-        document.getElementById('stop-allure-btn').addEventListener('click', () => {
-            this.stopAllureServer();
         });
 
         // 输出清除
@@ -5309,6 +5299,7 @@ class XKAutoTesterApp {
         let hasFailure = false;
         let stoppedEarly = false;
         const loopResults = [];
+        const aggregatedStats = { passed: 0, failed: 0, skipped: 0, broken: 0, total: 0 };
 
         this.appendOutput('\n>>> ========== ' + window.i18n.t('testExecution.testPlanDetails') + ' ==========');
         this.appendOutput('>>> ' + window.i18n.t('testExecution.planName') + ': ' + (this.currentTestPlan.name || ''));
@@ -5350,15 +5341,23 @@ class XKAutoTesterApp {
 
                 if (!result.success) {
                     hasFailure = true;
-                    loopResults.push({ loop: i, success: false });
+                    loopResults.push({ loop: i, success: false, testStats: result.testStats || null });
                     if (!continueOnFailure) {
                         this.appendError(`>>> ${window.i18n.t('testExecution.loopStopped', { current: i })}`);
                         break;
                     }
                     this.appendError(`>>> ${window.i18n.t('testExecution.loopFailed', { current: i })}`);
                 } else {
-                    loopResults.push({ loop: i, success: true });
+                    loopResults.push({ loop: i, success: true, testStats: result.testStats || null });
                     this.appendOutput(`>>> ${window.i18n.t('testExecution.loopCompleted', { current: i })}`);
+                }
+
+                if (result.testStats) {
+                    aggregatedStats.passed += result.testStats.passed || 0;
+                    aggregatedStats.failed += result.testStats.failed || 0;
+                    aggregatedStats.skipped += result.testStats.skipped || 0;
+                    aggregatedStats.broken += result.testStats.broken || 0;
+                    aggregatedStats.total += result.testStats.total || 0;
                 }
 
                 if (!this.isRunning) {
@@ -5397,16 +5396,57 @@ class XKAutoTesterApp {
                 }
             }
             
-            // 统一显示测试结果状态（基于 loopResults 数组，检查是否所有测试都通过）
-            const allTestsPassed = loopResults.length > 0 && loopResults.every(r => r.success);
-            if (!allTestsPassed) {
-                this.appendOutput('>>> ' + window.i18n.t('testExecution.testFailed'));
-            } else {
-                this.appendOutput('>>> ' + window.i18n.t('testExecution.testPassed'));
+            // 用例级统计
+            let casePassRate = '0.00';
+            const effectiveTotal = aggregatedStats.passed + aggregatedStats.failed + aggregatedStats.broken;
+            if (effectiveTotal > 0) {
+                casePassRate = ((aggregatedStats.passed / effectiveTotal) * 100).toFixed(2);
+            }
+            if (aggregatedStats.total > 0) {
+                this.appendOutput('>>> ' + window.i18n.t('testExecution.caseStats') + ': ' +
+                    window.i18n.t('testExecution.casePassed') + ' ' + aggregatedStats.passed + ', ' +
+                    window.i18n.t('testExecution.caseFailed') + ' ' + aggregatedStats.failed + ', ' +
+                    window.i18n.t('testExecution.caseSkipped') + ' ' + aggregatedStats.skipped + ', ' +
+                    window.i18n.t('testExecution.caseBroken') + ' ' + aggregatedStats.broken + ', ' +
+                    window.i18n.t('testExecution.caseTotal') + ' ' + aggregatedStats.total);
+                this.appendOutput('>>> ' + window.i18n.t('testExecution.casePassRate') + ': ' + casePassRate + '% (' + window.i18n.t('testExecution.excludingSkipped') + ')');
             }
             
+            // 判断测试结果状态：通过/失败/跳过/部分通过/无测试用例
+            let testStatus = 'passed';
+            if (aggregatedStats.total === 0) {
+                testStatus = 'noTests';
+            } else if (aggregatedStats.failed > 0 || aggregatedStats.broken > 0) {
+                if (aggregatedStats.passed > 0) {
+                    testStatus = 'partialPassed';
+                } else {
+                    testStatus = 'failed';
+                }
+            } else if (aggregatedStats.skipped > 0 && aggregatedStats.passed === 0) {
+                testStatus = 'skipped';
+            } else if (aggregatedStats.skipped > 0 && aggregatedStats.passed > 0) {
+                testStatus = 'partialPassed';
+            } else {
+                testStatus = 'passed';
+            }
+            
+            // 退出码5特殊处理：未收集到测试用例
+            const lastLoopResult = loopResults[loopResults.length - 1];
+            if (lastLoopResult && !lastLoopResult.success && aggregatedStats.total === 0) {
+                testStatus = 'noTests';
+            }
+
+            const statusMessages = {
+                passed: window.i18n.t('testExecution.testPassed'),
+                failed: window.i18n.t('testExecution.testFailed'),
+                skipped: window.i18n.t('testExecution.testSkipped'),
+                partialPassed: window.i18n.t('testExecution.testPartialPassed'),
+                noTests: window.i18n.t('testExecution.testNoTests')
+            };
+            this.appendOutput('>>> ' + (statusMessages[testStatus] || window.i18n.t('testExecution.testFailed')));
+            
             // 更新 hasFailure 变量以保持与通知一致
-            hasFailure = !allTestsPassed;
+            hasFailure = (testStatus === 'failed' || testStatus === 'partialPassed');
             this.appendOutput('>>> ============================\n');
 
             const notificationInfo = {
@@ -5417,7 +5457,10 @@ class XKAutoTesterApp {
                 totalLoops: loopResults.length,
                 passRate: passRate,
                 hasFailure: hasFailure,
-                stoppedEarly: stoppedEarly
+                stoppedEarly: stoppedEarly,
+                testStatus: testStatus,
+                aggregatedStats: aggregatedStats,
+                casePassRate: casePassRate
             };
             
             if (scheduledPlanInfo) {
@@ -5443,7 +5486,14 @@ class XKAutoTesterApp {
                 return;
             }
 
-            const testResult = testInfo.hasFailure ? '失败' : '通过';
+            const statusLabels = {
+                passed: '✅ 通过',
+                failed: '❌ 失败',
+                skipped: '⏭️ 跳过',
+                partialPassed: '⚠️ 部分通过',
+                noTests: '⚠️ 无测试用例'
+            };
+            const testResult = statusLabels[testInfo.testStatus] || (testInfo.hasFailure ? '❌ 失败' : '✅ 通过');
             
             let message = `【XKAutoTester 测试结果通知】\n`;
             
@@ -5456,9 +5506,19 @@ class XKAutoTesterApp {
             message += `测试文件: ${testInfo.testFileNames || '无'}\n`;
             message += `测试类型: ${testInfo.testTypes || '全部'}\n`;
             message += `循环次数: ${testInfo.loopCount}\n`;
-            message += `\n聚合信息:\n`;
+            message += `\n轮次信息:\n`;
             message += `总轮次: ${testInfo.totalLoops}\n`;
-            message += `通过率: ${testInfo.passRate}%\n`;
+            if (testInfo.loopCount > 1) {
+                message += `通过率: ${testInfo.passRate}%\n`;
+            }
+            
+            if (testInfo.aggregatedStats && testInfo.aggregatedStats.total > 0) {
+                const stats = testInfo.aggregatedStats;
+                message += `\n用例统计:\n`;
+                message += `通过: ${stats.passed}, 失败: ${stats.failed}, 跳过: ${stats.skipped}, 异常: ${stats.broken}, 总计: ${stats.total}\n`;
+                message += `用例通过率: ${testInfo.casePassRate}% (排除跳过)\n`;
+            }
+            
             message += `\n测试结果: ${testResult}`;
 
             const notificationData = {
@@ -5467,17 +5527,17 @@ class XKAutoTesterApp {
                 message: message
             };
 
-            this.appendOutput('\n>>> 正在发送钉钉通知...');
+            this.appendOutput('\n>>> ' + window.i18n.t('testExecution.sendingNotification') + '...');
             const result = await window.electronAPI.sendDingTalkNotification(notificationData);
             
             if (result.success) {
-                this.appendOutput('>>> 钉钉通知发送成功');
+                this.appendOutput('>>> ' + window.i18n.t('testExecution.notificationSent'));
             } else {
-                this.appendError('>>> 钉钉通知发送失败: ' + (result.error || '未知错误'));
+                this.appendError('>>> ' + window.i18n.t('testExecution.notificationFailed') + ': ' + (result.error || ''));
             }
         } catch (error) {
             console.error('发送钉钉通知失败:', error);
-            this.appendError('>>> 发送钉钉通知失败: ' + error.message);
+            this.appendError('>>> ' + window.i18n.t('testExecution.notificationFailed') + ': ' + error.message);
         }
     }
 
@@ -8860,7 +8920,6 @@ class XKAutoTesterApp {
             
             if (result.success) {
                 this.appendOutput(`>>> ${result.message}`);
-                this.enableStopAllureButton();
                 this.hideReportModal();
             } else {
                 this.appendOutput(`>>> 打开报告失败: ${result.error}`);
@@ -8922,55 +8981,6 @@ class XKAutoTesterApp {
                 this.hideReportModal();
             }
         });
-    }
-
-    async stopAllureServer() {
-        try {
-            this.appendOutput('>>> 正在停止Allure服务器...');
-            
-            const result = await window.electronAPI.stopAllureServer();
-            
-            if (result.success) {
-                this.appendOutput(`>>> ${result.message}`);
-                // 服务器停止后禁用停止按钮
-                this.disableStopAllureButton();
-            } else {
-                this.appendOutput(`>>> 停止服务器失败: ${result.error}`);
-            }
-        } catch (error) {
-            console.error('停止Allure服务器失败:', error);
-            this.appendOutput(`>>> 停止Allure服务器失败: ${error.message}`);
-        }
-    }
-
-    async enableStopAllureButton() {
-        const stopAllureBtn = document.getElementById('stop-allure-btn');
-        stopAllureBtn.disabled = false;
-        
-        // 定期检查服务器状态，如果服务器停止则禁用按钮
-        this.checkAllureServerStatus();
-    }
-
-    disableStopAllureButton() {
-        const stopAllureBtn = document.getElementById('stop-allure-btn');
-        stopAllureBtn.disabled = true;
-    }
-
-    async checkAllureServerStatus() {
-        try {
-            // 检查allure open进程状态
-            const status = await window.electronAPI.getAllureServerStatus();
-            if (!status.running && !status.allureOpenRunning) {
-                this.disableStopAllureButton();
-            } else {
-                // 如果进程仍在运行，继续检查
-                setTimeout(() => this.checkAllureServerStatus(), 5000);
-            }
-        } catch (error) {
-            console.error('检查进程状态失败:', error);
-            // 出错时也禁用按钮
-            this.disableStopAllureButton();
-        }
     }
 
     getSelectedTestPlan() {

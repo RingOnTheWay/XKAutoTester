@@ -137,6 +137,9 @@ class PytestRunner:
         stdout_content = '\n'.join(stdout_content)
         stderr_content = '\n'.join(stderr_content)
         
+        # 解析用例级统计
+        test_stats = self._parse_test_stats(stdout_content)
+        
         # 生成Allure报告
         allure_report_path = None
         if generate_allure and self.allure_results_dir.exists():
@@ -162,7 +165,8 @@ class PytestRunner:
             "test_paths": test_paths,
             "markers": markers,
             "keywords": keywords,
-            "test_plan_name": test_plan_name
+            "test_plan_name": test_plan_name,
+            "test_stats": test_stats
         }
     
     def run_all_tests(self, generate_allure: bool = True, test_plan_name: str = None) -> Dict[str, Any]:
@@ -665,9 +669,56 @@ class PytestRunner:
         except Exception as e:
             logger.error(f"停止Allure服务器失败: {e}")
     
+    def _parse_test_stats(self, stdout_content: str) -> Dict[str, int]:
+        """从pytest输出中解析用例级统计信息
+        
+        pytest -v 输出的最后一行格式示例:
+        - "5 passed, 2 failed, 3 skipped, 1 broken in 10.5s"
+        - "3 passed in 1.2s"
+        - "2 skipped in 0.5s"
+        - "1 failed, 1 passed in 2.0s"
+        - "no tests ran in 0.0s"
+        """
+        import re
+        
+        stats = {
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "broken": 0,
+            "total": 0
+        }
+        
+        # 从输出末尾查找统计行（包含 "in X.Xs" 的行通常是最后的汇总行）
+        lines = stdout_content.strip().split('\n')
+        summary_line = None
+        for line in reversed(lines):
+            line = line.strip()
+            if re.search(r'\d+\s+(passed|failed|skipped|broken)', line):
+                summary_line = line
+                break
+        
+        if not summary_line:
+            return stats
+        
+        # 逐个提取各状态的数量
+        passed_match = re.search(r'(\d+)\s+passed', summary_line)
+        failed_match = re.search(r'(\d+)\s+failed', summary_line)
+        skipped_match = re.search(r'(\d+)\s+skipped', summary_line)
+        broken_match = re.search(r'(\d+)\s+broken', summary_line)
+        
+        stats["passed"] = int(passed_match.group(1)) if passed_match else 0
+        stats["failed"] = int(failed_match.group(1)) if failed_match else 0
+        stats["skipped"] = int(skipped_match.group(1)) if skipped_match else 0
+        stats["broken"] = int(broken_match.group(1)) if broken_match else 0
+        stats["total"] = stats["passed"] + stats["failed"] + stats["skipped"] + stats["broken"]
+        
+        return stats
+
     def get_test_summary(self, result: Dict[str, Any]) -> str:
         """获取测试结果摘要"""
         exit_code = result["exit_code"]
+        test_stats = result.get("test_stats", {})
         
         if exit_code == 0:
             status = "✅ 测试通过"
@@ -680,11 +731,25 @@ class PytestRunner:
         elif exit_code == 4:
             status = "❌ 使用错误"
         elif exit_code == 5:
-            status = "❌ 未收集到测试"
+            status = "⚠️  未收集到测试"
         else:
             status = f"❓ 未知状态 (退出码: {exit_code})"
         
         summary = f"测试状态: {status}"
+        
+        if test_stats and test_stats.get("total", 0) > 0:
+            passed = test_stats.get("passed", 0)
+            failed = test_stats.get("failed", 0)
+            skipped = test_stats.get("skipped", 0)
+            broken = test_stats.get("broken", 0)
+            total = test_stats.get("total", 0)
+            effective_total = passed + failed + broken
+            if effective_total > 0:
+                pass_rate = (passed / effective_total) * 100
+            else:
+                pass_rate = 0.0
+            summary += f"\n用例统计: 通过 {passed}, 失败 {failed}, 跳过 {skipped}, 异常 {broken}, 总计 {total}"
+            summary += f"\n通过率: {pass_rate:.2f}% (排除跳过)"
         
         if result["allure_report_path"]:
             summary += f"\nAllure报告: {result['allure_report_path']}"
@@ -798,11 +863,12 @@ class PytestRunner:
         if not valid_paths:
             logger.error("没有有效的测试路径")
             return {
-                "exit_code": 5,  # 未收集到测试
+                "exit_code": 5,
                 "allure_report_path": None,
                 "test_paths": test_paths,
                 "markers": markers,
-                "keywords": keywords
+                "keywords": keywords,
+                "test_stats": {"passed": 0, "failed": 0, "skipped": 0, "broken": 0, "total": 0}
             }
         
         return self.run_tests(
