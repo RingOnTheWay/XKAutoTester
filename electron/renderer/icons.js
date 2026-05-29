@@ -76,7 +76,9 @@ const ICON_MAPPING = {
   android: 'Smartphone',
   restore: 'RotateCcw',
   prevent_sleep: 'Eye',
-  scan: 'ScanSearch'
+  scan: 'ScanSearch',
+  arrow_upward: 'ChevronUp',
+  arrow_downward: 'ChevronDown'
 };
 
 function lucideToSvg(iconData) {

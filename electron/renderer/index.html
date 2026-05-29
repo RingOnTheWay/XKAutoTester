@@ -1116,7 +1116,6 @@
                 <div class="modal-content no-scrollbar">
                     <form id="test-plan-form">
                         <div class="modal-form-container">
-                            <!-- 左边容器：计划名称、计划描述 -->
                             <div class="modal-left-panel">
                                 <div class="form-group">
                                     <label for="plan-name" data-i18n="modal.planName">计划名称</label>
@@ -1134,21 +1133,18 @@
                                 </div>
                             </div>
                             
-                            <!-- 右边容器：测试文件、测试类型、循环执行设置 -->
-                            <div class="modal-right-panel">
-                                <!-- 测试文件选择 -->
+                            <div class="modal-middle-panel">
                                 <div class="form-group">
                                     <label data-i18n="modal.testFiles">测试文件</label>
                                     <div id="modal-test-files" class="checkbox-list">
-                                        <!-- 测试文件列表将在这里动态生成 -->
                                     </div>
                                 </div>
-                                
-                                <!-- 测试类型选择 -->
-                                <div class="form-group">
+                            </div>
+                            
+                            <div class="modal-right-panel">
+                                <div class="form-group modal-test-type-group">
                                     <label data-i18n="testExecution.testType">测试类型</label>
                                     <div id="modal-test-types" class="checkbox-list">
-                                        <!-- 测试类型将在这里动态生成 -->
                                     </div>
                                     <div id="test-type-warning" class="warning-message warning-hidden">
                                         <span class="svg-icon" data-icon="warning"></span>
@@ -1156,7 +1152,6 @@
                                     </div>
                                 </div>
                                 
-                                <!-- 循环执行设置 -->
                                 <div class="form-group loop-settings-group">
                                     <label data-i18n="modal.loopSettings">循环执行设置</label>
                                     <div class="loop-settings-container">

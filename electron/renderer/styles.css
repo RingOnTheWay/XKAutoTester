@@ -3922,7 +3922,7 @@ body.dark-theme .welcome-app-name {
   -webkit-backdrop-filter: blur(var(--blur-amount));
   border: 1px solid var(--glass-border);
   border-radius: 16px;
-  width: 720px;
+  width: 920px;
   max-width: 90vw;
   max-height: 85vh;
   overflow: hidden;
@@ -4025,8 +4025,8 @@ body.dark-theme .welcome-app-name {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  flex: 0 0 280px;
-  min-width: 280px;
+  flex: 0 0 220px;
+  min-width: 0;
 }
 
 .modal-left-panel .form-group:last-child {
@@ -4041,6 +4041,28 @@ body.dark-theme .welcome-app-name {
   min-height: 0;
   max-height: none;
   resize: none;
+}
+
+.modal-middle-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1.4;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.modal-middle-panel .form-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.modal-middle-panel .checkbox-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .modal-right-panel {
@@ -4061,6 +4083,13 @@ body.dark-theme .welcome-app-name {
 
 .modal-right-panel .form-group.loop-settings-group {
   flex: 0 0 auto;
+}
+
+.modal-right-panel .form-group.modal-test-type-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .modal-right-panel .checkbox-list {
@@ -6770,9 +6799,9 @@ body.dark-theme .download-error .error-tooltip {
 
 .loop-settings-container {
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 16px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
     padding: 8px 12px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -6807,7 +6836,6 @@ body.dark-theme .download-error .error-tooltip {
 .loop-setting-item.checkbox-item {
     padding: 0;
     height: 28px;
-    margin-top: 2px;
 }
 
 .loop-setting-item.checkbox-item input[type="checkbox"] {
@@ -7513,6 +7541,10 @@ body:not(.dark-theme) #pp-element-modal-overlay .modal-footer {
     font-weight: 500;
 }
 
+.tc-section-collapsible > .tc-section-title {
+    margin-bottom: 0;
+}
+
 .tc-section-title {
     display: flex;
     align-items: center;
@@ -7531,13 +7563,15 @@ body:not(.dark-theme) #pp-element-modal-overlay .modal-footer {
 .tc-section-collapsible .tc-collapsible-content {
     max-height: 500px;
     overflow: hidden;
-    transition: max-height 0.3s ease, opacity 0.3s ease;
+    transition: max-height 0.3s ease, opacity 0.3s ease, padding-top 0.3s ease;
     opacity: 1;
+    padding-top: 16px;
 }
 
 .tc-section-collapsible.collapsed .tc-collapsible-content {
     max-height: 0;
     opacity: 0;
+    padding-top: 0;
 }
 
 .tc-collapsible-header {
@@ -8057,12 +8091,12 @@ body:not(.dark-theme) .tc-add-step-bottom-btn:hover {
 .tc-step-drag-handle {
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 6px 16px;
-    cursor: grab;
+    justify-content: space-between;
+    padding: 4px 8px;
     background: transparent;
     transition: all 0.2s ease;
     user-select: none;
+    gap: 4px;
 }
 
 .tc-step-drag-handle-top {
@@ -8079,9 +8113,40 @@ body:not(.dark-theme) .tc-add-step-bottom-btn:hover {
     background: rgba(var(--primary-rgb, 33, 150, 243), 0.08);
 }
 
-.tc-step-drag-handle:active {
-    cursor: grabbing;
+.tc-step-move-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--primary, #2196F3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.tc-step-move-btn:hover:not(.tc-step-move-btn-disabled) {
     background: rgba(var(--primary-rgb, 33, 150, 243), 0.15);
+    transform: scale(1.1);
+}
+
+.tc-step-move-btn:active:not(.tc-step-move-btn-disabled) {
+    background: rgba(var(--primary-rgb, 33, 150, 243), 0.25);
+    transform: scale(0.95);
+}
+
+.tc-step-move-btn-disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.tc-step-move-btn svg {
+    width: 18px;
+    height: 18px;
 }
 
 .tc-drag-grip {
@@ -8090,10 +8155,18 @@ body:not(.dark-theme) .tc-add-step-bottom-btn:hover {
     gap: 3px;
     opacity: 0.4;
     transition: opacity 0.2s ease;
+    cursor: grab;
+    flex: 1;
+    justify-content: center;
+    padding: 4px 0;
 }
 
 .tc-step-drag-handle:hover .tc-drag-grip {
     opacity: 1;
+}
+
+.tc-drag-grip:active {
+    cursor: grabbing;
 }
 
 .tc-drag-grip span {
@@ -8109,6 +8182,16 @@ body:not(.dark-theme) .tc-add-step-bottom-btn:hover {
 
 .tc-step-card.dragging .tc-drag-grip {
     opacity: 1;
+}
+
+.tc-step-moving {
+    animation: tcStepMove 0.3s ease;
+}
+
+@keyframes tcStepMove {
+    0% { transform: translateY(0); opacity: 0.7; }
+    50% { transform: translateY(-4px); opacity: 0.9; }
+    100% { transform: translateY(0); opacity: 1; }
 }
 
 .tc-step-number {
@@ -8948,6 +9031,18 @@ body:not(.dark-theme) .tc-step-drag-handle-top {
 
 body:not(.dark-theme) .tc-step-drag-handle-bottom {
     border-top-color: rgba(var(--primary-rgb, 33, 150, 243), 0.15);
+}
+
+body:not(.dark-theme) .tc-step-move-btn {
+    color: var(--primary, #2196F3);
+}
+
+body:not(.dark-theme) .tc-step-move-btn:hover:not(.tc-step-move-btn-disabled) {
+    background: rgba(var(--primary-rgb, 33, 150, 243), 0.12);
+}
+
+body:not(.dark-theme) .tc-step-move-btn-disabled {
+    opacity: 0.2;
 }
 
 body:not(.dark-theme) .cascade-select__dropdown {

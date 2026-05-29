@@ -12653,9 +12653,15 @@ class XKAutoTesterApp {
 
         card.innerHTML = `
             <div class="tc-step-drag-handle tc-step-drag-handle-top" data-drag-handle="true">
-                <div class="tc-drag-grip">
+                <button type="button" class="tc-step-move-btn tc-step-move-up-btn" data-step-id="${step.id}" data-move="up" title="上移">
+                    ${this.getIconHtml('arrow_upward')}
+                </button>
+                <div class="tc-drag-grip" data-drag-grip="true">
                     <span></span><span></span><span></span>
                 </div>
+                <button type="button" class="tc-step-move-btn tc-step-move-down-btn" data-step-id="${step.id}" data-move="down" title="下移">
+                    ${this.getIconHtml('arrow_downward')}
+                </button>
             </div>
             <div class="tc-step-header">
                 <div class="tc-step-number">${order}</div>
@@ -12676,9 +12682,15 @@ class XKAutoTesterApp {
                 ${this.tcRenderStepConfig(step)}
             </div>
             <div class="tc-step-drag-handle tc-step-drag-handle-bottom" data-drag-handle="true">
-                <div class="tc-drag-grip">
+                <button type="button" class="tc-step-move-btn tc-step-move-up-btn" data-step-id="${step.id}" data-move="up" title="上移">
+                    ${this.getIconHtml('arrow_upward')}
+                </button>
+                <div class="tc-drag-grip" data-drag-grip="true">
                     <span></span><span></span><span></span>
                 </div>
+                <button type="button" class="tc-step-move-btn tc-step-move-down-btn" data-step-id="${step.id}" data-move="down" title="下移">
+                    ${this.getIconHtml('arrow_downward')}
+                </button>
             </div>
         `;
 
@@ -14484,24 +14496,27 @@ class XKAutoTesterApp {
      */
     tcInitStepDragDrop() {
         const cards = document.querySelectorAll('.tc-step-card');
+        const container = document.getElementById('tc-steps-list');
+        const totalCards = cards.length;
 
-        cards.forEach(card => {
-            const dragHandles = card.querySelectorAll('.tc-step-drag-handle');
+        cards.forEach((card, index) => {
+            const dragGrips = card.querySelectorAll('.tc-drag-grip[data-drag-grip]');
 
-            dragHandles.forEach(handle => {
-                handle.draggable = true;
+            dragGrips.forEach(grip => {
+                grip.draggable = true;
 
-                handle.addEventListener('dragstart', (e) => {
+                grip.addEventListener('dragstart', (e) => {
                     this.tcDraggedStep = card;
                     card.classList.add('dragging');
                     e.dataTransfer.effectAllowed = 'move';
                     e.dataTransfer.setDragImage(card, 0, 0);
                 });
 
-                handle.addEventListener('dragend', () => {
+                grip.addEventListener('dragend', () => {
                     card.classList.remove('dragging');
                     this.tcDraggedStep = null;
                     this.tcUpdateStepOrders();
+                    this.tcUpdateMoveButtonsState();
                 });
             });
 
@@ -14510,9 +14525,8 @@ class XKAutoTesterApp {
                 e.dataTransfer.dropEffect = 'move';
 
                 if (this.tcDraggedStep && this.tcDraggedStep !== card) {
-                    const container = document.getElementById('tc-steps-list');
-                    const cards = [...container.querySelectorAll('.tc-step-card:not(.dragging)')];
-                    const nextCard = cards.find(c => {
+                    const allCards = [...container.querySelectorAll('.tc-step-card:not(.dragging)')];
+                    const nextCard = allCards.find(c => {
                         const rect = c.getBoundingClientRect();
                         return e.clientY < rect.top + rect.height / 2;
                     });
@@ -14523,6 +14537,72 @@ class XKAutoTesterApp {
                         container.appendChild(this.tcDraggedStep);
                     }
                 }
+            });
+
+            const moveBtns = card.querySelectorAll('.tc-step-move-btn');
+            moveBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const direction = btn.getAttribute('data-move');
+                    const stepId = btn.getAttribute('data-step-id');
+                    this.tcMoveStep(stepId, direction);
+                });
+            });
+        });
+
+        this.tcUpdateMoveButtonsState();
+    }
+
+    tcMoveStep(stepId, direction) {
+        const container = document.getElementById('tc-steps-list');
+        const cards = [...container.querySelectorAll('.tc-step-card')];
+        const currentIndex = cards.findIndex(c => c.getAttribute('data-step-id') === stepId);
+
+        if (currentIndex === -1) return;
+        if (direction === 'up' && currentIndex === 0) return;
+        if (direction === 'down' && currentIndex === cards.length - 1) return;
+
+        const card = cards[currentIndex];
+        const scrollTop = container.scrollTop;
+
+        card.classList.add('tc-step-moving');
+
+        if (direction === 'up') {
+            const prevCard = cards[currentIndex - 1];
+            container.insertBefore(card, prevCard);
+        } else {
+            const nextCard = cards[currentIndex + 1];
+            container.insertBefore(nextCard, card);
+        }
+
+        container.scrollTop = scrollTop;
+
+        setTimeout(() => {
+            card.classList.remove('tc-step-moving');
+        }, 300);
+
+        this.tcUpdateStepOrders();
+        this.tcUpdateMoveButtonsState();
+        this.tcMarkDirty();
+    }
+
+    tcUpdateMoveButtonsState() {
+        const container = document.getElementById('tc-steps-list');
+        if (!container) return;
+        const cards = [...container.querySelectorAll('.tc-step-card')];
+
+        cards.forEach((card, index) => {
+            const upBtns = card.querySelectorAll('.tc-step-move-up-btn');
+            const downBtns = card.querySelectorAll('.tc-step-move-down-btn');
+
+            upBtns.forEach(btn => {
+                btn.disabled = index === 0;
+                btn.classList.toggle('tc-step-move-btn-disabled', index === 0);
+            });
+
+            downBtns.forEach(btn => {
+                btn.disabled = index === cards.length - 1;
+                btn.classList.toggle('tc-step-move-btn-disabled', index === cards.length - 1);
             });
         });
     }
