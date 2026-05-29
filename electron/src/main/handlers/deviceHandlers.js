@@ -13,9 +13,9 @@ function register(ipcMain, services) {
     adbService.executeAdbCommand(cmd, deviceId)
   );
 
-  registerHandler(ipcMain, 'uploadFile', (localPath, remotePath, deviceId) =>
-    adbService.uploadFile(localPath, remotePath, deviceId)
-  );
+  registerHandler(ipcMain, 'uploadFile', (localPath, remotePath, deviceId, event) =>
+    adbService.uploadFile(localPath, remotePath, deviceId, event.sender)
+  , { withEvent: true });
 
   registerHandler(ipcMain, 'start-scrcpy', async (deviceId, scrcpyParams) => {
     const result = await scrcpyService.startScrcpy(deviceId, scrcpyParams);

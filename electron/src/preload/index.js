@@ -180,6 +180,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   executeAdbCommand: (cmd, deviceId) => ipcRenderer.invoke('executeAdbCommand', cmd, deviceId),
   selectFiles: () => ipcRenderer.invoke('selectFiles'),
   uploadFile: (localPath, remotePath, deviceId) => ipcRenderer.invoke('uploadFile', localPath, remotePath, deviceId),
+  onUploadProgress: (callback) => {
+    const listener = (event, progress) => callback(progress);
+    ipcRenderer.on('upload-progress', listener);
+    return () => ipcRenderer.removeListener('upload-progress', listener);
+  },
   downloadFile: (remotePath, localPath, deviceId) => ipcRenderer.invoke('downloadFile', remotePath, localPath, deviceId),
   onDownloadProgress: (callback) => ipcRenderer.on('download-progress', callback),
   installApk: (apkPath, deviceId) => ipcRenderer.invoke('install-apk', { apkPath, deviceId }),

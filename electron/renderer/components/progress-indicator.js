@@ -95,9 +95,19 @@ class ProgressIndicator {
             if (progress.message) {
                 filenameElement.textContent = progress.message;
             } else if (overallPercentage === 100) {
-                filenameElement.textContent = this.type === 'download' ? '下载完成' : '安装完成';
+                const completeMessages = {
+                    download: '下载完成',
+                    install: '安装完成',
+                    upload: '上传完成'
+                };
+                filenameElement.textContent = completeMessages[this.type] || '完成';
             } else {
-                filenameElement.textContent = this.type === 'download' ? '正在下载' : '正在安装';
+                const progressMessages = {
+                    download: '正在下载',
+                    install: '正在安装',
+                    upload: '正在上传'
+                };
+                filenameElement.textContent = progressMessages[this.type] || '进行中';
             }
         }
         
@@ -200,13 +210,21 @@ class ProgressIndicator {
         
         if (errorContainer && errorMessageElement && errorTooltipElement) {
             if (filenameElement) {
-                filenameElement.textContent = this.type === 'download' ? '下载失败' : '安装失败';
+                const failMessages = {
+                    download: '下载失败',
+                    install: '安装失败',
+                    upload: '上传失败'
+                };
+                filenameElement.textContent = failMessages[this.type] || '操作失败';
             }
             
             if (errorTitleElement) {
-                errorTitleElement.textContent = this.type === 'download' 
-                    ? window.i18n.t('fileManager.downloadFailed')
-                    : window.i18n.t('fileManager.installFailed');
+                const failTitleMessages = {
+                    download: window.i18n.t('fileManager.downloadFailed'),
+                    install: window.i18n.t('fileManager.installFailed'),
+                    upload: window.i18n.t('fileManager.uploadFailed')
+                };
+                errorTitleElement.textContent = failTitleMessages[this.type] || window.i18n.t('fileManager.uploadFailed');
             }
             
             let filteredError = errorMessage;
@@ -241,9 +259,12 @@ class ProgressIndicator {
             errorMessageElement.innerHTML = formattedError;
             errorContainer.classList.remove('hidden');
             
-            let toastMessage = this.type === 'download' 
-                ? window.i18n.t('fileManager.downloadFailed')
-                : window.i18n.t('fileManager.installFailed');
+            const toastMessages = {
+                download: window.i18n.t('fileManager.downloadFailed'),
+                install: window.i18n.t('fileManager.installFailed'),
+                upload: window.i18n.t('fileManager.uploadFailed')
+            };
+            let toastMessage = toastMessages[this.type] || window.i18n.t('fileManager.uploadFailed');
             
             if (errorMessage.includes('创建zip文件失败')) {
                 toastMessage = window.i18n.t('fileManager.zipCreationFailed');

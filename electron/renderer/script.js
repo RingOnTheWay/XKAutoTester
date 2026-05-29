@@ -7351,19 +7351,32 @@ class XKAutoTesterApp {
             
             const result = await window.electronAPI.selectFiles();
             if (!result.canceled && result.filePaths.length > 0) {
-                for (const localPath of result.filePaths) {
-                    const fileName = localPath.split(/[\\/]/).pop();
-                    const remotePath = `${this.currentPath}/${fileName}`;
-                    await this.uploadFile(localPath, remotePath);
+                this.progressIndicator.show(window.i18n.t('fileManager.preparingUpload'), 'upload');
+                this.progressIndicator.setTotalFiles(result.filePaths.length);
+                this.progressIndicator.setCurrentFileIndex(0);
+
+                const removeListener = window.electronAPI.onUploadProgress((progress) => {
+                    this.progressIndicator.update(progress);
+                });
+
+                try {
+                    for (let i = 0; i < result.filePaths.length; i++) {
+                        this.progressIndicator.setCurrentFileIndex(i + 1);
+                        const localPath = result.filePaths[i];
+                        const fileName = localPath.split(/[\\/]/).pop();
+                        const remotePath = `${this.currentPath}/${fileName}`;
+                        await this.uploadFile(localPath, remotePath);
+                    }
+                    this.loadFileList();
+                } finally {
+                    removeListener();
                 }
-                this.loadFileList();
             }
         } catch (error) {
             console.error('上传文件失败:', error);
         }
     }
     
-    // 上传单个文件
     async uploadFile(localPath, remotePath) {
         try {
             if (!window.electronAPI || !window.electronAPI.uploadFile) {
@@ -7372,9 +7385,25 @@ class XKAutoTesterApp {
             }
             
             const result = await window.electronAPI.uploadFile(localPath, remotePath, this.selectedDevice);
+            if (!result.success) {
+                this.progressIndicator.update({
+                    percentage: 100,
+                    status: 'error',
+                    message: window.i18n.t('fileManager.uploadFailed'),
+                    fileName: localPath.split(/[\\/]/).pop(),
+                    error: result.error
+                });
+            }
             return result;
         } catch (error) {
             console.error('上传文件失败:', error);
+            this.progressIndicator.update({
+                percentage: 100,
+                status: 'error',
+                message: window.i18n.t('fileManager.uploadFailed'),
+                fileName: localPath.split(/[\\/]/).pop(),
+                error: error.message
+            });
             return { success: false, error: error.message };
         }
     }

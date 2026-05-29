@@ -131,20 +131,109 @@ class ADBService {
     }
   }
 
-  async uploadFile(localPath, remotePath, deviceId) {
+  async uploadFile(localPath, remotePath, deviceId, eventSender) {
     try {
       const adbPath = this.getAdbPath();
-      const adbCmd = deviceId ? `"${adbPath}" -s ${deviceId} push "${localPath}" "${remotePath}"` : `"${adbPath}" push "${localPath}" "${remotePath}"`;
-      
-      return new Promise((resolve) => {
-        exec(adbCmd, { windowsHide: true }, (error, stdout, stderr) => {
-          if (error) {
-            resolve({ success: false, error: stderr || error.message });
-          } else {
-            resolve({ success: true, output: stdout });
+      const stats = fs.statSync(localPath);
+      const fileSizeInBytes = stats.size;
+      const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2);
+
+      if (eventSender) {
+        eventSender.send('upload-progress', {
+          percentage: 0,
+          status: 'preparing',
+          message: this.i18nService.t('fileManager.preparingUpload'),
+          fileName: path.basename(localPath),
+          fileSize: fileSizeInMB + ' MB'
+        });
+      }
+
+      const pushArgs = deviceId
+        ? ['-s', deviceId, 'push', localPath, remotePath]
+        : ['push', localPath, remotePath];
+
+      const pushProcess = spawn(adbPath, pushArgs, { windowsHide: true });
+      let pushResolved = false;
+
+      const monitorInterval = setInterval(async () => {
+        if (pushResolved) {
+          clearInterval(monitorInterval);
+          return;
+        }
+        try {
+          const statArgs = deviceId
+            ? ['-s', deviceId, 'shell', 'stat', remotePath]
+            : ['shell', 'stat', remotePath];
+          const statResult = await this.executeAdbCommandAsync(statArgs);
+          if (pushResolved) return;
+          if (statResult.success && statResult.output) {
+            const sizeMatch = statResult.output.match(/Size:\s*(\d+)/);
+            if (sizeMatch) {
+              const transferredBytes = parseInt(sizeMatch[1]);
+              const percentage = Math.min(95, Math.round((transferredBytes / fileSizeInBytes) * 95));
+              if (eventSender) {
+                eventSender.send('upload-progress', {
+                  percentage: percentage,
+                  status: 'transferring',
+                  message: this.i18nService.t('fileManager.uploading'),
+                  fileName: path.basename(localPath),
+                  fileSize: fileSizeInMB + ' MB'
+                });
+              }
+            }
           }
+        } catch (error) {
+        }
+      }, 500);
+
+      const pushResult = await new Promise((resolve) => {
+        let pushStdout = '';
+        let pushStderr = '';
+
+        pushProcess.stdout.on('data', (data) => {
+          pushStdout += data.toString();
+        });
+        pushProcess.stderr.on('data', (data) => {
+          pushStderr += data.toString();
+        });
+        pushProcess.on('close', (code) => {
+          pushResolved = true;
+          clearInterval(monitorInterval);
+          const success = code === 0 || pushStderr.includes('file pushed') || pushStdout.includes('file pushed');
+          resolve({ success, stdout: pushStdout, stderr: pushStderr, code });
+        });
+        pushProcess.on('error', (error) => {
+          pushResolved = true;
+          clearInterval(monitorInterval);
+          resolve({ success: false, stdout: pushStdout, stderr: pushStderr, error: error.message });
         });
       });
+
+      if (!pushResult.success) {
+        const errorMsg = pushResult.stderr || pushResult.error || 'Failed to push file to device';
+        if (eventSender) {
+          eventSender.send('upload-progress', {
+            percentage: 100,
+            status: 'error',
+            message: this.i18nService.t('fileManager.uploadFailed'),
+            fileName: path.basename(localPath),
+            fileSize: fileSizeInMB + ' MB',
+            error: errorMsg
+          });
+        }
+        return { success: false, error: errorMsg, output: pushResult.stdout };
+      }
+
+      if (eventSender) {
+        eventSender.send('upload-progress', {
+          percentage: 100,
+          status: 'success',
+          message: this.i18nService.t('fileManager.uploadSuccess'),
+          fileName: path.basename(localPath),
+          fileSize: fileSizeInMB + ' MB'
+        });
+      }
+      return { success: true, output: pushResult.stdout };
     } catch (error) {
       return { success: false, error: error.message };
     }

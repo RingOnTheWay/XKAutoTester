@@ -171,6 +171,10 @@
     "installing": "正在安装...",
     "installSuccess": "安装成功",
     "installFailed": "安装失败",
+    "preparingUpload": "正在准备上传...",
+    "uploading": "正在上传文件...",
+    "uploadSuccess": "上传成功",
+    "uploadFailed": "上传失败",
     "directoryNotFound": "目录不存在",
     "directoryNotFoundMessage": "默认下载目录 \"{{path}}\" 不存在且无法创建，是否清除该路径设置？"
   },

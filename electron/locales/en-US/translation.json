@@ -171,6 +171,10 @@
     "installing": "Installing...",
     "installSuccess": "Installation successful",
     "installFailed": "Installation failed",
+    "preparingUpload": "Preparing upload...",
+    "uploading": "Uploading file...",
+    "uploadSuccess": "Upload successful",
+    "uploadFailed": "Upload failed",
     "directoryNotFound": "Directory Not Found",
     "directoryNotFoundMessage": "The default download directory \"{{path}}\" does not exist and could not be created. Do you want to clear this path setting?"
   },
