@@ -19,6 +19,7 @@ class XKAutoTesterApp {
         this.tcSelectedDirectory = null;
         this.tcSelectedFile = null;
         this.tcIsEditing = false;
+        this.tcHasUnsavedChanges = false;
         this.tcTestFiles = [];
         this.tcSteps = [];  // 测试步骤列表
         this.tcDraggedStep = null;  // 拖拽中的步骤
@@ -231,6 +232,7 @@ class XKAutoTesterApp {
             editDeviceId: new Modal({ id: 'edit-device-id-modal-overlay' }),
             port: new Modal({ id: 'port-modal-overlay' }),
             confirm: new Modal({ id: 'confirm-modal-overlay' }),
+            saveConfirm: new Modal({ id: 'save-confirm-modal-overlay' }),
             update: new Modal({ id: 'update-modal-overlay' }),
             ppApp: new Modal({ id: 'pp-app-modal-overlay' }),
             ppPage: new Modal({ id: 'pp-page-modal-overlay' }),
@@ -287,7 +289,7 @@ class XKAutoTesterApp {
                         <div class="custom-select__options" id="${selectId}-options">
                             ${options.map(opt => `
                                 <div class="custom-select__option${opt.default ? ' selected' : ''}" data-value="${opt.value}">
-                                    <span data-i18n="${opt.label}">${window.i18n ? window.i18n.t(opt.label) : opt.value}</span>
+                                    <span data-i18n="${opt.label}">${window.i18n.t(opt.label)}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -299,7 +301,7 @@ class XKAutoTesterApp {
                 const selectedSpan = wrapper.querySelector('.custom-select__text');
                 const defaultOption = options.find(opt => opt.default);
                 if (selectedSpan && defaultOption) {
-                    selectedSpan.textContent = window.i18n ? window.i18n.t(defaultOption.label) : defaultOption.value;
+                    selectedSpan.textContent = window.i18n.t(defaultOption.label);
                     selectedSpan.setAttribute('data-i18n', defaultOption.label);
                 }
                 
@@ -403,7 +405,7 @@ class XKAutoTesterApp {
         if (this.currentMarkers && this.currentMarkers.length > 0) {
             const translatedMarkers = this.currentMarkers.map(marker => ({
                 name: marker.name,
-                description: window.i18n ? window.i18n.t(`testTypes.${marker.name}`) : marker.description
+                description: window.i18n.t(`testTypes.${marker.name}`)
             }));
             this.displayTestTypes(translatedMarkers, null, true);
         } else {
@@ -1245,6 +1247,27 @@ class XKAutoTesterApp {
             });
         }
 
+        const saveConfirmCancelBtn = document.getElementById('save-confirm-cancel-btn');
+        if (saveConfirmCancelBtn) {
+            saveConfirmCancelBtn.addEventListener('click', () => {
+                this.hideSaveConfirmModal();
+            });
+        }
+
+        const saveConfirmDiscardBtn = document.getElementById('save-confirm-discard-btn');
+        if (saveConfirmDiscardBtn) {
+            saveConfirmDiscardBtn.addEventListener('click', () => {
+                this.executeSaveConfirmDiscard();
+            });
+        }
+
+        const saveConfirmSaveBtn = document.getElementById('save-confirm-save-btn');
+        if (saveConfirmSaveBtn) {
+            saveConfirmSaveBtn.addEventListener('click', () => {
+                this.executeSaveConfirmSave();
+            });
+        }
+
         // 屏幕控制
         const screenControlBtn = document.getElementById('screen-control-btn');
         if (screenControlBtn) {
@@ -1436,7 +1459,7 @@ class XKAutoTesterApp {
             container.innerHTML = `
                 <div class="placeholder-message">
                     <span class="svg-icon" data-icon="info"></span>
-                    <span data-i18n="testCase.noTestFiles">${window.i18n ? window.i18n.t('testCase.noTestFiles') : '当前目录下没有测试文件'}</span>
+                    <span data-i18n="testCase.noTestFiles">${window.i18n.t('testCase.noTestFiles')}</span>
                 </div>
             `;
             this.initializeIcons();
@@ -1461,30 +1484,68 @@ class XKAutoTesterApp {
 
     tcSelectFile(file, element) {
         if (element.classList.contains('selected')) {
-            element.classList.remove('selected');
-            this.tcSelectedFile = null;
-            this.tcLoadedDeviceConfig = null;
-            this.tcLoadedBleDevice = null;
-            
-            const emptyState = document.getElementById('tc-editor-empty');
-            const editorForm = document.getElementById('tc-editor-form');
-            if (editorForm) editorForm.classList.add('hidden');
-            if (emptyState) emptyState.classList.remove('hidden');
-            
-            const fileNameInput = document.getElementById('tc-file-name');
-            if (fileNameInput) fileNameInput.value = '';
-            
+            if (this.tcHasUnsavedChanges) {
+                this.showSaveConfirmModal(
+                    window.i18n.t('testCase.unsavedChangesTitle') || '未保存的更改',
+                    window.i18n.t('testCase.unsavedChangesMessage') || '当前编辑有未保存的更改，是否保存？',
+                    () => {
+                        this.tcSaveCase().then(() => {
+                            this.tcDoDeselectFile(element);
+                        });
+                    },
+                    () => {
+                        this.tcDoDeselectFile(element);
+                    }
+                );
+                return;
+            }
+            this.tcDoDeselectFile(element);
             return;
         }
-        
-        document.querySelectorAll('.test-case-file-item.selected').forEach(item => {
-            item.classList.remove('selected');
-        });
-        
-        element.classList.add('selected');
-        this.tcSelectedFile = file;
-        
-        this.tcShowEditor(file);
+
+        const doSelectFile = () => {
+            document.querySelectorAll('.test-case-file-item.selected').forEach(item => {
+                item.classList.remove('selected');
+            });
+            element.classList.add('selected');
+            this.tcSelectedFile = file;
+            this.tcHasUnsavedChanges = false;
+            this.tcShowEditor(file);
+        };
+
+        if (this.tcHasUnsavedChanges) {
+            this.showSaveConfirmModal(
+                window.i18n.t('testCase.unsavedChangesTitle') || '未保存的更改',
+                window.i18n.t('testCase.unsavedChangesMessage') || '当前编辑有未保存的更改，是否保存？',
+                () => {
+                    this.tcSaveCase().then(() => {
+                        doSelectFile();
+                    });
+                },
+                () => {
+                    doSelectFile();
+                }
+            );
+            return;
+        }
+
+        doSelectFile();
+    }
+
+    tcDoDeselectFile(element) {
+        element.classList.remove('selected');
+        this.tcSelectedFile = null;
+        this.tcLoadedDeviceConfig = null;
+        this.tcLoadedBleDevice = null;
+        this.tcHasUnsavedChanges = false;
+
+        const emptyState = document.getElementById('tc-editor-empty');
+        const editorForm = document.getElementById('tc-editor-form');
+        if (editorForm) editorForm.classList.add('hidden');
+        if (emptyState) emptyState.classList.remove('hidden');
+
+        const fileNameInput = document.getElementById('tc-file-name');
+        if (fileNameInput) fileNameInput.value = '';
     }
 
     async tcShowEditor(file = null) {
@@ -1504,7 +1565,7 @@ class XKAutoTesterApp {
 
                 if (titleElement) {
                     titleElement.setAttribute('data-i18n', 'testCase.editCase');
-                    titleElement.textContent = window.i18n ? window.i18n.t('testCase.editCase') : '编辑测试用例';
+                    titleElement.textContent = window.i18n.t('testCase.editCase');
                 }
                 const fileNameInput = document.getElementById('tc-file-name');
                 if (fileNameInput) {
@@ -1541,7 +1602,7 @@ class XKAutoTesterApp {
             this.tcIsEditing = true;
             if (titleElement) {
                 titleElement.setAttribute('data-i18n', 'testCase.editCase');
-                titleElement.textContent = window.i18n ? window.i18n.t('testCase.editCase') : '编辑测试用例';
+                titleElement.textContent = window.i18n.t('testCase.editCase');
             }
             const fileNameInput = document.getElementById('tc-file-name');
             if (fileNameInput) {
@@ -1568,7 +1629,7 @@ class XKAutoTesterApp {
             this.tcIsEditing = false;
             if (titleElement) {
                 titleElement.setAttribute('data-i18n', 'testCase.newCase');
-                titleElement.textContent = window.i18n ? window.i18n.t('testCase.newCase') : '新建测试用例';
+                titleElement.textContent = window.i18n.t('testCase.newCase');
             }
             const fileNameInput = document.getElementById('tc-file-name');
             if (fileNameInput) {
@@ -1624,7 +1685,7 @@ class XKAutoTesterApp {
         warningDiv.className = 'tc-json-missing-warning';
         warningDiv.innerHTML = `
             <span class="svg-icon" data-icon="warning"></span>
-            <span>${window.i18n ? window.i18n.t('testCase.jsonMissingWarning', { fileName }) : `对应JSON数据文件(${fileName}.json)缺失，此用例不可编辑。请删除后重新创建。`}</span>
+            <span>${window.i18n.t('testCase.jsonMissingWarning', { fileName })}</span>
         `;
         editorContent.insertBefore(warningDiv, editorContent.firstChild);
         this.initializeIcons();
@@ -1664,6 +1725,17 @@ class XKAutoTesterApp {
             if (epicInput) epicInput.value = allureConfig.epic || '';
             if (featureInput) featureInput.value = allureConfig.feature || '';
             if (storyInput) storyInput.value = allureConfig.story || '';
+
+            // 填充等待时间配置
+            const waitTimeConfig = caseData.waitTimeConfig || {};
+            const appLoadWaitTimeInput = document.getElementById('tc-app-load-wait-time');
+            const elementWaitTimeoutInput = document.getElementById('tc-element-wait-timeout');
+            const stepIntervalInput = document.getElementById('tc-step-interval');
+            const appCloseWaitTimeInput = document.getElementById('tc-app-close-wait-time');
+            if (appLoadWaitTimeInput) appLoadWaitTimeInput.value = waitTimeConfig.appLoadWaitTime ?? 10;
+            if (elementWaitTimeoutInput) elementWaitTimeoutInput.value = waitTimeConfig.elementWaitTimeout ?? 30;
+            if (stepIntervalInput) stepIntervalInput.value = waitTimeConfig.stepInterval ?? 2;
+            if (appCloseWaitTimeInput) appCloseWaitTimeInput.value = waitTimeConfig.appCloseWaitTime ?? 2;
 
             // 设置选中的Markers
             const savedMarkers = allureConfig.markers || [];
@@ -1721,6 +1793,25 @@ class XKAutoTesterApp {
     }
 
     tcCancelEdit() {
+        if (this.tcHasUnsavedChanges) {
+            this.showSaveConfirmModal(
+                window.i18n.t('testCase.unsavedChangesTitle') || '未保存的更改',
+                window.i18n.t('testCase.unsavedChangesMessage') || '当前编辑有未保存的更改，是否保存？',
+                () => {
+                    this.tcSaveCase().then(() => {
+                        this.tcDoCancelEdit();
+                    });
+                },
+                () => {
+                    this.tcDoCancelEdit();
+                }
+            );
+            return;
+        }
+        this.tcDoCancelEdit();
+    }
+
+    tcDoCancelEdit() {
         const emptyState = document.getElementById('tc-editor-empty');
         const editorForm = document.getElementById('tc-editor-form');
         
@@ -1753,6 +1844,7 @@ class XKAutoTesterApp {
         });
         this.tcSelectedFile = null;
         this.tcIsEditing = false;
+        this.tcHasUnsavedChanges = false;
         this.tcLoadedDeviceConfig = null;
         this.tcLoadedBleDevice = null;
         
@@ -1764,24 +1856,24 @@ class XKAutoTesterApp {
         let fileName = fileNameInput ? fileNameInput.value.trim() : '';
 
         if (!fileName) {
-            Toast.error(window.i18n ? window.i18n.t('testCase.fileNameRequired') : '请输入文件名称');
+            Toast.error(window.i18n.t('testCase.fileNameRequired'));
             return;
         }
 
         const validPattern = /^[a-zA-Z0-9_]+$/;
         if (!validPattern.test(fileName)) {
-            Toast.error(window.i18n ? window.i18n.t('testCase.fileNameInvalidChars') : '文件名称只能包含英文、数字和下划线');
+            Toast.error(window.i18n.t('testCase.fileNameInvalidChars'));
             return;
         }
 
         if (!this.tcSelectedDirectory) {
-            Toast.error(window.i18n ? window.i18n.t('testCase.selectCaseFirst') : '请先选择测试目录');
+            Toast.error(window.i18n.t('testCase.selectCaseFirst'));
             return;
         }
 
         // 检查是否选择了目标应用
         if (!this.tcSelectedApp) {
-            Toast.error(window.i18n ? window.i18n.t('testCase.selectAppFirst') : '请先选择目标应用');
+            Toast.error(window.i18n.t('testCase.selectAppFirst'));
             return;
         }
 
@@ -1793,17 +1885,18 @@ class XKAutoTesterApp {
             const result = await window.electronAPI.testCase.saveAndGenerate(caseData, this.tcSelectedDirectory);
 
             if (result && result.success) {
-                Toast.success(window.i18n ? window.i18n.t('testCase.saveSuccess') : '测试用例保存成功');
+                Toast.success(window.i18n.t('testCase.saveSuccess'));
 
                 await this.tcScanTestFiles();
 
+                this.tcHasUnsavedChanges = false;
                 this.tcCancelEdit();
             } else {
-                Toast.error(result?.error || (window.i18n ? window.i18n.t('testCase.saveFailed') : '测试用例保存失败'));
+                Toast.error(result?.error || (window.i18n.t('testCase.saveFailed')));
             }
         } catch (error) {
             console.error('保存测试用例失败:', error);
-            Toast.error(window.i18n ? window.i18n.t('testCase.saveFailed') : '测试用例保存失败');
+            Toast.error(window.i18n.t('testCase.saveFailed'));
         }
     }
 
@@ -1813,7 +1906,7 @@ class XKAutoTesterApp {
         
         if (errorElement && messageSpan) {
             messageSpan.setAttribute('data-i18n', messageKey);
-            messageSpan.textContent = window.i18n ? window.i18n.t(messageKey) : messageKey;
+            messageSpan.textContent = window.i18n.t(messageKey);
             errorElement.classList.remove('error-hidden');
         }
     }
@@ -1827,12 +1920,12 @@ class XKAutoTesterApp {
 
     async tcDeleteCase() {
         if (!this.tcSelectedFile) {
-            Toast.error(window.i18n ? window.i18n.t('testCase.noFileSelected') : '未选择要删除的文件');
+            Toast.error(window.i18n.t('testCase.noFileSelected'));
             return;
         }
         
-        const title = window.i18n ? window.i18n.t('testCase.deleteConfirmTitle') : '删除确认';
-        const message = window.i18n ? window.i18n.t('testCase.deleteConfirmMessage', { name: this.tcSelectedFile.name }) : `确定要删除测试用例 "${this.tcSelectedFile.name}" 吗？关联的JSON和Python文件将被同时删除。`;
+        const title = window.i18n.t('testCase.deleteConfirmTitle');
+        const message = window.i18n.t('testCase.deleteConfirmMessage', { name: this.tcSelectedFile.name });
         
         this.showConfirmModal(title, message, async () => {
             try {
@@ -1842,17 +1935,17 @@ class XKAutoTesterApp {
                 const result = await window.electronAPI.testCase.delete({ fileName, pyFilePath });
                 
                 if (result && result.success) {
-                    Toast.success(window.i18n ? window.i18n.t('testCase.deleteSuccess') : '测试用例删除成功');
+                    Toast.success(window.i18n.t('testCase.deleteSuccess'));
                     
                     await this.tcScanTestFiles();
                     
                     this.tcCancelEdit();
                 } else {
-                    Toast.error(result?.error || (window.i18n ? window.i18n.t('testCase.deleteFailed') : '测试用例删除失败'));
+                    Toast.error(result?.error || (window.i18n.t('testCase.deleteFailed')));
                 }
             } catch (error) {
                 console.error('删除测试用例失败:', error);
-                Toast.error(window.i18n ? window.i18n.t('testCase.deleteFailed') : '测试用例删除失败');
+                Toast.error(window.i18n.t('testCase.deleteFailed'));
             }
         });
     }
@@ -2032,8 +2125,8 @@ class XKAutoTesterApp {
                 'dingtalk': 'settings.dingtalk'
             };
             const platformNames = {
-                'none': window.i18n ? window.i18n.t('settings.none') : '无',
-                'dingtalk': window.i18n ? window.i18n.t('settings.dingtalk') : '钉钉'
+                'none': window.i18n.t('settings.none'),
+                'dingtalk': window.i18n.t('settings.dingtalk')
             };
             const displayText = platformNames[platform] || platformNames['none'];
             const i18nKey = platformI18nKeys[platform] || platformI18nKeys['none'];
@@ -2503,10 +2596,10 @@ class XKAutoTesterApp {
                             }
                             
                             const restartConfirmed = await showConfigConfirmDialog(
-                                window.i18n ? window.i18n.t('settings.restartRequired') : '需要重启',
-                                window.i18n ? window.i18n.t('settings.changeAndRestartMessage') : '配置路径已更改，需要重启应用才能生效。是否立即重启？',
-                                window.i18n ? window.i18n.t('settings.restartNow') : '立即重启',
-                                window.i18n ? window.i18n.t('settings.restartLater') : '稍后重启'
+                                window.i18n.t('settings.restartRequired'),
+                                window.i18n.t('settings.changeAndRestartMessage'),
+                                window.i18n.t('settings.restartNow'),
+                                window.i18n.t('settings.restartLater')
                             );
                             
                             if (restartConfirmed) {
@@ -2514,10 +2607,10 @@ class XKAutoTesterApp {
                             }
                         } else {
                             await showConfigConfirmDialog(
-                                window.i18n ? window.i18n.t('common.error') : '错误',
-                                changeResult.error || (window.i18n ? window.i18n.t('settings.changeConfigPathFailed') : '更改配置路径失败'),
-                                window.i18n ? window.i18n.t('common.confirm') : '确定',
-                                window.i18n ? window.i18n.t('common.cancel') : '取消'
+                                window.i18n.t('common.error'),
+                                changeResult.error || (window.i18n.t('settings.changeConfigPathFailed')),
+                                window.i18n.t('common.confirm'),
+                                window.i18n.t('common.cancel')
                             );
                         }
                     }
@@ -2545,10 +2638,10 @@ class XKAutoTesterApp {
                         }
                         
                         const restartConfirmed = await showConfigConfirmDialog(
-                            window.i18n ? window.i18n.t('settings.restartRequired') : '需要重启',
-                            window.i18n ? window.i18n.t('settings.resetAndRestartMessage') : '配置路径已重置为默认路径，需要重启应用才能生效。是否立即重启？',
-                            window.i18n ? window.i18n.t('settings.restartNow') : '立即重启',
-                            window.i18n ? window.i18n.t('settings.restartLater') : '稍后重启'
+                            window.i18n.t('settings.restartRequired'),
+                            window.i18n.t('settings.resetAndRestartMessage'),
+                            window.i18n.t('settings.restartNow'),
+                            window.i18n.t('settings.restartLater')
                         );
                         
                         if (restartConfirmed) {
@@ -5725,11 +5818,11 @@ class XKAutoTesterApp {
             console.error('加载pytest标记失败:', error);
             // 如果加载失败，使用默认标记
             const defaultMarkers = [
-                { name: 'smoke', description: window.i18n ? window.i18n.t('testTypes.smoke') : '冒烟测试' },
-                { name: 'unit', description: window.i18n ? window.i18n.t('testTypes.unit') : '单元功能测试' },
-                { name: 'exception', description: window.i18n ? window.i18n.t('testTypes.exception') : '异常场景测试' },
-                { name: 'critical', description: window.i18n ? window.i18n.t('testTypes.critical') : '关键功能测试' },
-                { name: 'appium', description: window.i18n ? window.i18n.t('testTypes.appium') : 'Appium移动端测试' }
+                { name: 'smoke', description: window.i18n.t('testTypes.smoke') },
+                { name: 'unit', description: window.i18n.t('testTypes.unit') },
+                { name: 'exception', description: window.i18n.t('testTypes.exception') },
+                { name: 'critical', description: window.i18n.t('testTypes.critical') },
+                { name: 'appium', description: window.i18n.t('testTypes.appium') }
             ];
             this.displayTestTypes(defaultMarkers);
         }
@@ -5792,7 +5885,7 @@ class XKAutoTesterApp {
             placeholderElement.className = 'placeholder-message';
             placeholderElement.innerHTML = `
                 ${this.getIconHtml('info')}
-                <span>${window.i18n ? window.i18n.t('testExecution.noMarkers') : '没有找到pytest标记，将执行所有测试'}</span>
+                <span>${window.i18n.t('testExecution.noMarkers')}</span>
             `;
             container.appendChild(placeholderElement);
             return;
@@ -5997,9 +6090,9 @@ class XKAutoTesterApp {
         
         // 测试类型映射，使用 i18n 翻译
         const markerDescriptions = {
-            'smoke': window.i18n ? window.i18n.t('testTypes.smoke') : '冒烟测试',
-            'critical': window.i18n ? window.i18n.t('testTypes.critical') : '关键功能测试',
-            'exception': window.i18n ? window.i18n.t('testTypes.exception') : '异常场景测试'
+            'smoke': window.i18n.t('testTypes.smoke'),
+            'critical': window.i18n.t('testTypes.critical'),
+            'exception': window.i18n.t('testTypes.exception')
         };
         
         // 如果没有复选框，或者需要更新显示文本，重新创建测试类型显示
@@ -6381,22 +6474,22 @@ class XKAutoTesterApp {
         }
         
         if (diff < minute) {
-            return window.i18n ? window.i18n.t('fileManager.justNow') : '刚刚';
+            return window.i18n.t('fileManager.justNow');
         } else if (diff < hour) {
             const minutes = Math.floor(diff / minute);
-            return window.i18n ? `${minutes} ${window.i18n.t('fileManager.minutesAgo')}` : `${minutes}分钟前`;
+            return `${minutes} ${window.i18n.t('fileManager.minutesAgo')}`;
         } else if (diff < day) {
             const hours = Math.floor(diff / hour);
-            return window.i18n ? `${hours} ${window.i18n.t('fileManager.hoursAgo')}` : `${hours}小时前`;
+            return `${hours} ${window.i18n.t('fileManager.hoursAgo')}`;
         } else if (diff < week) {
             const days = Math.floor(diff / day);
-            return window.i18n ? `${days} ${window.i18n.t('fileManager.daysAgo')}` : `${days}天前`;
+            return `${days} ${window.i18n.t('fileManager.daysAgo')}`;
         } else if (diff < month) {
             const weeks = Math.floor(diff / week);
-            return window.i18n ? `${weeks} ${window.i18n.t('fileManager.weeksAgo')}` : `${weeks}周前`;
+            return `${weeks} ${window.i18n.t('fileManager.weeksAgo')}`;
         } else if (diff < year) {
             const months = Math.floor(diff / month);
-            return window.i18n ? `${months} ${window.i18n.t('fileManager.monthsAgo')}` : `${months}个月前`;
+            return `${months} ${window.i18n.t('fileManager.monthsAgo')}`;
         } else {
             // 时间太久远，直接显示日期
             return dateString.slice(0, 16);
@@ -7203,13 +7296,13 @@ class XKAutoTesterApp {
                     if (window.electronAPI && window.electronAPI.showDialog) {
                         const dialogResult = await window.electronAPI.showDialog({
                             type: 'warning',
-                            title: window.i18n ? window.i18n.t('fileManager.directoryNotFound') : '目录不存在',
+                            title: window.i18n.t('fileManager.directoryNotFound'),
                             message: window.i18n
                                 ? window.i18n.t('fileManager.directoryNotFoundMessage', { path: defaultDownloadPath })
                                 : `默认下载目录 "${defaultDownloadPath}" 不存在且无法创建，是否清除该路径设置？`,
                             buttons: [
-                                window.i18n ? window.i18n.t('common.clear') : '清除',
-                                window.i18n ? window.i18n.t('common.cancel') : '取消'
+                                window.i18n.t('common.clear'),
+                                window.i18n.t('common.cancel')
                             ],
                             defaultId: 0,
                             cancelId: 1
@@ -7905,7 +7998,7 @@ class XKAutoTesterApp {
                     uniqueMarkers.forEach(marker => {
                         const item = document.createElement('div');
                         item.className = 'modal-test-type-item';
-                        const translatedDescription = window.i18n ? window.i18n.t('testTypes.' + marker.name) : marker.description;
+                        const translatedDescription = window.i18n.t('testTypes.' + marker.name);
                         item.innerHTML = `
                             <input type="checkbox" id="modal-type-${marker.name}" value="${marker.name}">
                             <label for="modal-type-${marker.name}">
@@ -8173,6 +8266,38 @@ class XKAutoTesterApp {
             this.confirmCallback();
         }
         this.hideConfirmModal();
+    }
+
+    showSaveConfirmModal(title, message, onSave, onDiscard) {
+        const titleElement = document.getElementById('save-confirm-modal-title');
+        const messageElement = document.getElementById('save-confirm-modal-message');
+
+        if (titleElement) titleElement.textContent = title;
+        if (messageElement) messageElement.textContent = message;
+
+        this.saveConfirmOnSave = onSave;
+        this.saveConfirmOnDiscard = onDiscard;
+        this.modals.saveConfirm.open();
+    }
+
+    hideSaveConfirmModal() {
+        this.modals.saveConfirm.close();
+        this.saveConfirmOnSave = null;
+        this.saveConfirmOnDiscard = null;
+    }
+
+    executeSaveConfirmSave() {
+        if (this.saveConfirmOnSave) {
+            this.saveConfirmOnSave();
+        }
+        this.hideSaveConfirmModal();
+    }
+
+    executeSaveConfirmDiscard() {
+        if (this.saveConfirmOnDiscard) {
+            this.saveConfirmOnDiscard();
+        }
+        this.hideSaveConfirmModal();
     }
 
     async checkForUpdate() {
@@ -10011,7 +10136,7 @@ class XKAutoTesterApp {
         const optionsContainer = wrapper.querySelector('.cascade-select__options');
         
         if (this.ppApps.length === 0) {
-            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n ? window.i18n.t('pagePackage.noApps') : '暂无应用'}</div>`;
+            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n.t('pagePackage.noApps')}</div>`;
             return;
         }
         
@@ -10097,7 +10222,7 @@ class XKAutoTesterApp {
         }
         
         if (this.ppPages.length === 0) {
-            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n ? window.i18n.t('pagePackage.noPages') : '暂无页面'}</div>`;
+            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n.t('pagePackage.noPages')}</div>`;
             return;
         }
         
@@ -10181,7 +10306,7 @@ class XKAutoTesterApp {
         }
         
         if (this.ppElements.length === 0) {
-            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n ? window.i18n.t('pagePackage.noElements') : '暂无元素'}</div>`;
+            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n.t('pagePackage.noElements')}</div>`;
             return;
         }
         
@@ -10226,7 +10351,7 @@ class XKAutoTesterApp {
     ppResetAppSelect() {
         const wrapper = document.getElementById('pp-app-select-wrapper');
         const textSpan = wrapper.querySelector('.cascade-select__text');
-        textSpan.textContent = window.i18n ? window.i18n.t('pagePackage.selectApp') : '请选择应用';
+        textSpan.textContent = window.i18n.t('pagePackage.selectApp');
         textSpan.classList.add('placeholder');
         wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
         
@@ -10246,7 +10371,7 @@ class XKAutoTesterApp {
     ppResetPageSelect() {
         const wrapper = document.getElementById('pp-page-select-wrapper');
         const textSpan = wrapper.querySelector('.cascade-select__text');
-        textSpan.textContent = window.i18n ? window.i18n.t('pagePackage.selectPage') : '请选择页面';
+        textSpan.textContent = window.i18n.t('pagePackage.selectPage');
         textSpan.classList.add('placeholder');
         wrapper.querySelector('.cascade-select').classList.add('disabled');
         wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
@@ -10263,7 +10388,7 @@ class XKAutoTesterApp {
     ppResetElementSelect() {
         const wrapper = document.getElementById('pp-element-select-wrapper');
         const textSpan = wrapper.querySelector('.cascade-select__text');
-        textSpan.textContent = window.i18n ? window.i18n.t('pagePackage.selectElement') : '请选择元素';
+        textSpan.textContent = window.i18n.t('pagePackage.selectElement');
         textSpan.classList.add('placeholder');
         wrapper.querySelector('.cascade-select').classList.add('disabled');
         wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
@@ -10361,7 +10486,7 @@ class XKAutoTesterApp {
         const optionsContainer = wrapper.querySelector('.cascade-select__options');
         
         if (items.length === 0) {
-            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n ? window.i18n.t('pagePackage.noResults') : '无匹配结果'}</div>`;
+            optionsContainer.innerHTML = `<div class="cascade-select__option empty">${window.i18n.t('pagePackage.noResults')}</div>`;
             return;
         }
         
@@ -10459,7 +10584,7 @@ class XKAutoTesterApp {
             if (!filePath.toLowerCase().endsWith('.apk')) {
                 showState('error');
                 if (errorMessage) {
-                    errorMessage.textContent = window.i18n ? window.i18n.t('pagePackage.apkInvalidFile') : '请拖放APK文件';
+                    errorMessage.textContent = window.i18n.t('pagePackage.apkInvalidFile');
                 }
                 setTimeout(() => showState('default'), 3000);
                 return;
@@ -10491,7 +10616,7 @@ class XKAutoTesterApp {
                 } else {
                     showState('error');
                     if (errorMessage) {
-                        errorMessage.textContent = result.error || (window.i18n ? window.i18n.t('pagePackage.apkParseFailed') : '解析失败');
+                        errorMessage.textContent = result.error || (window.i18n.t('pagePackage.apkParseFailed'));
                     }
                     setTimeout(() => showState('default'), 3000);
                 }
@@ -10499,7 +10624,7 @@ class XKAutoTesterApp {
                 console.error('APK解析错误:', error);
                 showState('error');
                 if (errorMessage) {
-                    errorMessage.textContent = error.message || (window.i18n ? window.i18n.t('pagePackage.apkParseFailed') : '解析失败');
+                    errorMessage.textContent = error.message || (window.i18n.t('pagePackage.apkParseFailed'));
                 }
                 setTimeout(() => showState('default'), 3000);
             }
@@ -10537,7 +10662,7 @@ class XKAutoTesterApp {
                         } else {
                             showState('error');
                             if (errorMessage) {
-                                errorMessage.textContent = parseResult.error || (window.i18n ? window.i18n.t('pagePackage.apkParseFailed') : '解析失败');
+                                errorMessage.textContent = parseResult.error || (window.i18n.t('pagePackage.apkParseFailed'));
                             }
                             setTimeout(() => showState('default'), 3000);
                         }
@@ -10545,7 +10670,7 @@ class XKAutoTesterApp {
                         console.error('APK解析错误:', parseError);
                         showState('error');
                         if (errorMessage) {
-                            errorMessage.textContent = parseError.message || (window.i18n ? window.i18n.t('pagePackage.apkParseFailed') : '解析失败');
+                            errorMessage.textContent = parseError.message || (window.i18n.t('pagePackage.apkParseFailed'));
                         }
                         setTimeout(() => showState('default'), 3000);
                     }
@@ -10628,7 +10753,7 @@ class XKAutoTesterApp {
             const messageElement = document.getElementById('confirm-modal-message');
 
             if (titleElement) {
-                titleElement.textContent = window.i18n ? window.i18n.t('inspector.resetConfirmTitle') : '启动模式';
+                titleElement.textContent = window.i18n.t('inspector.resetConfirmTitle');
             }
             if (messageElement) {
                 const i18n = window.i18n;
@@ -10699,7 +10824,7 @@ class XKAutoTesterApp {
         
         switch (type) {
             case 'app':
-                document.getElementById('pp-app-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.newApp') : '新增应用';
+                document.getElementById('pp-app-modal-title').textContent = window.i18n.t('pagePackage.newApp');
                 document.getElementById('pp-app-input').value = '';
                 this.initializeCustomSelects();
                 this.setCustomSelectValue('pp-platform-wrapper', 'android');
@@ -10710,20 +10835,20 @@ class XKAutoTesterApp {
                 break;
             case 'page':
                 if (!this.ppSelectedApp) {
-                    Toast.warning(window.i18n ? window.i18n.t('pagePackage.selectAppFirst') : '请先选择应用');
+                    Toast.warning(window.i18n.t('pagePackage.selectAppFirst'));
                     return;
                 }
-                document.getElementById('pp-page-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.newPage') : '新增页面';
+                document.getElementById('pp-page-modal-title').textContent = window.i18n.t('pagePackage.newPage');
                 document.getElementById('pp-page-input').value = '';
                 this.modals.ppPage.open();
                 document.getElementById('pp-page-input').focus();
                 break;
             case 'element':
                 if (!this.ppSelectedPage) {
-                    Toast.warning(window.i18n ? window.i18n.t('pagePackage.selectPageFirst') : '请先选择页面');
+                    Toast.warning(window.i18n.t('pagePackage.selectPageFirst'));
                     return;
                 }
-                document.getElementById('pp-element-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.newElement') : '新增元素';
+                document.getElementById('pp-element-modal-title').textContent = window.i18n.t('pagePackage.newElement');
                 document.getElementById('pp-element-name-input').value = '';
                 document.getElementById('pp-element-value-input').value = '';
                 this.setCustomSelectValue('pp-element-locator-wrapper', 'id');
@@ -10740,7 +10865,7 @@ class XKAutoTesterApp {
         switch (type) {
             case 'app':
                 if (!this.ppSelectedApp) return;
-                document.getElementById('pp-app-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.editApp') : '编辑应用';
+                document.getElementById('pp-app-modal-title').textContent = window.i18n.t('pagePackage.editApp');
                 document.getElementById('pp-app-input').value = this.ppSelectedApp.name;
                 this.initializeCustomSelects();
                 this.setCustomSelectValue('pp-platform-wrapper', this.ppSelectedApp.platform || 'android');
@@ -10751,14 +10876,14 @@ class XKAutoTesterApp {
                 break;
             case 'page':
                 if (!this.ppSelectedPage) return;
-                document.getElementById('pp-page-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.editPage') : '编辑页面';
+                document.getElementById('pp-page-modal-title').textContent = window.i18n.t('pagePackage.editPage');
                 document.getElementById('pp-page-input').value = this.ppSelectedPage.name;
                 this.modals.ppPage.open();
                 document.getElementById('pp-page-input').focus();
                 break;
             case 'element':
                 if (!this.ppSelectedElement) return;
-                document.getElementById('pp-element-modal-title').textContent = window.i18n ? window.i18n.t('pagePackage.editElement') : '编辑元素';
+                document.getElementById('pp-element-modal-title').textContent = window.i18n.t('pagePackage.editElement');
                 document.getElementById('pp-element-name-input').value = this.ppSelectedElement.name;
                 document.getElementById('pp-element-value-input').value = this.ppSelectedElement.value;
                 this.setCustomSelectValue('pp-element-locator-wrapper', this.ppSelectedElement.locator || 'id');
@@ -10814,7 +10939,7 @@ class XKAutoTesterApp {
         const activityName = document.getElementById('pp-activity-input').value.trim();
         
         if (!name) {
-            Toast.error(window.i18n ? window.i18n.t('pagePackage.nameRequired') : '请输入名称');
+            Toast.error(window.i18n.t('pagePackage.nameRequired'));
             return;
         }
         
@@ -10828,7 +10953,7 @@ class XKAutoTesterApp {
             }
             
             if (result.success) {
-                Toast.success(window.i18n ? window.i18n.t('pagePackage.saveSuccess') : '保存成功');
+                Toast.success(window.i18n.t('pagePackage.saveSuccess'));
                 this.ppCloseModal('app');
                 await this.ppLoadApps();
                 if (this.ppIsEditing) {
@@ -10851,7 +10976,7 @@ class XKAutoTesterApp {
     async ppSavePage() {
         const name = document.getElementById('pp-page-input').value.trim();
         if (!name) {
-            Toast.error(window.i18n ? window.i18n.t('pagePackage.nameRequired') : '请输入名称');
+            Toast.error(window.i18n.t('pagePackage.nameRequired'));
             return;
         }
         
@@ -10864,7 +10989,7 @@ class XKAutoTesterApp {
             }
             
             if (result.success) {
-                Toast.success(window.i18n ? window.i18n.t('pagePackage.saveSuccess') : '保存成功');
+                Toast.success(window.i18n.t('pagePackage.saveSuccess'));
                 this.ppCloseModal('page');
                 await this.ppLoadPages(this.ppSelectedApp.id);
                 if (this.ppIsEditing) {
@@ -10887,11 +11012,11 @@ class XKAutoTesterApp {
         const locator = this.getCustomSelectValue('pp-element-locator-wrapper') || 'id';
         
         if (!name) {
-            Toast.error(window.i18n ? window.i18n.t('pagePackage.nameRequired') : '请输入名称');
+            Toast.error(window.i18n.t('pagePackage.nameRequired'));
             return;
         }
         if (!value) {
-            Toast.error(window.i18n ? window.i18n.t('pagePackage.valueRequired') : '请输入定位值');
+            Toast.error(window.i18n.t('pagePackage.valueRequired'));
             return;
         }
         
@@ -10915,7 +11040,7 @@ class XKAutoTesterApp {
             }
             
             if (result.success) {
-                Toast.success(window.i18n ? window.i18n.t('pagePackage.saveSuccess') : '保存成功');
+                Toast.success(window.i18n.t('pagePackage.saveSuccess'));
                 this.ppCloseModal('element');
                 await this.ppLoadElements(this.ppSelectedApp.id, this.ppSelectedPage.id);
                 if (this.ppIsEditing) {
@@ -10972,28 +11097,22 @@ class XKAutoTesterApp {
             case 'app':
                 if (!this.ppSelectedApp) return;
                 itemName = this.ppSelectedApp.name;
-                message = window.i18n ? 
-                    window.i18n.t('pagePackage.deleteAppConfirm', { name: itemName }) : 
-                    `确定要删除应用 "${itemName}" 吗？这将同时删除所有关联的页面和元素。`;
+                message = window.i18n.t('pagePackage.deleteAppConfirm', { name: itemName });
                 break;
             case 'page':
                 if (!this.ppSelectedPage) return;
                 itemName = this.ppSelectedPage.name;
-                message = window.i18n ? 
-                    window.i18n.t('pagePackage.deletePageConfirm', { name: itemName }) : 
-                    `确定要删除页面 "${itemName}" 吗？这将同时删除所有关联的元素。`;
+                message = window.i18n.t('pagePackage.deletePageConfirm', { name: itemName });
                 break;
             case 'element':
                 if (!this.ppSelectedElement) return;
                 itemName = this.ppSelectedElement.name;
-                message = window.i18n ? 
-                    window.i18n.t('pagePackage.deleteElementConfirm', { name: itemName }) : 
-                    `确定要删除元素 "${itemName}" 吗？`;
+                message = window.i18n.t('pagePackage.deleteElementConfirm', { name: itemName });
                 break;
         }
         
         this.showConfirmModal(
-            window.i18n ? window.i18n.t('pagePackage.deleteConfirm') : '删除确认',
+            window.i18n.t('pagePackage.deleteConfirm'),
             message,
             async () => {
                 await this.ppDeleteItem(type);
@@ -11040,7 +11159,7 @@ class XKAutoTesterApp {
                         await this.ppLoadElements(this.ppSelectedApp.id, this.ppSelectedPage.id);
                         const elementWrapper = document.getElementById('pp-element-select-wrapper');
                         const elementTextSpan = elementWrapper.querySelector('.cascade-select__text');
-                        elementTextSpan.textContent = window.i18n ? window.i18n.t('pagePackage.selectElement') : '请选择元素';
+                        elementTextSpan.textContent = window.i18n.t('pagePackage.selectElement');
                         elementTextSpan.classList.add('placeholder');
                         elementWrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
                         document.getElementById('pp-element-card').classList.remove('selected');
@@ -11050,7 +11169,7 @@ class XKAutoTesterApp {
             }
             
             if (result.success) {
-                Toast.success(window.i18n ? window.i18n.t('pagePackage.deleteSuccess') : '删除成功');
+                Toast.success(window.i18n.t('pagePackage.deleteSuccess'));
             } else {
                 Toast.error(result.error || '删除失败');
             }
@@ -11070,7 +11189,7 @@ class XKAutoTesterApp {
         const appWrapper = document.getElementById('pp-app-select-wrapper');
         if (appWrapper) {
             const textSpan = appWrapper.querySelector('.cascade-select__text');
-            textSpan.textContent = window.i18n ? window.i18n.t('pagePackage.selectApp') : '请选择应用';
+            textSpan.textContent = window.i18n.t('pagePackage.selectApp');
             textSpan.classList.add('placeholder');
             appWrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
         }
@@ -11095,20 +11214,23 @@ class XKAutoTesterApp {
      * 初始化测试用例编辑器
      */
     async tcInitEditor() {
-        // 加载应用列表
         await this.tcLoadApps();
-        // 加载蓝牙设备列表（用于测试步骤中的蓝牙操作）
         await this.tcLoadBleDevices();
-        // 加载Markers列表
         await this.tcLoadMarkers();
-        // 初始化平台选择下拉框
         this.tcInitPlatformSelect();
-        // 初始化应用选择下拉框
         this.tcInitAppSelect();
-        // 初始化Markers下拉框
         this.tcInitMarkersSelect();
-        // 初始化折叠区域
         this.tcInitCollapsible();
+
+        const editorForm = document.getElementById('tc-editor-form');
+        if (editorForm && !editorForm._dirtyListenerAdded) {
+            editorForm.addEventListener('change', (e) => {
+                if (e.target.matches('input, select, textarea') && !e.target.closest('.tc-step-card')) {
+                    this.tcMarkDirty();
+                }
+            });
+            editorForm._dirtyListenerAdded = true;
+        }
     }
 
     /**
@@ -11176,7 +11298,7 @@ class XKAutoTesterApp {
         if (!optionsContainer) return;
 
         if (this.tcMarkers.length === 0) {
-            optionsContainer.innerHTML = `<div class="custom-select__option disabled"><span>${window.i18n ? window.i18n.t('testExecution.noMarkers') : '暂无标记'}</span></div>`;
+            optionsContainer.innerHTML = `<div class="custom-select__option disabled"><span>${window.i18n.t('testExecution.noMarkers')}</span></div>`;
             return;
         }
 
@@ -11220,7 +11342,7 @@ class XKAutoTesterApp {
             const placeholderSpan = document.createElement('span');
             placeholderSpan.className = 'custom-select__text';
             placeholderSpan.setAttribute('data-i18n', 'placeholders.selectMarkers');
-            placeholderSpan.textContent = window.i18n ? window.i18n.t('placeholders.selectMarkers') : '请选择标记';
+            placeholderSpan.textContent = window.i18n.t('placeholders.selectMarkers');
             selectedContainer.appendChild(placeholderSpan);
         } else {
             this.tcSelectedMarkers.forEach(marker => {
@@ -11330,7 +11452,7 @@ class XKAutoTesterApp {
         if (!optionsContainer) return;
 
         if (this.tcApps.length === 0) {
-            optionsContainer.innerHTML = `<div class="custom-select__option disabled"><span>${window.i18n ? window.i18n.t('pagePackage.noApps') : '暂无应用'}</span></div>`;
+            optionsContainer.innerHTML = `<div class="custom-select__option disabled"><span>${window.i18n.t('pagePackage.noApps')}</span></div>`;
             return;
         }
 
@@ -11588,6 +11710,7 @@ class XKAutoTesterApp {
         };
 
         this.tcSteps.push(newStep);
+        this.tcMarkDirty();
         this.tcRenderSteps();
         this.tcHideStepsEmpty();
 
@@ -11807,6 +11930,8 @@ class XKAutoTesterApp {
     tcHandleSelectChange(selectId, value, stepId, index = -1) {
         const step = this.tcSteps.find(s => s.id === stepId);
         if (!step) return;
+
+        this.tcMarkDirty();
         
         const config = step.config || {};
         
@@ -11988,8 +12113,51 @@ class XKAutoTesterApp {
                 config.compareConfig.targetValueType = value;
                 if (value === 'custom') {
                     config.compareConfig.targetValue = '';
+                    delete config.compareConfig.bleStepId;
+                } else if (value === 'ble') {
+                    delete config.compareConfig.targetValue;
+                    config.compareConfig.bleStepId = '';
                 }
                 this.tcUpdateTargetValueConfig(stepId, value);
+                break;
+            case 'tc-ble-step-select':
+                config.compareConfig = config.compareConfig || {};
+                config.compareConfig.bleStepId = value;
+                break;
+            case 'tc-page-operation-type':
+                config.operationType = value;
+                this.tcUpdateOperationTypeUI(stepId, value);
+                break;
+            case 'tc-search-type':
+                config.searchConfig = config.searchConfig || {};
+                config.searchConfig.searchType = value;
+                this.tcUpdateSearchTypeUI(stepId, value);
+                break;
+            case 'tc-search-element-page':
+                config.searchConfig = config.searchConfig || {};
+                config.searchConfig.pageId = value;
+                config.searchConfig.elementId = '';
+                config.searchConfig.elementName = '';
+                this.tcUpdateSearchElementSelect(stepId, value);
+                break;
+            case 'tc-system-operation-type':
+                config.systemConfig = config.systemConfig || {};
+                config.systemConfig.operationType = value;
+                break;
+            case 'tc-nav-key-select':
+                config.systemConfig = config.systemConfig || {};
+                config.systemConfig.navKey = value;
+                break;
+            case 'tc-search-element-select':
+                config.searchConfig = config.searchConfig || {};
+                config.searchConfig.elementId = value;
+                const pageForSearchElement = this.tcSelectedApp?.pages?.find(p => p.id === config.searchConfig?.pageId);
+                const foundSearchElement = pageForSearchElement?.elements?.find(el => el.id === value);
+                if (foundSearchElement) {
+                    config.searchConfig.elementName = foundSearchElement.name;
+                    config.searchConfig.locator = foundSearchElement.locator;
+                    config.searchConfig.locatorValue = foundSearchElement.value;
+                }
                 break;
             case 'tc-compare-element-page':
                 config.compareConfig = config.compareConfig || {};
@@ -12136,7 +12304,7 @@ class XKAutoTesterApp {
             const card = container.closest('.tc-step-card');
             if (card) {
                 this.tcInitStepSelects(card);
-                this.tcBindMultiSelectEvents(card, step);
+                this.tcBindMultiSelectValueEvents(container, step);
             }
         }
     }
@@ -12159,7 +12327,7 @@ class XKAutoTesterApp {
             const card = container.closest('.tc-step-card');
             if (card) {
                 this.tcInitStepSelects(card);
-                this.tcBindMultiSelectEvents(card, step);
+                this.tcBindMultiSelectValueEvents(container, step);
             }
         }
     }
@@ -12180,36 +12348,36 @@ class XKAutoTesterApp {
         
         const providers = {
             'zh_CN': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '姓名', example: '张三' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '手机号', example: '13812345678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '邮箱', example: 'zhangsan@example.com' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '城市', example: '北京市' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '地址', example: '朝阳区xxx街道' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '公司名称', example: '科技有限公司' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '张三' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '13812345678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'zhangsan@example.com' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '北京市' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '朝阳区xxx街道' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '科技有限公司' }
             ],
             'en_US': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : 'Name', example: 'John Smith' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : 'Phone', example: '+1-555-123-4567' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'Email', example: 'john@example.com' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : 'City', example: 'New York' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : 'Address', example: '123 Main St' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : 'Company Name', example: 'Tech Corp' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: 'John Smith' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '+1-555-123-4567' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'john@example.com' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: 'New York' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '123 Main St' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: 'Tech Corp' }
             ],
             'ja_JP': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '名前', example: '田中太郎' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '電話番号', example: '090-1234-5678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'メール', example: 'tanaka@example.jp' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '都市', example: '東京都' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '住所', example: '渋谷区xxx' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '会社名', example: '株式会社テック' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '田中太郎' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '090-1234-5678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'tanaka@example.jp' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '東京都' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '渋谷区xxx' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '株式会社テック' }
             ],
             'ko_KR': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '이름', example: '김철수' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '전화번호', example: '010-1234-5678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '이메일', example: 'kim@example.kr' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '도시', example: '서울특별시' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '주소', example: '강남구 xxx' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '회사명', example: '테크주식회사' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '김철수' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '010-1234-5678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'kim@example.kr' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '서울특별시' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '강남구 xxx' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '테크주식회사' }
             ]
         };
         
@@ -12273,36 +12441,36 @@ class XKAutoTesterApp {
         
         const providers = {
             'zh_CN': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '姓名', example: '张三' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '手机号', example: '13812345678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '邮箱', example: 'zhangsan@example.com' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '城市', example: '北京市' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '地址', example: '朝阳区xxx街道' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '公司名称', example: '科技有限公司' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '张三' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '13812345678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'zhangsan@example.com' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '北京市' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '朝阳区xxx街道' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '科技有限公司' }
             ],
             'en_US': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : 'Name', example: 'John Smith' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : 'Phone', example: '+1-555-123-4567' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'Email', example: 'john@example.com' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : 'City', example: 'New York' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : 'Address', example: '123 Main St' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : 'Company Name', example: 'Tech Corp' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: 'John Smith' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '+1-555-123-4567' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'john@example.com' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: 'New York' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '123 Main St' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: 'Tech Corp' }
             ],
             'ja_JP': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '名前', example: '田中太郎' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '電話番号', example: '090-1234-5678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'メール', example: 'tanaka@example.jp' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '都市', example: '東京都' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '住所', example: '渋谷区xxx' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '会社名', example: '株式会社テック' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '田中太郎' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '090-1234-5678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'tanaka@example.jp' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '東京都' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '渋谷区xxx' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '株式会社テック' }
             ],
             'ko_KR': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '이름', example: '김철수' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '전화번호', example: '010-1234-5678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '이메일', example: 'kim@example.kr' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '도시', example: '서울특별시' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '주소', example: '강남구 xxx' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '회사명', example: '테크주식회사' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '김철수' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '010-1234-5678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'kim@example.kr' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '서울특별시' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '강남구 xxx' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '테크주식회사' }
             ]
         };
         
@@ -12317,7 +12485,7 @@ class XKAutoTesterApp {
         
         const wrapper = document.querySelector(`#tc-faker-provider-${stepId}`)?.closest('.custom-select-wrapper');
         if (wrapper) {
-            wrapper.outerHTML = this.tcGenerateCustomSelect('tc-faker-provider', providerOptions, window.i18n ? window.i18n.t('testCase.fakerType') : '请选择类型', stepId);
+            wrapper.outerHTML = this.tcGenerateCustomSelect('tc-faker-provider', providerOptions, window.i18n.t('testCase.fakerType'), stepId);
             const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
             if (card) {
                 this.tcInitStepSelects(card);
@@ -12414,8 +12582,8 @@ class XKAutoTesterApp {
                 }));
                 methodOptionsHtml = `
                     <div class="form-group">
-                        <label>${window.i18n ? window.i18n.t('testCase.bleMethod') : '操作方法'}</label>
-                        ${this.tcGenerateCustomSelect('tc-ble-method-select', methodOptions, window.i18n ? window.i18n.t('testCase.bleMethodPlaceholder') : '请选择方法', stepId)}
+                        <label>${window.i18n.t('testCase.bleMethod')}</label>
+                        ${this.tcGenerateCustomSelect('tc-ble-method-select', methodOptions, window.i18n.t('testCase.bleMethodPlaceholder'), stepId)}
                     </div>
                 `;
 
@@ -12536,6 +12704,10 @@ class XKAutoTesterApp {
                         ${this.getIconHtml('pageview')}
                         <span>页面操作</span>
                     </button>
+                    <button type="button" class="tc-type-tab ${step.type === 'system' ? 'active' : ''}" data-type="system">
+                        ${this.getIconHtml('smartphone')}
+                        <span>系统操作</span>
+                    </button>
                     <button type="button" class="tc-type-tab ${step.type === 'ble' ? 'active' : ''}" data-type="ble">
                         ${this.getIconHtml('bluetooth')}
                         <span>蓝牙操作</span>
@@ -12554,6 +12726,9 @@ class XKAutoTesterApp {
                 break;
             case 'page':
                 configHtml += this.tcRenderPageConfig(step);
+                break;
+            case 'system':
+                configHtml += this.tcRenderSystemConfig(step);
                 break;
         }
 
@@ -12712,16 +12887,16 @@ class XKAutoTesterApp {
     tcRenderMultiSendTextConfig(step, index, operationValue) {
         const inputType = operationValue.inputType || 'custom';
         const inputOptions = [
-            {value: 'custom', label: '自定义', selected: inputType === 'custom'},
-            {value: 'random', label: '随机数', selected: inputType === 'random'},
-            {value: 'faker', label: 'Faker', selected: inputType === 'faker'}
+            {value: 'custom', label: window.i18n.t('testCase.bleCustomData'), selected: inputType === 'custom'},
+            {value: 'random', label: window.i18n.t('testCase.inputRandom'), selected: inputType === 'random'},
+            {value: 'faker', label: window.i18n.t('testCase.inputFaker'), selected: inputType === 'faker'}
         ];
 
         return `
-            <label>键入内容</label>
+            <label>${window.i18n.t('testCase.inputContent')}</label>
             <div class="tc-sendtext-config">
                 <div class="tc-input-type-selector">
-                    ${this.tcGenerateCustomSelect('tc-multi-input-type-select', inputOptions, '请选择类型', step.id, index)}
+                    ${this.tcGenerateCustomSelect('tc-multi-input-type-select', inputOptions, window.i18n.t('testCase.inputType'), step.id, index)}
                 </div>
                 <div class="tc-input-value-container" data-step-id="${step.id}" data-index="${index}">
                     ${this.tcRenderMultiInputValueArea(step, index, inputType, operationValue)}
@@ -12787,44 +12962,44 @@ class XKAutoTesterApp {
         const fakerConfig = operationValue.fakerConfig || {};
 
         const locales = [
-            { value: 'zh_CN', label: window.i18n ? window.i18n.t('testCase.fakerLocales.zh_CN') : '中文' },
-            { value: 'en_US', label: window.i18n ? window.i18n.t('testCase.fakerLocales.en_US') : 'English' },
-            { value: 'ja_JP', label: window.i18n ? window.i18n.t('testCase.fakerLocales.ja_JP') : '日本語' },
-            { value: 'ko_KR', label: window.i18n ? window.i18n.t('testCase.fakerLocales.ko_KR') : '한국어' }
+            { value: 'zh_CN', label: window.i18n.t('testCase.fakerLocales.zh_CN') },
+            { value: 'en_US', label: window.i18n.t('testCase.fakerLocales.en_US') },
+            { value: 'ja_JP', label: window.i18n.t('testCase.fakerLocales.ja_JP') },
+            { value: 'ko_KR', label: window.i18n.t('testCase.fakerLocales.ko_KR') }
         ];
 
         const providers = {
             'zh_CN': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '姓名', example: '张三' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '手机号', example: '13812345678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '邮箱', example: 'zhangsan@example.com' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '城市', example: '北京市' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '地址', example: '朝阳区xxx街道' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '公司名称', example: '科技有限公司' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '张三' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '13812345678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'zhangsan@example.com' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '北京市' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '朝阳区xxx街道' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '科技有限公司' }
             ],
             'en_US': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : 'Name', example: 'John Smith' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : 'Phone', example: '+1-555-123-4567' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'Email', example: 'john@example.com' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : 'City', example: 'New York' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : 'Address', example: '123 Main St' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : 'Company Name', example: 'Tech Corp' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: 'John Smith' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '+1-555-123-4567' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'john@example.com' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: 'New York' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '123 Main St' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: 'Tech Corp' }
             ],
             'ja_JP': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '名前', example: '田中太郎' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '電話番号', example: '090-1234-5678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'メール', example: 'tanaka@example.jp' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '都市', example: '東京都' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '住所', example: '渋谷区xxx' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '会社名', example: '株式会社テック' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '田中太郎' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '090-1234-5678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'tanaka@example.jp' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '東京都' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '渋谷区xxx' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '株式会社テック' }
             ],
             'ko_KR': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '이름', example: '김철수' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '전화번호', example: '010-1234-5678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '이메일', example: 'kim@example.kr' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '도시', example: '서울특별시' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '주소', example: '강남구 xxx' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '회사명', example: '테크주식회사' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '김철수' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '010-1234-5678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'kim@example.kr' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '서울특별시' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '강남구 xxx' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '테크주식회사' }
             ]
         };
 
@@ -12845,20 +13020,20 @@ class XKAutoTesterApp {
             selected: selectedProvider === p.value
         }));
 
-        const languageLabel = window.i18n ? window.i18n.t('testCase.fakerLocale') : '语言';
-        const typeLabel = window.i18n ? window.i18n.t('testCase.fakerType') : '类型';
-        const exampleLabel = window.i18n ? window.i18n.t('testCase.fakerExample') : '示例';
+        const languageLabel = window.i18n.t('testCase.fakerLocale');
+        const typeLabel = window.i18n.t('testCase.fakerType');
+        const exampleLabel = window.i18n.t('testCase.fakerExample');
 
         return `
             <div class="tc-faker-config">
                 <div class="tc-faker-row">
                     <div class="tc-faker-field">
                         <label>${languageLabel}</label>
-                        ${this.tcGenerateCustomSelect('tc-multi-faker-locale', localeOptions, window.i18n ? window.i18n.t('testCase.fakerLocale') : '请选择语言', step.id, index)}
+                        ${this.tcGenerateCustomSelect('tc-multi-faker-locale', localeOptions, window.i18n.t('testCase.fakerLocale'), step.id, index)}
                     </div>
                     <div class="tc-faker-field">
                         <label>${typeLabel}</label>
-                        ${this.tcGenerateCustomSelect('tc-multi-faker-provider', providerOptions, window.i18n ? window.i18n.t('testCase.fakerType') : '请选择类型', step.id, index)}
+                        ${this.tcGenerateCustomSelect('tc-multi-faker-provider', providerOptions, window.i18n.t('testCase.fakerType'), step.id, index)}
                     </div>
                 </div>
                 <div class="tc-faker-example">
@@ -12953,16 +13128,16 @@ class XKAutoTesterApp {
 
         // 输入类型选项
         const inputTypeOptions = [
-            {value: 'custom', label: '自定义', selected: inputType === 'custom'},
-            {value: 'random', label: '随机数', selected: inputType === 'random'},
-            {value: 'faker', label: 'Faker', selected: inputType === 'faker'}
+            {value: 'custom', label: window.i18n.t('testCase.bleCustomData'), selected: inputType === 'custom'},
+            {value: 'random', label: window.i18n.t('testCase.inputRandom'), selected: inputType === 'random'},
+            {value: 'faker', label: window.i18n.t('testCase.inputFaker'), selected: inputType === 'faker'}
         ];
 
         return `
-            <label>键入内容</label>
+            <label>${window.i18n.t('testCase.inputContent')}</label>
             <div class="tc-sendtext-config">
                 <div class="tc-input-type-selector">
-                    ${this.tcGenerateCustomSelect('tc-input-type-select', inputTypeOptions, '请选择类型', step.id)}
+                    ${this.tcGenerateCustomSelect('tc-input-type-select', inputTypeOptions, window.i18n.t('testCase.inputType'), step.id)}
                 </div>
                 <div class="tc-input-value-container" data-step-id="${step.id}">
                     ${this.tcRenderInputValueArea(step, inputType)}
@@ -13031,44 +13206,44 @@ class XKAutoTesterApp {
         const fakerConfig = opValue.fakerConfig || {};
 
         const locales = [
-            { value: 'zh_CN', label: window.i18n ? window.i18n.t('testCase.fakerLocales.zh_CN') : '中文' },
-            { value: 'en_US', label: window.i18n ? window.i18n.t('testCase.fakerLocales.en_US') : 'English' },
-            { value: 'ja_JP', label: window.i18n ? window.i18n.t('testCase.fakerLocales.ja_JP') : '日本語' },
-            { value: 'ko_KR', label: window.i18n ? window.i18n.t('testCase.fakerLocales.ko_KR') : '한국어' }
+            { value: 'zh_CN', label: window.i18n.t('testCase.fakerLocales.zh_CN') },
+            { value: 'en_US', label: window.i18n.t('testCase.fakerLocales.en_US') },
+            { value: 'ja_JP', label: window.i18n.t('testCase.fakerLocales.ja_JP') },
+            { value: 'ko_KR', label: window.i18n.t('testCase.fakerLocales.ko_KR') }
         ];
 
         const providers = {
             'zh_CN': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '姓名', example: '张三' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '手机号', example: '13812345678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '邮箱', example: 'zhangsan@example.com' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '城市', example: '北京市' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '地址', example: '朝阳区xxx街道' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '公司名称', example: '科技有限公司' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '张三' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '13812345678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'zhangsan@example.com' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '北京市' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '朝阳区xxx街道' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '科技有限公司' }
             ],
             'en_US': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : 'Name', example: 'John Smith' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : 'Phone', example: '+1-555-123-4567' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'Email', example: 'john@example.com' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : 'City', example: 'New York' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : 'Address', example: '123 Main St' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : 'Company Name', example: 'Tech Corp' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: 'John Smith' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '+1-555-123-4567' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'john@example.com' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: 'New York' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '123 Main St' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: 'Tech Corp' }
             ],
             'ja_JP': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '名前', example: '田中太郎' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '電話番号', example: '090-1234-5678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'メール', example: 'tanaka@example.jp' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '都市', example: '東京都' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '住所', example: '渋谷区xxx' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '会社名', example: '株式会社テック' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '田中太郎' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '090-1234-5678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'tanaka@example.jp' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '東京都' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '渋谷区xxx' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '株式会社テック' }
             ],
             'ko_KR': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '이름', example: '김철수' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '전화번호', example: '010-1234-5678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '이메일', example: 'kim@example.kr' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '도시', example: '서울특별시' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '주소', example: '강남구 xxx' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '회사명', example: '테크주식회사' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '김철수' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '010-1234-5678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'kim@example.kr' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '서울특별시' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '강남구 xxx' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '테크주식회사' }
             ]
         };
 
@@ -13089,25 +13264,65 @@ class XKAutoTesterApp {
             selected: selectedProvider === p.value
         }));
 
-        const languageLabel = window.i18n ? window.i18n.t('testCase.fakerLocale') : '语言';
-        const typeLabel = window.i18n ? window.i18n.t('testCase.fakerType') : '类型';
-        const exampleLabel = window.i18n ? window.i18n.t('testCase.fakerExample') : '示例';
+        const languageLabel = window.i18n.t('testCase.fakerLocale');
+        const typeLabel = window.i18n.t('testCase.fakerType');
+        const exampleLabel = window.i18n.t('testCase.fakerExample');
 
         return `
             <div class="tc-faker-config">
                 <div class="tc-faker-row">
                     <div class="tc-faker-field">
                         <label>${languageLabel}</label>
-                        ${this.tcGenerateCustomSelect('tc-faker-locale', localeOptions, window.i18n ? window.i18n.t('testCase.fakerLocale') : '请选择语言', step.id)}
+                        ${this.tcGenerateCustomSelect('tc-faker-locale', localeOptions, window.i18n.t('testCase.fakerLocale'), step.id)}
                     </div>
                     <div class="tc-faker-field">
                         <label>${typeLabel}</label>
-                        ${this.tcGenerateCustomSelect('tc-faker-provider', providerOptions, window.i18n ? window.i18n.t('testCase.fakerType') : '请选择类型', step.id)}
+                        ${this.tcGenerateCustomSelect('tc-faker-provider', providerOptions, window.i18n.t('testCase.fakerType'), step.id)}
                     </div>
                 </div>
                 <div class="tc-faker-example">
                     <span class="tc-faker-example-label">${exampleLabel}:</span>
                     <span class="tc-faker-example-value">${currentProvider?.example || ''}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    tcRenderSystemConfig(step) {
+        const config = step.config || {};
+        const systemConfig = config.systemConfig || {};
+        const operationType = systemConfig.operationType || 'navigation';
+        const navKey = systemConfig.navKey || 'back';
+        const clickCount = systemConfig.clickCount || 1;
+
+        const operationTypeOptions = [
+            {value: 'navigation', label: window.i18n.t('testCase.navigationBar'), selected: operationType === 'navigation'}
+        ];
+
+        const navKeyOptions = [
+            {value: 'back', label: window.i18n.t('testCase.navBack'), selected: navKey === 'back'},
+            {value: 'home', label: window.i18n.t('testCase.navHome'), selected: navKey === 'home'},
+            {value: 'recent', label: window.i18n.t('testCase.navRecent'), selected: navKey === 'recent'}
+        ];
+
+        return `
+            <div class="tc-step-config tc-system-config">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>${window.i18n.t('testCase.systemOperationType')}</label>
+                        ${this.tcGenerateCustomSelect('tc-system-operation-type', operationTypeOptions, window.i18n.t('testCase.selectSystemOperationType'), step.id)}
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>${window.i18n.t('testCase.keySelect')}</label>
+                        ${this.tcGenerateCustomSelect('tc-nav-key-select', navKeyOptions, window.i18n.t('testCase.selectKey'), step.id)}
+                    </div>
+                    <div class="form-group">
+                        <label>${window.i18n.t('testCase.clickCount')}</label>
+                        <input type="number" class="glass-input tc-nav-click-count" data-step-id="${step.id}"
+                               value="${clickCount}" min="1" step="1">
+                    </div>
                 </div>
             </div>
         `;
@@ -13133,8 +13348,8 @@ class XKAutoTesterApp {
                 }));
                 methodOptionsHtml = `
                     <div class="form-group">
-                        <label>${window.i18n ? window.i18n.t('testCase.bleMethod') : '操作方法'}</label>
-                        ${this.tcGenerateCustomSelect('tc-ble-method-select', methodOptions, window.i18n ? window.i18n.t('testCase.bleMethodPlaceholder') : '请选择方法', step.id)}
+                        <label>${window.i18n.t('testCase.bleMethod')}</label>
+                        ${this.tcGenerateCustomSelect('tc-ble-method-select', methodOptions, window.i18n.t('testCase.bleMethodPlaceholder'), step.id)}
                     </div>
                 `;
 
@@ -13150,7 +13365,7 @@ class XKAutoTesterApp {
         return `
             <div class="tc-step-config tc-ble-config" data-step-id="${step.id}">
                 <div class="form-group">
-                    <label>${window.i18n ? window.i18n.t('testCase.bleDeviceSelect') : '蓝牙设备'}</label>
+                    <label>${window.i18n.t('testCase.bleDeviceSelect')}</label>
                     <div class="tc-ble-device-select-container" data-step-id="${step.id}"></div>
                 </div>
                 ${methodOptionsHtml}
@@ -13223,8 +13438,8 @@ class XKAutoTesterApp {
                 }));
                 methodOptionsHtml = `
                     <div class="form-group">
-                        <label>${window.i18n ? window.i18n.t('testCase.bleMethod') : '操作方法'}</label>
-                        ${this.tcGenerateCustomSelect('tc-ble-method-select', methodOptions, window.i18n ? window.i18n.t('testCase.bleMethodPlaceholder') : '请选择方法', step.id)}
+                        <label>${window.i18n.t('testCase.bleMethod')}</label>
+                        ${this.tcGenerateCustomSelect('tc-ble-method-select', methodOptions, window.i18n.t('testCase.bleMethodPlaceholder'), step.id)}
                     </div>
                 `;
 
@@ -13251,25 +13466,29 @@ class XKAutoTesterApp {
      */
     tcRenderPageConfig(step) {
         const config = step.config || {};
-        const operationType = config.operationType || 'compare';
+        if (!config.operationType) {
+            config.operationType = 'compare';
+        }
+        const operationType = config.operationType;
 
         const operationTypeOptions = [
-            {value: 'compare', label: window.i18n ? window.i18n.t('testCase.pageCompare') : '对比', selected: operationType === 'compare'}
+            {value: 'compare', label: window.i18n.t('testCase.pageCompare'), selected: operationType === 'compare'},
+            {value: 'search', label: window.i18n.t('testCase.pageSearch'), selected: operationType === 'search'}
         ];
 
         const app = this.tcSelectedApp;
-        let compareElementPageOptions = [{value: '', label: window.i18n ? window.i18n.t('pagePackage.selectPage') : '请选择页面', selected: !config.compareConfig?.pageId}];
+        let compareElementPageOptions = [{value: '', label: window.i18n.t('pagePackage.selectPage'), selected: !config.compareConfig?.pageId}];
         if (app && app.pages) {
             app.pages.forEach(page => {
                 compareElementPageOptions.push({value: page.id, label: page.name, selected: config.compareConfig?.pageId === page.id});
             });
         }
 
-        let compareElementOptions = [{value: '', label: window.i18n ? window.i18n.t('pagePackage.selectElement') : '请选择元素', selected: true}];
+        let compareElementOptions = [{value: '', label: window.i18n.t('pagePackage.selectElement'), selected: true}];
         if (config.compareConfig?.pageId && app) {
             const page = app.pages?.find(p => p.id === config.compareConfig.pageId);
             if (page && page.elements) {
-                compareElementOptions = [{value: '', label: window.i18n ? window.i18n.t('pagePackage.selectElement') : '请选择元素', selected: !config.compareConfig.elementId}];
+                compareElementOptions = [{value: '', label: window.i18n.t('pagePackage.selectElement'), selected: !config.compareConfig.elementId}];
                 page.elements.forEach(element => {
                     compareElementOptions.push({value: element.id, label: element.name, selected: config.compareConfig.elementId === element.id});
                 });
@@ -13277,63 +13496,172 @@ class XKAutoTesterApp {
         }
 
         const compareConfig = config.compareConfig || {};
-        const targetValueType = compareConfig.targetValueType || 'custom';
+        if (!compareConfig.targetValueType) {
+            compareConfig.targetValueType = 'custom';
+            config.compareConfig = compareConfig;
+        }
+        const targetValueType = compareConfig.targetValueType;
 
-        const bleRandomRangeSteps = this.tcSteps.filter(s => 
-            s.type === 'ble' && (s.config?.deviceConfig?.methodName === 'send_random_data' || s.config?.deviceConfig?.methodName === 'send_custom_data')
+        const currentStepIndex = this.tcSteps.findIndex(s => s.id === step.id);
+        const hasBleSteps = this.tcSteps.some((s, index) =>
+            index < currentStepIndex &&
+            s.type === 'ble' &&
+            (s.config?.deviceConfig?.methodName === 'send_random_data' || s.config?.deviceConfig?.methodName === 'send_custom_data')
         );
+
         const targetValueOptions = [
-            {value: 'custom', label: window.i18n ? window.i18n.t('testCase.bleCustomData') : '自定义', selected: targetValueType === 'custom'}
+            {value: 'custom', label: window.i18n.t('testCase.bleCustomData'), selected: targetValueType === 'custom'}
         ];
-        bleRandomRangeSteps.forEach(s => {
+        if (hasBleSteps) {
             targetValueOptions.push({
-                value: s.id, 
-                label: `${s.name} ${window.i18n ? window.i18n.t('testCase.generatedRandomValue') : '生成的随机数值'}`,
-                selected: targetValueType === s.id
+                value: 'ble',
+                label: window.i18n.t('testCase.bleOperation'),
+                selected: targetValueType === 'ble'
             });
+        }
+
+        const bleStepId = compareConfig.bleStepId || '';
+        const bleStepOptions = [{value: '', label: window.i18n.t('testCase.selectStep'), selected: !bleStepId}];
+        this.tcSteps.forEach((s, index) => {
+            if (index < currentStepIndex &&
+                s.type === 'ble' &&
+                (s.config?.deviceConfig?.methodName === 'send_random_data' || s.config?.deviceConfig?.methodName === 'send_custom_data')) {
+                bleStepOptions.push({
+                    value: s.id,
+                    label: `${s.name} ${window.i18n.t('testCase.generatedRandomValue')}`,
+                    selected: bleStepId === s.id
+                });
+            }
         });
 
-        const isRandomRangeTarget = targetValueType !== 'custom' && targetValueType !== '';
+        const isBleTarget = targetValueType === 'ble';
         const showCustomInput = targetValueType === 'custom';
-        const toleranceDisabled = !isRandomRangeTarget && compareConfig.targetValue && isNaN(parseFloat(compareConfig.targetValue));
+        const showBleStepSelect = isBleTarget;
+        const toleranceDisabled = !isBleTarget && compareConfig.targetValue && isNaN(parseFloat(compareConfig.targetValue));
+
+        const searchConfig = config.searchConfig || {};
+        if (!searchConfig.searchType) {
+            searchConfig.searchType = 'element';
+            config.searchConfig = searchConfig;
+        }
+        const searchType = searchConfig.searchType;
+        const searchTypeOptions = [
+            {value: 'element', label: window.i18n.t('testCase.searchTypeElement'), selected: searchType === 'element'},
+            {value: 'text', label: window.i18n.t('testCase.searchTypeText'), selected: searchType === 'text'}
+        ];
+        const searchMatchType = searchConfig.matchType || 'contains';
+
+        let searchElementPageOptions = [{value: '', label: window.i18n.t('pagePackage.selectPage'), selected: !searchConfig.pageId}];
+        if (app && app.pages) {
+            app.pages.forEach(page => {
+                searchElementPageOptions.push({value: page.id, label: page.name, selected: searchConfig.pageId === page.id});
+            });
+        }
+
+        let searchElementOptions = [{value: '', label: window.i18n.t('pagePackage.selectElement'), selected: true}];
+        if (searchConfig.pageId && app) {
+            const page = app.pages?.find(p => p.id === searchConfig.pageId);
+            if (page && page.elements) {
+                searchElementOptions = [{value: '', label: window.i18n.t('pagePackage.selectElement'), selected: !searchConfig.elementId}];
+                page.elements.forEach(element => {
+                    searchElementOptions.push({value: element.id, label: element.name, selected: searchConfig.elementId === element.id});
+                });
+            }
+        }
 
         return `
             <div class="tc-step-config tc-page-config">
                 <div class="form-row">
                     <div class="form-group">
-                        <label>${window.i18n ? window.i18n.t('testCase.pageOperationType') : '操作类型'}</label>
-                        ${this.tcGenerateCustomSelect('tc-page-operation-type', operationTypeOptions, window.i18n ? window.i18n.t('testCase.selectOperationType') : '请选择操作类型', step.id)}
+                        <label>${window.i18n.t('testCase.pageOperationType')}</label>
+                        ${this.tcGenerateCustomSelect('tc-page-operation-type', operationTypeOptions, window.i18n.t('testCase.selectOperationType'), step.id)}
                     </div>
                 </div>
-                <div class="tc-page-compare-config" data-step-id="${step.id}">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>${window.i18n ? window.i18n.t('testCase.targetValueType') : '目标值类型'}</label>
-                            ${this.tcGenerateCustomSelect('tc-target-value-type', targetValueOptions, window.i18n ? window.i18n.t('testCase.selectTargetValueType') : '请选择目标值类型', step.id)}
+                <div class="tc-page-compare-config ${operationType === 'compare' ? '' : 'hidden'}" data-step-id="${step.id}">
+                    <div class="tc-compare-group">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>${window.i18n.t('testCase.compareSource')}</label>
+                                ${this.tcGenerateCustomSelect('tc-target-value-type', targetValueOptions, window.i18n.t('testCase.selectCompareSource'), step.id)}
+                            </div>
+                            <div class="form-group tc-custom-target-value-group ${showCustomInput ? '' : 'hidden'}">
+                                <label>${window.i18n.t('testCase.targetValue')}</label>
+                                <input type="text" class="glass-input tc-compare-target-value" data-step-id="${step.id}"
+                                       value="${compareConfig.targetValue || ''}" placeholder="${window.i18n.t('testCase.enterTargetValue')}">
+                            </div>
                         </div>
-                        <div class="form-group tc-custom-target-value-group ${showCustomInput ? '' : 'hidden'}">
-                            <label>${window.i18n ? window.i18n.t('testCase.targetValue') : '目标值'}</label>
-                            <input type="text" class="glass-input tc-compare-target-value" data-step-id="${step.id}"
-                                   value="${compareConfig.targetValue || ''}" placeholder="${window.i18n ? window.i18n.t('testCase.enterTargetValue') : '输入目标值'}">
+                        <div class="form-row tc-ble-step-select-group ${showBleStepSelect ? '' : 'hidden'}">
+                            <div class="form-group">
+                                <label>${window.i18n.t('testCase.stepSelect')}</label>
+                                ${this.tcGenerateCustomSelect('tc-ble-step-select', bleStepOptions, window.i18n.t('testCase.selectStep'), step.id)}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tc-compare-group">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>${window.i18n.t('testCase.compareElementPage')}</label>
+                                ${this.tcGenerateCustomSelect('tc-compare-element-page', compareElementPageOptions, window.i18n.t('pagePackage.selectPage'), step.id)}
+                            </div>
+                            <div class="form-group">
+                                <label>${window.i18n.t('testCase.compareElement')}</label>
+                                ${this.tcGenerateCustomSelect('tc-compare-element-select', compareElementOptions, window.i18n.t('pagePackage.selectElement'), step.id)}
+                            </div>
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>${window.i18n ? window.i18n.t('testCase.pageSelect') : '页面选择'}</label>
-                            ${this.tcGenerateCustomSelect('tc-compare-element-page', compareElementPageOptions, window.i18n ? window.i18n.t('pagePackage.selectPage') : '请选择页面', step.id)}
-                        </div>
-                        <div class="form-group">
-                            <label>${window.i18n ? window.i18n.t('testCase.compareElement') : '对比元素'}</label>
-                            ${this.tcGenerateCustomSelect('tc-compare-element-select', compareElementOptions, window.i18n ? window.i18n.t('pagePackage.selectElement') : '请选择元素', step.id)}
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>${window.i18n ? window.i18n.t('testCase.pageCompareTolerance') : '容差值'}</label>
+                            <label>${window.i18n.t('testCase.pageCompareTolerance')}</label>
                             <input type="number" class="glass-input tc-compare-tolerance" data-step-id="${step.id}"
                                    value="${compareConfig.tolerance || ''}" step="0.1" min="0"
-                                   placeholder="${window.i18n ? window.i18n.t('testCase.tolerancePlaceholder') : '不输入默认对比字符串差异'}"
+                                   placeholder="${window.i18n.t('testCase.tolerancePlaceholder')}"
                                    ${toleranceDisabled ? 'disabled' : ''}>
+                        </div>
+                    </div>
+                </div>
+                <div class="tc-page-search-config ${operationType === 'search' ? '' : 'hidden'}" data-step-id="${step.id}">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${window.i18n.t('testCase.pageSearchType')}</label>
+                            ${this.tcGenerateCustomSelect('tc-search-type', searchTypeOptions, window.i18n.t('testCase.selectSearchType'), step.id)}
+                        </div>
+                    </div>
+                    <div class="tc-search-element-group ${searchType === 'element' ? '' : 'hidden'}" data-step-id="${step.id}">
+                        <div class="tc-compare-group">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>${window.i18n.t('testCase.searchElementPage')}</label>
+                                    ${this.tcGenerateCustomSelect('tc-search-element-page', searchElementPageOptions, window.i18n.t('pagePackage.selectPage'), step.id)}
+                                </div>
+                                <div class="form-group">
+                                    <label>${window.i18n.t('testCase.searchElement')}</label>
+                                    ${this.tcGenerateCustomSelect('tc-search-element-select', searchElementOptions, window.i18n.t('pagePackage.selectElement'), step.id)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tc-search-text-group ${searchType === 'text' ? '' : 'hidden'}" data-step-id="${step.id}">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>${window.i18n.t('testCase.searchTextValue')}</label>
+                                <input type="text" class="glass-input tc-search-text-value" data-step-id="${step.id}"
+                                       value="${searchConfig.textValue || ''}" placeholder="${window.i18n.t('testCase.enterSearchText')}">
+                            </div>
+                        </div>
+                        <div class="form-row tc-search-match-type-row">
+                            <div class="form-group">
+                                <label>${window.i18n.t('testCase.matchType')}</label>
+                                <div class="tc-radio-group" data-step-id="${step.id}">
+                                    <label class="tc-radio-option">
+                                        <input type="radio" name="tc-search-match-${step.id}" value="contains" ${searchMatchType === 'contains' ? 'checked' : ''} class="tc-search-match-radio">
+                                        <span>${window.i18n.t('testCase.matchContains')}</span>
+                                    </label>
+                                    <label class="tc-radio-option">
+                                        <input type="radio" name="tc-search-match-${step.id}" value="exact" ${searchMatchType === 'exact' ? 'checked' : ''} class="tc-search-match-radio">
+                                        <span>${window.i18n.t('testCase.matchExact')}</span>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -13347,11 +13675,18 @@ class XKAutoTesterApp {
     tcBindStepCardEvents(card, step) {
         const stepId = step.id;
 
+        card.addEventListener('change', (e) => {
+            if (e.target.matches('input, select, textarea')) {
+                this.tcMarkDirty();
+            }
+        });
+
         // 步骤名称变更
         const nameInput = card.querySelector('.tc-step-name-input');
         if (nameInput) {
             nameInput.addEventListener('change', (e) => {
                 step.name = e.target.value;
+                this.tcMarkDirty();
             });
         }
 
@@ -13380,6 +13715,7 @@ class XKAutoTesterApp {
                 }
 
                 step.type = tab.dataset.type;
+                this.tcMarkDirty();
                 const body = card.querySelector('.tc-step-body');
                 body.innerHTML = this.tcRenderStepConfig(step);
                 this.tcBindStepCardEvents(card, step);
@@ -13399,6 +13735,9 @@ class XKAutoTesterApp {
 
         // 页面操作相关事件
         this.tcBindPageEvents(card, step);
+
+        // 系统操作相关事件
+        this.tcBindSystemEvents(card, step);
     }
 
     /**
@@ -13550,6 +13889,69 @@ class XKAutoTesterApp {
         // 多选元素的随机范围配置
         const multiRandomMins = card.querySelectorAll('.tc-multi-random-min');
         const multiRandomMaxs = card.querySelectorAll('.tc-multi-random-max');
+        multiRandomMins.forEach(input => {
+            input.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const currentElem = step.config.selectedElements?.[index];
+                if (typeof currentElem === 'object') {
+                    currentElem.operationValue = currentElem.operationValue || {};
+                    currentElem.operationValue.randomConfig = currentElem.operationValue.randomConfig || {};
+                    currentElem.operationValue.randomConfig.minValue = parseFloat(e.target.value) || 0;
+                }
+            });
+        });
+        multiRandomMaxs.forEach(input => {
+            input.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const currentElem = step.config.selectedElements?.[index];
+                if (typeof currentElem === 'object') {
+                    currentElem.operationValue = currentElem.operationValue || {};
+                    currentElem.operationValue.randomConfig = currentElem.operationValue.randomConfig || {};
+                    currentElem.operationValue.randomConfig.maxValue = parseFloat(e.target.value) || 100;
+                }
+            });
+        });
+    }
+
+    tcBindMultiSelectValueEvents(container, step) {
+        const multiClickCountInputs = container.querySelectorAll('.tc-multi-click-count-input');
+        multiClickCountInputs.forEach(input => {
+            input.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const currentElem = step.config.selectedElements?.[index];
+                if (typeof currentElem === 'object') {
+                    currentElem.operationValue = currentElem.operationValue || {};
+                    currentElem.operationValue.clickCount = parseInt(e.target.value) || 1;
+                }
+            });
+        });
+
+        const multiSwipeDurations = container.querySelectorAll('.tc-multi-swipe-duration');
+        multiSwipeDurations.forEach(input => {
+            input.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const currentElem = step.config.selectedElements?.[index];
+                if (typeof currentElem === 'object') {
+                    currentElem.operationValue = currentElem.operationValue || {};
+                    currentElem.operationValue.swipeDuration = parseInt(e.target.value) || 500;
+                }
+            });
+        });
+
+        const multiCustomInputs = container.querySelectorAll('.tc-multi-custom-input');
+        multiCustomInputs.forEach(input => {
+            input.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const currentElem = step.config.selectedElements?.[index];
+                if (typeof currentElem === 'object') {
+                    currentElem.operationValue = currentElem.operationValue || {};
+                    currentElem.operationValue.inputValue = e.target.value;
+                }
+            });
+        });
+
+        const multiRandomMins = container.querySelectorAll('.tc-multi-random-min');
+        const multiRandomMaxs = container.querySelectorAll('.tc-multi-random-max');
         multiRandomMins.forEach(input => {
             input.addEventListener('change', (e) => {
                 const index = parseInt(e.target.dataset.index);
@@ -13738,36 +14140,36 @@ class XKAutoTesterApp {
 
         const providers = {
             'zh_CN': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '姓名', example: '张三' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '手机号', example: '13812345678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '邮箱', example: 'zhangsan@example.com' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '城市', example: '北京市' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '地址', example: '朝阳区xxx街道' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '公司名称', example: '科技有限公司' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '张三' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '13812345678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'zhangsan@example.com' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '北京市' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '朝阳区xxx街道' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '科技有限公司' }
             ],
             'en_US': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : 'Name', example: 'John Smith' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : 'Phone', example: '+1-555-123-4567' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'Email', example: 'john@example.com' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : 'City', example: 'New York' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : 'Address', example: '123 Main St' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : 'Company Name', example: 'Tech Corp' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: 'John Smith' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '+1-555-123-4567' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'john@example.com' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: 'New York' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '123 Main St' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: 'Tech Corp' }
             ],
             'ja_JP': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '名前', example: '田中太郎' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '電話番号', example: '090-1234-5678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : 'メール', example: 'tanaka@example.jp' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '都市', example: '東京都' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '住所', example: '渋谷区xxx' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '会社名', example: '株式会社テック' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '田中太郎' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '090-1234-5678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'tanaka@example.jp' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '東京都' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '渋谷区xxx' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '株式会社テック' }
             ],
             'ko_KR': [
-                { value: 'person.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personName') : '이름', example: '김철수' },
-                { value: 'person.phone', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personPhone') : '전화번호', example: '010-1234-5678' },
-                { value: 'person.email', label: window.i18n ? window.i18n.t('testCase.fakerProviders.personEmail') : '이메일', example: 'kim@example.kr' },
-                { value: 'address.city', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressCity') : '도시', example: '서울특별시' },
-                { value: 'address.address', label: window.i18n ? window.i18n.t('testCase.fakerProviders.addressAddress') : '주소', example: '강남구 xxx' },
-                { value: 'company.name', label: window.i18n ? window.i18n.t('testCase.fakerProviders.companyName') : '회사명', example: '테크주식회사' }
+                { value: 'person.name', label: window.i18n.t('testCase.fakerProviders.personName'), example: '김철수' },
+                { value: 'person.phone', label: window.i18n.t('testCase.fakerProviders.personPhone'), example: '010-1234-5678' },
+                { value: 'person.email', label: window.i18n.t('testCase.fakerProviders.personEmail'), example: 'kim@example.kr' },
+                { value: 'address.city', label: window.i18n.t('testCase.fakerProviders.addressCity'), example: '서울특별시' },
+                { value: 'address.address', label: window.i18n.t('testCase.fakerProviders.addressAddress'), example: '강남구 xxx' },
+                { value: 'company.name', label: window.i18n.t('testCase.fakerProviders.companyName'), example: '테크주식회사' }
             ]
         };
 
@@ -13843,9 +14245,9 @@ class XKAutoTesterApp {
 
         const stepId = step.id;
         const cascadeSelect = new DeviceCascadeSelect(container.id, {
-            placeholder: window.i18n ? window.i18n.t('testCase.bleDeviceSelect') : '请选择设备',
-            typePlaceholder: window.i18n ? window.i18n.t('testCase.bleDeviceType') : '选择类型',
-            modelPlaceholder: window.i18n ? window.i18n.t('testCase.bleDeviceModel') : '选择型号',
+            placeholder: window.i18n.t('testCase.bleDeviceSelect'),
+            typePlaceholder: window.i18n.t('testCase.bleDeviceType'),
+            modelPlaceholder: window.i18n.t('testCase.bleDeviceModel'),
             onSelect: (device) => {
                 const s = this.tcSteps.find(st => st.id === stepId);
                 if (s) {
@@ -13926,6 +14328,32 @@ class XKAutoTesterApp {
         }
 
         updateToleranceState(targetValueType !== 'custom' && targetValueType !== '');
+
+        const searchTextValue = card.querySelector('.tc-search-text-value');
+        if (searchTextValue) {
+            searchTextValue.addEventListener('change', (e) => {
+                step.config.searchConfig = step.config.searchConfig || {};
+                step.config.searchConfig.textValue = e.target.value;
+            });
+        }
+
+        const searchMatchRadios = card.querySelectorAll('.tc-search-match-radio');
+        searchMatchRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                step.config.searchConfig = step.config.searchConfig || {};
+                step.config.searchConfig.matchType = e.target.value;
+            });
+        });
+    }
+
+    tcBindSystemEvents(card, step) {
+        const clickCountInput = card.querySelector('.tc-nav-click-count');
+        if (clickCountInput) {
+            clickCountInput.addEventListener('change', (e) => {
+                step.config.systemConfig = step.config.systemConfig || {};
+                step.config.systemConfig.clickCount = parseInt(e.target.value) || 1;
+            });
+        }
     }
 
     tcUpdateTargetValueConfig(stepId, targetValueType) {
@@ -13936,19 +14364,20 @@ class XKAutoTesterApp {
         if (!card) return;
 
         const customTargetValueGroup = card.querySelector('.tc-custom-target-value-group');
+        const bleStepSelectGroup = card.querySelector('.tc-ble-step-select-group');
         const tolerance = card.querySelector('.tc-compare-tolerance');
 
         if (customTargetValueGroup) {
-            if (targetValueType === 'custom') {
-                customTargetValueGroup.classList.remove('hidden');
-            } else {
-                customTargetValueGroup.classList.add('hidden');
-            }
+            customTargetValueGroup.classList.toggle('hidden', targetValueType !== 'custom');
+        }
+
+        if (bleStepSelectGroup) {
+            bleStepSelectGroup.classList.toggle('hidden', targetValueType !== 'ble');
         }
 
         if (tolerance) {
-            const isRandomRange = targetValueType !== 'custom' && targetValueType !== '';
-            if (isRandomRange) {
+            const isBleTarget = targetValueType === 'ble';
+            if (isBleTarget) {
                 tolerance.disabled = false;
             } else {
                 const targetValue = card.querySelector('.tc-compare-target-value');
@@ -13986,6 +14415,63 @@ class XKAutoTesterApp {
         const wrapper = document.querySelector(`#tc-compare-element-select-${stepId}`)?.closest('.custom-select-wrapper');
         if (wrapper) {
             wrapper.outerHTML = this.tcGenerateCustomSelect('tc-compare-element-select', elementOptions, '请选择元素', stepId);
+            const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
+            if (card) {
+                this.tcInitStepSelects(card);
+            }
+        }
+    }
+
+    tcUpdateOperationTypeUI(stepId, operationType) {
+        const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
+        if (!card) return;
+
+        const compareConfig = card.querySelector('.tc-page-compare-config');
+        const searchConfig = card.querySelector('.tc-page-search-config');
+
+        if (compareConfig) {
+            compareConfig.classList.toggle('hidden', operationType !== 'compare');
+        }
+        if (searchConfig) {
+            searchConfig.classList.toggle('hidden', operationType !== 'search');
+        }
+    }
+
+    tcUpdateSearchTypeUI(stepId, searchType) {
+        const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
+        if (!card) return;
+
+        const elementGroup = card.querySelector('.tc-search-element-group');
+        if (elementGroup) {
+            elementGroup.classList.toggle('hidden', searchType !== 'element');
+        }
+
+        const textGroup = card.querySelector('.tc-search-text-group');
+        if (textGroup) {
+            textGroup.classList.toggle('hidden', searchType !== 'text');
+        }
+    }
+
+    tcUpdateSearchElementSelect(stepId, pageId) {
+        const step = this.tcSteps.find(s => s.id === stepId);
+        if (!step) return;
+
+        const app = this.tcSelectedApp;
+        let elementOptions = [{value: '', label: window.i18n.t('pagePackage.selectElement'), selected: true}];
+
+        if (pageId && app) {
+            const page = app.pages?.find(p => p.id === pageId);
+            if (page && page.elements) {
+                elementOptions = [{value: '', label: window.i18n.t('pagePackage.selectElement'), selected: true}];
+                page.elements.forEach(element => {
+                    elementOptions.push({value: element.id, label: element.name, selected: false});
+                });
+            }
+        }
+
+        const wrapper = document.querySelector(`#tc-search-element-select-${stepId}`)?.closest('.custom-select-wrapper');
+        if (wrapper) {
+            wrapper.outerHTML = this.tcGenerateCustomSelect('tc-search-element-select', elementOptions, window.i18n.t('pagePackage.selectElement'), stepId);
             const card = document.querySelector(`[data-step-id="${stepId}"].tc-step-card`);
             if (card) {
                 this.tcInitStepSelects(card);
@@ -14068,6 +14554,7 @@ class XKAutoTesterApp {
      */
     tcDeleteStep(stepId) {
         this.tcSteps = this.tcSteps.filter(s => s.id !== stepId);
+        this.tcMarkDirty();
         this.tcRenderSteps();
 
         if (this.tcSteps.length === 0) {
@@ -14091,12 +14578,14 @@ class XKAutoTesterApp {
         };
 
         this.tcSteps.push(newStep);
+        this.tcMarkDirty();
         this.tcRenderSteps();
     }
 
-    /**
-     * 收集表单数据
-     */
+    tcMarkDirty() {
+        this.tcHasUnsavedChanges = true;
+    }
+
     tcCollectFormData() {
         const fileName = document.getElementById('tc-file-name')?.value?.trim() || '';
         const caseName = document.getElementById('tc-case-name')?.value?.trim() || '';
@@ -14168,6 +14657,12 @@ class XKAutoTesterApp {
                 feature,
                 story,
                 markers
+            },
+            waitTimeConfig: {
+                appLoadWaitTime: parseFloat(document.getElementById('tc-app-load-wait-time')?.value) || 10,
+                elementWaitTimeout: parseFloat(document.getElementById('tc-element-wait-timeout')?.value) || 30,
+                stepInterval: parseFloat(document.getElementById('tc-step-interval')?.value) || 2,
+                appCloseWaitTime: parseFloat(document.getElementById('tc-app-close-wait-time')?.value) || 2
             }
         };
     }
@@ -14190,7 +14685,7 @@ class XKAutoTesterApp {
         // 重置平台选择
         const platformSelectedSpan = document.querySelector('#tc-platform-select-wrapper-select .custom-select__text');
         if (platformSelectedSpan) {
-            platformSelectedSpan.textContent = window.i18n ? window.i18n.t('testCase.platforms.android') : 'Android';
+            platformSelectedSpan.textContent = window.i18n.t('testCase.platforms.android');
         }
         const platformOptions = document.getElementById('tc-platform-select-wrapper-options');
         if (platformOptions) {
@@ -14202,7 +14697,7 @@ class XKAutoTesterApp {
         // 重置应用选择
         const appSelectedSpan = document.querySelector('#tc-app-selected .custom-select__text');
         if (appSelectedSpan) {
-            appSelectedSpan.textContent = window.i18n ? window.i18n.t('testCase.selectApp') : '请选择目标应用';
+            appSelectedSpan.textContent = window.i18n.t('testCase.selectApp');
         }
         // 清除选中状态
         const appOptions = document.getElementById('tc-app-options');

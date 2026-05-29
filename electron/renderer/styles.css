@@ -8263,13 +8263,60 @@ body:not(.dark-theme) .tc-add-step-bottom-btn:hover {
 }
 
 .tc-input-type-selector {
-    margin-bottom: 8px;
 }
 
 .tc-input-value-container {
-    padding: 8px;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 8px;
+}
+
+.tc-radio-group {
+    display: flex;
+    gap: 16px;
+    padding: 8px 0;
+}
+
+.tc-radio-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.tc-radio-option input[type="radio"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(128, 128, 128, 0.4);
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.tc-radio-option input[type="radio"]:checked {
+    border-color: var(--primary);
+    background: transparent;
+}
+
+.tc-radio-option input[type="radio"]:checked::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+}
+
+.tc-radio-option span {
+    user-select: none;
 }
 
 /* Faker配置 */
@@ -8725,6 +8772,19 @@ body.dark-theme .progress-modal-container {
 .tc-page-config .tc-page-object-config,
 .tc-page-config .tc-page-compare-config {
     margin-top: 12px;
+}
+
+.tc-compare-group {
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+body:not(.dark-theme) .tc-compare-group {
+    background: rgba(0, 0, 0, 0.015);
+    border-color: rgba(0, 0, 0, 0.06);
 }
 
 .tc-compare-config {

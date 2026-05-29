@@ -238,6 +238,8 @@ class TestCaseService {
 
             template = this.generateBleConfig(template, caseData);
 
+            template = this.generateWaitTimeConfig(template, caseData);
+
             template = this.generateAllureDecorators(template, caseData);
 
             template = this.generateTestMethods(template, caseData, pagePackageData);
@@ -268,6 +270,15 @@ class TestCaseService {
             result = result.replace(regex, value);
         }
         return result;
+    }
+
+    generateWaitTimeConfig(template, caseData) {
+        const waitTimeConfig = caseData.waitTimeConfig || {};
+        template = template.replace('APP_LOAD_WAIT_TIME = 10', `APP_LOAD_WAIT_TIME = ${waitTimeConfig.appLoadWaitTime ?? 10}`);
+        template = template.replace('ELEMENT_WAIT_TIMEOUT = 30', `ELEMENT_WAIT_TIMEOUT = ${waitTimeConfig.elementWaitTimeout ?? 30}`);
+        template = template.replace('STEP_INTERVAL = 2', `STEP_INTERVAL = ${waitTimeConfig.stepInterval ?? 2}`);
+        template = template.replace('APP_CLOSE_WAIT_TIME = 2', `APP_CLOSE_WAIT_TIME = ${waitTimeConfig.appCloseWaitTime ?? 2}`);
+        return template;
     }
 
     /**
@@ -403,6 +414,9 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 break;
             case 'page':
                 code += this.generatePageStepCode(step, steps, pagePackageData);
+                break;
+            case 'system':
+                code += this.generateSystemStepCode(step);
                 break;
             default:
                 code += `            pass  # 未知步骤类型\n`;
@@ -765,7 +779,8 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
 
         switch (inputType) {
             case 'custom':
-                return `'${operationValue.inputValue || ''}'`;
+                const safeInputValue = (operationValue.inputValue || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                return `'${safeInputValue}'`;
 
             case 'random':
                 const precision = parseInt(operationValue.randomConfig?.precision || 0);
@@ -851,6 +866,56 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         return code;
     }
 
+    generateSystemStepCode(step) {
+        const config = step.config;
+        const systemConfig = config.systemConfig || {};
+        const operationType = systemConfig.operationType || 'navigation';
+        const navKey = systemConfig.navKey || 'back';
+        const clickCount = systemConfig.clickCount || 1;
+
+        let code = `            try:\n`;
+
+        if (operationType === 'navigation') {
+            const keyMap = {
+                back: { constant: 'KEYCODE_BACK', description: '返回' },
+                home: { constant: 'KEYCODE_HOME', description: '主页' },
+                recent: { constant: 'KEYCODE_APP_SWITCH', description: '最近任务' }
+            };
+
+            const keyInfo = keyMap[navKey] || keyMap.back;
+            const desc = keyInfo.description;
+
+            if (clickCount <= 1) {
+                code += `                # 按下导航栏${desc}键\n`;
+                code += `                self.driver.press_keycode(${keyInfo.constant})\n`;
+                code += `                time.sleep(STEP_INTERVAL)\n`;
+            } else {
+                code += `                # 按下导航栏${desc}键 ${clickCount}次\n`;
+                code += `                for _ in range(${clickCount}):\n`;
+                code += `                    self.driver.press_keycode(${keyInfo.constant})\n`;
+                code += `                    time.sleep(STEP_INTERVAL)\n`;
+            }
+
+            code += `                allure.attach(\n`;
+            code += `                    "按下导航栏${desc}键",\n`;
+            code += `                    name="系统操作",\n`;
+            code += `                    attachment_type=allure.attachment_type.TEXT\n`;
+            code += `                )\n`;
+        }
+
+        code += `            except Exception as e:\n`;
+        code += `                logger.error(f"${step.name}失败: {str(e)}")\n`;
+        code += `                screenshot = self.driver.get_screenshot_as_png()\n`;
+        code += `                allure.attach(\n`;
+        code += `                    screenshot,\n`;
+        code += `                    name="错误截图",\n`;
+        code += `                    attachment_type=allure.attachment_type.PNG\n`;
+        code += `                )\n`;
+        code += `                pytest.fail(f"${step.name}失败: {str(e)}")\n`;
+
+        return code;
+    }
+
     /**
      * 生成页面操作步骤代码
      */
@@ -860,47 +925,89 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
 
         let code = `            try:\n`;
 
-        const operationType = config.operationType;
-        const operationObject = config.operationObject;
+        const operationType = config.operationType || 'compare';
 
-        // 如果没有 operationType，尝试从配置中推断
-        const actualOperationType = operationType || (config.compareConfig ? 'compare' : (config.textConfig || config.elementConfig ? 'search' : null));
+        if (operationType === 'search') {
+            const searchConfig = config.searchConfig || {};
+            const searchType = searchConfig.searchType || 'element';
 
-        if (actualOperationType === 'search') {
-            // 搜索操作
-            if (operationObject === 'text') {
-                const searchText = config.textConfig?.searchText || '';
-                code += `                # 搜索文本\n`;
+            let searchLocator = searchConfig.locator || 'id';
+            let searchLocatorValue = searchConfig.locatorValue || '';
+
+            if (searchConfig.elementId && pagePackageData) {
+                const latestElement = this.findElementByIdFromPackage(searchConfig.elementId, pagePackageData);
+                if (latestElement) {
+                    searchLocator = latestElement.locator || searchLocator;
+                    searchLocatorValue = latestElement.value || searchLocatorValue;
+                }
+            }
+
+            if (searchType === 'text') {
+                const textValue = searchConfig.textValue || '';
+                const matchType = searchConfig.matchType || 'contains';
+                const escapedTextValue = textValue.replace(/"/g, '&quot;');
+                const pythonSafeTextValue = textValue.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\{/g, '{{').replace(/\}/g, '}}');
+                const xpathExpr = matchType === 'exact'
+                    ? `//*[@text="${escapedTextValue}"]`
+                    : `//*[contains(@text, "${escapedTextValue}")]`;
+
+                code += `                # 查找文本\n`;
                 code += `                waited_time = 0\n`;
-                code += `                while waited_time < TEXT_WAIT_MAX_TIME:\n`;
+                code += `                search_success = False\n`;
+                code += `                while waited_time < ELEMENT_WAIT_TIMEOUT:\n`;
                 code += `                    try:\n`;
-                code += `                        element = self.driver.find_element(AppiumBy.XPATH, f"//*[contains(@text, '${searchText}')]")\n`;
-                code += `                        logger.info(f"找到文本: ${searchText}")\n`;
+                code += `                        self.driver.find_element(\n`;
+                code += `                            AppiumBy.XPATH,\n`;
+                code += `                            '${xpathExpr}'\n`;
+                code += `                        )\n`;
+                code += `                        search_success = True\n`;
+                code += `                        logger.info('找到文本: ${pythonSafeTextValue}')\n`;
                 code += `                        break\n`;
                 code += `                    except:\n`;
-                code += `                        time.sleep(TEXT_WAIT_INTERVAL)\n`;
-                code += `                        waited_time += TEXT_WAIT_INTERVAL\n`;
-                code += `                if waited_time >= TEXT_WAIT_MAX_TIME:\n`;
-                code += `                    logger.error(f"搜索文本超时: ${searchText}")\n`;
-                code += `                    pytest.fail(f"搜索文本超时: ${searchText}")\n`;
-            } else {
-                // 元素搜索
-                const elementConfig = config.elementConfig || {};
-                code += `                # 搜索元素\n`;
-                code += `                element = self.driver.find_element(\n`;
-                code += `                    AppiumBy.${elementConfig.locator?.toUpperCase() || 'ID'},\n`;
-                code += `                    '${elementConfig.locatorValue || ''}'\n`;
+                code += `                        time.sleep(STEP_INTERVAL)\n`;
+                code += `                        waited_time += STEP_INTERVAL\n`;
+                code += `                if not search_success:\n`;
+                code += `                    logger.error(f"查找文本超时")\n`;
+                code += `                    pytest.fail(f"查找文本超时")\n`;
+                code += `                allure.attach(\n`;
+                code += `                    '找到文本: ${pythonSafeTextValue}',\n`;
+                code += `                    name="查找结果",\n`;
+                code += `                    attachment_type=allure.attachment_type.TEXT\n`;
                 code += `                )\n`;
-                code += `                logger.info("找到元素")\n`;
+            } else {
+                code += `                # 查找元素\n`;
+                code += `                waited_time = 0\n`;
+                code += `                search_success = False\n`;
+                code += `                while waited_time < ELEMENT_WAIT_TIMEOUT:\n`;
+                code += `                    try:\n`;
+                code += `                        self.driver.find_element(\n`;
+                code += `                            AppiumBy.${searchLocator.toUpperCase()},\n`;
+                code += `                            '${searchLocatorValue}'\n`;
+                code += `                        )\n`;
+                code += `                        search_success = True\n`;
+                code += `                        logger.info("找到元素")\n`;
+                code += `                        break\n`;
+                code += `                    except:\n`;
+                code += `                        time.sleep(STEP_INTERVAL)\n`;
+                code += `                        waited_time += STEP_INTERVAL\n`;
+                code += `                if not search_success:\n`;
+                code += `                    logger.error(f"查找元素超时")\n`;
+                code += `                    pytest.fail(f"查找元素超时")\n`;
+                code += `                allure.attach(\n`;
+                code += `                    "找到元素",\n`;
+                code += `                    name="查找结果",\n`;
+                code += `                    attachment_type=allure.attachment_type.TEXT\n`;
+                code += `                )\n`;
             }
-        } else if (actualOperationType === 'compare') {
+        } else if (operationType === 'compare') {
             // 对比操作
             const compareConfig = config.compareConfig || {};
             const targetValueType = compareConfig.targetValueType || 'custom';
             const targetValue = compareConfig.targetValue || '';
+            const pythonSafeTargetValue = targetValue.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
             const tolerance = compareConfig.tolerance;
             const hasTolerance = tolerance !== undefined && tolerance !== null && tolerance !== '';
-            const isRandomRangeTarget = targetValueType !== 'custom' && targetValueType !== '';
+            const isRandomRangeTarget = targetValueType === 'ble';
 
             // 优先从最新的页面封装数据中获取元素定位信息
             let compareLocator = compareConfig.locator || 'id';
@@ -917,20 +1024,21 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
             // 先设置期望值
             if (isRandomRangeTarget) {
                 // 使用蓝牙随机范围数据作为目标值
-                const bleStep = steps.find(s => s.id === targetValueType);
+                const bleStepId = compareConfig.bleStepId || '';
+                const bleStep = steps.find(s => s.id === bleStepId);
                 const bleStepName = bleStep ? bleStep.name : '蓝牙随机数据';
                 code += `                # 使用步骤"${bleStepName}"生成的随机值\n`;
                 code += `                expected_value = str(self.test_ble_value)\n`;
                 code += `                logger.info(f"期望值(来自蓝牙随机数据): {expected_value}")\n`;
             } else {
-                code += `                expected_value = '${targetValue}'\n`;
+                code += `                expected_value = '${pythonSafeTargetValue}'\n`;
             }
 
             code += `                # 等待并对比元素值\n`;
             code += `                waited_time = 0\n`;
             code += `                compare_success = False\n`;
             code += `                displayed_value = ''\n`;
-            code += `                while waited_time < TEXT_WAIT_MAX_TIME:\n`;
+            code += `                while waited_time < ELEMENT_WAIT_TIMEOUT:\n`;
             code += `                    try:\n`;
             code += `                        result_element = self.driver.find_element(\n`;
             code += `                            AppiumBy.${compareLocator.toUpperCase()},\n`;
@@ -964,8 +1072,8 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
             
             code += `                    except:\n`;
             code += `                        pass\n`;
-            code += `                    time.sleep(TEXT_WAIT_INTERVAL)\n`;
-            code += `                    waited_time += TEXT_WAIT_INTERVAL\n`;
+            code += `                    time.sleep(STEP_INTERVAL)\n`;
+            code += `                    waited_time += STEP_INTERVAL\n`;
             code += `                \n`;
             code += `                if not compare_success:\n`;
             code += `                    logger.error(f"对比数据不一致，期望: {expected_value}, 显示: {displayed_value or '无'}")\n`;
