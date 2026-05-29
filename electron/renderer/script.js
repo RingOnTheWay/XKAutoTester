@@ -29,8 +29,11 @@ class XKAutoTesterApp {
         this.tcBleDevices = [];  // 蓝牙设备列表（用于测试步骤中的蓝牙操作）
         this.tcMarkers = [];  // Markers列表
         this.tcSelectedMarkers = [];  // 选中的Markers
-        this.tcLoadedDeviceConfig = null;  // 加载的设备配置（编辑时保留）
-        this.tcLoadedBleDevice = null;  // 加载的蓝牙设备配置（编辑时保留）
+        this.tcLoadedDeviceConfig = null;
+        this.tcLoadedBleDevice = null;
+        this.tcSearchDebounceTimer = null;
+        this.tcJsonExistsMap = {};
+        this.tcSearchQuery = '';
         
         // 页面封装相关属性
         this.ppSelectedApp = null;
@@ -1352,10 +1355,43 @@ class XKAutoTesterApp {
     }
 
     setupTestCaseEvents() {
-        // 选择目录按钮
         const selectDirBtn = document.getElementById('tc-select-directory-btn');
         if (selectDirBtn) {
             selectDirBtn.addEventListener('click', () => this.tcSelectDirectory());
+        }
+
+        const searchInput = document.getElementById('tc-search-input');
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                const query = searchInput.value.trim();
+                this.tcSearchQuery = query;
+                const clearBtn = document.getElementById('tc-search-clear');
+                if (clearBtn) {
+                    clearBtn.classList.toggle('hidden', !query);
+                }
+                clearTimeout(this.tcSearchDebounceTimer);
+                if (!query) {
+                    this.tcDisplayTestFiles();
+                    return;
+                }
+                const spinner = document.getElementById('tc-search-spinner');
+                if (spinner) spinner.classList.remove('hidden');
+                this.tcSearchDebounceTimer = setTimeout(() => {
+                    this.tcPerformSearch(query);
+                }, 1000);
+            });
+        }
+
+        const searchClearBtn = document.getElementById('tc-search-clear');
+        if (searchClearBtn) {
+            searchClearBtn.addEventListener('click', () => {
+                const input = document.getElementById('tc-search-input');
+                if (input) input.value = '';
+                this.tcSearchQuery = '';
+                searchClearBtn.classList.add('hidden');
+                clearTimeout(this.tcSearchDebounceTimer);
+                this.tcDisplayTestFiles();
+            });
         }
 
         // 添加新用例按钮
@@ -1418,6 +1454,11 @@ class XKAutoTesterApp {
                 }
                 await this.tcScanTestFiles();
                 this.tcUpdateAddButtonState(true);
+                const searchInput = document.getElementById('tc-search-input');
+                if (searchInput) {
+                    searchInput.disabled = false;
+                    searchInput.closest('.tc-search-input-wrapper').classList.remove('disabled');
+                }
             }
         } catch (error) {
             console.error('选择目录失败:', error);
@@ -1443,10 +1484,54 @@ class XKAutoTesterApp {
         try {
             const files = await window.electronAPI.scanTestFiles(this.tcSelectedDirectory);
             this.tcTestFiles = files || [];
+            await this.tcBatchCheckJsonExists();
+            const searchInput = document.getElementById('tc-search-input');
+            if (searchInput) {
+                searchInput.value = '';
+                this.tcSearchQuery = '';
+            }
+            const clearBtn = document.getElementById('tc-search-clear');
+            if (clearBtn) clearBtn.classList.add('hidden');
             this.tcDisplayTestFiles();
         } catch (error) {
             console.error('扫描测试文件失败:', error);
         }
+    }
+
+    async tcBatchCheckJsonExists() {
+        if (!this.tcTestFiles || this.tcTestFiles.length === 0) {
+            this.tcJsonExistsMap = {};
+            return;
+        }
+        const fileNames = this.tcTestFiles.map(f => f.name.replace(/\.[^/.]+$/, ''));
+        try {
+            const result = await window.electronAPI.testCase.batchCheckJsonExists(fileNames);
+            if (result.success && result.data) {
+                this.tcJsonExistsMap = result.data;
+            } else {
+                this.tcJsonExistsMap = {};
+            }
+        } catch (error) {
+            console.error('批量检查JSON存在性失败:', error);
+            this.tcJsonExistsMap = {};
+        }
+    }
+
+    async tcPerformSearch(query) {
+        const startTime = Date.now();
+        const MIN_SPINNER_MS = 500;
+
+        this.tcDisplayTestFiles();
+
+        const elapsed = Date.now() - startTime;
+        const remainingDelay = Math.max(0, MIN_SPINNER_MS - elapsed);
+
+        if (remainingDelay > 0) {
+            await new Promise(resolve => setTimeout(resolve, remainingDelay));
+        }
+
+        const spinner = document.getElementById('tc-search-spinner');
+        if (spinner) spinner.classList.add('hidden');
     }
 
     tcDisplayTestFiles() {
@@ -1465,15 +1550,37 @@ class XKAutoTesterApp {
             this.initializeIcons();
             return;
         }
+
+        let filesToDisplay = this.tcTestFiles;
+        if (this.tcSearchQuery) {
+            const query = this.tcSearchQuery.toLowerCase();
+            filesToDisplay = this.tcTestFiles.filter(file =>
+                file.name.toLowerCase().includes(query)
+            );
+        }
+
+        if (filesToDisplay.length === 0) {
+            container.innerHTML = `
+                <div class="tc-no-search-results">
+                    <span class="svg-icon" data-icon="search_x"></span>
+                    <span data-i18n="testCase.noSearchResults">${window.i18n.t('testCase.noSearchResults')}</span>
+                </div>
+            `;
+            this.initializeIcons();
+            return;
+        }
         
         const fragment = document.createDocumentFragment();
-        this.tcTestFiles.forEach(file => {
+        filesToDisplay.forEach(file => {
+            const fileName = file.name.replace(/\.[^/.]+$/, '');
+            const jsonMissing = this.tcJsonExistsMap[fileName] === false;
             const fileElement = document.createElement('div');
-            fileElement.className = 'test-case-file-item';
+            fileElement.className = 'test-case-file-item' + (jsonMissing ? ' json-missing' : '');
             fileElement.setAttribute('data-path', file.path);
             fileElement.innerHTML = `
-                ${this.getIconHtml('description')}
+                ${jsonMissing ? this.getIconHtml('alert_triangle') : this.getIconHtml('description')}
                 <span>${file.name}</span>
+                ${jsonMissing ? '<span class="tc-json-missing-badge" data-i18n="testCase.jsonMissing">' + window.i18n.t('testCase.jsonMissing') + '</span>' : ''}
             `;
             
             fileElement.addEventListener('click', () => this.tcSelectFile(file, fileElement));

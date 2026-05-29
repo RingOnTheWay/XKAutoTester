@@ -1122,6 +1122,14 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         }
     }
 
+    async batchCheckJsonExists(fileNames) {
+        const results = {};
+        await Promise.all(fileNames.map(async (fileName) => {
+            results[fileName] = await this.checkJsonExists(fileName);
+        }));
+        return results;
+    }
+
     async cleanupOrphanedFiles() {
         const results = { cleanedJson: [], orphanedPy: [] };
 

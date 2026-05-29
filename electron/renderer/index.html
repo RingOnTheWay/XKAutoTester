@@ -387,6 +387,18 @@
                                     </button>
                                     <div id="tc-selected-directory" class="selected-path" data-i18n="testCase.noDirectorySelected">未选择目录</div>
                                 </div>
+                                <div class="tc-search-container">
+                                    <div class="tc-search-input-wrapper disabled">
+                                        <span class="svg-icon tc-search-icon" data-icon="search"></span>
+                                        <input type="text" id="tc-search-input" class="tc-search-input" data-i18n-placeholder="testCase.searchPlaceholder" placeholder="搜索测试文件..." autocomplete="off" disabled>
+                                        <div id="tc-search-spinner" class="tc-search-spinner hidden">
+                                            <div class="tc-spinner"></div>
+                                        </div>
+                                        <button id="tc-search-clear" class="tc-search-clear hidden">
+                                            <span class="svg-icon" data-icon="close"></span>
+                                        </button>
+                                    </div>
+                                </div>
                                 <div id="tc-test-files-list" class="test-files-list">
                                     <!-- 测试文件列表将在这里动态生成 -->
                                 </div>

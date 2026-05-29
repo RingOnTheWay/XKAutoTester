@@ -78,7 +78,10 @@ const ICON_MAPPING = {
   prevent_sleep: 'Eye',
   scan: 'ScanSearch',
   arrow_upward: 'ChevronUp',
-  arrow_downward: 'ChevronDown'
+  arrow_downward: 'ChevronDown',
+  search: 'Search',
+  alert_triangle: 'TriangleAlert',
+  search_x: 'SearchX'
 };
 
 function lucideToSvg(iconData) {

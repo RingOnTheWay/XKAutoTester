@@ -32,6 +32,11 @@ function register(ipcMain, services) {
     return { exists };
   });
 
+  registerHandler(ipcMain, 'test-case:batch-check-json-exists', async (fileNames) => {
+    const results = await testCaseService.batchCheckJsonExists(fileNames);
+    return { success: true, data: results };
+  });
+
   registerHandler(ipcMain, 'test-case:generate-python', ({ caseData, outputDir }) =>
     testCaseService.generatePythonFile(caseData, outputDir)
   );

@@ -261,6 +261,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     save: (caseData) => ipcRenderer.invoke('test-case:save', caseData),
     delete: (param) => ipcRenderer.invoke('test-case:delete', param),
     checkJsonExists: (fileName) => ipcRenderer.invoke('test-case:check-json-exists', fileName),
+    batchCheckJsonExists: (fileNames) => ipcRenderer.invoke('test-case:batch-check-json-exists', fileNames),
     generatePython: (caseData, outputDir) => ipcRenderer.invoke('test-case:generate-python', { caseData, outputDir }),
     saveAndGenerate: (caseData, outputDir) => ipcRenderer.invoke('test-case:save-and-generate', { caseData, outputDir })
   },

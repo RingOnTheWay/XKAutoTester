@@ -3464,6 +3464,199 @@ body.dark-theme .tc-editor-form .form-actions {
     border-top-color: var(--outline);
 }
 
+/* 测试用例搜索框 */
+.tc-search-container {
+    margin-top: 12px;
+    margin-bottom: 8px;
+}
+
+.tc-search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.tc-search-icon {
+    position: absolute;
+    left: 12px;
+    color: var(--text-secondary);
+    pointer-events: none;
+    width: 18px;
+    height: 18px;
+}
+
+.tc-search-input {
+    width: 100%;
+    padding: 10px 36px 10px 38px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    font-size: 13px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    outline: none;
+}
+
+.tc-search-input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+.tc-search-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.tc-search-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.tc-search-input-wrapper.disabled .tc-search-icon {
+    opacity: 0.4;
+}
+
+body:not(.dark-theme) .tc-search-input {
+    border-color: rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.02);
+}
+
+body:not(.dark-theme) .tc-search-input:focus {
+    border-color: var(--primary);
+    background: rgba(0, 0, 0, 0.01);
+}
+
+.tc-search-spinner {
+    position: absolute;
+    right: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tc-search-spinner.hidden {
+    display: none;
+}
+
+.tc-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(var(--primary-rgb), 0.2);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: tc-spin 0.6s linear infinite;
+}
+
+@keyframes tc-spin {
+    to { transform: rotate(360deg); }
+}
+
+.tc-search-clear {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tc-search-clear:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.tc-search-clear.hidden {
+    display: none;
+}
+
+body:not(.dark-theme) .tc-search-clear:hover {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+/* JSON缺失标记 - 黄色（不受主题色影响，兼容暗色模式） */
+#test-case .test-case-file-item.json-missing {
+    background: rgba(255, 193, 7, 0.12);
+    border-color: rgba(255, 193, 7, 0.35);
+}
+
+#test-case .test-case-file-item.json-missing:hover {
+    background: rgba(255, 193, 7, 0.18);
+    border-color: rgba(255, 193, 7, 0.5);
+}
+
+#test-case .test-case-file-item.json-missing.selected {
+    background: rgba(255, 193, 7, 0.2);
+    border-color: rgba(255, 193, 7, 0.6);
+}
+
+#test-case .test-case-file-item.json-missing .svg-icon {
+    color: #FFC107;
+}
+
+#test-case .test-case-file-item.json-missing .tc-json-missing-badge {
+    margin-left: auto;
+    font-size: 11px;
+    color: #FFC107;
+    opacity: 0.85;
+}
+
+body.dark-theme #test-case .test-case-file-item.json-missing {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: rgba(255, 193, 7, 0.3);
+}
+
+body.dark-theme #test-case .test-case-file-item.json-missing:hover {
+    background: rgba(255, 193, 7, 0.16);
+    border-color: rgba(255, 193, 7, 0.45);
+}
+
+body.dark-theme #test-case .test-case-file-item.json-missing.selected {
+    background: rgba(255, 193, 7, 0.18);
+    border-color: rgba(255, 193, 7, 0.55);
+}
+
+body:not(.dark-theme) #test-case .test-case-file-item.json-missing {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: rgba(255, 193, 7, 0.3);
+}
+
+body:not(.dark-theme) #test-case .test-case-file-item.json-missing:hover {
+    background: rgba(255, 193, 7, 0.16);
+    border-color: rgba(255, 193, 7, 0.45);
+}
+
+body:not(.dark-theme) #test-case .test-case-file-item.json-missing.selected {
+    background: rgba(255, 193, 7, 0.18);
+    border-color: rgba(255, 193, 7, 0.55);
+}
+
+/* 搜索无结果提示 */
+#test-case .tc-no-search-results {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+body:not(.dark-theme) #test-case .tc-no-search-results {
+    background: rgba(0, 0, 0, 0.01);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
 .test-file-item {
   display: flex;
   align-items: center;
