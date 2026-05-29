@@ -423,7 +423,6 @@ class ADBService {
       const stats = fs.statSync(apkPath);
       const fileSizeInBytes = stats.size;
       const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2);
-      console.log('[ADBService] Installing APK:', { apkPath, deviceId, fileSize: fileSizeInMB + 'MB' });
       
       // 生成临时文件路径
       const tempFileName = `temp_${Date.now()}.apk`;
@@ -441,7 +440,6 @@ class ADBService {
       }
       
       // 步骤1: 使用adb push推送文件到设备
-      console.log('[ADBService] Step 1: Pushing APK to device...');
       const pushArgs = deviceId ? ['-s', deviceId, 'push', apkPath, tempRemotePath] : ['push', apkPath, tempRemotePath];
       
       const pushProcess = spawn(adbPath, pushArgs, { windowsHide: true });
@@ -466,10 +464,7 @@ class ADBService {
             const sizeMatch = statResult.output.match(/Size:\s*(\d+)/);
             if (sizeMatch) {
               const transferredBytes = parseInt(sizeMatch[1]);
-              const percentage = Math.min(80, Math.round((transferredBytes / fileSizeInBytes) * 80));
-              
-              console.log('[ADBService] Transfer progress:', transferredBytes, '/', fileSizeInBytes, 'bytes (', percentage, '%)');
-              
+              const percentage = Math.min(80, Math.round((transferredBytes / fileSizeInBytes) * 80));             
               if (eventSender) {
                 eventSender.send('install-progress', {
                   percentage: percentage,
@@ -493,19 +488,13 @@ class ADBService {
         
         pushProcess.stdout.on('data', (data) => {
           pushStdout += data.toString();
-          console.log('[ADBService] push stdout:', data.toString());
         });
-        
         pushProcess.stderr.on('data', (data) => {
           pushStderr += data.toString();
-          console.log('[ADBService] push stderr:', data.toString());
         });
-        
         pushProcess.on('close', (code) => {
           pushResolved = true;
-          clearInterval(monitorInterval);
-          console.log('[ADBService] Push completed with code:', code);
-          
+          clearInterval(monitorInterval);          
           // 即使退出码为1，也要检查是否成功推送
           // ADB有时会返回退出码1，但实际上文件已成功推送
           const success = code === 0 || pushStderr.includes('file pushed') || pushStdout.includes('file pushed');
@@ -521,7 +510,6 @@ class ADBService {
         pushProcess.on('error', (error) => {
           pushResolved = true;
           clearInterval(monitorInterval);
-          console.error('[ADBService] Push error:', error);
           resolve({
             success: false,
             stdout: pushStdout,
@@ -533,7 +521,6 @@ class ADBService {
       
       // 检查push是否成功
       if (!pushResult.success) {
-        console.error('[ADBService] Push failed:', pushResult);
         const errorMsg = pushResult.stderr || pushResult.error || 'Failed to push APK to device';
         if (eventSender) {
           eventSender.send('install-progress', {
@@ -549,7 +536,6 @@ class ADBService {
       }
       
       // 步骤2: 使用adb shell pm install安装临时文件
-      console.log('[ADBService] Step 2: Installing APK...');
       if (eventSender) {
         eventSender.send('install-progress', {
           percentage: 80,
@@ -576,35 +562,24 @@ class ADBService {
           resolved = true;
           
           // 步骤3: 删除临时文件
-          console.log('[ADBService] Step 3: Cleaning up temp file...');
           try {
             const rmArgs = deviceId ? ['-s', deviceId, 'shell', 'rm', tempRemotePath] : ['shell', 'rm', tempRemotePath];
             await this.executeAdbCommandAsync(rmArgs);
-            console.log('[ADBService] Temp file removed');
           } catch (error) {
-            console.error('[ADBService] Failed to remove temp file:', error);
           }
-          
-          console.log('[ADBService] Install result:', result);
           resolve(result);
         };
         
         installProcess.stdout.on('data', (data) => {
           const output = data.toString();
           stdout += output;
-          console.log('[ADBService] install stdout:', output);
         });
         
         installProcess.stderr.on('data', (data) => {
           stderr += data.toString();
-          console.log('[ADBService] install stderr:', data.toString());
         });
         
         installProcess.on('close', (code) => {
-          console.log('[ADBService] Install process closed with code:', code);
-          console.log('[ADBService] Full stdout:', stdout);
-          console.log('[ADBService] Full stderr:', stderr);
-          
           const isSuccess = stdout.toLowerCase().includes('success');
           
           if (isSuccess) {
@@ -643,7 +618,6 @@ class ADBService {
         });
         
         installProcess.on('error', (error) => {
-          console.error('[ADBService] Install process error:', error);
           if (eventSender) {
             eventSender.send('install-progress', {
               percentage: 100,
@@ -662,7 +636,6 @@ class ADBService {
           if (resolved) return;
           installProcess.kill();
           const errorMsg = this.i18nService.t('main.commandTimeout');
-          console.error('[ADBService] Timeout after 600s (10 minutes)');
           if (eventSender) {
             eventSender.send('install-progress', {
               percentage: 100,
@@ -677,7 +650,6 @@ class ADBService {
         }, 600000);
       });
     } catch (error) {
-      console.error('[ADBService] Install APK exception:', error);
       return { success: false, error: error.message };
     }
   }

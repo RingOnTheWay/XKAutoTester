@@ -1,6 +1,11 @@
-function registerHandler(ipcMain, channel, handler) {
+function registerHandler(ipcMain, channel, handler, options = {}) {
+  const { withEvent = false } = options;
+
   ipcMain.handle(channel, async (event, ...args) => {
     try {
+      if (withEvent) {
+        return await handler(...args, event);
+      }
       return await handler(...args);
     } catch (error) {
       console.error(`IPC handler error [${channel}]:`, error);

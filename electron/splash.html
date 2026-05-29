@@ -836,7 +836,7 @@
         }
         
         function enterMainApp() {
-            window.electronAPI.send('splash-ready');
+            window.electronAPI.splashReady();
         }
         
         function exitApp() {
@@ -1088,7 +1088,7 @@
             loadConfigAndApplyTheme();
             setupTransparentAreaClickThrough();
             setTimeout(() => {
-                window.electronAPI.send('start-checks');
+                window.electronAPI.startChecks();
             }, 500);
         });
 

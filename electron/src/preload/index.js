@@ -295,6 +295,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkInstallerRunning: () => ipcRenderer.invoke('check-installer-running'),
   recheckCP210xDriver: () => ipcRenderer.invoke('recheck-cp210x-driver'),
 
+  startChecks: () => ipcRenderer.invoke('start-checks'),
+  splashReady: () => ipcRenderer.invoke('splash-ready'),
+
   setPreventSleep: (enable) => ipcRenderer.invoke('set-prevent-sleep', enable),
 
   selectExportPath: (options) => ipcRenderer.invoke('select-export-path', options),

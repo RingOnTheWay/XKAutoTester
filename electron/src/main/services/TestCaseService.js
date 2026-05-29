@@ -464,11 +464,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                         code += `                self.driver.tap([(${tapX}, ${tapY})])\n`;
                     }
                     code += `                logger.info("${step.name}成功")\n`;
-                    code += `                allure.attach(\n`;
-                    code += `                    "已点击坐标(${tapX}, ${tapY})${clickCount > 1 ? ` ${clickCount}次` : ''}",\n`;
-                    code += `                    name="点击操作",\n`;
-                    code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-                    code += `                )\n`;
+                    code += this.generateAllureAttachCode(`已点击坐标(${tapX}, ${tapY})${clickCount > 1 ? ` ${clickCount}次` : ''}`, '点击操作');
                     code += `                time.sleep(1)\n`;
                     break;
 
@@ -480,11 +476,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                     code += `                end_y = int(size['height'] * 0.2)\n`;
                     code += `                self.driver.swipe(${tapX}, start_y, ${tapX}, end_y, ${swipeUpDuration})\n`;
                     code += `                logger.info("向上滑动完成")\n`;
-                    code += `                allure.attach(\n`;
-                    code += `                    "向上滑动${swipeUpDuration}ms",\n`;
-                    code += `                    name="滑动操作",\n`;
-                    code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-                    code += `                )\n`;
+                    code += this.generateAllureAttachCode(`向上滑动${swipeUpDuration}ms`, '滑动操作');
                     code += `                time.sleep(1)\n`;
                     break;
 
@@ -496,11 +488,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                     code += `                end_y = int(size['height'] * 0.8)\n`;
                     code += `                self.driver.swipe(${tapX}, start_y, ${tapX}, end_y, ${swipeDownDuration})\n`;
                     code += `                logger.info("向下滑动完成")\n`;
-                    code += `                allure.attach(\n`;
-                    code += `                    "向下滑动${swipeDownDuration}ms",\n`;
-                    code += `                    name="滑动操作",\n`;
-                    code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-                    code += `                )\n`;
+                    code += this.generateAllureAttachCode(`向下滑动${swipeDownDuration}ms`, '滑动操作');
                     code += `                time.sleep(1)\n`;
                     break;
             }
@@ -517,11 +505,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                     code += `                element.click()\n`;
                 }
                 code += `                logger.info("${step.name}成功")\n`;
-                code += `                allure.attach(\n`;
-                code += `                    "已点击${clickCount}次",\n`;
-                code += `                    name="点击操作",\n`;
-                code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-                code += `                )\n`;
+                code += this.generateAllureAttachCode(`已点击${clickCount}次`, '点击操作');
                 code += `                time.sleep(1)\n`;
                 break;
 
@@ -530,11 +514,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 code += `                input_value = ${inputCode}\n`;
                 code += `                element.send_keys(input_value)\n`;
                 code += `                logger.info(f"${step.name}成功: {input_value}")\n`;
-                code += `                allure.attach(\n`;
-                code += `                    f"已输入: {input_value}",\n`;
-                code += `                    name="输入操作",\n`;
-                code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-                code += `                )\n`;
+                code += this.generateAllureAttachCode('已输入: {input_value}', '输入操作', { isFString: true });
                 code += `                time.sleep(1)\n`;
                 break;
 
@@ -547,11 +527,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 code += `                x = int(size['width'] / 2)\n`;
                 code += `                self.driver.swipe(x, start_y, x, end_y, ${swipeDuration})\n`;
                 code += `                logger.info("向上滑动完成")\n`;
-                code += `                allure.attach(\n`;
-                code += `                    "向上滑动${swipeDuration}ms",\n`;
-                code += `                    name="滑动操作",\n`;
-                code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-                code += `                )\n`;
+                code += this.generateAllureAttachCode(`向上滑动${swipeDuration}ms`, '滑动操作');
                 code += `                time.sleep(1)\n`;
                 break;
 
@@ -564,11 +540,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 code += `                x = int(size['width'] / 2)\n`;
                 code += `                self.driver.swipe(x, start_y, x, end_y, ${swipeDurationDown})\n`;
                 code += `                logger.info("向下滑动完成")\n`;
-                code += `                allure.attach(\n`;
-                code += `                    "向下滑动${swipeDurationDown}ms",\n`;
-                code += `                    name="滑动操作",\n`;
-                code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-                code += `                )\n`;
+                code += this.generateAllureAttachCode(`向下滑动${swipeDurationDown}ms`, '滑动操作');
                 code += `                time.sleep(1)\n`;
                 break;
         }
@@ -576,11 +548,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
 
         code += `            except Exception as e:\n`;
         code += `                logger.error(f"${step.name}失败: {str(e)}")\n`;
-        code += `                allure.attach(\n`;
-        code += `                    f"操作失败: {str(e)}",\n`;
-        code += `                    name="错误信息",\n`;
-        code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-        code += `                )\n`;
+        code += this.generateAllureAttachCode('操作失败: {str(e)}', '错误信息', { isFString: true });
         code += `                pytest.fail(f"${step.name}失败: {str(e)}")\n`;
 
         return code;
@@ -720,33 +688,17 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         code += `                                logger.info(f"向下滑动完成，时长: {swipe_duration}ms")\n`;
         code += `                                time.sleep(1)\n`;
         code += `                        \n`;
-        code += `                        allure.attach(\n`;
-        code += `                            f"操作元素: {elem_config['locator_value']}, 操作类型: {operation}",\n`;
-        code += `                            name="元素操作",\n`;
-        code += `                            attachment_type=allure.attachment_type.TEXT\n`;
-        code += `                        )\n`;
+        code += this.generateAllureAttachCode("操作元素: {elem_config['locator_value']}, 操作类型: {operation}", '元素操作', { isFString: true, indent: '                        ' });
         code += `                        \n`;
         code += `                    except Exception as elem_error:\n`;
         code += `                        logger.error(f"操作元素失败: {elem_config['locator_value']}, 错误: {str(elem_error)}")\n`;
-        code += `                        allure.attach(\n`;
-        code += `                            f"操作元素失败: {elem_config['locator_value']}, 错误: {str(elem_error)}",\n`;
-        code += `                            name="元素操作错误",\n`;
-        code += `                            attachment_type=allure.attachment_type.TEXT\n`;
-        code += `                        )\n`;
+        code += this.generateAllureAttachCode("操作元素失败: {elem_config['locator_value']}, 错误: {str(elem_error)}", '元素操作错误', { isFString: true, indent: '                        ' });
         code += `                        pytest.fail(f"操作元素失败: {elem_config['locator_value']}, 错误: {str(elem_error)}")\n`;
 
-        code += `                allure.attach(\n`;
-        code += `                    f"已从${selectedElements.length}个元素中随机选择并操作了{selected_count}个",\n`;
-        code += `                    name="多选元素操作",\n`;
-        code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-        code += `                )\n`;
+        code += this.generateAllureAttachCode(`已从${selectedElements.length}个元素中随机选择并操作了{selected_count}个`, '多选元素操作', { isFString: true });
         code += `            except Exception as e:\n`;
         code += `                logger.error(f"${step.name}失败: {str(e)}")\n`;
-        code += `                allure.attach(\n`;
-        code += `                    f"操作失败: {str(e)}",\n`;
-        code += `                    name="错误信息",\n`;
-        code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-        code += `                )\n`;
+        code += this.generateAllureAttachCode('操作失败: {str(e)}', '错误信息', { isFString: true });
         code += `                pytest.fail(f"${step.name}失败: {str(e)}")\n`;
 
         return code;
@@ -767,6 +719,30 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
             }
         }
         return null;
+    }
+
+    generateAllureAttachCode(content, name, options = {}) {
+        const {
+            type = 'TEXT',
+            isFString = false,
+            isVariable = false,
+            indent = '                '
+        } = options;
+
+        let contentStr;
+        if (isVariable) {
+            contentStr = content;
+        } else if (isFString) {
+            contentStr = `f"${content}"`;
+        } else {
+            contentStr = JSON.stringify(content);
+        }
+
+        return `${indent}allure.attach(\n` +
+               `${indent}    ${contentStr},\n` +
+               `${indent}    name=${JSON.stringify(name)},\n` +
+               `${indent}    attachment_type=allure.attachment_type.${type}\n` +
+               `${indent})\n`;
     }
 
     /**
@@ -845,22 +821,14 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
 
         code += `                if self.ble_device and self.ble_device.send_hex_data(hex_data):\n`;
         code += `                    logger.info(f"蓝牙发送数据成功: {hex_data}")\n`;
-        code += `                    allure.attach(\n`;
-        code += `                        f"蓝牙发送数据: {hex_data}",\n`;
-        code += `                        name="蓝牙操作",\n`;
-        code += `                        attachment_type=allure.attachment_type.TEXT\n`;
-        code += `                    )\n`;
+        code += this.generateAllureAttachCode('蓝牙发送数据: {hex_data}', '蓝牙操作', { isFString: true });
         code += `                    time.sleep(1)\n`;
         code += `                else:\n`;
         code += `                    logger.error("蓝牙发送数据失败")\n`;
         code += `                    pytest.fail("蓝牙发送数据失败")\n`;
         code += `            except Exception as e:\n`;
         code += `                logger.error(f"${step.name}失败: {str(e)}")\n`;
-        code += `                allure.attach(\n`;
-        code += `                    f"蓝牙操作失败: {str(e)}",\n`;
-        code += `                    name="错误信息",\n`;
-        code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-        code += `                )\n`;
+        code += this.generateAllureAttachCode('蓝牙操作失败: {str(e)}', '错误信息', { isFString: true });
         code += `                pytest.fail(f"${step.name}失败: {str(e)}")\n`;
 
         return code;
@@ -896,21 +864,13 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 code += `                    time.sleep(STEP_INTERVAL)\n`;
             }
 
-            code += `                allure.attach(\n`;
-            code += `                    "按下导航栏${desc}键",\n`;
-            code += `                    name="系统操作",\n`;
-            code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-            code += `                )\n`;
+            code += this.generateAllureAttachCode(`按下导航栏${desc}键`, '系统操作');
         }
 
         code += `            except Exception as e:\n`;
         code += `                logger.error(f"${step.name}失败: {str(e)}")\n`;
         code += `                screenshot = self.driver.get_screenshot_as_png()\n`;
-        code += `                allure.attach(\n`;
-        code += `                    screenshot,\n`;
-        code += `                    name="错误截图",\n`;
-        code += `                    attachment_type=allure.attachment_type.PNG\n`;
-        code += `                )\n`;
+        code += this.generateAllureAttachCode('screenshot', '错误截图', { isVariable: true, type: 'PNG' });
         code += `                pytest.fail(f"${step.name}失败: {str(e)}")\n`;
 
         return code;
@@ -969,11 +929,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 code += `                if not search_success:\n`;
                 code += `                    logger.error(f"查找文本超时")\n`;
                 code += `                    pytest.fail(f"查找文本超时")\n`;
-                code += `                allure.attach(\n`;
-                code += `                    '找到文本: ${pythonSafeTextValue}',\n`;
-                code += `                    name="查找结果",\n`;
-                code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-                code += `                )\n`;
+                code += this.generateAllureAttachCode(`找到文本: ${pythonSafeTextValue}`, '查找结果');
             } else {
                 code += `                # 查找元素\n`;
                 code += `                waited_time = 0\n`;
@@ -993,11 +949,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 code += `                if not search_success:\n`;
                 code += `                    logger.error(f"查找元素超时")\n`;
                 code += `                    pytest.fail(f"查找元素超时")\n`;
-                code += `                allure.attach(\n`;
-                code += `                    "找到元素",\n`;
-                code += `                    name="查找结果",\n`;
-                code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-                code += `                )\n`;
+                code += this.generateAllureAttachCode('找到元素', '查找结果');
             }
         } else if (operationType === 'compare') {
             // 对比操作
@@ -1080,23 +1032,11 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
             code += `                    pytest.fail(f"对比数据不一致，期望: {expected_value}, 显示: {displayed_value or '无'}")\n`;
             code += `                \n`;
             code += `                logger.info(f"显示的数据: {displayed_value}")\n`;
-            code += `                allure.attach(\n`;
-            code += `                    f"显示的数据: {displayed_value}",\n`;
-            code += `                    name="显示数据",\n`;
-            code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-            code += `                )\n`;
-            code += `                screenshot = self.driver.get_screenshot_as_png()\n`;
-            code += `                allure.attach(\n`;
-            code += `                    screenshot,\n`;
-            code += `                    name="截图",\n`;
-            code += `                    attachment_type=allure.attachment_type.PNG\n`;
-            code += `                )\n`;
-            code += `                logger.info("对比数据一致")\n`;
-            code += `                allure.attach(\n`;
-            code += `                    "对比数据一致",\n`;
-            code += `                    name="对比结果",\n`;
-            code += `                    attachment_type=allure.attachment_type.TEXT\n`;
-            code += `                )\n`;
+                code += this.generateAllureAttachCode('显示的数据: {displayed_value}', '显示数据', { isFString: true });
+                code += `                screenshot = self.driver.get_screenshot_as_png()\n`;
+                code += this.generateAllureAttachCode('screenshot', '截图', { isVariable: true, type: 'PNG' });
+                code += `                logger.info("对比数据一致")\n`;
+                code += this.generateAllureAttachCode('对比数据一致', '对比结果');
         } else {
             // 未知操作类型或缺少必要配置
             code += `                pass  # 未知操作类型或缺少配置\n`;
@@ -1105,11 +1045,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         code += `            except Exception as e:\n`;
         code += `                logger.error(f"${step.name}失败: {str(e)}")\n`;
         code += `                screenshot = self.driver.get_screenshot_as_png()\n`;
-        code += `                allure.attach(\n`;
-        code += `                    screenshot,\n`;
-        code += `                    name="错误截图",\n`;
-        code += `                    attachment_type=allure.attachment_type.PNG\n`;
-        code += `                )\n`;
+        code += this.generateAllureAttachCode('screenshot', '错误截图', { isVariable: true, type: 'PNG' });
         code += `                pytest.fail(f"${step.name}失败: {str(e)}")\n`;
 
         return code;

@@ -53,14 +53,9 @@ function register(ipcMain, services) {
     return result;
   });
 
-  ipcMain.handle('downloadFile', async (event, remotePath, localPath, deviceId) => {
-    try {
-      return await adbService.downloadFile(remotePath, localPath, deviceId, event.sender);
-    } catch (error) {
-      console.error(`IPC handler error [downloadFile]:`, error);
-      return { success: false, error: error.message };
-    }
-  });
+  registerHandler(ipcMain, 'downloadFile', (remotePath, localPath, deviceId, event) =>
+    adbService.downloadFile(remotePath, localPath, deviceId, event.sender)
+  , { withEvent: true });
 }
 
 module.exports = { register };

@@ -3,7 +3,7 @@ const { registerHandler } = require('./base/handlerUtils');
 function register(ipcMain, services) {
   const { environmentService, electronApp, testCaseService, i18nService, userDataService } = services;
 
-  ipcMain.on('start-checks', async (event) => {
+  registerHandler(ipcMain, 'start-checks', async () => {
     try {
       const results = await environmentService.runEnvironmentChecks(
         electronApp.projectRoot,
@@ -48,18 +48,20 @@ function register(ipcMain, services) {
           warnings: results.warnings
         });
       }
+
+      return { success: true };
     } catch (error) {
-      console.error('环境检查失败:', error);
       if (electronApp.splashWindow) {
         electronApp.splashWindow.webContents.send('check-complete', {
           requiredErrors: [i18nService.t('splash.checks.environmentCheckFailed', { error: error.message })],
           warnings: []
         });
       }
+      throw error;
     }
   });
 
-  ipcMain.on('splash-ready', () => {
+  registerHandler(ipcMain, 'splash-ready', () => {
     if (electronApp.splashWindow) {
       electronApp.splashWindow.close();
     }
