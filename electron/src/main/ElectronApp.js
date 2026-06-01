@@ -146,6 +146,7 @@ class ElectronApp {
       minWidth: 800,
       minHeight: 600,
       icon: path.join(assetsPath, 'icon.png'),
+      show: false,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -179,11 +180,29 @@ class ElectronApp {
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
     );
 
-    let hasReloaded = false;
+    let languageInjected = false;
+    let initialLoadDone = false;
+    let showTimeout = null;
+
+    const showWindow = () => {
+      if (showTimeout) {
+        clearTimeout(showTimeout);
+        showTimeout = null;
+      }
+      if (this.allureWindow && !this.allureWindow.isDestroyed()) {
+        this.allureWindow.show();
+      }
+    };
+
+    showTimeout = setTimeout(() => {
+      showWindow();
+    }, 5000);
 
     this.allureWindow.webContents.on('did-navigate', async (event, navigateUrl) => {
-      if (!hasReloaded && navigateUrl.startsWith('http') && this.allureWindow && !this.allureWindow.isDestroyed()) {
-        hasReloaded = true;
+      if (!navigateUrl.startsWith('http') || !this.allureWindow || this.allureWindow.isDestroyed()) return;
+
+      if (!languageInjected) {
+        languageInjected = true;
         try {
           await this.allureWindow.webContents.executeJavaScript(`
             try {
@@ -196,7 +215,18 @@ class ElectronApp {
           this.allureWindow.webContents.reload();
         } catch (e) {
           console.error('[Allure] Failed to inject language settings:', e);
+          showWindow();
         }
+      }
+    });
+
+    this.allureWindow.webContents.on('did-finish-load', () => {
+      if (!initialLoadDone) {
+        initialLoadDone = true;
+        return;
+      }
+      if (languageInjected) {
+        showWindow();
       }
     });
 
@@ -208,6 +238,7 @@ class ElectronApp {
 
     this.allureWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
       console.error(`[Allure] Failed to load: ${errorDescription} (${errorCode}) URL: ${validatedURL}`);
+      showWindow();
     });
 
     this.allureWindow.loadURL(url);
@@ -217,6 +248,10 @@ class ElectronApp {
     }
 
     this.allureWindow.on('closed', () => {
+      if (showTimeout) {
+        clearTimeout(showTimeout);
+        showTimeout = null;
+      }
       this.allureWindow = null;
     });
   }
