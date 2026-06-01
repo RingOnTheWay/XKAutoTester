@@ -368,7 +368,7 @@
     "testFailed": "测试失败",
     "testSkipped": "测试跳过",
     "testPartialPassed": "测试部分通过",
-    "testNoTests": "无测试用例",
+    "testNoTests": "没有执行测试用例",
     "caseStats": "用例统计",
     "casePassed": "通过",
     "caseFailed": "失败",

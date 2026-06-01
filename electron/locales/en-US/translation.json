@@ -366,7 +366,7 @@
     "testFailed": "Test Failed",
     "testSkipped": "Test Skipped",
     "testPartialPassed": "Test Partially Passed",
-    "testNoTests": "No Test Cases",
+    "testNoTests": "No Test Cases Executed",
     "caseStats": "Case Statistics",
     "casePassed": "Passed",
     "caseFailed": "Failed",

@@ -175,20 +175,22 @@ class AllureService {
       let command;
 
       if (await asyncFs.exists(projectAllureBat)) {
-        command = `"${projectAllureBat}" open "${reportDir}"`;
+        command = `"${projectAllureBat}" open --host 127.0.0.1 "${reportDir}"`;
         await this.logger.info('Using project allure.bat command');
       } else if (await asyncFs.exists(projectAllure)) {
-        command = `"${projectAllure}" open "${reportDir}"`;
+        command = `"${projectAllure}" open --host 127.0.0.1 "${reportDir}"`;
         await this.logger.info('Using project allure command');
       } else {
-        command = `allure open "${reportDir}"`;
+        command = `allure open --host 127.0.0.1 "${reportDir}"`;
         await this.logger.info('Using system allure command');
       }
 
       await this.logger.info(`Opening report with allure open, command: ${command}`);
 
-      const envOptions = await this.buildEnvWithJdk();
-      await this.logger.info(`Using JAVA_HOME: ${envOptions.JAVA_HOME || 'system default'}`);
+      const baseEnv = await this.buildEnvWithJdk();
+      const envOptions = { ...baseEnv };
+      envOptions.BROWSER = 'none';
+      await this.logger.info(`Using JAVA_HOME: ${baseEnv.JAVA_HOME || 'system default'}`);
 
       this.allureOpenProcess = spawn(command, {
         cwd: this.projectRoot,
@@ -201,39 +203,68 @@ class AllureService {
 
       this.allureOpenOutput = '';
 
-      this.allureOpenProcess.stdout.on('data', async (data) => {
-        const output = data.toString();
-        this.allureOpenOutput += output;
-        await this.logger.stdout(output);
+      return new Promise((resolve) => {
+        let resolved = false;
 
-        const extractedPort = this.extractPortFromAllureOpenOutput(this.allureOpenOutput);
-        if (extractedPort) {
-          await this.logger.info(`Extracted port number from output: ${extractedPort}`);
-          this.allureServerPort = extractedPort;
-        }
+        this.allureOpenProcess.stdout.on('data', async (data) => {
+          const output = data.toString();
+          this.allureOpenOutput += output;
+          await this.logger.stdout(output);
+
+          const extractedPort = this.extractPortFromAllureOpenOutput(this.allureOpenOutput);
+          if (extractedPort && !this.allureServerPort) {
+            this.allureServerPort = extractedPort;
+            await this.logger.info(`Extracted port number from output: ${extractedPort}`);
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: true, url: `http://127.0.0.1:${extractedPort}`, port: extractedPort, message: '正在打开Allure报告...' });
+            }
+          }
+        });
+
+        this.allureOpenProcess.stderr.on('data', async (data) => {
+          const output = data.toString();
+          this.allureOpenOutput += `[ERROR] ${output}`;
+          await this.logger.stderr(output);
+
+          const extractedPort = this.extractPortFromAllureOpenOutput(output);
+          if (extractedPort && !this.allureServerPort) {
+            this.allureServerPort = extractedPort;
+            await this.logger.info(`Extracted port number from stderr: ${extractedPort}`);
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: true, url: `http://127.0.0.1:${extractedPort}`, port: extractedPort, message: '正在打开Allure报告...' });
+            }
+          }
+        });
+
+        this.allureOpenProcess.on('close', async (code) => {
+          await this.logger.info(`allure open process exited with code: ${code}`);
+          this.allureOpenProcess = null;
+          this.allureOpenOutput = '';
+          this.allureServerPort = null;
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: false, error: this.i18nService.t('main.allureServerStartFailed') || 'Allure server start failed' });
+          }
+        });
+
+        this.allureOpenProcess.on('error', async (error) => {
+          await this.logger.error(`allure open process error: ${error.message}`);
+          this.allureOpenProcess = null;
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: false, error: error.message });
+          }
+        });
+
+        setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: false, error: this.i18nService.t('main.allureServerStartFailed') || 'Allure server start failed' });
+          }
+        }, 30000);
       });
-
-      this.allureOpenProcess.stderr.on('data', async (data) => {
-        const output = data.toString();
-        this.allureOpenOutput += `[ERROR] ${output}`;
-        await this.logger.stderr(output);
-      });
-
-      this.allureOpenProcess.on('close', async (code) => {
-        await this.logger.info(`allure open process exited with code: ${code}`);
-        this.allureOpenProcess = null;
-        this.allureOpenOutput = '';
-        this.allureServerPort = null;
-      });
-
-      this.allureOpenProcess.on('error', async (error) => {
-        await this.logger.error(`allure open process error: ${error.message}`);
-        this.allureOpenProcess = null;
-      });
-
-      await this.logger.info('allure open process started successfully');
-
-      return { success: true, message: '正在打开Allure报告...' };
     } catch (error) {
       await this.logger.error(`打开Allure报告失败: ${error.message}`);
       return { success: false, error: error.message };

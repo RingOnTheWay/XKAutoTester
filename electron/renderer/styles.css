@@ -2115,6 +2115,10 @@ body:not(.dark-theme) .btn-spinner {
   display: none;
 }
 
+#android-connection .file-list-container.scroll-locked {
+  overflow: hidden;
+}
+
 #android-connection .file-list-table {
   background: transparent;
 }

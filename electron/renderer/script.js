@@ -1295,11 +1295,11 @@ class XKAutoTesterApp {
 
         // 测试输出监听
         window.electronAPI.onTestOutput((event, data) => {
-            this.appendOutput(data);
+            this.appendOutput(data, false);
         });
 
         window.electronAPI.onTestError((event, data) => {
-            this.appendError(data);
+            this.appendError(data, false);
         });
         
         // 文件管理器事件监听
@@ -5691,7 +5691,7 @@ class XKAutoTesterApp {
                 failed: '❌ 失败',
                 skipped: '⏭️ 跳过',
                 partialPassed: '⚠️ 部分通过',
-                noTests: '⚠️ 无测试用例'
+                noTests: '⚠️ 没有执行测试用例'
             };
             const testResult = statusLabels[testInfo.testStatus] || (testInfo.hasFailure ? '❌ 失败' : '✅ 通过');
             
@@ -5856,14 +5856,20 @@ class XKAutoTesterApp {
         return types;
     }
 
-    appendOutput(text) {
+    appendOutput(text, logToFile = true) {
         this._outputBuffer.push({ text, isError: false });
         this._scheduleOutputFlush();
+        if (logToFile && window.electronAPI?.logTestOutput) {
+            window.electronAPI.logTestOutput(text, false);
+        }
     }
 
-    appendError(text) {
+    appendError(text, logToFile = true) {
         this._outputBuffer.push({ text, isError: true });
         this._scheduleOutputFlush();
+        if (logToFile && window.electronAPI?.logTestOutput) {
+            window.electronAPI.logTestOutput(text, true);
+        }
     }
 
     _scheduleOutputFlush() {
@@ -7167,7 +7173,11 @@ class XKAutoTesterApp {
         const menu = this.contextMenu;
         if (!menu) return;
 
-        // 先显示菜单以获取其尺寸
+        const fileListContainer = document.querySelector('.file-list-container');
+        if (fileListContainer) {
+            fileListContainer.classList.add('scroll-locked');
+        }
+
         menu.classList.remove('hidden');
 
         // 强制浏览器重排以获取准确的菜单尺寸
@@ -7265,6 +7275,10 @@ class XKAutoTesterApp {
         if (this.contextMenu) {
             this.contextMenu.classList.add('hidden');
             this.contextMenuTarget = null;
+        }
+        const fileListContainer = document.querySelector('.file-list-container');
+        if (fileListContainer) {
+            fileListContainer.classList.remove('scroll-locked');
         }
     }
     

@@ -24,10 +24,10 @@ class ElectronTestRunner:
 
     def run_tests(self, test_paths, markers=None, test_plan_name=None):
         try:
-            print(f">>> 开始运行测试计划: {test_plan_name or '默认'}")
-            print(f">>> 测试路径: {test_paths}")
+            logger.info(f">>> 开始运行测试计划: {test_plan_name or '默认'}")
+            logger.info(f">>> 测试路径: {test_paths}")
             if markers:
-                print(f">>> 测试标记: {markers}")
+                logger.info(f">>> 测试标记: {markers}")
 
             result = self.pytest_runner.run_custom_tests(
                 test_paths=test_paths,
@@ -37,7 +37,7 @@ class ElectronTestRunner:
             )
 
             summary = self.pytest_runner.get_test_summary(result)
-            print(summary)
+            logger.info(summary)
 
             success = result.get("exit_code", 0) == 0
 
@@ -52,7 +52,6 @@ class ElectronTestRunner:
         except Exception as e:
             error_msg = f">>> 测试运行失败: {str(e)}"
             logger.error(error_msg)
-            print(error_msg)
 
             return {
                 "success": False,

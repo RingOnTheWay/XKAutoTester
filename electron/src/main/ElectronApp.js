@@ -6,6 +6,7 @@ class ElectronApp {
   constructor() {
     this.mainWindow = null;
     this.splashWindow = null;
+    this.allureWindow = null;
     this.isDev = process.argv.includes('--dev');
     this.isPackaged = app.isPackaged || false;
     
@@ -103,6 +104,10 @@ class ElectronApp {
 
     this.mainWindow.on('closed', () => {
       this.mainWindow = null;
+      if (this.allureWindow && !this.allureWindow.isDestroyed()) {
+        this.allureWindow.destroy();
+        this.allureWindow = null;
+      }
     });
 
     if (this.services.schedulerService) {
@@ -126,10 +131,107 @@ class ElectronApp {
     });
   }
 
+  createAllureWindow(url, language) {
+    if (this.allureWindow && !this.allureWindow.isDestroyed()) {
+      this.allureWindow.close();
+      this.allureWindow = null;
+    }
+
+    const assetsPath = pathHelper.getAssetsPath(this.isPackaged, __dirname);
+    const partitionName = `allure-report-${Date.now()}`;
+
+    this.allureWindow = new BrowserWindow({
+      width: 1400,
+      height: 900,
+      minWidth: 800,
+      minHeight: 600,
+      icon: path.join(assetsPath, 'icon.png'),
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: false,
+        webSecurity: false,
+        partition: partitionName
+      },
+      autoHideMenuBar: true
+    });
+
+    const ses = this.allureWindow.webContents.session;
+
+    ses.webRequest.onBeforeRequest(
+      { urls: ['*://*.google-analytics.com/*', '*://*.googletagmanager.com/*'] },
+      (details, callback) => {
+        callback({ cancel: true });
+      }
+    );
+
+    ses.webRequest.onHeadersReceived((details, callback) => {
+      const responseHeaders = { ...details.responseHeaders };
+      delete responseHeaders['content-security-policy'];
+      delete responseHeaders['content-security-policy-report-only'];
+      delete responseHeaders['x-content-security-policy'];
+      delete responseHeaders['x-webkit-csp'];
+      responseHeaders['access-control-allow-origin'] = ['*'];
+      callback({ responseHeaders });
+    });
+
+    this.allureWindow.webContents.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
+    );
+
+    let hasReloaded = false;
+
+    this.allureWindow.webContents.on('did-navigate', async (event, navigateUrl) => {
+      if (!hasReloaded && navigateUrl.startsWith('http') && this.allureWindow && !this.allureWindow.isDestroyed()) {
+        hasReloaded = true;
+        try {
+          await this.allureWindow.webContents.executeJavaScript(`
+            try {
+              var existing = localStorage.getItem('ALLURE_REPORT_SETTINGS');
+              var settings = existing ? JSON.parse(existing) : {};
+              settings.language = ${JSON.stringify(language)};
+              localStorage.setItem('ALLURE_REPORT_SETTINGS', JSON.stringify(settings));
+            } catch(e) {}
+          `);
+          this.allureWindow.webContents.reload();
+        } catch (e) {
+          console.error('[Allure] Failed to inject language settings:', e);
+        }
+      }
+    });
+
+    this.allureWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+      if (level >= 3) {
+        console.error(`[Allure Window] ${message} (${sourceId}:${line})`);
+      }
+    });
+
+    this.allureWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+      console.error(`[Allure] Failed to load: ${errorDescription} (${errorCode}) URL: ${validatedURL}`);
+    });
+
+    this.allureWindow.loadURL(url);
+
+    if (!this.isPackaged) {
+      this.allureWindow.webContents.openDevTools({ mode: 'detach' });
+    }
+
+    this.allureWindow.on('closed', () => {
+      this.allureWindow = null;
+    });
+  }
+
   initialize() {
     app.on('window-all-closed', () => {
       if (process.platform !== 'darwin') {
         app.quit();
+      }
+    });
+
+    app.on('before-quit', () => {
+      if (this.allureWindow && !this.allureWindow.isDestroyed()) {
+        this.allureWindow.destroy();
+        this.allureWindow = null;
       }
     });
 

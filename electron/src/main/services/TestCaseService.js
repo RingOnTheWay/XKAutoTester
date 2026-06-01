@@ -821,7 +821,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
 
         code += `                if self.ble_device and self.ble_device.send_hex_data(hex_data):\n`;
         code += `                    logger.info(f"蓝牙发送数据成功: {hex_data}")\n`;
-        code += this.generateAllureAttachCode('蓝牙发送数据: {hex_data}', '蓝牙操作', { isFString: true });
+        code += this.generateAllureAttachCode('蓝牙发送数据: {hex_data}', '蓝牙操作', { isFString: true, indent: '                    ' });
         code += `                    time.sleep(1)\n`;
         code += `                else:\n`;
         code += `                    logger.error("蓝牙发送数据失败")\n`;

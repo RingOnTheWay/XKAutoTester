@@ -13,6 +13,19 @@ function register(ipcMain, services) {
   registerHandler(ipcMain, 'scan-test-files', (directoryPath) => testPlanService.scanTestFiles(directoryPath));
   registerHandler(ipcMain, 'extract-pytest-markers', (filePaths) => testPlanService.extractPytestMarkers(filePaths));
   registerHandler(ipcMain, 'get-pytest-markers', () => testPlanService.getPytestMarkers());
+
+  ipcMain.on('log-test-output', (event, text, isError) => {
+    if (pythonTestService.logger) {
+      const trimmed = typeof text === 'string' ? text.trimEnd() : '';
+      if (trimmed) {
+        if (isError) {
+          pythonTestService.logger.stderr(trimmed);
+        } else {
+          pythonTestService.logger.stdout(trimmed);
+        }
+      }
+    }
+  });
 }
 
 module.exports = { register };

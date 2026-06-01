@@ -142,19 +142,29 @@ class PytestRunner:
         
         # 生成Allure报告
         allure_report_path = None
+        allure_skipped_reason = None
         if generate_allure and self.allure_results_dir.exists():
-            allure_report_path = self._generate_allure_report(test_plan_name)
-            
-            if exit_code == 0:
-                if allure_report_path:
-                    logger.info("✅ 测试成功，已生成Allure报告")
-                else:
-                    logger.info("✅ 测试成功，但Allure报告生成失败")
+            if not self._has_allure_results():
+                allure_skipped_reason = "no_results"
+                logger.warning(
+                    f"未生成Allure报告：allure-results 目录为空，"
+                    f"测试可能未实际执行（退出码: {exit_code}）。请检查测试代码是否存在语法错误或配置问题。"
+                )
             else:
-                if allure_report_path:
-                    logger.warning(f"测试失败 (退出码: {exit_code})，但已生成Allure报告供分析")
-                else:
-                    logger.warning(f"测试失败 (退出码: {exit_code})，且Allure报告生成失败")
+                allure_report_path = self._generate_allure_report(test_plan_name)
+
+        if allure_skipped_reason == "no_results":
+            logger.warning(f"测试未产生任何结果 (退出码: {exit_code})，Allure报告已跳过生成")
+        elif exit_code == 0:
+            if allure_report_path:
+                logger.info("✅ 测试成功，已生成Allure报告")
+            else:
+                logger.info("✅ 测试成功，但Allure报告生成失败")
+        else:
+            if allure_report_path:
+                logger.warning(f"测试失败 (退出码: {exit_code})，但已生成Allure报告供分析")
+            else:
+                logger.warning(f"测试失败 (退出码: {exit_code})，且Allure报告生成失败")
         
         # 记录测试计划运行信息
         self._record_test_plan(test_plan_name, test_paths, markers, allure_report_path)
@@ -242,12 +252,27 @@ class PytestRunner:
         
         return args
     
+    def _has_allure_results(self) -> bool:
+        result_files = list(self.allure_results_dir.glob("*-result.json"))
+        if result_files:
+            return True
+        all_files = list(self.allure_results_dir.iterdir())
+        json_files = [f for f in all_files if f.suffix == ".json"]
+        return len(json_files) > 0
+
     def _generate_allure_report(self, test_plan_name: str) -> Optional[Path]:
-        """生成Allure报告"""
         try:
             from datetime import datetime
-            
+
             logger.info(f"开始生成Allure报告，测试计划: {test_plan_name}")
+
+            if not self._has_allure_results():
+                logger.warning(
+                    f"allure-results 目录中没有测试结果文件，跳过报告生成。"
+                    f"可能原因：测试收集阶段出错（如语法错误、导入失败），导致没有用例被执行。"
+                    f"请检查测试代码是否存在语法错误或配置问题。"
+                )
+                return None
             
             # 使用时间戳创建唯一的报告目录，支持同一测试计划多次运行
             run_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')

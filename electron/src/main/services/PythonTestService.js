@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const asyncFs = require('../utils/asyncFs');
 const pathHelper = require('../utils/pathHelper');
+const Logger = require('../utils/logger');
 
 class PythonTestService {
   constructor(projectRoot, i18nService, userDataPath) {
@@ -12,6 +13,12 @@ class PythonTestService {
     this.currentPythonProcess = null;
     this.unauthorizedDialogInterval = null;
     this.mainWindow = null;
+    this.logger = new Logger(this._getLogsPath('XKAT'), 'PythonTest');
+  }
+
+  _getLogsPath(...subdirs) {
+    const baseDir = this.userDataPath || this.projectRoot;
+    return path.join(baseDir, 'logs', ...subdirs);
   }
 
   setMainWindow(window) {
@@ -90,6 +97,7 @@ class PythonTestService {
       pythonProcess.stdout.on('data', (data) => {
         const decodedData = data.toString('utf8');
         output += decodedData;
+        this.logger.stdout(decodedData.trimEnd());
         if (this.mainWindow) {
           this.mainWindow.webContents.send('test-output', decodedData);
         }
@@ -98,6 +106,7 @@ class PythonTestService {
       pythonProcess.stderr.on('data', (data) => {
         const decodedData = data.toString('utf8');
         errorOutput += decodedData;
+        this.logger.stderr(decodedData.trimEnd());
         if (this.mainWindow) {
           this.mainWindow.webContents.send('test-error', decodedData);
         }

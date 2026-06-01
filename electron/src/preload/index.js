@@ -104,6 +104,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTestOutput: (callback) => ipcRenderer.on('test-output', callback),
   onTestError: (callback) => ipcRenderer.on('test-error', callback),
   
+  // 渲染进程日志回写
+  logTestOutput: (text, isError) => ipcRenderer.send('log-test-output', text, isError),
+  
   // 扫描测试文件
   scanTestFiles: (directoryPath) => ipcRenderer.invoke('scan-test-files', directoryPath),
   

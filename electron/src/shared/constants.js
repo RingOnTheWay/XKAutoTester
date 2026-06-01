@@ -54,7 +54,9 @@ const IPC_CHANNELS = {
     SELECT_EXPORT_PATH: 'select-export-path',
     SELECT_IMPORT_PATH: 'select-import-path',
     ON_EXPORT_PROGRESS: 'on-export-progress',
-    ON_IMPORT_PROGRESS: 'on-import-progress'
+    ON_IMPORT_PROGRESS: 'on-import-progress',
+
+    LOG_TEST_OUTPUT: 'log-test-output'
 };
 
 module.exports = { IPC_CHANNELS };
