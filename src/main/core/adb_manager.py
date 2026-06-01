@@ -8,6 +8,8 @@ import logging
 import time
 from typing import Tuple, Optional
 
+from main.utils.i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,7 +38,7 @@ class ADBManager:
             result = subprocess.run(['adb', 'version'], capture_output=True, text=True, timeout=5)
             return result.returncode == 0
         except Exception as e:
-            logger.warning(f"ADB服务检查异常: {e}")
+            logger.warning(t('python.adbManager.adbServiceCheckError', error=e))
             return False
     
     def _is_tcp_device(self) -> bool:
@@ -70,9 +72,9 @@ class ADBManager:
                 capture_output=True, text=True, timeout=5
             )
             
-            logger.info(f"ADB设备列表检查结果 - 标准输出: {devices_result.stdout}")
+            logger.info(t('python.adbManager.adbDeviceListStdout', output=devices_result.stdout))
             if devices_result.stderr:
-                logger.info(f"ADB设备列表检查结果 - 标准错误: {devices_result.stderr}")
+                logger.info(t('python.adbManager.adbDeviceListStderr', output=devices_result.stderr))
             
             for line in devices_result.stdout.split('\n'):
                 line = line.strip()
@@ -85,7 +87,7 @@ class ADBManager:
                         return False, 'offline'
             return False, 'not_found'
         except Exception as e:
-            logger.warning(f"检查设备列表异常: {e}")
+            logger.warning(t('python.adbManager.checkDeviceListError', error=e))
             return False, str(e)
     
     def _wait_for_usb_authorization(self) -> Tuple[bool, str]:
@@ -95,7 +97,7 @@ class ADBManager:
         Returns:
             Tuple[bool, str]: (授权是否成功, 状态信息)
         """
-        logger.info("请在设备上点击'同意'授权此电脑连接，系统将每2秒检查一次授权状态")
+        logger.info(t('python.adbManager.pleaseAuthorizeDevice'))
         self._show_unauthorized_dialog()
         
         max_wait_time = 60
@@ -103,23 +105,23 @@ class ADBManager:
         waited_time = 0
         
         while waited_time < max_wait_time:
-            logger.info(f"等待授权中... 已等待{waited_time}秒")
+            logger.info(t('python.adbManager.waitingForAuth', seconds=waited_time))
             time.sleep(check_interval)
             waited_time += check_interval
             
             found, status = self._check_device_in_list()
-            logger.info(f"授权检查结果 - 状态: {status}")
+            logger.info(t('python.adbManager.authCheckResult', status=status))
             
             if found and status == 'device':
-                logger.info(f"设备已授权: {self.device_name}")
-                return True, "设备连接成功并已授权"
+                logger.info(t('python.adbManager.deviceAuthorized', device=self.device_name))
+                return True, t('python.adbManager.deviceConnectedAndAuthorized')
             elif status == 'unauthorized':
-                logger.info("设备仍处于未授权状态，继续等待...")
+                logger.info(t('python.adbManager.deviceStillUnauthorized'))
             else:
-                logger.warning(f"设备未在设备列表中: {self.device_name}")
+                logger.warning(t('python.adbManager.deviceNotInList', device=self.device_name))
         
-        logger.error(f"设备授权超时: 等待{max_wait_time}秒后设备仍未授权")
-        return False, "设备授权超时"
+        logger.error(t('python.adbManager.deviceAuthTimeout', seconds=max_wait_time))
+        return False, t('python.adbManager.deviceAuthTimeoutShort')
     
     def connect_device(self) -> Tuple[bool, str]:
         """
@@ -133,7 +135,7 @@ class ADBManager:
             Tuple[bool, str]: (连接是否成功, 连接状态信息)
         """
         try:
-            logger.info(f"尝试连接设备: {self.device_name}")
+            logger.info(t('python.adbManager.tryingConnectDevice', device=self.device_name))
             
             if self._is_tcp_device():
                 return self._connect_tcp_device()
@@ -141,8 +143,8 @@ class ADBManager:
                 return self._connect_usb_device()
                 
         except Exception as e:
-            logger.warning(f"ADB设备连接异常: {e}")
-            return False, f"ADB设备连接异常: {e}"
+            logger.warning(t('python.adbManager.adbConnectError', error=e))
+            return False, t('python.adbManager.adbConnectError', error=e)
     
     def _connect_tcp_device(self) -> Tuple[bool, str]:
         """
@@ -164,64 +166,64 @@ class ADBManager:
         stdout = connect_result.stdout
         stderr = connect_result.stderr
         
-        logger.info(f"ADB连接命令执行结果 - 标准输出: {stdout}")
+        logger.info(t('python.adbManager.adbConnectStdout', output=stdout))
         if stderr:
-            logger.info(f"ADB连接命令执行结果 - 标准错误: {stderr}")
-        logger.info(f"ADB连接命令执行结果 - 返回码: {connect_result.returncode}")
+            logger.info(t('python.adbManager.adbConnectStderr', output=stderr))
+        logger.info(t('python.adbManager.adbConnectReturnCode', code=connect_result.returncode))
         
         if 'connected' in stdout or 'already' in stdout or 'failed to authenticate' in stdout:
-            logger.info(f"设备连接尝试结果: {stdout.strip()}")
+            logger.info(t('python.adbManager.deviceConnectResult', output=stdout.strip()))
             
             devices_result = subprocess.run(
                 ['adb', 'devices'], 
                 capture_output=True, text=True, timeout=5
             )
             
-            logger.info(f"ADB设备列表检查结果 - 标准输出: {devices_result.stdout}")
+            logger.info(t('python.adbManager.adbDeviceListStdout', output=devices_result.stdout))
             if devices_result.stderr:
-                logger.info(f"ADB设备列表检查结果 - 标准错误: {devices_result.stderr}")
+                logger.info(t('python.adbManager.adbDeviceListStderr', output=devices_result.stderr))
             
             device_line = device_address
             
-            logger.info("断开设备连接以重新触发授权提示...")
+            logger.info(t('python.adbManager.disconnectForReauth'))
             disconnect_result = subprocess.run(
                 ['adb', 'disconnect', device_address], 
                 capture_output=True, text=True, timeout=5
             )
-            logger.info(f"断开连接结果: {disconnect_result.stdout}")
+            logger.info(t('python.adbManager.disconnectResult', output=disconnect_result.stdout))
             
             time.sleep(1)
             
-            logger.info("重新连接设备以触发授权提示...")
+            logger.info(t('python.adbManager.reconnectForAuth'))
             reconnect_result = subprocess.run(
                 ['adb', 'connect', device_address], 
                 capture_output=True, text=True, timeout=10
             )
-            logger.info(f"重新连接结果: {reconnect_result.stdout}")
+            logger.info(t('python.adbManager.reconnectResult', output=reconnect_result.stdout))
             
             devices_result = subprocess.run(
                 ['adb', 'devices'], 
                 capture_output=True, text=True, timeout=5
             )
-            logger.info(f"重新连接后设备列表 - 标准输出: {devices_result.stdout}")
+            logger.info(t('python.adbManager.reconnectDeviceListStdout', output=devices_result.stdout))
             
             if device_line in devices_result.stdout:
                 if 'unauthorized' in devices_result.stdout or 'failed to authenticate' in stdout:
-                    logger.warning(f"设备未授权: {self.device_name}")
+                    logger.warning(t('python.adbManager.deviceUnauthorized', device=self.device_name))
                     return self._wait_for_usb_authorization()
                 else:
-                    logger.info(f"设备已授权: {self.device_name}")
-                    return True, "设备连接成功并已授权"
+                    logger.info(t('python.adbManager.deviceAuthorized', device=self.device_name))
+                    return True, t('python.adbManager.deviceConnectedAndAuthorized')
             else:
-                logger.warning(f"设备未在设备列表中: {self.device_name}")
-                return False, "设备未在设备列表中"
+                logger.warning(t('python.adbManager.deviceNotInList', device=self.device_name))
+                return False, t('python.adbManager.deviceNotInListShort')
                 
         elif 'cannot connect' in stdout or '目标计算机积极拒绝' in stdout or '10061' in stdout:
-            logger.warning(f"设备连接被拒绝: {self.device_name}")
-            return False, "设备连接被拒绝"
+            logger.warning(t('python.adbManager.deviceConnectionRefused', device=self.device_name))
+            return False, t('python.adbManager.deviceConnectionRefusedShort')
         else:
-            logger.warning(f"设备连接失败: {self.device_name}")
-            return False, "设备连接失败"
+            logger.warning(t('python.adbManager.deviceConnectionFailed', device=self.device_name))
+            return False, t('python.adbManager.deviceConnectionFailedShort')
     
     def _connect_usb_device(self) -> Tuple[bool, str]:
         """
@@ -233,23 +235,23 @@ class ADBManager:
         Returns:
             Tuple[bool, str]: (连接是否成功, 连接状态信息)
         """
-        logger.info("检测到USB设备（非IP连接标识），跳过adb connect，直接检查设备状态")
+        logger.info(t('python.adbManager.usbDeviceDetected'))
         
         found, status = self._check_device_in_list()
         
         if found and status == 'device':
-            logger.info(f"USB设备已连接并已授权: {self.device_name}")
-            return True, "设备连接成功并已授权"
+            logger.info(t('python.adbManager.usbDeviceAuthorized', device=self.device_name))
+            return True, t('python.adbManager.deviceConnectedAndAuthorized')
         elif status == 'unauthorized':
-            logger.warning(f"USB设备未授权: {self.device_name}")
+            logger.warning(t('python.adbManager.usbDeviceUnauthorized', device=self.device_name))
             return self._wait_for_usb_authorization()
         elif status == 'offline':
-            logger.warning(f"USB设备处于离线状态: {self.device_name}")
-            return False, "USB设备处于离线状态，请重新插拔USB连接"
+            logger.warning(t('python.adbManager.usbDeviceOffline', device=self.device_name))
+            return False, t('python.adbManager.usbDeviceOfflineReplug')
         else:
-            logger.warning(f"USB设备未在设备列表中: {self.device_name}")
-            logger.info("请检查USB连接是否正常，或在终端执行 adb devices 确认设备状态")
-            return False, "USB设备未在设备列表中，请检查USB连接"
+            logger.warning(t('python.adbManager.usbDeviceNotInList', device=self.device_name))
+            logger.info(t('python.adbManager.checkUsbConnection'))
+            return False, t('python.adbManager.usbDeviceNotInListCheck')
     
     def _show_unauthorized_dialog(self):
         """
@@ -270,13 +272,13 @@ class ADBManager:
             dialog_data = {
                 "device_name": self.device_name,
                 "timestamp": time.time(),
-                "message": f"设备 {self.device_name} 未授权，请在设备上点击'同意'授权此电脑连接"
+                "message": t('python.adbManager.deviceUnauthorizedDialog', device=self.device_name)
             }
             
             with open(dialog_trigger_file, 'w', encoding='utf-8') as f:
                 json.dump(dialog_data, f, ensure_ascii=False, indent=2)
             
-            logger.info(f"已创建未授权弹窗触发文件: {dialog_trigger_file}")
+            logger.info(t('python.adbManager.unauthorizedDialogFileCreated', path=dialog_trigger_file))
             
             # 方法2: 尝试通过标准输出发送消息给Electron进程
             print(f"[ELECTRON_DIALOG] device_unauthorized:{self.device_name}")
@@ -300,7 +302,7 @@ class ADBManager:
                     pass  # IPC连接失败，使用其他方法
             
         except Exception as e:
-            logger.warning(f"显示未授权弹窗失败: {e}")
+            logger.warning(t('python.adbManager.showUnauthorizedDialogFailed', error=e))
             # 即使弹窗失败，也不影响主要逻辑，继续等待授权
     
     def check_app_status(self) -> Tuple[bool, Optional[str]]:
@@ -318,18 +320,18 @@ class ADBManager:
             
             if result.returncode == 0:
                 if self.app_package in result.stdout:
-                    logger.info("检测到APP正在前台运行")
+                    logger.info(t('python.adbManager.appRunningInForeground'))
                     return True, None
                 else:
-                    logger.info("APP未在前台运行")
+                    logger.info(t('python.adbManager.appNotInForeground'))
                     return False, None
             else:
-                logger.warning("无法检查APP状态")
-                return False, "无法检查APP状态"
+                logger.warning(t('python.adbManager.cannotCheckAppStatus'))
+                return False, t('python.adbManager.cannotCheckAppStatus')
                 
         except Exception as e:
-            logger.warning(f"检查APP状态时出错: {e}")
-            return False, f"检查APP状态时出错: {e}"
+            logger.warning(t('python.adbManager.checkAppStatusError', error=e))
+            return False, t('python.adbManager.checkAppStatusError', error=e)
     
     def force_stop_app(self) -> bool:
         """
@@ -345,14 +347,14 @@ class ADBManager:
             )
             
             if result.returncode == 0:
-                logger.info("APP已强制关闭")
+                logger.info(t('python.adbManager.appForceStopped'))
                 return True
             else:
-                logger.warning("强制关闭APP失败")
+                logger.warning(t('python.adbManager.appForceStopFailed'))
                 return False
                 
         except Exception as e:
-            logger.warning(f"强制关闭APP时出错: {e}")
+            logger.warning(t('python.adbManager.appForceStopError', error=e))
             return False
     
     def ensure_app_closed(self, wait_time: int = 2) -> bool:
@@ -369,7 +371,7 @@ class ADBManager:
             is_running, error_msg = self.check_app_status()
             
             if is_running:
-                logger.info("检测到APP正在前台运行，强制关闭APP")
+                logger.info(t('python.adbManager.appRunningForceStop'))
                 if self.force_stop_app():
                     time.sleep(wait_time)
                     return True
@@ -377,13 +379,13 @@ class ADBManager:
                     return False
             else:
                 if error_msg:
-                    logger.warning(f"检查APP状态时出错: {error_msg}")
+                    logger.warning(t('python.adbManager.checkAppStatusError', error=error_msg))
                 else:
-                    logger.info("APP未在前台运行，无需关闭")
+                    logger.info(t('python.adbManager.appNotRunningNoNeedToClose'))
                 return True
                 
         except Exception as e:
-            logger.warning(f"确保APP关闭时出错: {e}")
+            logger.warning(t('python.adbManager.ensureAppClosedError', error=e))
             return False
     
     def check_bluetooth_status(self) -> Tuple[bool, Optional[str]]:
@@ -402,18 +404,18 @@ class ADBManager:
             if result.returncode == 0:
                 bluetooth_status = result.stdout.strip()
                 if bluetooth_status == '1':
-                    logger.info("蓝牙已开启")
+                    logger.info(t('python.adbManager.bluetoothEnabled'))
                     return True, None
                 else:
-                    logger.warning("蓝牙未开启")
-                    return False, "蓝牙未开启"
+                    logger.warning(t('python.adbManager.bluetoothNotEnabled'))
+                    return False, t('python.adbManager.bluetoothNotEnabled')
             else:
-                logger.warning("无法检查蓝牙状态")
-                return False, "无法检查蓝牙状态"
+                logger.warning(t('python.adbManager.cannotCheckBluetooth'))
+                return False, t('python.adbManager.cannotCheckBluetooth')
                 
         except Exception as e:
-            logger.warning(f"检查蓝牙状态时出错: {e}")
-            return False, f"检查蓝牙状态时出错: {e}"
+            logger.warning(t('python.adbManager.checkBluetoothError', error=e))
+            return False, t('python.adbManager.checkBluetoothError', error=e)
     
     def enable_bluetooth(self) -> bool:
         """
@@ -429,16 +431,16 @@ class ADBManager:
             )
             
             if result.returncode == 0:
-                logger.info("蓝牙开启命令执行成功")
+                logger.info(t('python.adbManager.bluetoothEnableCommandSuccess'))
                 # 等待蓝牙开启
                 time.sleep(3)
                 return True
             else:
-                logger.warning("蓝牙开启命令执行失败")
+                logger.warning(t('python.adbManager.bluetoothEnableCommandFailed'))
                 return False
                 
         except Exception as e:
-            logger.warning(f"开启蓝牙时出错: {e}")
+            logger.warning(t('python.adbManager.enableBluetoothError', error=e))
             return False
     
     def ensure_bluetooth_enabled(self) -> bool:
@@ -452,26 +454,26 @@ class ADBManager:
             bluetooth_enabled, error_msg = self.check_bluetooth_status()
             
             if bluetooth_enabled:
-                logger.info("蓝牙已开启，无需操作")
+                logger.info(t('python.adbManager.bluetoothAlreadyEnabled'))
                 return True
             else:
-                logger.warning("蓝牙未开启，尝试开启蓝牙")
+                logger.warning(t('python.adbManager.bluetoothNotEnabledTrying'))
                 if self.enable_bluetooth():
                     # 再次检查蓝牙状态
                     time.sleep(2)
                     bluetooth_enabled, _ = self.check_bluetooth_status()
                     if bluetooth_enabled:
-                        logger.info("蓝牙开启成功")
+                        logger.info(t('python.adbManager.bluetoothEnableSuccess'))
                         return True
                     else:
-                        logger.warning("蓝牙开启后状态检查失败")
+                        logger.warning(t('python.adbManager.bluetoothEnableCheckFailed'))
                         return False
                 else:
-                    logger.warning("蓝牙开启失败")
+                    logger.warning(t('python.adbManager.bluetoothEnableFailed'))
                     return False
                 
         except Exception as e:
-            logger.warning(f"确保蓝牙开启时出错: {e}")
+            logger.warning(t('python.adbManager.ensureBluetoothError', error=e))
             return False
     
     def get_app_pid(self) -> Optional[int]:
@@ -489,14 +491,14 @@ class ADBManager:
             
             if result.returncode == 0 and result.stdout.strip():
                 pid = int(result.stdout.strip())
-                logger.info(f"获取到应用PID: {pid}")
+                logger.info(t('python.adbManager.gotAppPid', pid=pid))
                 return pid
             else:
-                logger.warning(f"应用未运行或无法获取PID: {self.app_package}")
+                logger.warning(t('python.adbManager.appNotRunningOrNoPid', package=self.app_package))
                 return None
                 
         except Exception as e:
-            logger.warning(f"获取应用PID时出错: {e}")
+            logger.warning(t('python.adbManager.getAppPidError', error=e))
             return None
     
     def check_crash_logs(self, pid: int) -> list:
@@ -523,11 +525,11 @@ class ADBManager:
                     if line.strip() and f"{pid}" in line and "E" in line and "AndroidRuntime" in line:
                         crash_logs.append(line.strip())
             
-            logger.info(f"检查到{len(crash_logs)}条崩溃日志")
+            logger.info(t('python.adbManager.crashLogsFound', count=len(crash_logs)))
             return crash_logs
             
         except Exception as e:
-            logger.warning(f"检查崩溃日志时出错: {e}")
+            logger.warning(t('python.adbManager.checkCrashLogsError', error=e))
             return []
     
 
@@ -554,7 +556,7 @@ def get_connected_devices() -> list:
         list: 设备ID列表
     """
     try:
-        logger.info("获取连接的设备列表")
+        logger.info(t('python.adbManager.gettingConnectedDevices'))
         
         # 执行adb devices命令
         result = subprocess.run(
@@ -562,10 +564,10 @@ def get_connected_devices() -> list:
             capture_output=True, text=True, timeout=10
         )
         
-        logger.info(f"ADB设备列表命令执行结果 - 标准输出: {result.stdout}")
+        logger.info(t('python.adbManager.adbDeviceListStdout', output=result.stdout))
         if result.stderr:
-            logger.info(f"ADB设备列表命令执行结果 - 标准错误: {result.stderr}")
-        logger.info(f"ADB设备列表命令执行结果 - 返回码: {result.returncode}")
+            logger.info(t('python.adbManager.adbDeviceListStderr', output=result.stderr))
+        logger.info(t('python.adbManager.adbDeviceListReturnCode', code=result.returncode))
         
         # 解析设备列表
         devices = []
@@ -579,8 +581,8 @@ def get_connected_devices() -> list:
             if match:
                 devices.append(match.group(1))
         
-        logger.info(f"解析到的设备列表: {devices}")
+        logger.info(t('python.adbManager.parsedDeviceList', devices=devices))
         return devices
     except Exception as e:
-        logger.error(f"获取设备列表失败: {e}")
+        logger.error(t('python.adbManager.getDeviceListFailed', error=e))
         return []

@@ -120,6 +120,8 @@ class XKAutoTesterApp {
         // 加载版本信息
         await this.loadVersionInfo();
         
+        this.initGithubRepoLink();
+        
         // 初始化文件管理器状态（在加载配置后调用，确保使用正确的语言）
         this.toggleFileManagerEnabled(false);
         
@@ -635,10 +637,11 @@ class XKAutoTesterApp {
         
         // 更新版本信息卡片中的标签
         const versionLabels = document.querySelectorAll('#settings .material-card[data-card-type="version"] .version-label');
-        if (versionLabels.length >= 3) {
+        if (versionLabels.length >= 4) {
             versionLabels[0].textContent = window.i18n.t('labels.version');
             versionLabels[1].textContent = window.i18n.t('labels.buildDate');
-            versionLabels[2].textContent = window.i18n.t('labels.copyright');
+            versionLabels[2].textContent = window.i18n.t('labels.githubRepo');
+            versionLabels[3].textContent = window.i18n.t('labels.copyright');
         }
         
         // 更新安卓连接页面文本
@@ -911,7 +914,7 @@ class XKAutoTesterApp {
         }
         
         const progressStatus = document.getElementById('progress-status');
-        if (progressStatus && progressStatus.textContent === '准备就绪') {
+        if (progressStatus && progressStatus.textContent === window.i18n.t('testExecution.ready')) {
             progressStatus.textContent = window.i18n.t('testExecution.ready');
         }
         
@@ -932,7 +935,7 @@ class XKAutoTesterApp {
         
         // 更新模态框文本
         const modalTitle = document.getElementById('modal-title');
-        if (modalTitle && modalTitle.textContent === '新建测试计划') {
+        if (modalTitle && modalTitle.textContent === window.i18n.t('testExecution.newTestPlan')) {
             modalTitle.textContent = window.i18n.t('modal.newTestPlan');
         }
         
@@ -2210,6 +2213,19 @@ class XKAutoTesterApp {
         }
     }
     
+    initGithubRepoLink() {
+        const link = document.getElementById('github-repo-link');
+        if (link) {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const url = link.getAttribute('data-url');
+                if (url && window.electronAPI && window.electronAPI.openExternal) {
+                    window.electronAPI.openExternal(url);
+                }
+            });
+        }
+    }
+    
     loadNotificationConfig(notificationConfig) {
         if (!notificationConfig) {
             notificationConfig = {
@@ -3256,7 +3272,7 @@ class XKAutoTesterApp {
             element.style.color = 'var(--text-primary)';
             element.title = this.selectedDirectory; // 鼠标悬停时显示完整路径
         } else {
-            element.textContent = '未选择目录';
+            element.textContent = window.i18n.t('testExecution.noDirectorySelected');
             element.style.color = 'var(--text-secondary)';
             element.title = '';
         }
@@ -4968,14 +4984,14 @@ class XKAutoTesterApp {
             
             if (markers.length === 0) {
                 // 选中的文件没有标记时，显示占位提示
-                this.displayTestTypes([], '选中的文件没有pytest标记，将执行所有测试');
+                this.displayTestTypes([], window.i18n.t('testExecution.noMarkers'));
             } else {
                 // 显示从文件中提取的标记
                 this.displayTestTypes(markers);
             }
         } catch (error) {
             console.error('提取标记失败:', error);
-            this.displayTestTypes([], '提取标记失败，将执行所有测试');
+            this.displayTestTypes([], window.i18n.t('testExecution.extractMarkersFailed'));
         }
     }
 
@@ -5687,39 +5703,39 @@ class XKAutoTesterApp {
             }
 
             const statusLabels = {
-                passed: '✅ 通过',
-                failed: '❌ 失败',
-                skipped: '⏭️ 跳过',
-                partialPassed: '⚠️ 部分通过',
-                noTests: '⚠️ 没有执行测试用例'
+                passed: '✅ ' + window.i18n.t('testExecution.testPassed'),
+                failed: '❌ ' + window.i18n.t('testExecution.testFailed'),
+                skipped: '⏭️ ' + window.i18n.t('testExecution.testSkipped'),
+                partialPassed: '⚠️ ' + window.i18n.t('testExecution.testPartialPassed'),
+                noTests: '⚠️ ' + window.i18n.t('testExecution.testNoTests')
             };
-            const testResult = statusLabels[testInfo.testStatus] || (testInfo.hasFailure ? '❌ 失败' : '✅ 通过');
+            const testResult = statusLabels[testInfo.testStatus] || (testInfo.hasFailure ? '❌ ' + window.i18n.t('testExecution.testFailed') : '✅ ' + window.i18n.t('testExecution.testPassed'));
             
-            let message = `【XKAutoTester 测试结果通知】\n`;
+            let message = window.i18n.t('testExecution.notification.title') + '\n';
             
             if (testInfo.scheduledPlanName) {
-                message += `\n定时计划: ${testInfo.scheduledPlanName}\n`;
-                message += `执行时间: ${testInfo.scheduledPlanExecutionTime || new Date().toLocaleString()}\n`;
+                message += `\n${window.i18n.t('testExecution.notification.scheduledPlan')}: ${testInfo.scheduledPlanName}\n`;
+                message += `${window.i18n.t('testExecution.notification.executionTime')}: ${testInfo.scheduledPlanExecutionTime || new Date().toLocaleString()}\n`;
             }
             
-            message += `\n测试计划: ${testInfo.testPlanName}\n`;
-            message += `测试文件: ${testInfo.testFileNames || '无'}\n`;
-            message += `测试类型: ${testInfo.testTypes || '全部'}\n`;
-            message += `循环次数: ${testInfo.loopCount}\n`;
-            message += `\n轮次信息:\n`;
-            message += `总轮次: ${testInfo.totalLoops}\n`;
+            message += `\n${window.i18n.t('testExecution.notification.testPlan')}: ${testInfo.testPlanName}\n`;
+            message += `${window.i18n.t('testExecution.notification.testFiles')}: ${testInfo.testFileNames || window.i18n.t('testExecution.notification.none')}\n`;
+            message += `${window.i18n.t('testExecution.notification.testTypes')}: ${testInfo.testTypes || window.i18n.t('testExecution.notification.all')}\n`;
+            message += `${window.i18n.t('testExecution.notification.loopCount')}: ${testInfo.loopCount}\n`;
+            message += `\n${window.i18n.t('testExecution.notification.roundInfo')}:\n`;
+            message += `${window.i18n.t('testExecution.notification.totalRounds')}: ${testInfo.totalLoops}\n`;
             if (testInfo.loopCount > 1) {
-                message += `通过率: ${testInfo.passRate}%\n`;
+                message += `${window.i18n.t('testExecution.notification.passRate')}: ${testInfo.passRate}%\n`;
             }
             
             if (testInfo.aggregatedStats && testInfo.aggregatedStats.total > 0) {
                 const stats = testInfo.aggregatedStats;
-                message += `\n用例统计:\n`;
-                message += `通过: ${stats.passed}, 失败: ${stats.failed}, 跳过: ${stats.skipped}, 异常: ${stats.broken}, 总计: ${stats.total}\n`;
-                message += `用例通过率: ${testInfo.casePassRate}% (排除跳过)\n`;
+                message += `\n${window.i18n.t('testExecution.notification.caseStats')}:\n`;
+                message += `${window.i18n.t('testExecution.notification.casePassed')}: ${stats.passed}, ${window.i18n.t('testExecution.notification.caseFailed')}: ${stats.failed}, ${window.i18n.t('testExecution.notification.caseSkipped')}: ${stats.skipped}, ${window.i18n.t('testExecution.notification.caseBroken')}: ${stats.broken}, ${window.i18n.t('testExecution.notification.caseTotal')}: ${stats.total}\n`;
+                message += `${window.i18n.t('testExecution.notification.casePassRate')}: ${testInfo.casePassRate}% (${window.i18n.t('testExecution.notification.excludingSkipped')})\n`;
             }
             
-            message += `\n测试结果: ${testResult}`;
+            message += `\n${window.i18n.t('testExecution.notification.testResult')}: ${testResult}`;
 
             const notificationData = {
                 accessToken: dingtalkConfig.access_token,
@@ -5771,7 +5787,7 @@ class XKAutoTesterApp {
         document.getElementById('stop-tests-btn').disabled = false;
         document.getElementById('view-report-btn').disabled = true;
         
-        this.updateProgress('测试运行中...', 0);
+        this.updateProgress(window.i18n.t('testExecution.testRunning'), 0);
         
         // 清除欢迎消息
         const output = document.getElementById('test-output');
@@ -5807,7 +5823,7 @@ class XKAutoTesterApp {
         document.getElementById('run-tests-btn').disabled = false;
         document.getElementById('stop-tests-btn').disabled = true;
         
-        this.updateProgress('准备就绪', 100);
+        this.updateProgress(window.i18n.t('testExecution.ready'), 100);
         
         // 移除所有running类
         document.querySelectorAll('.test-plan-item.running').forEach(item => {
@@ -9368,32 +9384,32 @@ class XKAutoTesterApp {
         if (plan.status === 'completed') {
             return {
                 class: 'completed',
-                text: window.i18n.t('scheduledPlan.statusCompleted') || '已完成'
+                text: window.i18n.t('scheduledPlan.statusCompleted')
             };
         } else if (plan.status === 'running') {
             return {
                 class: 'running',
-                text: window.i18n.t('scheduledPlan.statusRunning') || '执行中'
+                text: window.i18n.t('scheduledPlan.statusRunning')
             };
         } else if (plan.status === 'cancelled') {
             return {
                 class: 'cancelled',
-                text: window.i18n.t('scheduledPlan.statusCancelled') || '已取消'
+                text: window.i18n.t('scheduledPlan.statusCancelled')
             };
         } else if (plan.status === 'expired') {
             return {
                 class: 'expired',
-                text: window.i18n.t('scheduledPlan.statusExpired') || '已过期'
+                text: window.i18n.t('scheduledPlan.statusExpired')
             };
         } else if (scheduledTime <= now) {
             return {
                 class: 'overdue',
-                text: window.i18n.t('scheduledPlan.statusOverdue') || '已过期'
+                text: window.i18n.t('scheduledPlan.statusOverdue')
             };
         } else {
             return {
                 class: 'pending',
-                text: window.i18n.t('scheduledPlan.statusPending') || '待执行'
+                text: window.i18n.t('scheduledPlan.statusPending')
             };
         }
     }
@@ -10096,7 +10112,7 @@ class XKAutoTesterApp {
     }
 
     async handleScheduledTestStart(data) {
-        const message = window.i18n.t('scheduledPlan.testStarting', { name: data.planName }) || `定时计划 "${data.planName}" 开始执行...`;
+        const message = window.i18n.t('scheduledPlan.testStarting', { name: data.planName });
         this.appendOutput(`\n>>> ${message}`);
         
         // 重新加载定时计划列表，显示"执行中"状态
@@ -10106,7 +10122,7 @@ class XKAutoTesterApp {
             const testPlans = await window.electronAPI.getTestPlans();
             
             if (!data.testPlans || data.testPlans.length === 0) {
-                this.appendError('>>> 定时计划没有关联的测试计划');
+                this.appendError('>>> ' + window.i18n.t('testExecution.scheduledNoTestPlans'));
                 return;
             }
             
@@ -10115,11 +10131,11 @@ class XKAutoTesterApp {
                 const testPlan = testPlans.find(p => p.id === testPlanId);
                 
                 if (!testPlan) {
-                    this.appendError(`>>> 测试计划 ${testPlanId} 不存在`);
+                    this.appendError(`>>> ${window.i18n.t('testExecution.testPlanNotExist')} ${testPlanId}`);
                     continue;
                 }
                 
-                this.appendOutput(`>>> 正在执行测试计划: ${testPlan.name}`);
+                this.appendOutput(`>>> ${window.i18n.t('testExecution.executingTestPlan')}: ${testPlan.name}`);
                 
                 this.currentTestPlan = testPlan;
                 
@@ -10148,7 +10164,7 @@ class XKAutoTesterApp {
             
         } catch (error) {
             console.error('执行定时计划失败:', error);
-            this.appendError('>>> 执行定时计划失败: ' + error.message);
+            this.appendError('>>> ' + window.i18n.t('testExecution.executeScheduledPlanFailed') + ': ' + error.message);
         } finally {
             // 通知主进程测试执行完成，更新定时计划状态
             if (data.planId) {

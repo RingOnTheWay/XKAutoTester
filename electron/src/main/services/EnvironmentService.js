@@ -23,7 +23,7 @@ class EnvironmentService {
         isEmbedded: true,
         isSystem: false,
         sitePackagesPath: pathHelper.getVenvSitePackagesPath(this.projectRoot),
-        sourceLabel: '(内置)'
+        sourceLabel: `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
       });
       this.pythonConfigured = true;
       return;
@@ -38,7 +38,7 @@ class EnvironmentService {
           isEmbedded: false,
           isSystem: false,
           sitePackagesPath: null,
-          sourceLabel: '(内置)'
+          sourceLabel: `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
         });
         this.pythonConfigured = true;
         return;
@@ -54,7 +54,7 @@ class EnvironmentService {
             isEmbedded: false,
             isSystem: false,
             sitePackagesPath: null,
-            sourceLabel: '(内置)'
+            sourceLabel: `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
           });
           this.pythonConfigured = true;
           return;
@@ -69,7 +69,7 @@ class EnvironmentService {
         isEmbedded: false,
         isSystem: true,
         sitePackagesPath: pathHelper.getVenvSitePackagesPath(this.projectRoot),
-        sourceLabel: '(系统)'
+        sourceLabel: `(${this.i18nService.t('splash.checks.sourceSystem')})`
       });
       this.pythonConfigured = true;
       return;
@@ -282,7 +282,7 @@ class EnvironmentService {
       const installerPath = this.getDriverInstallerPath();
       return {
         status: 'warning',
-        message: `检查CP210x驱动失败: ${error.message}`,
+        message: this.i18nService.t('splash.checks.cp210xCheckFailed', { error: error.message }),
         canInstall: !!installerPath,
         installerPath: installerPath
       };
@@ -381,11 +381,11 @@ class EnvironmentService {
 
       let sourceLabel = '';
       if (localComponents.length > 0 && systemComponents.length > 0) {
-        sourceLabel = ` (内置: ${localComponents.join(', ')}; 系统: ${systemComponents.join(', ')})`;
+        sourceLabel = ` (${this.i18nService.t('splash.checks.sourceMixed', { local: localComponents.join(', '), system: systemComponents.join(', ') })})`;
       } else if (localComponents.length > 0) {
-        sourceLabel = ' (内置)';
+        sourceLabel = ` (${this.i18nService.t('splash.checks.sourceBuiltIn')})`;
       } else if (systemComponents.length > 0) {
-        sourceLabel = ' (系统)';
+        sourceLabel = ` (${this.i18nService.t('splash.checks.sourceSystem')})`;
       }
 
       if (adbAvailable && aapt2Available) {
@@ -415,7 +415,7 @@ class EnvironmentService {
     try {
       const result = await this.executeCommand('java', ['-version']);
       const isLocal = this.isUsingLocalJdk();
-      const sourceLabel = isLocal ? '(内置)' : '(系统)';
+      const sourceLabel = isLocal ? `(${this.i18nService.t('splash.checks.sourceBuiltIn')})` : `(${this.i18nService.t('splash.checks.sourceSystem')})`;
 
       const output = result.stderr;
       const versionMatch = output.match(/version "(\d+\.\d+\.\d+)/);

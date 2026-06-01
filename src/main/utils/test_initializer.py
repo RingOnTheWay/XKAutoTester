@@ -15,6 +15,7 @@ from appium import webdriver
 from appium.options.android import UiAutomator2Options
 from faker import Faker
 
+from main.utils.i18n import t
 from main.core.adb_manager import ADBManager
 from main.core.appium_server import AppiumServer
 from main.core.mock_ble_device import BLEDevice
@@ -86,7 +87,7 @@ class TestInitializer:
         Returns:
             bool: 初始化是否成功
         """
-        self.logger.info(f"使用此设备进行测试: {self.config.adb.device_name}")
+        self.logger.info(t('python.testInitializer.usingDevice', device=self.config.adb.device_name))
         
         try:
             self.adb_manager = ADBManager(
@@ -95,39 +96,39 @@ class TestInitializer:
             )
             
             if not self.adb_manager.check_adb_service():
-                self.logger.warning("ADB服务异常，跳过安卓相关测试")
-                pytest.skip("ADB服务异常")
+                self.logger.warning(t('python.testInitializer.adbServiceError'))
+                pytest.skip(t('python.testInitializer.adbServiceErrorShort'))
             
             connect_success, connect_status = self.adb_manager.connect_device()
             if not connect_success:
-                self.logger.warning(f"设备连接失败: {self.config.adb.device_name} - {connect_status}，跳过安卓相关测试")
-                pytest.skip(f"设备连接失败: {self.config.adb.device_name}")
+                self.logger.warning(t('python.testInitializer.deviceConnectFailed', device=self.config.adb.device_name, status=connect_status))
+                pytest.skip(t('python.testInitializer.deviceConnectFailedShort', device=self.config.adb.device_name))
             
             if self.config.ble is not None:
                 if not self.adb_manager.ensure_bluetooth_enabled():
-                    self.logger.warning("蓝牙开启失败，跳过安卓相关测试")
-                    pytest.skip("蓝牙开启失败")
+                    self.logger.warning(t('python.testInitializer.bluetoothEnableFailed'))
+                    pytest.skip(t('python.testInitializer.bluetoothEnableFailedShort'))
             else:
-                self.logger.info("未配置蓝牙设备，跳过蓝牙开启检查")
+                self.logger.info(t('python.testInitializer.noBleConfigSkipCheck'))
             
-            self.logger.info("ADB初始化成功")
+            self.logger.info(t('python.testInitializer.adbInitSuccess'))
             return True
                 
         except Exception as e:
-            self.logger.warning(f"ADB设备检测失败: {e}，检查设备网络或端口情况，跳过安卓相关测试")
-            pytest.skip("ADB设备检测失败")
+            self.logger.warning(t('python.testInitializer.adbDeviceCheckFailed', error=e))
+            pytest.skip(t('python.testInitializer.adbDeviceCheckFailedShort'))
     
     def ble_init(self) -> bool:
         if self.config.ble is None:
-            self.logger.info("未配置蓝牙设备，跳过蓝牙初始化")
+            self.logger.info(t('python.testInitializer.noBleConfigSkipInit'))
             return True
 
         ble_config = self.config.ble
-        self.logger.info(f"蓝牙设备名称: {ble_config.ble_name}")
-        self.logger.info(f"自定义广播数据: {ble_config.adv_data}")
-        self.logger.info(f"主服务UUID (UUIDS): {ble_config.uuids}")
-        self.logger.info(f"读服务UUID (UUIDN): {ble_config.uuidn}")
-        self.logger.info(f"写服务UUID (UUIDW): {ble_config.uuidw}")
+        self.logger.info(t('python.testInitializer.bleDeviceName', name=ble_config.ble_name))
+        self.logger.info(t('python.testInitializer.bleAdvData', data=ble_config.adv_data))
+        self.logger.info(t('python.testInitializer.bleUuids', uuid=ble_config.uuids))
+        self.logger.info(t('python.testInitializer.bleUuidn', uuid=ble_config.uuidn))
+        self.logger.info(t('python.testInitializer.bleUuidw', uuid=ble_config.uuidw))
         
         try:
             self.ble_device = BLEDevice(
@@ -138,28 +139,28 @@ class TestInitializer:
                 uuidn=ble_config.uuidn,
                 uuids=ble_config.uuids
             )
-            self.logger.info("蓝牙设备对象创建成功")
+            self.logger.info(t('python.testInitializer.bleDeviceCreated'))
             
             # 初始化蓝牙设备（打开串口、设置参数）
             if not self.ble_device.initialize():
-                self.logger.error("蓝牙设备初始化失败，请检查串口连接状态")
-                pytest.fail("蓝牙设备初始化失败，请检查串口连接状态")
+                self.logger.error(t('python.testInitializer.bleInitFailed'))
+                pytest.fail(t('python.testInitializer.bleInitFailed'))
             
-            self.logger.info("蓝牙设备初始化完成")
+            self.logger.info(t('python.testInitializer.bleInitComplete'))
             allure.attach(
-                "蓝牙设备初始化完成",
-                name="蓝牙初始化",
+                t('python.testInitializer.bleInitComplete'),
+                name=t('python.testInitializer.bleInitAttachName'),
                 attachment_type=allure.attachment_type.TEXT
             )
             return True
         except Exception as e:
-            self.logger.error(f"蓝牙设备初始化异常: {e}")
+            self.logger.error(t('python.testInitializer.bleInitError', error=e))
             allure.attach(
-                f"蓝牙设备初始化异常: {str(e)}",
-                name="蓝牙初始化异常",
+                t('python.testInitializer.bleInitError', error=str(e)),
+                name=t('python.testInitializer.bleInitErrorAttachName'),
                 attachment_type=allure.attachment_type.TEXT
             )
-            pytest.fail(f"蓝牙设备初始化失败: {e}")
+            pytest.fail(t('python.testInitializer.bleInitFailedWithError', error=e))
     
     def appium_init(self) -> bool:
         """
@@ -186,14 +187,14 @@ class TestInitializer:
         )
         
         if not self.appium_server.start():
-            self.logger.error("Appium服务器启动失败，测试将无法进行")
+            self.logger.error(t('python.testInitializer.appiumServerStartFailed'))
             if self.appium_server:
                 self.appium_server.force_cleanup()
-                self.logger.info("Appium服务器启动失败，已清理相关端口对应的PID")
-            pytest.skip("Appium服务器启动失败")
+                self.logger.info(t('python.testInitializer.appiumServerStartFailedCleaned'))
+            pytest.skip(t('python.testInitializer.appiumServerStartFailedShort'))
         
         try:
-            self.logger.info("开始创建Appium会话...")
+            self.logger.info(t('python.testInitializer.creatingAppiumSession'))
             start_time = time.time()
             socket.setdefaulttimeout(AppiumServer.DEFAULT_SESSION_TIMEOUT)
             subprocess.run(
@@ -208,59 +209,59 @@ class TestInitializer:
             )
             
             elapsed_time = time.time() - start_time
-            self.logger.info(f"Appium会话创建成功! 耗时: {elapsed_time:.2f}秒")
-            self.logger.info(f"设备信息: {self.options.capabilities}")
-            self.logger.info(f"会话ID: {self.driver.session_id}")
+            self.logger.info(t('python.testInitializer.appiumSessionCreated', time=f'{elapsed_time:.2f}'))
+            self.logger.info(t('python.testInitializer.deviceInfo', info=self.options.capabilities))
+            self.logger.info(t('python.testInitializer.sessionId', id=self.driver.session_id))
             
             allure.attach(
-                f"设备信息: {self.options.capabilities}\n会话ID: {self.driver.session_id}\n创建耗时: {elapsed_time:.2f}秒",
-                name="设备配置",
+                t('python.testInitializer.appiumSessionAttachInfo', info=self.options.capabilities, session_id=self.driver.session_id, time=f'{elapsed_time:.2f}'),
+                name=t('python.testInitializer.deviceConfigAttachName'),
                 attachment_type=allure.attachment_type.TEXT
             )
             
-            self.logger.info("获取应用PID")
+            self.logger.info(t('python.testInitializer.gettingAppPid'))
             self.app_pid = self.adb_manager.get_app_pid()
             if self.app_pid:
-                self.logger.info(f"成功获取应用PID: {self.app_pid}")
+                self.logger.info(t('python.testInitializer.gotAppPid', pid=self.app_pid))
                 allure.attach(
-                    f"应用PID: {self.app_pid}",
-                    name="应用进程ID",
+                    t('python.testInitializer.appPidAttach', pid=self.app_pid),
+                    name=t('python.testInitializer.appPidAttachName'),
                     attachment_type=allure.attachment_type.TEXT
                 )
             else:
-                self.logger.warning("无法获取应用PID")
+                self.logger.warning(t('python.testInitializer.cannotGetAppPid'))
             
             # 等待APP加载完成
-            self.logger.info(f"等待APP加载完成（{self.config.appium.app_load_wait_time}秒）...")
+            self.logger.info(t('python.testInitializer.waitingAppLoad', seconds=self.config.appium.app_load_wait_time))
             time.sleep(self.config.appium.app_load_wait_time)
             current_activity = self.driver.current_activity
-            self.logger.info(f"当前Activity: {current_activity}")
+            self.logger.info(t('python.testInitializer.currentActivity', activity=current_activity))
             allure.attach(
-                f"当前Activity: {current_activity}",
-                name="Activity信息",
+                t('python.testInitializer.currentActivity', activity=current_activity),
+                name=t('python.testInitializer.activityInfoAttachName'),
                 attachment_type=allure.attachment_type.TEXT
             )
             
-            self.logger.info("Appium初始化成功")
+            self.logger.info(t('python.testInitializer.appiumInitSuccess'))
             return True
                 
         except Exception as e:
             error_msg = str(e)
             
             if "Activity name" in error_msg and "doesn't exist or cannot be launched" in error_msg:
-                self.logger.error(f"Appium会话创建失败: Activity名称填写错误。错误信息: {error_msg}")
-                self.logger.error("请检查APP_ACTIVITY配置是否正确，确保Activity名称存在且可启动")
+                self.logger.error(t('python.testInitializer.appiumSessionActivityError', error=error_msg))
+                self.logger.error(t('python.testInitializer.checkActivityConfig'))
                 allure.attach(
-                    f"Appium会话创建失败: Activity名称填写错误\n错误信息: {error_msg}\n请检查APP_ACTIVITY配置是否正确，确保Activity名称存在且可启动",
-                    name="Activity名称错误",
+                    t('python.testInitializer.appiumActivityErrorAttach', error=error_msg),
+                    name=t('python.testInitializer.activityErrorAttachName'),
                     attachment_type=allure.attachment_type.TEXT
                 )
-                pytest.fail(f"Appium会话创建失败: Activity名称填写错误，请检查APP_ACTIVITY配置")
+                pytest.fail(t('python.testInitializer.appiumSessionActivityFailed'))
             else:
-                self.logger.error(f"Appium会话创建失败: {error_msg}，请检查安卓SDK环境及在手机确认安装Appium Settings")
+                self.logger.error(t('python.testInitializer.appiumSessionFailedSdk', error=error_msg))
                 allure.attach(
-                    f"Appium会话创建失败: {error_msg}，请检查安卓SDK环境及在手机确认安装Appium Settings",
-                    name="会话创建错误",
+                    t('python.testInitializer.appiumSessionFailedSdkAttach', error=error_msg),
+                    name=t('python.testInitializer.sessionErrorAttachName'),
                     attachment_type=allure.attachment_type.TEXT
                 )
                 
@@ -269,11 +270,11 @@ class TestInitializer:
                         ['adb', '-s', self.config.adb.device_name, 'shell', 'dumpsys', 'window', 'windows'], 
                         capture_output=True, text=True, timeout=10
                     )
-                    self.logger.info(f"设备窗口状态: {result.stdout[:500]}...")
+                    self.logger.info(t('python.testInitializer.deviceWindowState', state=result.stdout[:500]))
                 except Exception as adb_error:
-                    self.logger.error(f"设备状态检查失败: {adb_error}，请尝试使用Android13及以上版本进行测试")
+                    self.logger.error(t('python.testInitializer.deviceStateCheckFailed', error=adb_error))
                 
-                pytest.fail(f"Appium会话创建失败: {error_msg}，请检查安卓SDK环境")
+                pytest.fail(t('python.testInitializer.appiumSessionFailedSdkShort', error=error_msg))
     
     def init_all(self) -> 'TestInitializer':
         """
@@ -286,7 +287,7 @@ class TestInitializer:
         self.ble_init()
         self.appium_init()
         self.fake = Faker()
-        self.logger.info("测试类初始化完成")
+        self.logger.info(t('python.testInitializer.testClassInitComplete'))
         return self
     
     def cleanup(self):
@@ -295,22 +296,22 @@ class TestInitializer:
             # 强制关闭测试APP
             if self.driver:
                 self.driver.quit()
-                self.logger.info("Driver已关闭")
+                self.logger.info(t('python.testInitializer.driverClosed'))
             
             if self.adb_manager:
                 self.adb_manager.ensure_app_closed(2)
-                self.logger.info("测试APP已强制关闭")
+                self.logger.info(t('python.testInitializer.testAppForceStopped'))
             
             if self.ble_device:
                 self.ble_device.close()
-                self.logger.info("蓝牙设备已关闭")
+                self.logger.info(t('python.testInitializer.bleDeviceClosed'))
             
             if self.appium_server:
                 self.appium_server.force_cleanup()
-                self.logger.info("Appium服务器已使用查找端口方法清理")
+                self.logger.info(t('python.testInitializer.appiumServerCleaned'))
                 
         except Exception as e:
-            self.logger.error(f"cleanup执行过程中出错: {e}")
+            self.logger.error(t('python.testInitializer.cleanupError', error=e))
             if self.appium_server:
                 self.appium_server.force_cleanup()
             if self.ble_device:

@@ -81,7 +81,8 @@ const ICON_MAPPING = {
   arrow_downward: 'ChevronDown',
   search: 'Search',
   alert_triangle: 'TriangleAlert',
-  search_x: 'SearchX'
+  search_x: 'SearchX',
+  external_link: 'ExternalLink'
 };
 
 function lucideToSvg(iconData) {

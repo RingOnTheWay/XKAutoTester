@@ -83,6 +83,7 @@ class PythonTestService {
           ...process.env,
           PYTHONIOENCODING: 'utf-8',
           PYTHONUTF8: '1',
+          XKAUTOTESTER_LANG: this.i18nService.getLanguage(),
           ...(pythonCmd.isEmbedded ? {} : this.buildPythonPathEnv(pythonCmd)),
           XKAUTOTESTER_USER_DATA: this.userDataPath
         },
@@ -143,13 +144,13 @@ class PythonTestService {
         
         this.stopUnauthorizedDialogMonitor();
         
-        return { success: true, message: '测试已停止' };
+        return { success: true, message: this.i18nService.t('testExecution.testManuallyStopped') };
       } else {
-        return { success: false, message: '没有正在运行的测试' };
+        return { success: false, message: this.i18nService.t('testExecution.noSelectedTestPlan') };
       }
     } catch (error) {
-      console.error('停止测试失败:', error);
-      return { success: false, message: '停止测试失败: ' + error.message };
+      console.error('Stop test failed:', error);
+      return { success: false, message: this.i18nService.t('testExecution.stopTestFailed') + ': ' + error.message };
     }
   }
 
@@ -200,7 +201,7 @@ class PythonTestService {
           fs.unlinkSync(dialogTriggerFile);
         }
       } catch (error) {
-        console.error('检查未授权弹窗触发文件失败:', error);
+        console.error('Failed to check unauthorized dialog trigger file:', error);
       }
     };
     
@@ -220,12 +221,12 @@ class PythonTestService {
       });
       
       this.unauthorizedDialogWatcher.on('error', (error) => {
-        console.error('未授权弹窗文件监听失败，回退到轮询模式:', error);
+        console.error('Unauthorized dialog file watcher failed, falling back to polling:', error);
         this.unauthorizedDialogInterval = setInterval(processDialogFile, 2000);
         this.unauthorizedDialogWatcher = null;
       });
     } catch (error) {
-      console.error('创建文件监听失败，回退到轮询模式:', error);
+      console.error('Failed to create file watcher, falling back to polling:', error);
       this.unauthorizedDialogInterval = setInterval(processDialogFile, 2000);
     }
   }
@@ -247,10 +248,10 @@ class PythonTestService {
     
     await dialog.showMessageBox(this.mainWindow, {
       type: 'warning',
-      title: '设备未授权',
-      message: message || `设备 ${device_name} 未授权`,
-      detail: '请在Android设备上点击"同意"授权此电脑连接。\n\n系统将自动等待授权，最多等待60秒。',
-      buttons: ['确定'],
+      title: this.i18nService.t('testExecution.deviceSelection.deviceUnauthorizedTitle'),
+      message: message || this.i18nService.t('testExecution.deviceSelection.deviceUnauthorizedMessage', { device: device_name }),
+      detail: this.i18nService.t('testExecution.deviceSelection.deviceUnauthorizedDetail'),
+      buttons: [this.i18nService.t('common.confirm')],
       defaultId: 0,
       cancelId: 0
     });

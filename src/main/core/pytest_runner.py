@@ -10,6 +10,7 @@ import shutil
 import time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+from main.utils.i18n import t
 from main.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -76,7 +77,7 @@ class PytestRunner:
         # 构建Pytest参数
         pytest_args = self._build_pytest_args(test_paths, markers, keywords)
         
-        logger.info(f"开始运行Pytest测试，测试计划: {test_plan_name}，参数: {pytest_args}")
+        logger.info(t('python.pytestRunner.startPytest', test_plan_name=test_plan_name, pytest_args=pytest_args))
         
         # 运行测试并实时捕获输出
         import subprocess
@@ -92,7 +93,7 @@ class PytestRunner:
         
         # 构建完整的pytest命令
         pytest_command = [sys.executable, "-m", "pytest"] + pytest_args
-        logger.info(f"执行Pytest命令: {' '.join(pytest_command)}")
+        logger.info(t('python.pytestRunner.executeCommand', command=' '.join(pytest_command)))
         
         # 使用subprocess.Popen实现实时输出捕获
         process = subprocess.Popen(
@@ -147,24 +148,23 @@ class PytestRunner:
             if not self._has_allure_results():
                 allure_skipped_reason = "no_results"
                 logger.warning(
-                    f"未生成Allure报告：allure-results 目录为空，"
-                    f"测试可能未实际执行（退出码: {exit_code}）。请检查测试代码是否存在语法错误或配置问题。"
+                    t('python.pytestRunner.noAllureResults', exit_code=exit_code)
                 )
             else:
                 allure_report_path = self._generate_allure_report(test_plan_name)
 
         if allure_skipped_reason == "no_results":
-            logger.warning(f"测试未产生任何结果 (退出码: {exit_code})，Allure报告已跳过生成")
+            logger.warning(t('python.pytestRunner.noTestResults', exit_code=exit_code))
         elif exit_code == 0:
             if allure_report_path:
-                logger.info("✅ 测试成功，已生成Allure报告")
+                logger.info(t('python.pytestRunner.testSuccessWithReport'))
             else:
-                logger.info("✅ 测试成功，但Allure报告生成失败")
+                logger.info(t('python.pytestRunner.testSuccessNoReport'))
         else:
             if allure_report_path:
-                logger.warning(f"测试失败 (退出码: {exit_code})，但已生成Allure报告供分析")
+                logger.warning(t('python.pytestRunner.testFailedWithReport', exit_code=exit_code))
             else:
-                logger.warning(f"测试失败 (退出码: {exit_code})，且Allure报告生成失败")
+                logger.warning(t('python.pytestRunner.testFailedNoReport', exit_code=exit_code))
         
         # 记录测试计划运行信息
         self._record_test_plan(test_plan_name, test_paths, markers, allure_report_path)
@@ -181,7 +181,7 @@ class PytestRunner:
     
     def run_all_tests(self, generate_allure: bool = True, test_plan_name: str = None) -> Dict[str, Any]:
         """运行所有测试"""
-        logger.info("开始运行所有测试...")
+        logger.info(t('python.pytestRunner.startAllTests'))
         return self.run_tests(
             test_paths=["tests/"],
             generate_allure=generate_allure,
@@ -190,7 +190,7 @@ class PytestRunner:
     
     def run_smoke_tests(self, generate_allure: bool = True, test_plan_name: str = None) -> Dict[str, Any]:
         """运行冒烟测试"""
-        logger.info("开始运行冒烟测试...")
+        logger.info(t('python.pytestRunner.startSmokeTests'))
         return self.run_tests(
             test_paths=["tests/"],
             markers=["smoke"],
@@ -200,7 +200,7 @@ class PytestRunner:
     
     def run_unit_tests(self, generate_allure: bool = True, test_plan_name: str = None) -> Dict[str, Any]:
         """运行单元功能测试"""
-        logger.info("开始运行单元功能测试...")
+        logger.info(t('python.pytestRunner.startUnitTests'))
         return self.run_tests(
             test_paths=["tests/"],
             markers=["unit"],
@@ -210,7 +210,7 @@ class PytestRunner:
     
     def run_exception_tests(self, generate_allure: bool = True, test_plan_name: str = None) -> Dict[str, Any]:
         """运行异常场景测试"""
-        logger.info("开始运行异常场景测试...")
+        logger.info(t('python.pytestRunner.startExceptionTests'))
         return self.run_tests(
             test_paths=["tests/"],
             markers=["exception"],
@@ -264,13 +264,11 @@ class PytestRunner:
         try:
             from datetime import datetime
 
-            logger.info(f"开始生成Allure报告，测试计划: {test_plan_name}")
+            logger.info(t('python.pytestRunner.startGenerateReport', test_plan_name=test_plan_name))
 
             if not self._has_allure_results():
                 logger.warning(
-                    f"allure-results 目录中没有测试结果文件，跳过报告生成。"
-                    f"可能原因：测试收集阶段出错（如语法错误、导入失败），导致没有用例被执行。"
-                    f"请检查测试代码是否存在语法错误或配置问题。"
+                    t('python.pytestRunner.allureResultsEmpty')
                 )
                 return None
             
@@ -332,34 +330,34 @@ class PytestRunner:
             if result.returncode == 0:
                 allure_index = allure_report_dir / "index.html"
                 if allure_index.exists():
-                    logger.info(f"Allure报告生成成功: {allure_report_dir}")
+                    logger.info(t('python.pytestRunner.allureReportSuccess', path=allure_report_dir))
                     
                     # 生成报告成功后，自动删除allure-results文件夹
                     try:
                         if self.allure_results_dir.exists():
                             shutil.rmtree(self.allure_results_dir)
-                            logger.info("✅ 已自动清理allure-results文件夹")
+                            logger.info(t('python.pytestRunner.allureResultsCleaned'))
                     except Exception as e:
-                        logger.warning(f"清理allure-results文件夹失败: {e}")
+                        logger.warning(t('python.pytestRunner.allureResultsCleanFailed', error=e))
                     
                     return allure_report_dir
                 else:
-                    logger.error("Allure报告生成失败，index.html文件不存在")
+                    logger.error(t('python.pytestRunner.allureReportNoIndex'))
                     return None
             else:
-                logger.error(f"Allure命令执行失败: {result.stderr}，请检查JAVA环境")
+                logger.error(t('python.pytestRunner.allureCommandFailed', error=result.stderr))
                 
                 # 检查Allure是否可用
                 if project_allure_bat.exists() or project_allure.exists():
-                    logger.error("项目内的Allure命令执行失败")
+                    logger.error(t('python.pytestRunner.allureProjectCmdFailed'))
                 else:
-                    logger.warning("Allure命令行工具未安装，无法生成HTML报告")
-                    logger.info("请安装Allure命令行工具: https://docs.qameta.io/allure/")
+                    logger.warning(t('python.pytestRunner.allureNotInstalled'))
+                    logger.info(t('python.pytestRunner.allureInstallGuide'))
                 
                 return None
                 
         except Exception as e:
-            logger.error(f"生成Allure报告失败: {e}")
+            logger.error(t('python.pytestRunner.allureGenerateFailed', error=e))
             return None
     
     def _record_test_plan(self, test_plan_name: str, test_paths: List[str], 
@@ -392,7 +390,7 @@ class PytestRunner:
             
             # 更新最后运行时间
             existing_plan["last_run"] = run_record["timestamp"]
-            logger.info(f"测试计划 '{test_plan_name}' 添加新的运行记录，共 {len(existing_plan['runs'])} 次运行")
+            logger.info(t('python.pytestRunner.planRunRecordAdded', test_plan_name=test_plan_name, count=len(existing_plan['runs'])))
         else:
             # 创建新的测试计划
             test_plan = {
@@ -404,7 +402,7 @@ class PytestRunner:
                 "runs": [run_record]
             }
             self.test_plans.append(test_plan)
-            logger.info(f"创建新的测试计划 '{test_plan_name}'")
+            logger.info(t('python.pytestRunner.planCreated', test_plan_name=test_plan_name))
         
         # 保持最近100个测试计划
         if len(self.test_plans) > 100:
@@ -420,9 +418,9 @@ class PytestRunner:
                 import json
                 with open(self.test_plans_file, 'r', encoding='utf-8') as f:
                     self.test_plans = json.load(f)
-                logger.info(f"已加载 {len(self.test_plans)} 个测试计划历史记录")
+                logger.info(t('python.pytestRunner.plansLoaded', count=len(self.test_plans)))
         except Exception as e:
-            logger.warning(f"加载测试计划历史记录失败: {e}")
+            logger.warning(t('python.pytestRunner.plansLoadFailed', error=e))
             self.test_plans = []
     
     def _save_test_plans(self) -> None:
@@ -431,9 +429,9 @@ class PytestRunner:
             import json
             with open(self.test_plans_file, 'w', encoding='utf-8') as f:
                 json.dump(self.test_plans, f, ensure_ascii=False, indent=2)
-            logger.info(f"已保存 {len(self.test_plans)} 个测试计划历史记录")
+            logger.info(t('python.pytestRunner.plansSaved', count=len(self.test_plans)))
         except Exception as e:
-            logger.error(f"保存测试计划历史记录失败: {e}")
+            logger.error(t('python.pytestRunner.plansSaveFailed', error=e))
     
     def get_test_plans(self) -> List[Dict[str, Any]]:
         """获取测试计划历史记录"""
@@ -459,7 +457,7 @@ class PytestRunner:
             if self.test_plans:
                 test_plan_name = self.test_plans[-1]["name"]
             else:
-                logger.error("没有可用的测试计划，请先运行测试")
+                logger.error(t('python.pytestRunner.noAvailablePlans'))
                 return False
         
         # 查找测试计划
@@ -470,20 +468,20 @@ class PytestRunner:
                 break
         
         if not test_plan:
-            logger.error(f"测试计划 '{test_plan_name}' 不存在")
+            logger.error(t('python.pytestRunner.planNotExist', test_plan_name=test_plan_name))
             return False
         
         # 获取运行记录
         runs = test_plan.get("runs", [])
         if not runs:
-            logger.error(f"测试计划 '{test_plan_name}' 没有运行记录")
+            logger.error(t('python.pytestRunner.planNoRuns', test_plan_name=test_plan_name))
             return False
         
         # 处理索引
         if run_index < 0:
             run_index = len(runs) + run_index
         if run_index < 0 or run_index >= len(runs):
-            logger.error(f"运行记录索引 {run_index} 超出范围 (0-{len(runs)-1})")
+            logger.error(t('python.pytestRunner.runIndexOutOfRange', index=run_index, max_index=len(runs)-1))
             return False
         
         # 获取指定的运行记录
@@ -491,16 +489,16 @@ class PytestRunner:
         report_path = run_record.get("report_path")
         
         if not report_path:
-            logger.error(f"运行记录没有关联的报告路径")
+            logger.error(t('python.pytestRunner.runNoReportPath'))
             return False
         
         allure_report_dir = Path(report_path)
         
         if not allure_report_dir.exists():
-            logger.error(f"报告目录不存在: {allure_report_dir}")
+            logger.error(t('python.pytestRunner.reportDirNotExist', path=allure_report_dir))
             return False
         
-        logger.info(f"正在打开测试计划 '{test_plan_name}' 的第 {run_index + 1} 次运行报告")
+        logger.info(t('python.pytestRunner.openingReport', test_plan_name=test_plan_name, index=run_index + 1))
         
         try:
             # 优先使用项目内的allure命令
@@ -545,18 +543,18 @@ class PytestRunner:
                     
                     # 检查服务器是否在运行
                     if allure_process.poll() is None:
-                        logger.info(f"测试计划 '{test_plan_name}' 的Allure报告服务器已启动 (PID: {allure_process.pid})")
-                        logger.info("报告将在浏览器中打开，请稍等...")
+                        logger.info(t('python.pytestRunner.allureServerStarted', test_plan_name=test_plan_name, pid=allure_process.pid))
+                        logger.info(t('python.pytestRunner.reportOpeningInBrowser'))
                         
                         # 启动浏览器监控线程
                         self._start_browser_monitor(test_plan_name)
                     else:
                         # 服务器启动失败，尝试直接打开文件
-                        logger.error("Allure服务器启动失败，尝试直接打开报告文件...")
+                        logger.error(t('python.pytestRunner.allureServerStartFailed'))
                         self._open_report_directly(allure_report_dir, test_plan_name)
                         
                 except Exception as e:
-                    logger.error(f"监控Allure服务器失败: {e}")
+                    logger.error(t('python.pytestRunner.allureMonitorFailed', error=e))
                     # 出错时尝试直接打开文件
                     self._open_report_directly(allure_report_dir, test_plan_name)
             
@@ -567,7 +565,7 @@ class PytestRunner:
             return True
                 
         except Exception as e:
-            logger.error(f"打开Allure报告失败: {e}")
+            logger.error(t('python.pytestRunner.openReportFailed', error=e))
             # 出错时尝试直接打开文件
             return self._open_report_directly(allure_report_dir, test_plan_name)
     
@@ -586,13 +584,13 @@ class PytestRunner:
                     subprocess.run(["open", str(allure_index)])
                 else:
                     subprocess.run(["xdg-open", str(allure_index)])
-                logger.info(f"测试计划 '{test_plan_name}' 的Allure报告已打开（直接打开）")
+                logger.info(t('python.pytestRunner.reportOpenedDirectly', test_plan_name=test_plan_name))
                 return True
             else:
-                logger.error("无法打开Allure报告，index.html文件不存在")
+                logger.error(t('python.pytestRunner.cannotOpenReportNoIndex'))
                 return False
         except Exception as e:
-            logger.error(f"直接打开报告文件失败: {e}")
+            logger.error(t('python.pytestRunner.openReportDirectlyFailed', error=e))
             return False
     
     def _start_browser_monitor(self, test_plan_name):
@@ -622,7 +620,7 @@ class PytestRunner:
                         continue
                 
                 if browser_processes:
-                    logger.info(f"检测到 {len(browser_processes)} 个浏览器进程连接到Allure服务器")
+                    logger.info(t('python.pytestRunner.browsersDetected', count=len(browser_processes)))
                     
                     # 监控浏览器进程状态
                     while True:
@@ -648,7 +646,7 @@ class PytestRunner:
                         
                         # 如果没有活动的浏览器进程，关闭allure服务器
                         if not active_browsers:
-                            logger.info("所有浏览器已关闭，正在停止Allure服务器...")
+                            logger.info(t('python.pytestRunner.allBrowsersClosed'))
                             self._stop_allure_server()
                             break
                         
@@ -657,12 +655,12 @@ class PytestRunner:
                         
                 else:
                     # 如果没有检测到浏览器进程，等待一段时间后关闭服务器
-                    logger.info("未检测到浏览器进程，将在30秒后自动关闭Allure服务器...")
+                    logger.info(t('python.pytestRunner.noBrowserDetected'))
                     time.sleep(30)
                     self._stop_allure_server()
                     
             except Exception as e:
-                logger.error(f"浏览器监控失败: {e}")
+                logger.error(t('python.pytestRunner.browserMonitorFailed', error=e))
                 # 出错时关闭服务器
                 self._stop_allure_server()
         
@@ -680,11 +678,11 @@ class PytestRunner:
                     try:
                         # 等待进程终止
                         self.allure_server_process.wait(timeout=5)
-                        logger.info("Allure服务器已成功停止")
+                        logger.info(t('python.pytestRunner.allureServerStopped'))
                     except subprocess.TimeoutExpired:
                         # 如果进程没有正常终止，强制杀死
                         self.allure_server_process.kill()
-                        logger.info("Allure服务器已被强制停止")
+                        logger.info(t('python.pytestRunner.allureServerForceStopped'))
                 
                 # 清理进程引用
                 self.allure_server_process = None
@@ -692,7 +690,7 @@ class PytestRunner:
                 self.allure_server_start_time = None
                 
         except Exception as e:
-            logger.error(f"停止Allure服务器失败: {e}")
+            logger.error(t('python.pytestRunner.stopAllureServerFailed', error=e))
     
     def _parse_test_stats(self, stdout_content: str) -> Dict[str, int]:
         """从pytest输出中解析用例级统计信息
@@ -746,21 +744,21 @@ class PytestRunner:
         test_stats = result.get("test_stats", {})
         
         if exit_code == 0:
-            status = "✅ 测试通过"
+            status = t('python.pytestRunner.statusPassed')
         elif exit_code == 1:
-            status = "❌ 测试失败"
+            status = t('python.pytestRunner.statusFailed')
         elif exit_code == 2:
-            status = "⚠️  测试中断"
+            status = t('python.pytestRunner.statusInterrupted')
         elif exit_code == 3:
-            status = "❌ 内部错误"
+            status = t('python.pytestRunner.statusInternalError')
         elif exit_code == 4:
-            status = "❌ 使用错误"
+            status = t('python.pytestRunner.statusUsageError')
         elif exit_code == 5:
-            status = "⚠️  未收集到测试"
+            status = t('python.pytestRunner.statusNoTestsCollected')
         else:
-            status = f"❓ 未知状态 (退出码: {exit_code})"
+            status = t('python.pytestRunner.statusUnknown', exit_code=exit_code)
         
-        summary = f"测试状态: {status}"
+        summary = t('python.pytestRunner.testStatusLine', status=status)
         
         if test_stats and test_stats.get("total", 0) > 0:
             passed = test_stats.get("passed", 0)
@@ -773,17 +771,17 @@ class PytestRunner:
                 pass_rate = (passed / effective_total) * 100
             else:
                 pass_rate = 0.0
-            summary += f"\n用例统计: 通过 {passed}, 失败 {failed}, 跳过 {skipped}, 异常 {broken}, 总计 {total}"
-            summary += f"\n通过率: {pass_rate:.2f}% (排除跳过)"
+            summary += t('python.pytestRunner.caseStatsLine', passed=passed, failed=failed, skipped=skipped, broken=broken, total=total)
+            summary += t('python.pytestRunner.passRateLine', pass_rate=f'{pass_rate:.2f}')
         
         if result["allure_report_path"]:
-            summary += f"\nAllure报告: {result['allure_report_path']}"
+            summary += t('python.pytestRunner.allureReportLine', path=result['allure_report_path'])
         
         if result["markers"]:
-            summary += f"\n测试标记: {', '.join(result['markers'])}"
+            summary += t('python.pytestRunner.testMarkersLine', markers=', '.join(result['markers']))
         
         if result["test_paths"]:
-            summary += f"\n测试路径: {', '.join(result['test_paths'])}"
+            summary += t('python.pytestRunner.testPathsLine', paths=', '.join(result['test_paths']))
         
         return summary
     
@@ -812,7 +810,7 @@ class PytestRunner:
         # 去重并排序
         test_dirs = sorted(list(set(test_dirs)))
         
-        logger.info(f"发现测试目录: {test_dirs}")
+        logger.info(t('python.pytestRunner.discoveredTestDirs', dirs=test_dirs))
         return test_dirs
     
     def run_custom_tests(self, 
@@ -834,8 +832,8 @@ class PytestRunner:
         Returns:
             测试结果字典
         """
-        logger.info(f"开始运行自定义路径测试: {test_paths}")
-        logger.info(f"项目根目录: {self.project_root}")
+        logger.info(t('python.pytestRunner.startCustomTests', paths=test_paths))
+        logger.info(t('python.pytestRunner.projectRoot', root=self.project_root))
         
         # 验证测试路径是否存在
         valid_paths = []
@@ -867,26 +865,26 @@ class PytestRunner:
                 try:
                     relative_path = full_path.relative_to(self.project_root)
                     valid_paths.append(str(relative_path))
-                    logger.info(f"找到测试路径: {path} -> {full_path}")
+                    logger.info(t('python.pytestRunner.foundTestPath', path=path, full_path=full_path))
                 except ValueError:
                     # 如果路径不在项目根目录的子路径中，直接使用绝对路径
-                    logger.debug(f"测试路径不在项目根目录下: {full_path}")
+                    logger.debug(t('python.pytestRunner.testPathNotUnderProject', full_path=full_path))
                     # 记录详细信息用于调试
-                    logger.debug(f"项目根目录: {self.project_root}")
-                    logger.debug(f"测试文件路径: {full_path}")
+                    logger.debug(t('python.pytestRunner.projectRootDebug', root=self.project_root))
+                    logger.debug(t('python.pytestRunner.testFilePath', full_path=full_path))
                     # 直接使用绝对路径
                     valid_paths.append(str(full_path))
-                    logger.info(f"使用绝对路径: {full_path}")
+                    logger.info(t('python.pytestRunner.usingAbsolutePath', path=full_path))
             else:
-                logger.warning(f"测试路径不存在: {path}")
+                logger.warning(t('python.pytestRunner.testPathNotExist', path=path))
                 # 记录详细的路径信息用于调试
-                logger.debug(f"尝试的路径: {path}")
-                logger.debug(f"项目根目录: {self.project_root}")
-                logger.debug(f"tests目录: {self.project_root / 'tests'}")
-                logger.debug(f"tests目录内容: {list((self.project_root / 'tests').glob('*.py')) if (self.project_root / 'tests').exists() else '目录不存在'}")
+                logger.debug(t('python.pytestRunner.triedPath', path=path))
+                logger.debug(t('python.pytestRunner.projectRootDebug', root=self.project_root))
+                logger.debug(t('python.pytestRunner.testsDir', path=self.project_root / 'tests'))
+                logger.debug(t('python.pytestRunner.testsDirContent', content=list((self.project_root / 'tests').glob('*.py')) if (self.project_root / 'tests').exists() else 'N/A'))
         
         if not valid_paths:
-            logger.error("没有有效的测试路径")
+            logger.error(t('python.pytestRunner.noValidTestPaths'))
             return {
                 "exit_code": 5,
                 "allure_report_path": None,
@@ -913,7 +911,7 @@ if __name__ == "__main__":
     # 测试运行器功能
     runner = PytestRunner()
     
-    print("测试Pytest运行器...")
+    print(t('python.pytestRunner.testingRunner'))
     
     # 运行所有测试
     result = runner.run_all_tests(generate_allure=True)

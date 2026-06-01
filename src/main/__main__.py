@@ -13,6 +13,7 @@ sys.path.insert(0, str(src_dir))
 
 from main.core.inspector_service import InspectorService  # noqa: E402
 from main.core.pytest_runner import PytestRunner  # noqa: E402
+from main.utils.i18n import t  # noqa: E402
 from main.utils.logger import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
@@ -24,10 +25,10 @@ class ElectronTestRunner:
 
     def run_tests(self, test_paths, markers=None, test_plan_name=None):
         try:
-            logger.info(f">>> 开始运行测试计划: {test_plan_name or '默认'}")
-            logger.info(f">>> 测试路径: {test_paths}")
+            logger.info(t('python.main.startTestPlan', name=test_plan_name or t('python.main.defaultPlan')))
+            logger.info(t('python.main.testPaths', paths=test_paths))
             if markers:
-                logger.info(f">>> 测试标记: {markers}")
+                logger.info(t('python.main.testMarkers', markers=markers))
 
             result = self.pytest_runner.run_custom_tests(
                 test_paths=test_paths,
@@ -50,7 +51,7 @@ class ElectronTestRunner:
             }
 
         except Exception as e:
-            error_msg = f">>> 测试运行失败: {str(e)}"
+            error_msg = t('python.main.testRunFailed', error=str(e))
             logger.error(error_msg)
 
             return {
@@ -136,12 +137,12 @@ class InspectorRunner:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='XKAutoTester Electron集成测试运行器')
+    parser = argparse.ArgumentParser(description=t('python.main.argDescription'))
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--test-paths', help='测试路径，多个路径用逗号分隔')
-    group.add_argument('--inspector', action='store_true', help='启动Inspector模式，通过stdin/stdout进行JSON通信')
-    parser.add_argument('--markers', help='测试标记，多个标记用逗号分隔')
-    parser.add_argument('--test-plan', help='测试计划名称')
+    group.add_argument('--test-paths', help=t('python.main.testPathsHelp'))
+    group.add_argument('--inspector', action='store_true', help=t('python.main.inspectorHelp'))
+    parser.add_argument('--markers', help=t('python.main.markersHelp'))
+    parser.add_argument('--test-plan', help=t('python.main.testPlanHelp'))
 
     args = parser.parse_args()
 
