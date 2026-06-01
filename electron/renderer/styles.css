@@ -610,6 +610,11 @@ body.dark-theme #test-execution .left-panel .glass-card {
   position: relative;
 }
 
+#test-execution .right-panel > .glass-card:first-child {
+  flex: 1;
+  min-height: 0;
+}
+
 #test-execution .glass-card::before {
   content: '';
   position: absolute;
@@ -635,6 +640,8 @@ body.dark-theme #test-execution .left-panel .glass-card {
 /* 卡片内容区域 */
 #test-execution .glass-card .card-content {
   padding: 20px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* 按钮容器 */
@@ -3897,8 +3904,8 @@ body:not(.dark-theme) #test-case .tc-no-search-results {
   font-size: 12px;
   padding: var(--spacing-md);
   border-radius: 4px;
-  min-height: 380px;
-  max-height: 400px;
+  flex: 1;
+  min-height: 0;
   overflow-y: hidden;
   white-space: pre-wrap;
   line-height: 1.4;
