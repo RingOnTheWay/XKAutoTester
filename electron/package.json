@@ -8,13 +8,15 @@
     "dev": "electron . --dev",
     "build": "electron-builder",
     "build-win": "electron-builder --win",
+    "build-lite-win": "electron-builder --win --config electron-builder.lite.yml",
     "pack": "electron-builder --dir",
     "version:bump": "python ../scripts/sync_version.py",
     "version:verify": "python ../scripts/sync_version.py --verify",
     "version:sync": "python ../scripts/sync_version.py --sync",
     "postinstall": "node patch-nsis.js",
     "prebuild": "node patch-nsis.js",
-    "prebuild-win": "node patch-nsis.js"
+    "prebuild-win": "node patch-nsis.js",
+    "prebuild-lite-win": "node patch-nsis.js"
   },
   "keywords": [
     "electron",

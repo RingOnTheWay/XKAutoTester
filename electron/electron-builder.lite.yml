@@ -1,0 +1,16 @@
+artifactName: ${productName} Lite Setup v${version}.${ext}
+
+extraResources:
+  - from: ../src
+    to: src
+    filter:
+      - "**/*.py"
+      - "**/*.json"
+  - from: ../config/pytest.ini
+    to: config/pytest.ini
+  - from: ../pyproject.toml
+    to: pyproject.toml
+  - from: ../uv.lock
+    to: uv.lock
+  - from: ../version.json
+    to: version.json

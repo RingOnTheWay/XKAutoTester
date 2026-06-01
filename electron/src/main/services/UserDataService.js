@@ -357,6 +357,10 @@ class UserDataService {
     return this.userConfigPath;
   }
 
+  getProjectRoot() {
+    return this.projectRoot;
+  }
+
   getUserDataPath() {
     return this.userDataPath;
   }

@@ -18,6 +18,11 @@ class UpdateService {
         this._cleanupOldUpdates();
     }
 
+    isLiteInstallation() {
+        const envDir = path.join(this.userDataService.getProjectRoot(), 'env');
+        return !fs.existsSync(envDir);
+    }
+
     _ensureUpdateDir() {
         if (!fs.existsSync(this.updateDir)) {
             fs.mkdirSync(this.updateDir, { recursive: true });
@@ -88,7 +93,24 @@ class UpdateService {
             let fileSize = 0;
 
             if (hasUpdate && latestRelease.assets && latestRelease.assets.length > 0) {
-                const exeAsset = latestRelease.assets.find(a => a.name.endsWith('.exe'));
+                const isLite = this.isLiteInstallation();
+                const targetKeyword = isLite ? 'Lite' : '';
+                let exeAsset = null;
+
+                if (targetKeyword) {
+                    exeAsset = latestRelease.assets.find(a =>
+                        a.name.endsWith('.exe') && a.name.includes(targetKeyword)
+                    );
+                } else {
+                    exeAsset = latestRelease.assets.find(a =>
+                        a.name.endsWith('.exe') && !a.name.includes('Lite')
+                    );
+                }
+
+                if (!exeAsset) {
+                    exeAsset = latestRelease.assets.find(a => a.name.endsWith('.exe'));
+                }
+
                 if (exeAsset) {
                     downloadUrl = exeAsset.url;
                     fileName = exeAsset.name;

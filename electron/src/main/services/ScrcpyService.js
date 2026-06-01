@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -8,9 +8,31 @@ class ScrcpyService {
     this.i18nService = i18nService;
   }
 
+  _findScrcpyPath() {
+    const localScrcpy = path.join(this.projectRoot, 'env', 'scrcpy', 'scrcpy.exe');
+    if (fs.existsSync(localScrcpy)) {
+      return localScrcpy;
+    }
+
+    try {
+      const result = execSync('where scrcpy', { encoding: 'utf8', windowsHide: true, timeout: 3000 });
+      const systemPath = result.split('\n').map(p => p.trim()).find(p => p && p.endsWith('.exe'));
+      if (systemPath) {
+        return systemPath;
+      }
+    } catch {}
+
+    return null;
+  }
+
   async startScrcpy(deviceId, scrcpyParams) {
     try {
-      const scrcpyPath = path.join(this.projectRoot, 'env', 'scrcpy', 'scrcpy.exe');
+      const scrcpyPath = this._findScrcpyPath();
+
+      if (!scrcpyPath) {
+        return { success: false, error: this.i18nService.t('main.scrcpyNotFound', { path: path.join(this.projectRoot, 'env', 'scrcpy', 'scrcpy.exe') }) };
+      }
+
       const args = ['-s', deviceId];
 
       if (scrcpyParams.max_size) {
@@ -29,10 +51,6 @@ class ScrcpyService {
       }
       if (scrcpyParams.always_on_top) {
         args.push('--always-on-top');
-      }
-
-      if (!fs.existsSync(scrcpyPath)) {
-        return { success: false, error: this.i18nService.t('main.scrcpyNotFound', { path: scrcpyPath }) };
       }
 
       let child;
