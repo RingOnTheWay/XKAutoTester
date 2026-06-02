@@ -680,21 +680,6 @@ body.dark-theme #test-execution .test-output {
   transition: width 0.3s ease;
 }
 
-/* 测试文件列表项 */
-#test-execution .test-file-item {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin-bottom: 8px;
-  transition: all 0.2s ease;
-}
-
-#test-execution .test-file-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
 /* 测试计划列表项 */
 #test-execution .test-plan-item {
   background: rgba(255, 255, 255, 0.05);
@@ -779,8 +764,9 @@ body.dark-theme #test-execution .test-output {
 #test-execution .selected-path {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 10px 14px;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
 }
 
 /* 占位消息 */
@@ -1039,14 +1025,12 @@ body:not(.dark-theme) #test-execution .progress-bar-container {
   background: rgba(0, 0, 0, 0.1);
 }
 
-body:not(.dark-theme) #test-execution .test-file-item,
 body:not(.dark-theme) #test-execution .test-plan-item,
 body:not(.dark-theme) #test-execution .test-type-item {
   background: rgba(0, 0, 0, 0.02);
   border-color: rgba(0, 0, 0, 0.05);
 }
 
-body:not(.dark-theme) #test-execution .test-file-item:hover,
 body:not(.dark-theme) #test-execution .test-plan-item:hover,
 body:not(.dark-theme) #test-execution .test-type-item:hover {
   background: rgba(0, 0, 0, 0.04);
@@ -1730,7 +1714,9 @@ body.dark-theme input[type="datetime-local"] {
 
 /* 测试执行页面 - 左侧面板卡片高度调整 */
 #test-execution .left-panel .material-card:nth-child(1) {
-  height: 280px;
+  height: auto;
+  min-height: unset;
+  flex: 0 0 auto;
 }
 
 #test-execution .left-panel .material-card:nth-child(2) {
@@ -3125,7 +3111,6 @@ body.dark-theme .material-button.outlined:disabled {
 
 /* 测试文件列表 */
 .test-files-list {
-  min-height: 100px;
   overflow-y: auto;
   margin-top: var(--spacing-md);
   flex: 1;
@@ -8581,20 +8566,22 @@ body:not(.dark-theme) .tc-add-step-bottom-btn:hover {
 }
 
 .tc-radio-option {
-    display: flex;
+    display: inline-flex !important;
     align-items: center;
     gap: 6px;
     cursor: pointer;
     font-size: 14px;
     color: var(--text-primary);
+    margin-bottom: 0 !important;
 }
 
 .tc-radio-option input[type="radio"] {
     -webkit-appearance: none;
     -moz-appearance: none;
     appearance: none;
-    width: 16px;
-    height: 16px;
+    width: 16px !important;
+    height: 16px !important;
+    padding: 0 !important;
     border: 2px solid rgba(128, 128, 128, 0.4);
     border-radius: 50%;
     background: transparent;
@@ -8602,11 +8589,12 @@ body:not(.dark-theme) .tc-add-step-bottom-btn:hover {
     position: relative;
     flex-shrink: 0;
     transition: all 0.2s ease;
+    box-sizing: border-box;
 }
 
 .tc-radio-option input[type="radio"]:checked {
-    border-color: var(--primary);
-    background: transparent;
+    border-color: var(--primary) !important;
+    background: transparent !important;
 }
 
 .tc-radio-option input[type="radio"]:checked::after {

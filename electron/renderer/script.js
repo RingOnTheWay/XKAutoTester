@@ -3551,52 +3551,6 @@ class XKAutoTesterApp {
     }
 
     displayTestFiles(files) {
-        const container = document.getElementById('test-files-list');
-        container.innerHTML = '';
-
-        const fragment = document.createDocumentFragment();
-        files.forEach(file => {
-            const fileElement = document.createElement('div');
-            fileElement.className = 'test-file-item';
-            fileElement.setAttribute('data-path', file.path);
-            fileElement.innerHTML = `
-                ${this.getIconHtml('description')}
-                <span>${file.name}</span>
-            `;
-
-            fragment.appendChild(fileElement);
-        });
-        container.appendChild(fragment);
-    }
-
-    findTestFileItemByPath(filePath) {
-        // 尝试多种路径匹配方式，确保能找到对应的文件
-        
-        // 1. 直接匹配完整路径
-        let fileItem = document.querySelector(`.test-file-item[data-path="${filePath}"]`);
-        if (fileItem) return fileItem;
-        
-        // 2. 尝试匹配标准化路径（处理路径分隔符差异）
-        const normalizedPath = filePath.replace(/\\/g, '/');
-        fileItem = document.querySelector(`.test-file-item[data-path="${normalizedPath}"]`);
-        if (fileItem) return fileItem;
-        
-        // 3. 尝试匹配反斜杠路径
-        const backslashPath = filePath.replace(/\//g, '\\');
-        fileItem = document.querySelector(`.test-file-item[data-path="${backslashPath}"]`);
-        if (fileItem) return fileItem;
-        
-        // 4. 尝试通过文件名匹配（作为最后的手段）
-        const fileName = filePath.split(/[\\/]/).pop();
-        const allFileItems = document.querySelectorAll('.test-file-item');
-        for (const item of allFileItems) {
-            const itemPath = item.getAttribute('data-path');
-            if (itemPath && itemPath.endsWith(fileName)) {
-                return item;
-            }
-        }
-        
-        return null;
     }
 
     updateRunButtonState() {
@@ -6148,37 +6102,16 @@ class XKAutoTesterApp {
     }
 
     selectTestPlanFiles(testFiles) {
-        // 设置标志，表示正在通过测试计划选择文件
         this.selectingFromPlan = true;
         
-        // 清空当前选中的测试文件
         this.selectedTestFiles = [];
-        
 
-        
-        // 先移除所有文件的选中状态
-        document.querySelectorAll('.test-file-item.selected').forEach(item => {
-            item.classList.remove('selected');
-        });
-        
-        // 根据测试计划中的文件路径自动勾选对应的测试文件
         testFiles.forEach(planFile => {
-            // 尝试多种路径匹配方式，确保能找到对应的文件
-            const fileItem = this.findTestFileItemByPath(planFile.path);
-
-            if (fileItem) {
-                fileItem.classList.add('selected');
-                this.selectedTestFiles.push(planFile);
-
-            }
+            this.selectedTestFiles.push(planFile);
         });
         
-
-        
-        // 更新运行按钮状态
         this.updateRunButtonState();
         
-        // 清除标志
         setTimeout(() => {
             this.selectingFromPlan = false;
         }, 100);
@@ -6257,10 +6190,8 @@ class XKAutoTesterApp {
     }
 
     disableTestDirectoryTab() {
-        // 禁用测试目录选项卡
-        const directoryCard = document.querySelector('.left-panel .material-card:nth-child(1)'); // 现在测试目录是第1个卡片
+        const directoryCard = document.querySelector('.left-panel .material-card:nth-child(1)');
         const selectButton = document.getElementById('select-directory-btn');
-        const testFilesList = document.getElementById('test-files-list');
         
         if (directoryCard) {
             directoryCard.style.opacity = '0.6';
@@ -6270,24 +6201,11 @@ class XKAutoTesterApp {
         if (selectButton) {
             selectButton.disabled = true;
         }
-        
-        if (testFilesList) {
-            // 只禁用文件项的点击事件，但保持列表的滚动功能
-            testFilesList.style.overflow = 'auto'; // 确保可以滚动
-            
-            // 禁用所有文件项的点击事件，但不影响容器本身的滚动
-            const fileItems = testFilesList.querySelectorAll('.test-file-item');
-            fileItems.forEach(item => {
-                item.style.pointerEvents = 'none';
-            });
-        }
     }
 
     enableTestDirectoryTab() {
-        // 启用测试目录选项卡
-        const directoryCard = document.querySelector('.left-panel .material-card:nth-child(1)'); // 现在测试目录是第1个卡片
+        const directoryCard = document.querySelector('.left-panel .material-card:nth-child(1)');
         const selectButton = document.getElementById('select-directory-btn');
-        const testFilesList = document.getElementById('test-files-list');
         
         if (directoryCard) {
             directoryCard.style.opacity = '1';
@@ -6296,17 +6214,6 @@ class XKAutoTesterApp {
         
         if (selectButton) {
             selectButton.disabled = false;
-        }
-        
-        if (testFilesList) {
-            testFilesList.style.pointerEvents = 'auto';
-            testFilesList.style.overflow = 'auto'; // 确保滚动功能正常
-            
-            // 启用所有文件项的点击事件
-            const fileItems = testFilesList.querySelectorAll('.test-file-item');
-            fileItems.forEach(item => {
-                item.style.pointerEvents = 'auto';
-            });
         }
     }
 
@@ -6370,14 +6277,7 @@ class XKAutoTesterApp {
     }
 
     ensureScrollable() {
-        // 确保文件列表和测试类型列表可以滚动
-        const testFilesList = document.getElementById('test-files-list');
         const testTypeSelector = document.getElementById('test-type-selector');
-        
-        if (testFilesList) {
-            testFilesList.style.overflow = 'auto';
-            testFilesList.style.pointerEvents = 'auto';
-        }
         
         if (testTypeSelector) {
             testTypeSelector.style.overflow = 'auto';
@@ -7789,17 +7689,9 @@ class XKAutoTesterApp {
     }
 
     addScrollDebugListeners() {
-        // 添加鼠标滚轮监听器来帮助调试滚动问题
-        const testFilesList = document.getElementById('test-files-list');
         const testTypeSelector = document.getElementById('test-type-selector');
         
-        if (testFilesList) {
-            // 添加滚动事件监听（已移除调试输出）
-        }
-        
-        
         if (testTypeSelector) {
-            // 添加滚动事件监听（已移除调试输出）
         }
     }
 
@@ -7814,12 +7706,6 @@ class XKAutoTesterApp {
             // 清空选中的测试文件
             this.selectedTestFiles = [];
             
-            // 移除所有文件的选中状态
-            document.querySelectorAll('.test-file-item.selected').forEach(item => {
-                item.classList.remove('selected');
-            });
-            
-            // 清空文件列表显示，恢复到初始状态
             this.displayTestFiles([]);
             
             // 清空测试类型显示，恢复到初始占位符状态
@@ -7851,11 +7737,6 @@ class XKAutoTesterApp {
             this.updateScheduledPlanButtons();
         }
         
-        // 移除其他选中状态
-        document.querySelectorAll('.test-file-item').forEach(item => {
-            item.classList.remove('selected');
-        });
-        
         // 移除其他测试计划的选中状态
         document.querySelectorAll('.test-plan-item.selected').forEach(item => {
             item.classList.remove('selected');
@@ -7871,37 +7752,10 @@ class XKAutoTesterApp {
         // 自动勾选测试计划对应的测试目录
         this.selectTestPlanDirectory(plan.testFiles || []);
         
-        // 如果是"什么都没有选择"的场景，需要先扫描并显示文件列表
-        if (wasNothingSelected && plan.testFiles && plan.testFiles.length > 0) {
-            try {
-                // 等待目录设置完成
-                await new Promise(resolve => setTimeout(resolve, 100));
-                
-                // 扫描并显示测试文件
-                const testFiles = await window.electronAPI.scanTestFiles(this.selectedDirectory);
-                this.displayTestFiles(testFiles);
-                
-                // 等待文件显示完成
-                await new Promise(resolve => setTimeout(resolve, 200));
-            } catch (error) {
-                console.error(window.i18n.t('testExecution.scanTestFilesFailed') + ':', error);
-            }
-        }
-        
-        // 先根据计划筛选测试类型，再选择测试文件（避免闪现）
         this.selectTestPlanTypes(plan.testTypes || []);
         this.selectTestPlanFiles(plan.testFiles || []);
         
-        // 如果是"什么都没有选择"的场景，确保文件被正确选中
         if (wasNothingSelected) {
-            // 确保文件被正确选中
-            if (plan.testFiles && plan.testFiles.length > 0) {
-                setTimeout(() => {
-                    this.selectTestPlanFiles(plan.testFiles);
-                }, 100);
-            }
-            
-            // 确保测试类型被正确选中
             if (plan.testTypes && plan.testTypes.length > 0) {
                 setTimeout(() => {
                     this.selectTestPlanTypes(plan.testTypes);
@@ -7909,7 +7763,6 @@ class XKAutoTesterApp {
             }
         }
         
-        // 禁用测试目录和测试类型选项卡
         this.disableTestDirectoryTab();
         this.disableTestTypeTab();
         
