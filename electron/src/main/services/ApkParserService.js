@@ -4,9 +4,10 @@ const fs = require('fs');
 const asyncFs = require('../utils/asyncFs');
 
 class ApkParserService {
-    constructor(projectRoot) {
+    constructor(projectRoot, i18nService = null) {
         this.projectRoot = projectRoot;
         this.aapt2Path = null;
+        this.i18nService = i18nService;
     }
 
     async initialize() {
@@ -75,7 +76,10 @@ class ApkParserService {
         console.log(`[ApkParserService] aapt2 path: ${this.aapt2Path}`);
         
         return new Promise((resolve) => {
-            const command = `"${this.aapt2Path}" dump badging "${apkPath}"`;
+            let command = `"${this.aapt2Path}" dump badging "${apkPath}"`;
+            if (process.platform === 'win32') {
+                command = `chcp 65001 >nul && ${command}`;
+            }
             console.log(`[ApkParserService] Executing command: ${command}`);
             
             exec(command, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
@@ -148,6 +152,7 @@ class ApkParserService {
             features: []
         };
 
+        const localeLabels = {};
         const lines = output.split('\n');
 
         for (const line of lines) {
@@ -184,6 +189,20 @@ class ApkParserService {
                 }
             }
 
+            if (trimmedLine.startsWith('application-label:')) {
+                const defaultLabelMatch = trimmedLine.match(/^application-label:\s*'(.*)'/);
+                if (defaultLabelMatch) {
+                    localeLabels['default'] = defaultLabelMatch[1];
+                }
+            }
+
+            const localeLabelMatch = trimmedLine.match(/^application-label-([a-zA-Z]{2,3}(?:-[a-zA-Z]{2,3}(?:-[a-zA-Z]{2})?)?):\s*'(.*)'/);
+            if (localeLabelMatch) {
+                const locale = localeLabelMatch[1];
+                const label = localeLabelMatch[2];
+                localeLabels[locale] = label;
+            }
+
             if (trimmedLine.startsWith('uses-permission:')) {
                 const permMatch = trimmedLine.match(/uses-permission:\s*name='([^']+)'/);
                 if (permMatch) {
@@ -199,7 +218,73 @@ class ApkParserService {
             }
         }
 
+        const preferredLabel = this._resolveLocaleLabel(localeLabels, result.applicationLabel);
+        if (preferredLabel) {
+            result.applicationLabel = preferredLabel;
+        }
+
         return result;
+    }
+
+    _resolveLocaleLabel(localeLabels, defaultLabel) {
+        if (Object.keys(localeLabels).length === 0) {
+            return defaultLabel;
+        }
+
+        let appLocale = 'zh-CN';
+        if (this.i18nService && typeof this.i18nService.getLanguage === 'function') {
+            appLocale = this.i18nService.getLanguage() || 'zh-CN';
+        }
+
+        const candidates = [appLocale];
+
+        const baseLang = appLocale.split('-')[0];
+        if (baseLang !== appLocale) {
+            candidates.push(baseLang);
+        }
+
+        if (appLocale !== 'zh-CN') {
+            candidates.push('zh-CN');
+        }
+        if (appLocale !== 'en-US') {
+            candidates.push('en-US');
+        }
+        if (appLocale !== 'en') {
+            candidates.push('en');
+        }
+        candidates.push('default');
+
+        for (const locale of candidates) {
+            if (localeLabels[locale]) {
+                const label = localeLabels[locale];
+                const fixed = this._fixGarbledUtf8(label);
+                return fixed;
+            }
+        }
+
+        return this._fixGarbledUtf8(defaultLabel);
+    }
+
+    _fixGarbledUtf8(str) {
+        if (!str) return str;
+
+        try {
+            const buf = Buffer.from(str, 'latin1');
+            const decoded = buf.toString('utf8');
+
+            const garbledPattern = /[\u00c0-\u00df][\u0080-\u00bf]|[\u00e0-\u00ef][\u0080-\u00bf]{2}|[\u00f0-\u00f7][\u0080-\u00bf]{3}/;
+            if (garbledPattern.test(decoded) && /[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(decoded)) {
+                return decoded;
+            }
+
+            if (garbledPattern.test(str)) {
+                return decoded;
+            }
+        } catch {
+            return str;
+        }
+
+        return str;
     }
 }
 

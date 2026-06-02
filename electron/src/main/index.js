@@ -50,7 +50,7 @@ async function initializeServices() {
   const pagePackageService = new PagePackageService(userConfigPath);
   const bleDeviceDiscoveryService = new BleDeviceDiscoveryService(projectRoot);
   const testCaseService = new TestCaseService(userConfigPath, projectRoot);
-  const apkParserService = new ApkParserService(projectRoot);
+  const apkParserService = new ApkParserService(projectRoot, i18nService);
   const versionService = new VersionService(projectRoot);
   const updateService = new UpdateService(versionService, userDataService);
   const inspectorService = new InspectorService(projectRoot, i18nService, userDataPath);
