@@ -46,7 +46,6 @@ class XKAutoTesterApp {
         this.ppEditingType = null;
         this.ppInitialized = false;
         this.inspectorModal = null;
-        this._ppElementModalNeedsReopen = false;
         
         // 文件管理器相关属性
         this.currentPath = '/storage/emulated/0'; // 默认路径
@@ -262,10 +261,6 @@ class XKAutoTesterApp {
             document.addEventListener('inspector-element-selected', (event) => {
                 const { locatorType, locatorValue } = event.detail;
                 this.ppFillLocatorFromInspector(locatorType, locatorValue);
-            });
-
-            document.addEventListener('inspector-closed', () => {
-                this._reopenElementModalIfNeeded();
             });
         } catch (error) {
             console.error('Failed to initialize Inspector:', error);
@@ -10102,6 +10097,7 @@ class XKAutoTesterApp {
         const select = wrapper.querySelector('.cascade-select');
         const selected = wrapper.querySelector('.cascade-select__selected');
         const searchInput = wrapper.querySelector('.cascade-select__search');
+        const identifyBtn = wrapper.querySelector('.cascade-select__btn.identify');
         const addBtn = wrapper.querySelector('.cascade-select__btn.add');
         const editBtn = wrapper.querySelector('.cascade-select__btn.edit');
         const deleteBtn = wrapper.querySelector('.cascade-select__btn.delete');
@@ -10126,6 +10122,13 @@ class XKAutoTesterApp {
             const keyword = e.target.value.toLowerCase();
             this.ppFilterOptions(type, keyword);
         });
+        
+        if (identifyBtn) {
+            identifyBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.ppOpenInspector();
+            });
+        }
         
         addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -10726,11 +10729,6 @@ class XKAutoTesterApp {
         saveBtn.addEventListener('click', () => this.ppSaveElement());
         
         this.initializeCustomSelects();
-
-        const inspectorBtn = document.getElementById('pp-inspector-btn');
-        if (inspectorBtn) {
-            inspectorBtn.addEventListener('click', () => this.ppOpenInspector());
-        }
     }
 
     async ppOpenInspector() {
@@ -10744,26 +10742,15 @@ class XKAutoTesterApp {
             return;
         }
 
-        this.modals.ppElement.close();
-        this._ppElementModalNeedsReopen = true;
-
         let deviceName;
         try {
             deviceName = await this.showDeviceSelectionForInspector();
         } catch (e) {
-            this._reopenElementModalIfNeeded();
             return;
         }
 
         const noReset = await this._showResetConfirmModal();
         await this.inspectorModal.open(deviceName, app.packageName, app.activityName, noReset);
-    }
-
-    _reopenElementModalIfNeeded() {
-        if (this._ppElementModalNeedsReopen) {
-            this._ppElementModalNeedsReopen = false;
-            this.modals.ppElement.open();
-        }
     }
 
     _showResetConfirmModal() {
@@ -10825,6 +10812,7 @@ class XKAutoTesterApp {
     }
 
     ppFillLocatorFromInspector(locatorType, locatorValue) {
+        this.ppShowAddModal('element');
         this.setCustomSelectValue('pp-element-locator-wrapper', locatorType);
         const valueInput = document.getElementById('pp-element-value-input');
         if (valueInput) {
@@ -10834,7 +10822,6 @@ class XKAutoTesterApp {
         if (nameInput && !nameInput.value) {
             nameInput.focus();
         }
-        this._reopenElementModalIfNeeded();
     }
 
     ppShowAddModal(type) {

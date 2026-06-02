@@ -840,8 +840,8 @@
     "stepLaunchingApp": "Launching app...",
     "stepLoadingElements": "Loading element tree...",
     "noLocators": "Select an element to view locators",
-    "confirmSelect": "Confirm Selection",
-    "cancel": "Cancel",
+    "exit": "Exit",
+    "addElement": "Add Element",
     "locatorType": "Locator Type",
     "locatorValue": "Locator Value",
     "locatorDesc": "Description",
@@ -868,7 +868,21 @@
     "nodeText": "Text",
     "nodeDesc": "Description",
     "nodeResourceId": "Resource ID",
-    "selectLocatorFirst": "Please select a locator type first"
+    "selectLocatorFirst": "Please select a locator type first",
+    "errorActivityNotFound": "Launch activity not found, check app config",
+    "errorAppiumStartFailed": "Appium server failed to start",
+    "errorDeviceNotFound": "Device not connected or offline",
+    "errorAppNotInstalled": "App not installed, install APK first",
+    "errorTimeout": "Session creation timed out, check device status",
+    "errorPermissionDenied": "Permission denied, check device authorization",
+    "errorConnectionRefused": "Appium server connection failed",
+    "errorPortInUse": "Port in use, close the occupying process",
+    "errorSessionNotCreated": "Session creation failed, check device and app config",
+    "errorUnknown": "Appium session creation failed",
+    "errorNoSession": "No active session, reconnect please",
+    "errorXmlParse": "Page source parse failed",
+    "errorElementNotFound": "Element not found",
+    "errorSessionExists": "Session already exists, stop current session first"
   },
   "python": {
     "main": {

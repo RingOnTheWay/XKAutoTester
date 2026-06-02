@@ -9,11 +9,32 @@ from appium import webdriver
 from appium.options.android import UiAutomator2Options
 
 from main.core.appium_server import AppiumServer
+from main.utils.i18n import t
 
 logger = logging.getLogger(__name__)
 
 INSPECTOR_PORT = 4725
 DEFAULT_PORT = 4723
+
+_APPIUM_ERROR_PATTERNS = [
+    (re.compile(r"doesn't exist or cannot be launched", re.IGNORECASE), "inspector.errorActivityNotFound"),
+    (re.compile(r"device.*(?:not found|offline|unreachable)", re.IGNORECASE), "inspector.errorDeviceNotFound"),
+    (re.compile(r"package.*(?:not found|not installed)", re.IGNORECASE), "inspector.errorAppNotInstalled"),
+    (re.compile(r"(?:timeout|timed out)", re.IGNORECASE), "inspector.errorTimeout"),
+    (re.compile(r"permission.*denied", re.IGNORECASE), "inspector.errorPermissionDenied"),
+    (re.compile(r"(?:connection refused|econnrefused)", re.IGNORECASE), "inspector.errorConnectionRefused"),
+    (re.compile(r"(?:port.*(?:in use|already)|eaddrinuse)", re.IGNORECASE), "inspector.errorPortInUse"),
+    (re.compile(r"session.*(?:not created|cannot create)", re.IGNORECASE), "inspector.errorSessionNotCreated"),
+]
+
+
+def _map_appium_error(raw_error: str) -> str:
+    if not raw_error:
+        return t("inspector.errorUnknown")
+    for pattern, i18n_key in _APPIUM_ERROR_PATTERNS:
+        if pattern.search(raw_error):
+            return t(i18n_key)
+    return t("inspector.errorUnknown")
 
 
 def _check_port_in_use(port: int) -> bool:
@@ -48,7 +69,7 @@ class InspectorService:
     def start_session(self, device_name: str, app_package: str, app_activity: str, platform_version: str = "", no_reset: bool = True) -> dict:
         try:
             if self.driver is not None:
-                return {"success": False, "error": "Session already exists. Stop the current session first."}
+                return {"success": False, "error": t("inspector.errorSessionExists")}
 
             port_warning = ""
             if _check_port_in_use(DEFAULT_PORT):
@@ -59,7 +80,7 @@ class InspectorService:
             self.appium_server = AppiumServer(host=AppiumServer.DEFAULT_HOST, port=INSPECTOR_PORT)
             if not self.appium_server.start():
                 self.appium_server.force_cleanup()
-                return {"success": False, "error": f"Failed to start Appium server on port {INSPECTOR_PORT}"}
+                return {"success": False, "error": t("inspector.errorAppiumStartFailed")}
 
             self._notify_progress("appium-started")
 
@@ -101,12 +122,12 @@ class InspectorService:
             if self.appium_server:
                 self.appium_server.force_cleanup()
                 self.appium_server = None
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": _map_appium_error(str(e))}
 
     def get_screenshot(self) -> dict:
         try:
             if self.driver is None:
-                return {"success": False, "error": "No active session"}
+                return {"success": False, "error": t("inspector.errorNoSession")}
 
             screenshot_b64 = self.driver.get_screenshot_as_base64()
             data_uri = f"data:image/png;base64,{screenshot_b64}"
@@ -114,12 +135,12 @@ class InspectorService:
 
         except Exception as e:
             logger.error(f"Failed to get screenshot: {e}")
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": _map_appium_error(str(e))}
 
     def get_page_source(self) -> dict:
         try:
             if self.driver is None:
-                return {"success": False, "error": "No active session"}
+                return {"success": False, "error": t("inspector.errorNoSession")}
 
             source = self.driver.page_source
             self._cached_source = source
@@ -134,15 +155,15 @@ class InspectorService:
             logger.error(f"Failed to parse XML source: {e}")
             if self._cached_source:
                 return {"success": True, "source": self._cached_source, "elements": self._cached_tree or {}}
-            return {"success": False, "error": f"XML parse error: {e}"}
+            return {"success": False, "error": t("inspector.errorXmlParse")}
         except Exception as e:
             logger.error(f"Failed to get page source: {e}")
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": _map_appium_error(str(e))}
 
     def find_locators(self, element_path: str) -> dict:
         try:
             if self.driver is None:
-                return {"success": False, "error": "No active session"}
+                return {"success": False, "error": t("inspector.errorNoSession")}
 
             if self._cached_tree is None:
                 result = self.get_page_source()
@@ -151,7 +172,7 @@ class InspectorService:
 
             element_attrs = self._find_element_by_path(self._cached_tree, element_path)
             if element_attrs is None:
-                return {"success": False, "error": f"Element not found at path: {element_path}"}
+                return {"success": False, "error": t("inspector.errorElementNotFound")}
 
             locators = []
 
@@ -220,12 +241,12 @@ class InspectorService:
 
         except Exception as e:
             logger.error(f"Failed to find locators: {e}")
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": _map_appium_error(str(e))}
 
     def refresh(self) -> dict:
         try:
             if self.driver is None:
-                return {"success": False, "error": "No active session"}
+                return {"success": False, "error": t("inspector.errorNoSession")}
 
             screenshot_result = self.get_screenshot()
             if not screenshot_result.get("success"):
@@ -244,7 +265,7 @@ class InspectorService:
 
         except Exception as e:
             logger.error(f"Failed to refresh: {e}")
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": _map_appium_error(str(e))}
 
     def stop_session(self) -> dict:
         try:
@@ -270,7 +291,7 @@ class InspectorService:
             logger.error(f"Error stopping inspector session: {e}")
             self.driver = None
             self.appium_server = None
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": _map_appium_error(str(e))}
 
     def _find_element_by_path(self, tree: dict, path: str) -> dict | None:
         parts = path.split(".")

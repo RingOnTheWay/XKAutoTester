@@ -842,8 +842,8 @@
     "stepLaunchingApp": "正在启动应用...",
     "stepLoadingElements": "正在加载元素树...",
     "noLocators": "请选择一个元素查看定位方式",
-    "confirmSelect": "确认选择",
-    "cancel": "取消",
+    "exit": "退出",
+    "addElement": "新增元素",
     "locatorType": "定位方式",
     "locatorValue": "定位值",
     "locatorDesc": "说明",
@@ -870,7 +870,21 @@
     "nodeText": "文本",
     "nodeDesc": "描述",
     "nodeResourceId": "资源ID",
-    "selectLocatorFirst": "请先选择一种定位方式"
+    "selectLocatorFirst": "请先选择一种定位方式",
+    "errorActivityNotFound": "启动Activity不存在，请检查应用配置",
+    "errorAppiumStartFailed": "Appium服务启动失败",
+    "errorDeviceNotFound": "设备未连接或已离线",
+    "errorAppNotInstalled": "应用未安装，请先安装APK",
+    "errorTimeout": "会话创建超时，请检查设备状态",
+    "errorPermissionDenied": "权限不足，请检查设备授权",
+    "errorConnectionRefused": "Appium服务连接失败",
+    "errorPortInUse": "端口被占用，请关闭占用进程",
+    "errorSessionNotCreated": "会话创建失败，请检查设备和应用配置",
+    "errorUnknown": "Appium会话创建失败",
+    "errorNoSession": "无活跃会话，请重新连接",
+    "errorXmlParse": "页面源数据解析失败",
+    "errorElementNotFound": "未找到指定元素",
+    "errorSessionExists": "会话已存在，请先停止当前会话"
   },
   "python": {
     "main": {

@@ -149,8 +149,6 @@ class InspectorModal {
         }
 
         this.resetState();
-
-        document.dispatchEvent(new CustomEvent('inspector-closed'));
     }
 
     resetState() {
@@ -638,7 +636,6 @@ class InspectorModal {
             }
         });
         document.dispatchEvent(event);
-        this.close();
     }
 
     searchTree(keyword) {
