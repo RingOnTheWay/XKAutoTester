@@ -11,7 +11,11 @@ class XKAutoTesterApp {
         this.runningScheduledPlanId = null; // 正在执行的定时计划ID
         this.isInitializing = false;
         this.initialized = false; // 添加初始化完成标志
-        this.selectedDevice = null; // 添加设备管理相关属性
+        this.selectedDevice = null;
+        this._modalSelectedDeviceId = null;
+        this._deviceRefreshTimer = null;
+        this._currentDeviceList = [];
+        this._isDeviceRefreshing = false;
         this.currentMarkers = []; // 保存当前的测试类型标记
         this.selectedReportRun = null; // 选中的报告运行记录
         
@@ -3591,18 +3595,15 @@ class XKAutoTesterApp {
         
         this.modals.device.open();
 
+        if (this.deviceStatusSaved && this.selectedDevice) {
+            this._modalSelectedDeviceId = this.selectedDevice;
+        }
+
         this.showDeviceScanningState();
 
         await this.scanDevices();
         
-        if (this.deviceStatusSaved && this.selectedDevice) {
-            setTimeout(() => {
-                const deviceToSelect = document.querySelector(`.device-item[data-device-id="${this.selectedDevice}"]`);
-                if (deviceToSelect) {
-                    deviceToSelect.click();
-                }
-            }, 100);
-        }
+        this.startDeviceRefresh();
         
         const openPortBtn = document.getElementById('open-port-btn');
         if (openPortBtn) {
@@ -3640,11 +3641,6 @@ class XKAutoTesterApp {
             // 检查结果
             if (result.success) {
                 Toast.success(window.i18n.t('deviceModal.portOpenSuccess'), { container: modalContainer });
-                
-                // 重新扫描设备，查看是否出现IP连接
-                setTimeout(async () => {
-                    await this.scanDevices();
-                }, 1000);
             } else {
                 Toast.error(`${window.i18n.t('deviceModal.portOpenFailed')}: ${result.error}`, { container: modalContainer });
             }
@@ -3655,9 +3651,13 @@ class XKAutoTesterApp {
 
     // 隐藏设备管理模态框
     hideDeviceModal() {
+        this.stopDeviceRefresh();
         this.modals.device.close();
         
         this.hideAddDeviceInput();
+        
+        this._modalSelectedDeviceId = null;
+        this._currentDeviceList = [];
         
         const deviceListElement = document.getElementById('device-list');
         if (deviceListElement) {
@@ -3669,7 +3669,12 @@ class XKAutoTesterApp {
         }
     }
 
-    // 显示编辑设备连接标识弹窗
+    onDeviceModalClose() {
+        this.stopDeviceRefresh();
+        this._modalSelectedDeviceId = null;
+        this._currentDeviceList = [];
+    }
+
     async showEditDeviceIdModal(fileName, filePath) {
         this._editDeviceIdFileName = fileName;
         this._editDeviceIdFilePath = filePath;
@@ -4053,92 +4058,12 @@ class XKAutoTesterApp {
         if (deviceListElement) {
             deviceListElement.classList.remove('hidden');
             
-            // 保存当前选中的设备ID（只有当设备状态已保存时才保存）
-            const selectedDeviceId = this.deviceStatusSaved ? this.selectedDevice : null;
+            const selectedDeviceId = this._modalSelectedDeviceId;
             
-            // 清空设备列表
             deviceListElement.innerHTML = '';
 
-            devices.forEach((device, index) => {
-                const deviceElement = document.createElement('div');
-                deviceElement.className = 'device-item';
-                deviceElement.setAttribute('data-device-id', device);
-                deviceElement.style.padding = '8px 12px';
-                deviceElement.style.borderRadius = '4px';
-                deviceElement.style.cursor = 'pointer';
-                deviceElement.style.transition = 'background-color 0.2s';
-                deviceElement.style.display = 'flex';
-                deviceElement.style.alignItems = 'flex-start';
-                
-                // 判断设备连接类型并使用不同图标
-                let icon = 'device_hub'; // 默认图标
-                if (device.includes(':')) {
-                    // IP连接的设备，格式通常为 IP:端口
-                    icon = 'wifi';
-                } else {
-                    // USB连接的设备，通常是序列号
-                    icon = 'usb';
-                }
-                
-                deviceElement.innerHTML = `
-                    ${this.getIconHtml(icon, 'vertical-align: top; margin-right: 8px; flex-shrink: 0; margin-top: 2px;')}
-                    <span style="vertical-align: top; flex: 1; min-width: 0; word-wrap: break-word; overflow-wrap: break-word; white-space: normal;">${device}</span>
-                `;
-                
-                // 添加悬停效果
-                deviceElement.addEventListener('mouseenter', () => {
-                    if (!deviceElement.classList.contains('selected')) {
-                        deviceElement.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
-                    }
-                });
-                
-                deviceElement.addEventListener('mouseleave', () => {
-                    if (!deviceElement.classList.contains('selected')) {
-                        deviceElement.style.backgroundColor = '';
-                    }
-                });
-
-                // 添加点击事件
-                deviceElement.addEventListener('click', () => {
-                    // 移除其他设备的选中状态
-                    document.querySelectorAll('.device-item.selected').forEach(item => {
-                        item.classList.remove('selected');
-                        item.style.backgroundColor = '';
-                    });
-                    
-                    // 选中当前设备
-                    deviceElement.classList.add('selected');
-                    // 使用主题色作为背景颜色
-                    const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
-                    deviceElement.style.backgroundColor = `${primaryColor}20`;
-                    
-                    // 启用确认按钮（直接获取最新引用）
-                    const currentConfirmBtn = document.getElementById('device-modal-confirm-btn');
-                    if (currentConfirmBtn) {
-                        currentConfirmBtn.disabled = false;
-                    }
-                    
-                    // 控制开放5555端口按钮状态
-                    const openPortBtn = document.getElementById('open-port-btn');
-                    if (openPortBtn) {
-                        // 只有USB设备（不包含冒号）才能开放端口
-                        if (!device.includes(':')) {
-                            openPortBtn.disabled = false;
-                        } else {
-                            openPortBtn.disabled = true;
-                        }
-                    }
-                    
-                    // 显示设备状态卡片并获取设备信息
-                    const deviceStatusCard = document.getElementById('modal-device-status-card');
-                    if (deviceStatusCard) {
-                        deviceStatusCard.classList.remove('hidden');
-                    }
-                    
-                    // 获取设备详细信息
-                    this.getDeviceInfo(device, true);
-                });
-
+            devices.forEach((device) => {
+                const deviceElement = this._createDeviceItemElement(device);
                 deviceListElement.appendChild(deviceElement);
             });
 
@@ -4177,55 +4102,46 @@ class XKAutoTesterApp {
 
             deviceListElement.appendChild(addDeviceButton);
 
-            // 恢复选中状态
             if (selectedDeviceId) {
                 const deviceToSelect = document.querySelector(`.device-item[data-device-id="${selectedDeviceId}"]`);
                 if (deviceToSelect) {
                     deviceToSelect.classList.add('selected');
-                    // 使用主题色作为背景颜色
                     const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
                     deviceToSelect.style.backgroundColor = `${primaryColor}20`;
                     
-                    // 启用确认按钮
                     if (confirmButton) {
                         confirmButton.disabled = false;
                     }
                     
-                    // 控制开放5555端口按钮状态
-                    const openPortBtn = document.getElementById('open-port-btn');
-                    if (openPortBtn) {
-                        // 只有USB设备（不包含冒号）才能开放端口
+                    const currentOpenPortBtn = document.getElementById('open-port-btn');
+                    if (currentOpenPortBtn) {
                         if (!selectedDeviceId.includes(':')) {
-                            openPortBtn.disabled = false;
+                            currentOpenPortBtn.disabled = false;
                         } else {
-                            openPortBtn.disabled = true;
+                            currentOpenPortBtn.disabled = true;
                         }
                     }
                     
-                    // 如果设备状态已保存，自动显示设备信息卡片
-                    if (this.deviceStatusSaved) {
-                        const deviceStatusCard = document.getElementById('modal-device-status-card');
-                        if (deviceStatusCard) {
-                            deviceStatusCard.classList.remove('hidden');
-                        }
-                        // 获取设备详细信息
-                        this.getDeviceInfo(selectedDeviceId, true);
+                    const currentDeviceStatusCard = document.getElementById('modal-device-status-card');
+                    if (currentDeviceStatusCard) {
+                        currentDeviceStatusCard.classList.remove('hidden');
                     }
+                    this.getDeviceInfo(selectedDeviceId, true);
                 }
             }
         }
 
-        // 隐藏无设备提示
         if (noDevicesElement) noDevicesElement.classList.add('hidden');
+        this._currentDeviceList = [...devices];
     }
 
     // 显示新增设备输入框
     showAddDeviceInput() {
-        // 清除设备选择
         document.querySelectorAll('.device-item.selected').forEach(item => {
             item.classList.remove('selected');
             item.style.backgroundColor = '';
         });
+        this._modalSelectedDeviceId = null;
         
         // 禁用确认按钮和开放端口按钮
         const confirmButton = document.getElementById('device-modal-confirm-btn');
@@ -4343,10 +4259,6 @@ class XKAutoTesterApp {
             
             if (result.success) {
                 this.showAddDeviceResult(`${window.i18n.t('deviceModal.connectSuccess')}: ${deviceAddress}`, 'success');
-                // 重新扫描设备
-                setTimeout(async () => {
-                    await this.scanDevices();
-                }, 1000);
             } else {
                 this.showAddDeviceResult(`${window.i18n.t('deviceModal.connectFailed')}: ${result.error}`, 'error');
             }
@@ -4788,7 +4700,150 @@ class XKAutoTesterApp {
         }
     }
 
-    // 确认设备选择
+    startDeviceRefresh() {
+        this.stopDeviceRefresh();
+        this._deviceRefreshTimer = setInterval(() => {
+            this.refreshDeviceList();
+        }, 2000);
+    }
+
+    stopDeviceRefresh() {
+        if (this._deviceRefreshTimer) {
+            clearInterval(this._deviceRefreshTimer);
+            this._deviceRefreshTimer = null;
+        }
+    }
+
+    async refreshDeviceList() {
+        if (this._isDeviceRefreshing) return;
+        this._isDeviceRefreshing = true;
+
+        try {
+            const newDevices = await this.getConnectedDevices();
+            const oldSet = new Set(this._currentDeviceList);
+            const newSet = new Set(newDevices);
+
+            const added = newDevices.filter(d => !oldSet.has(d));
+            const removed = this._currentDeviceList.filter(d => !newSet.has(d));
+            const unchanged = this._currentDeviceList.filter(d => newSet.has(d));
+
+            if (added.length === 0 && removed.length === 0) {
+                this._isDeviceRefreshing = false;
+                return;
+            }
+
+            const orderedDevices = [...added, ...unchanged];
+            this._currentDeviceList = [...orderedDevices];
+
+            const deviceListElement = document.getElementById('device-list');
+            if (!deviceListElement) {
+                this._isDeviceRefreshing = false;
+                return;
+            }
+
+            removed.forEach(deviceId => {
+                const el = deviceListElement.querySelector(`.device-item[data-device-id="${deviceId}"]`);
+                if (el) el.remove();
+            });
+
+            for (let i = added.length - 1; i >= 0; i--) {
+                const deviceElement = this._createDeviceItemElement(added[i]);
+                deviceListElement.prepend(deviceElement);
+            }
+
+            if (this._modalSelectedDeviceId && removed.includes(this._modalSelectedDeviceId)) {
+                this._modalSelectedDeviceId = null;
+                const confirmButton = document.getElementById('device-modal-confirm-btn');
+                const openPortBtn = document.getElementById('open-port-btn');
+                const deviceStatusCard = document.getElementById('modal-device-status-card');
+                if (confirmButton) confirmButton.disabled = true;
+                if (openPortBtn) openPortBtn.disabled = true;
+                if (deviceStatusCard) deviceStatusCard.classList.add('hidden');
+            }
+        } catch (error) {
+            console.error('刷新设备列表失败:', error);
+        } finally {
+            this._isDeviceRefreshing = false;
+        }
+    }
+
+    _createDeviceItemElement(device) {
+        const deviceElement = document.createElement('div');
+        deviceElement.className = 'device-item';
+        deviceElement.setAttribute('data-device-id', device);
+        deviceElement.style.padding = '8px 12px';
+        deviceElement.style.borderRadius = '4px';
+        deviceElement.style.cursor = 'pointer';
+        deviceElement.style.transition = 'background-color 0.2s';
+        deviceElement.style.display = 'flex';
+        deviceElement.style.alignItems = 'flex-start';
+
+        let icon = 'device_hub';
+        if (device.includes(':')) {
+            icon = 'wifi';
+        } else {
+            icon = 'usb';
+        }
+
+        deviceElement.innerHTML = `
+            ${this.getIconHtml(icon, 'vertical-align: top; margin-right: 8px; flex-shrink: 0; margin-top: 2px;')}
+            <span style="vertical-align: top; flex: 1; min-width: 0; word-wrap: break-word; overflow-wrap: break-word; white-space: normal;">${device}</span>
+        `;
+
+        deviceElement.addEventListener('mouseenter', () => {
+            if (!deviceElement.classList.contains('selected')) {
+                deviceElement.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+            }
+        });
+
+        deviceElement.addEventListener('mouseleave', () => {
+            if (!deviceElement.classList.contains('selected')) {
+                deviceElement.style.backgroundColor = '';
+            }
+        });
+
+        deviceElement.addEventListener('click', () => {
+            document.querySelectorAll('.device-item.selected').forEach(item => {
+                item.classList.remove('selected');
+                item.style.backgroundColor = '';
+            });
+
+            deviceElement.classList.add('selected');
+            this._modalSelectedDeviceId = device;
+            const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
+            deviceElement.style.backgroundColor = `${primaryColor}20`;
+
+            const currentConfirmBtn = document.getElementById('device-modal-confirm-btn');
+            if (currentConfirmBtn) {
+                currentConfirmBtn.disabled = false;
+            }
+
+            const currentOpenPortBtn = document.getElementById('open-port-btn');
+            if (currentOpenPortBtn) {
+                if (!device.includes(':')) {
+                    currentOpenPortBtn.disabled = false;
+                } else {
+                    currentOpenPortBtn.disabled = true;
+                }
+            }
+
+            const currentDeviceStatusCard = document.getElementById('modal-device-status-card');
+            if (currentDeviceStatusCard) {
+                currentDeviceStatusCard.classList.remove('hidden');
+            }
+
+            this.getDeviceInfo(device, true);
+        });
+
+        if (this._modalSelectedDeviceId === device) {
+            deviceElement.classList.add('selected');
+            const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
+            deviceElement.style.backgroundColor = `${primaryColor}20`;
+        }
+
+        return deviceElement;
+    }
+
     confirmDeviceSelection() {
         // 获取选中的设备
         const selectedDeviceElement = document.querySelector('.device-item.selected');
