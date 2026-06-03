@@ -26,6 +26,7 @@ class ADBManager:
         """
         self.device_name = device_name
         self.app_package = app_package
+        self._logcat_monitor = None
     
     def check_adb_service(self) -> bool:
         """
@@ -501,36 +502,116 @@ class ADBManager:
             logger.warning(t('python.adbManager.getAppPidError', error=e))
             return None
     
-    def check_crash_logs(self, pid: int) -> list:
+    def check_crash_logs(self, pid: int | None = None) -> list:
         """
-        检查应用的崩溃日志
-        
+        检查应用的崩溃日志（兼容旧接口，优先从 logcat_monitor 获取）
+
         Args:
-            pid: 应用进程ID
-            
+            pid: 应用进程ID（可选，为 None 时按包名过滤）
+
         Returns:
             list: 崩溃日志列表
         """
+        # 优先从 logcat_monitor 获取
+        if self._logcat_monitor and self._logcat_monitor.crash_detected:
+            full_log = self._logcat_monitor.get_full_log()
+            crash_info = self._logcat_monitor.crash_info
+            crash_logs = [
+                f"[{crash_info['crash_type']}] {crash_info['crash_line']}",
+                "--- 完整日志 ---",
+                full_log,
+            ]
+            logger.info(t('python.adbManager.crashLogsFound', count=len(crash_logs)))
+            return crash_logs
+
+        # 回退到原有的一次性 dump 方式
         try:
-            # 使用logcat -d命令获取缓存的日志，并通过PID过滤
-            # 同时支持Windows的findstr和Linux的grep命令
             result = subprocess.run(
                 ['adb', '-s', self.device_name, 'shell', f'logcat -d'],
                 capture_output=True, text=True, timeout=15
             )
-            
+
             crash_logs = []
             if result.returncode == 0:
                 for line in result.stdout.strip().split('\n'):
-                    if line.strip() and f"{pid}" in line and "E" in line and "AndroidRuntime" in line:
+                    if not line.strip():
+                        continue
+                    # 有 PID 时按 PID 过滤
+                    if pid and f"{pid}" in line and "E" in line and "AndroidRuntime" in line:
                         crash_logs.append(line.strip())
-            
+                    # 无 PID 时按包名 + AndroidRuntime 过滤
+                    elif not pid and self.app_package in line and "AndroidRuntime" in line:
+                        crash_logs.append(line.strip())
+                    # 始终捕获 FATAL EXCEPTION 行
+                    elif "FATAL EXCEPTION" in line:
+                        crash_logs.append(line.strip())
+
             logger.info(t('python.adbManager.crashLogsFound', count=len(crash_logs)))
             return crash_logs
-            
+
         except Exception as e:
             logger.warning(t('python.adbManager.checkCrashLogsError', error=e))
             return []
+
+    def start_logcat_monitor(self, pid: int | None = None, on_crash=None) -> bool:
+        """
+        启动 logcat 实时监控
+
+        Args:
+            pid: 应用进程 ID（可选，为 None 时按包名过滤）
+            on_crash: 崩溃回调函数，接收 (crash_type, crash_line, full_log) 参数
+
+        Returns:
+            bool: 启动是否成功
+        """
+        from main.core.logcat_monitor import LogcatMonitor
+
+        if self._logcat_monitor is not None:
+            logger.warning(t('python.adbManager.logcatMonitorAlreadyRunning'))
+            self.stop_logcat_monitor()
+
+        self._logcat_monitor = LogcatMonitor(
+            device_name=self.device_name,
+            app_package=self.app_package,
+            app_pid=pid,
+            on_crash=on_crash,
+        )
+
+        success = self._logcat_monitor.start()
+        if success:
+            logger.info(t('python.adbManager.logcatMonitorStarted', pid=pid))
+        else:
+            logger.error(t('python.adbManager.logcatMonitorStartFailed'))
+            self._logcat_monitor = None
+
+        return success
+
+    def stop_logcat_monitor(self):
+        """停止 logcat 实时监控"""
+        if self._logcat_monitor is not None:
+            self._logcat_monitor.stop()
+            self._logcat_monitor = None
+            logger.info(t('python.adbManager.logcatMonitorStopped'))
+
+    def get_logcat_full_log(self) -> str:
+        """获取 logcat 监控的完整日志
+
+        Returns:
+            str: 完整日志文本，未启动监控时返回空字符串
+        """
+        if self._logcat_monitor is not None:
+            return self._logcat_monitor.get_full_log()
+        return ''
+
+    def is_crash_detected(self) -> bool:
+        """是否检测到崩溃
+
+        Returns:
+            bool: 是否检测到致命闪退
+        """
+        if self._logcat_monitor is not None:
+            return self._logcat_monitor.crash_detected
+        return False
     
 
 

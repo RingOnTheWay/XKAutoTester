@@ -107,23 +107,40 @@ class {{CLASS_NAME}}:
     def teardown_method(self):
         """
         每个测试方法后的清理
+        检查 logcat 监控是否检测到崩溃，如有则附加日志
         """
         try:
-            if self.app_pid:
-                logger.info(f"测试结束，检查PID为{self.app_pid}的应用崩溃日志")
-                crash_logs = self.initializer.adb_manager.check_crash_logs(self.app_pid)
+            if hasattr(self, 'initializer') and self.initializer.adb_manager:
+                adb_mgr = self.initializer.adb_manager
 
-                if crash_logs:
-                    logger.error(f"检测到{len(crash_logs)}条崩溃日志:")
-                    for log in crash_logs:
-                        logger.error(f"崩溃日志: {log}")
+                # 优先检查 logcat 实时监控的崩溃状态
+                if adb_mgr.is_crash_detected():
+                    # 等待 logcat 读取崩溃堆栈续行
+                    import time as _time
+                    _time.sleep(3)
+                    full_log = adb_mgr.get_logcat_full_log()
+                    if full_log:
+                        logger.error("检测到应用致命闪退，已捕获崩溃日志并附加到报告")
                         allure.attach(
-                            log,
-                            name="崩溃日志",
+                            full_log,
+                            name="应用崩溃日志（实时监控）",
                             attachment_type=allure.attachment_type.TEXT
                         )
+                    else:
+                        logger.warning("检测到应用崩溃，但未捕获到崩溃日志")
                 else:
-                    logger.info("未检测到崩溃日志")
+                    # 回退：检查崩溃日志（支持无 PID 场景）
+                    crash_logs = adb_mgr.check_crash_logs(self.app_pid)
+                    if crash_logs:
+                        logger.error(f"检测到{len(crash_logs)}条崩溃日志")
+                        for log in crash_logs:
+                            allure.attach(
+                                str(log),
+                                name="崩溃日志",
+                                attachment_type=allure.attachment_type.TEXT
+                            )
+                    else:
+                        logger.info("未检测到崩溃日志")
         except Exception as e:
             logger.warning(f"检查崩溃日志时出错: {e}")
 

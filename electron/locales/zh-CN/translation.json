@@ -1049,6 +1049,10 @@
       "getAppPidError": "获取应用PID时出错: {error}",
       "crashLogsFound": "检查到{count}条崩溃日志",
       "checkCrashLogsError": "检查崩溃日志时出错: {error}",
+      "logcatMonitorAlreadyRunning": "logcat 监控已在运行中",
+      "logcatMonitorStarted": "logcat 实时监控已启动，PID: {pid}",
+      "logcatMonitorStartFailed": "logcat 实时监控启动失败",
+      "logcatMonitorStopped": "logcat 实时监控已停止",
       "gettingConnectedDevices": "获取连接的设备列表",
       "adbDeviceListReturnCode": "ADB设备列表命令执行结果 - 返回码: {code}",
       "parsedDeviceList": "解析到的设备列表: {devices}",
@@ -1113,7 +1117,31 @@
       "testAppForceStopped": "测试APP已强制关闭",
       "bleDeviceClosed": "蓝牙设备已关闭",
       "appiumServerCleaned": "Appium服务器已使用查找端口方法清理",
-      "cleanupError": "cleanup执行过程中出错: {error}"
+      "cleanupError": "cleanup执行过程中出错: {error}",
+      "logcatMonitorSkipNoPid": "无法获取应用PID，跳过 logcat 监控启动",
+      "logcatMonitorStarted": "logcat 实时监控已启动",
+      "logcatMonitorStartFailed": "logcat 实时监控启动失败",
+      "logcatMonitorStartError": "启动 logcat 监控时出错: {error}",
+      "logcatMonitorStopError": "停止 logcat 监控时出错: {error}",
+      "crashLogAttachName": "应用崩溃日志",
+      "appLogAttachName": "应用运行日志",
+      "crashLogCaptured": "检测到应用崩溃，已捕获崩溃日志并附加到报告",
+      "appLogCaptured": "已捕获 {count} 条应用运行日志并附加到报告",
+      "noAppLog": "未捕获到应用运行日志",
+      "fatalCrashDetected": "检测到致命闪退 [{type}]: {line}",
+      "testFailedByCrash": "测试因应用致命闪退而终止: {type}",
+      "appPidChanged": "应用PID已变更（旧: {old_pid}，新: {new_pid}），已更新 logcat 监控",
+      "initErrorWithCrash": "初始化失败且检测到应用崩溃日志"
+    },
+    "logcatMonitor": {
+      "alreadyRunning": "logcat 监控已在运行中",
+      "started": "logcat 实时监控已启动，设备: {device}，PID: {pid}",
+      "startFailed": "logcat 实时监控启动失败: {error}",
+      "stopped": "logcat 实时监控已停止",
+      "crashDetected": "检测到致命闪退 [{type}]: {line}",
+      "crashCallbackError": "崩溃回调执行出错: {error}",
+      "readLoopError": "logcat 读取循环异常: {error}",
+      "pidUpdated": "logcat 监控 PID 已更新为: {pid}"
     }
   }
 }

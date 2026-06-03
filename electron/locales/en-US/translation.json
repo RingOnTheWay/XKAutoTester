@@ -1047,6 +1047,10 @@
       "getAppPidError": "Error getting app PID: {error}",
       "crashLogsFound": "Found {count} crash log entries",
       "checkCrashLogsError": "Error checking crash logs: {error}",
+      "logcatMonitorAlreadyRunning": "Logcat monitor is already running",
+      "logcatMonitorStarted": "Logcat monitor started, PID: {pid}",
+      "logcatMonitorStartFailed": "Logcat monitor failed to start",
+      "logcatMonitorStopped": "Logcat monitor stopped",
       "gettingConnectedDevices": "Getting connected device list",
       "adbDeviceListReturnCode": "ADB device list command result - return code: {code}",
       "parsedDeviceList": "Parsed device list: {devices}",
@@ -1111,7 +1115,31 @@
       "testAppForceStopped": "Test app force stopped",
       "bleDeviceClosed": "BLE device closed",
       "appiumServerCleaned": "Appium server cleaned up using port lookup method",
-      "cleanupError": "Error during cleanup: {error}"
+      "cleanupError": "Error during cleanup: {error}",
+      "logcatMonitorSkipNoPid": "Cannot get app PID, skipping logcat monitor start",
+      "logcatMonitorStarted": "Logcat monitor started",
+      "logcatMonitorStartFailed": "Logcat monitor failed to start",
+      "logcatMonitorStartError": "Error starting logcat monitor: {error}",
+      "logcatMonitorStopError": "Error stopping logcat monitor: {error}",
+      "crashLogAttachName": "App Crash Log",
+      "appLogAttachName": "App Runtime Log",
+      "crashLogCaptured": "App crash detected, crash log captured and attached to report",
+      "appLogCaptured": "Captured {count} app log lines and attached to report",
+      "noAppLog": "No app log captured",
+      "fatalCrashDetected": "Fatal crash detected [{type}]: {line}",
+      "testFailedByCrash": "Test terminated due to fatal app crash: {type}",
+      "appPidChanged": "App PID changed (old: {old_pid}, new: {new_pid}), logcat monitor updated",
+      "initErrorWithCrash": "Initialization failed and app crash logs detected"
+    },
+    "logcatMonitor": {
+      "alreadyRunning": "Logcat monitor is already running",
+      "started": "Logcat monitor started, device: {device}, PID: {pid}",
+      "startFailed": "Logcat monitor failed to start: {error}",
+      "stopped": "Logcat monitor stopped",
+      "crashDetected": "Fatal crash detected [{type}]: {line}",
+      "crashCallbackError": "Crash callback error: {error}",
+      "readLoopError": "Logcat read loop error: {error}",
+      "pidUpdated": "Logcat monitor PID updated to: {pid}"
     }
   }
 }

@@ -112,6 +112,10 @@ class TestInitializer:
                 self.logger.info(t('python.testInitializer.noBleConfigSkipCheck'))
             
             self.logger.info(t('python.testInitializer.adbInitSuccess'))
+
+            # ADB 连接成功后立即启动 logcat 监控（不依赖 PID，按包名过滤）
+            self._start_logcat_monitor()
+
             return True
                 
         except Exception as e:
@@ -228,12 +232,25 @@ class TestInitializer:
                     name=t('python.testInitializer.appPidAttachName'),
                     attachment_type=allure.attachment_type.TEXT
                 )
+                # 更新 logcat monitor 的 PID（monitor 已在 adb_init 时启动）
+                if self.adb_manager._logcat_monitor:
+                    self.adb_manager._logcat_monitor.update_pid(self.app_pid)
             else:
                 self.logger.warning(t('python.testInitializer.cannotGetAppPid'))
             
             # 等待APP加载完成
             self.logger.info(t('python.testInitializer.waitingAppLoad', seconds=self.config.appium.app_load_wait_time))
             time.sleep(self.config.appium.app_load_wait_time)
+
+            # 等待后重新获取 PID（app 可能在加载期间崩溃重启，PID 已变化）
+            new_pid = self.adb_manager.get_app_pid()
+            if new_pid and new_pid != self.app_pid:
+                self.logger.info(t('python.testInitializer.appPidChanged', old_pid=self.app_pid, new_pid=new_pid))
+                self.app_pid = new_pid
+                # 更新 logcat monitor 的 PID
+                if self.adb_manager._logcat_monitor:
+                    self.adb_manager._logcat_monitor.update_pid(new_pid)
+
             current_activity = self.driver.current_activity
             self.logger.info(t('python.testInitializer.currentActivity', activity=current_activity))
             allure.attach(
@@ -247,7 +264,10 @@ class TestInitializer:
                 
         except Exception as e:
             error_msg = str(e)
-            
+
+            # Appium 会话失败时，检查 logcat 是否捕获到崩溃日志
+            self._check_and_attach_crash_on_init_error()
+
             if "Activity name" in error_msg and "doesn't exist or cannot be launched" in error_msg:
                 self.logger.error(t('python.testInitializer.appiumSessionActivityError', error=error_msg))
                 self.logger.error(t('python.testInitializer.checkActivityConfig'))
@@ -293,6 +313,9 @@ class TestInitializer:
     def cleanup(self):
         """清理资源"""
         try:
+            # 停止 logcat 监控并附加日志到 Allure
+            self._stop_logcat_monitor()
+
             # 强制关闭测试APP
             if self.driver:
                 self.driver.quit()
@@ -316,3 +339,106 @@ class TestInitializer:
                 self.appium_server.force_cleanup()
             if self.ble_device:
                 self.ble_device.close()
+
+    def _start_logcat_monitor(self):
+        """启动 logcat 实时监控（不依赖 PID，按包名过滤）"""
+        if not self.adb_manager:
+            return
+
+        try:
+            success = self.adb_manager.start_logcat_monitor(
+                pid=self.app_pid,
+                on_crash=self._on_crash_detected,
+            )
+            if success:
+                self.logger.info(t('python.testInitializer.logcatMonitorStarted'))
+            else:
+                self.logger.warning(t('python.testInitializer.logcatMonitorStartFailed'))
+        except Exception as e:
+            self.logger.warning(t('python.testInitializer.logcatMonitorStartError', error=e))
+
+    def _check_and_attach_crash_on_init_error(self):
+        """Appium 初始化失败时，检查 logcat 是否捕获到崩溃日志并附加到 Allure"""
+        if not self.adb_manager:
+            return
+
+        try:
+            # 先检查 logcat monitor
+            if self.adb_manager.is_crash_detected():
+                full_log = self.adb_manager.get_logcat_full_log()
+                if full_log:
+                    self.logger.error(t('python.testInitializer.initErrorWithCrash'))
+                    allure.attach(
+                        full_log,
+                        name=t('python.testInitializer.crashLogAttachName'),
+                        attachment_type=allure.attachment_type.TEXT,
+                    )
+                return
+
+            # logcat monitor 未检测到崩溃，回退到 logcat -d 检查
+            if self.app_pid:
+                crash_logs = self.adb_manager.check_crash_logs(self.app_pid)
+                if crash_logs:
+                    crash_text = '\n'.join(str(log) for log in crash_logs)
+                    self.logger.error(t('python.testInitializer.initErrorWithCrash'))
+                    allure.attach(
+                        crash_text,
+                        name=t('python.testInitializer.crashLogAttachName'),
+                        attachment_type=allure.attachment_type.TEXT,
+                    )
+        except Exception as e:
+            self.logger.warning(t('python.testInitializer.logcatMonitorStopError', error=e))
+
+    def _stop_logcat_monitor(self):
+        """停止 logcat 监控并附加日志到 Allure 报告"""
+        if not self.adb_manager:
+            return
+
+        try:
+            crash_detected = self.adb_manager.is_crash_detected()
+
+            # 崩溃检测后等待堆栈续行
+            if crash_detected:
+                import time as _time
+                _time.sleep(3)
+
+            full_log = self.adb_manager.get_logcat_full_log()
+
+            if crash_detected:
+                self.logger.error(t('python.testInitializer.crashLogCaptured'))
+                if full_log:
+                    allure.attach(
+                        full_log,
+                        name=t('python.testInitializer.crashLogAttachName'),
+                        attachment_type=allure.attachment_type.TEXT,
+                    )
+            else:
+                if full_log:
+                    self.logger.info(t('python.testInitializer.appLogCaptured', count=len(full_log.split('\n'))))
+                    allure.attach(
+                        full_log,
+                        name=t('python.testInitializer.appLogAttachName'),
+                        attachment_type=allure.attachment_type.TEXT,
+                    )
+                else:
+                    self.logger.info(t('python.testInitializer.noAppLog'))
+
+            self.adb_manager.stop_logcat_monitor()
+        except Exception as e:
+            self.logger.warning(t('python.testInitializer.logcatMonitorStopError', error=e))
+
+    def _on_crash_detected(self, crash_type: str, crash_line: str, full_log: str):
+        """崩溃检测回调：记录崩溃信息，不阻塞 read_loop
+
+        注意：此回调在 logcat_monitor 的 read_loop 线程中执行，
+        不能 sleep 或执行耗时操作，否则会阻塞日志读取。
+
+        Args:
+            crash_type: 崩溃类型
+            crash_line: 崩溃行
+            full_log: 完整日志（此时可能不完整，堆栈续行尚未读取）
+        """
+        self.logger.error(t('python.testInitializer.fatalCrashDetected', type=crash_type, line=crash_line))
+
+        # 不在此处附加日志或 sleep，避免阻塞 read_loop
+        # 日志附加在 _stop_logcat_monitor 中进行（停止前等待堆栈续行）
