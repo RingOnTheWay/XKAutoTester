@@ -321,6 +321,8 @@
     "selectTestDirectoryFirstPlaceholder": "Please select test directory first",
     "testType": "Test Type",
     "testOutput": "Test Output",
+    "openXkatFolder": "Open Logs Folder",
+    "xkatFolderNotFound": "Logs folder does not exist",
     "ready": "Ready",
     "runTests": "Run Tests",
     "stopTests": "Stop Tests",

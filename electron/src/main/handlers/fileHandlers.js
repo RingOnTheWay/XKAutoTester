@@ -55,6 +55,19 @@ function register(ipcMain, services) {
 
   registerHandler(ipcMain, 'open-external', (url) => shell.openExternal(url));
 
+  registerHandler(ipcMain, 'open-path', (pathToOpen) => {
+    try {
+      if (!fs.existsSync(pathToOpen)) {
+        return { success: false, error: 'Path does not exist' };
+      }
+      shell.openPath(pathToOpen);
+      return { success: true };
+    } catch (error) {
+      console.error('打开路径失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   registerHandler(ipcMain, 'save-test-case', (data) => {
     const { directory, fileName, content } = data;
 

@@ -518,10 +518,25 @@ class XKAutoTesterApp {
                 }
             });
         };
+
+        // 通用方法：根据data-i18n-title属性更新title提示
+        const updateTitlesByI18nAttribute = () => {
+            const elements = document.querySelectorAll('[data-i18n-title]');
+            elements.forEach(element => {
+                const key = element.getAttribute('data-i18n-title');
+                if (key) {
+                    const translation = window.i18n.t(key);
+                    if (translation) {
+                        element.title = translation;
+                    }
+                }
+            });
+        };
         
         // 调用通用方法更新文本
         updateElementsByI18nAttribute();
         updatePlaceholdersByI18nAttribute();
+        updateTitlesByI18nAttribute();
         
         // 更新标签页文本
         const testExecutionTab = document.querySelector('[data-tab="test-execution"] span:last-child');
@@ -1043,6 +1058,25 @@ class XKAutoTesterApp {
         // 输出清除
         document.getElementById('clear-output-btn').addEventListener('click', () => {
             this.clearOutput();
+        });
+
+        // 打开XKAT日志文件夹
+        document.getElementById('open-xkat-folder-btn').addEventListener('click', async () => {
+            try {
+                const dataPathInfo = await window.electronAPI.getDataPath();
+                const basePath = dataPathInfo?.currentPath;
+                if (!basePath) {
+                    Toast.error(window.i18n.t('testExecution.xkatFolderNotFound'));
+                    return;
+                }
+                const logsPath = basePath + '/logs';
+                const result = await window.electronAPI.openPath(logsPath);
+                if (!result?.success) {
+                    Toast.error(window.i18n.t('testExecution.xkatFolderNotFound'));
+                }
+            } catch (error) {
+                Toast.error(window.i18n.t('testExecution.xkatFolderNotFound'));
+            }
         });
 
         // 测试计划管理

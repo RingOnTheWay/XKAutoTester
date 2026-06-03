@@ -97,6 +97,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // 系统操作
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  openPath: (pathToOpen) => ipcRenderer.invoke('open-path', pathToOpen),
   getProjectInfo: () => ipcRenderer.invoke('get-project-info'),
   getPytestMarkers: () => ipcRenderer.invoke('get-pytest-markers'),
   

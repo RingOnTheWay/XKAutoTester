@@ -3897,6 +3897,7 @@ body:not(.dark-theme) #test-case .tc-no-search-results {
   display: flex;
   align-items: center;
   justify-content: center;
+  user-select: text;
 }
 
 /* 当有内容时显示滚动条 */

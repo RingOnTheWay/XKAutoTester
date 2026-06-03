@@ -323,6 +323,8 @@
     "selectTestDirectoryFirstPlaceholder": "请先选择测试目录",
     "testType": "测试类型",
     "testOutput": "测试输出",
+    "openXkatFolder": "打开日志文件夹",
+    "xkatFolderNotFound": "日志文件夹不存在",
     "ready": "准备就绪",
     "runTests": "运行测试",
     "stopTests": "停止测试",
