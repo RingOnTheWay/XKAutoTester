@@ -6,10 +6,12 @@ const pathHelper = require('../utils/pathHelper');
 const Logger = require('../utils/logger');
 
 class PythonTestService {
-  constructor(projectRoot, i18nService, userDataPath) {
+  constructor(projectRoot, i18nService, userDataPath, allureService, testPlanService) {
     this.projectRoot = projectRoot;
     this.i18nService = i18nService;
     this.userDataPath = userDataPath;
+    this.allureService = allureService;
+    this.testPlanService = testPlanService;
     this.currentPythonProcess = null;
     this.unauthorizedDialogInterval = null;
     this.mainWindow = null;
@@ -113,11 +115,49 @@ class PythonTestService {
         }
       });
 
-      pythonProcess.on('close', (code) => {
+      pythonProcess.on('close', async (code) => {
         this.stopUnauthorizedDialogMonitor();
         this.currentPythonProcess = null;
         
         const testStats = this._parseTestStats(output);
+        
+        // 从Python输出中解析allure-results路径标记
+        let allureResultsDir = null;
+        const markerMatch = output.match(/XKAT_ALLURE_RESULTS_DIR:(.+)/);
+        if (markerMatch) {
+          allureResultsDir = markerMatch[1].trim();
+        }
+        
+        // Fallback: 直接检查已知路径
+        if (!allureResultsDir) {
+          const defaultResultsDir = path.join(this._getLogsPath('Allure'), 'allure-results');
+          if (fs.existsSync(defaultResultsDir)) {
+            const files = fs.readdirSync(defaultResultsDir);
+            if (files.some(f => f.endsWith('-result.json') || f.endsWith('.json'))) {
+              allureResultsDir = defaultResultsDir;
+            }
+          }
+        }
+        
+        // 使用AllureService生成报告
+        let allureReportPath = null;
+        if (this.allureService && allureResultsDir) {
+          try {
+            const allureResult = await this.allureService.generateAllureReport(
+              allureResultsDir,
+              testPlanName
+            );
+            if (allureResult.success) {
+              allureReportPath = allureResult.reportPath;
+              // 更新test_plans.json中最新运行记录的report_path
+              if (this.testPlanService && testPlanName) {
+                await this.testPlanService.updateRunReportPath(testPlanName, allureReportPath);
+              }
+            }
+          } catch (e) {
+            this.logger.error(`Failed to generate Allure report: ${e.message}`);
+          }
+        }
         
         const result = {
           success: code === 0,
@@ -125,7 +165,8 @@ class PythonTestService {
           output: output,
           error: errorOutput,
           testPlanName: testPlanName,
-          testStats: testStats
+          testStats: testStats,
+          allureReportPath: allureReportPath
         };
         resolve(result);
       });

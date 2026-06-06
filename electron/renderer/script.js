@@ -9076,7 +9076,7 @@ class XKAutoTesterApp {
         runsListElement.innerHTML = runs.map(run => `
             <div class="report-run-item ${run.available ? '' : 'unavailable'}" 
                  data-index="${run.index}" 
-                 data-path="${run.reportPath || ''}"
+                 data-path="${(run.reportPath || '').replace(/\\/g, '/')}"
                  data-available="${run.available}">
                 <div class="report-run-left">
                     <div class="report-run-index">${run.index}</div>

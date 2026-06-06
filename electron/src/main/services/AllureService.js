@@ -34,7 +34,6 @@ class AllureService {
     this.userDataPath = userDataPath;
     this.allureHttpServer = null;
     this.allureServerPort = null;
-    this.cachedEnvOptions = null;
     this.logger = new Logger(this._getLogsPath('XKAT'), 'Electron');
   }
 
@@ -43,25 +42,147 @@ class AllureService {
     return path.join(baseDir, 'logs', ...subdirs);
   }
 
-  async buildEnvWithJdk() {
-    if (this.cachedEnvOptions) {
-      return this.cachedEnvOptions;
+  _findSystemNode() {
+    try {
+      const result = execSync('where node', {
+        encoding: 'utf8',
+        timeout: 3000,
+        windowsHide: true,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      const paths = result.split('\n').map(p => p.trim()).filter(p => p && p.endsWith('.exe'));
+      return paths[0] || null;
+    } catch {
+      return null;
     }
+  }
 
-    const envOptions = { ...process.env };
-    const projectJdkDir = path.join(this.projectRoot, 'env', 'jdk');
-    const jdkBinDir = path.join(projectJdkDir, 'bin');
+  _getAllureCliPath() {
+    // 解析 allure npm 包的 CLI 入口路径 (cli.js)
+    try {
+      // Allure 3 是 ESM 包，require.resolve 可能失败，用路径探测
+      const searchPaths = [
+        path.join(this.projectRoot, 'node_modules', 'allure'),
+        path.join(this.projectRoot, 'electron', 'node_modules', 'allure'),
+        path.join(__dirname, '..', '..', '..', 'node_modules', 'allure')
+      ];
 
-    if (await asyncFs.exists(jdkBinDir)) {
-      envOptions.JAVA_HOME = projectJdkDir;
-      envOptions.PATH = `${jdkBinDir}${path.delimiter}${process.env.PATH || ''}`;
-      await this.logger.info(`Using built-in JDK: ${projectJdkDir}`);
-    } else {
-      await this.logger.info('Built-in JDK not found, using system Java');
+      for (const allureDir of searchPaths) {
+        const cliPath = path.join(allureDir, 'cli.js');
+        if (fs.existsSync(cliPath)) {
+          return cliPath;
+        }
+      }
+      return null;
+    } catch {
+      return null;
     }
+  }
 
-    this.cachedEnvOptions = envOptions;
-    return envOptions;
+  async generateAllureReport(allureResultsDir, testPlanName) {
+    try {
+      await this.logger.ensureLogDir();
+      this.logger.resetLogPath();
+
+      if (!allureResultsDir || !(await asyncFs.exists(allureResultsDir))) {
+        await this.logger.error('Allure results directory does not exist');
+        return { success: false, error: 'allure-results目录不存在' };
+      }
+
+      // 检查是否有结果文件
+      const resultFiles = await asyncFs.readdir(allureResultsDir);
+      const jsonFiles = resultFiles.filter(f => f.endsWith('-result.json') || f.endsWith('.json'));
+      if (jsonFiles.length === 0) {
+        await this.logger.warning('No allure result files found');
+        return { success: false, error: 'allure-results目录中没有结果文件' };
+      }
+
+      // 创建报告目录: allure-reports/testPlanName/timestamp
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const run_timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const allureReportBaseDir = this._getLogsPath('Allure', 'allure-reports');
+      const testPlanDir = path.join(allureReportBaseDir, testPlanName || 'default');
+      const allureReportDir = path.join(testPlanDir, run_timestamp);
+
+      await asyncFs.mkdir(testPlanDir, { recursive: true });
+
+      await this.logger.info(`Generating Allure report: ${allureResultsDir} -> ${allureReportDir}`);
+
+      // 使用 ELECTRON_RUN_AS_NODE 让 Electron 以纯 Node.js 模式运行 allure CLI
+      const allureCliPath = this._getAllureCliPath();
+      const env = { ...process.env };
+
+      let command;
+      let args;
+
+      if (allureCliPath) {
+        // 优先使用系统 Node.js 运行 Allure CLI (ESM 兼容性更好)
+        // Electron 的 process.execPath 是 electron.exe，ELECTRON_RUN_AS_NODE=1 可能有 ESM 问题
+        const systemNode = this._findSystemNode();
+        command = systemNode || process.execPath;
+        // Allure 3 generate: allure generate <resultsDir> -o <outputDir>
+        args = [allureCliPath, 'generate', allureResultsDir, '-o', allureReportDir];
+        if (!systemNode) {
+          // 使用 Electron 作为 Node 时需要设置环境变量
+          env.ELECTRON_RUN_AS_NODE = '1';
+        }
+      } else {
+        // 回退: 尝试系统 npx
+        command = 'npx';
+        args = ['allure', 'generate', allureResultsDir, '-o', allureReportDir];
+        await this.logger.warning('Allure npm package not found, falling back to npx');
+      }
+
+      const result = await new Promise((resolve) => {
+        const child = require('child_process').spawn(command, args, {
+          env,
+          windowsHide: true,
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout.on('data', (data) => { stdout += data.toString(); });
+        child.stderr.on('data', (data) => { stderr += data.toString(); });
+
+        child.on('close', (code) => {
+          resolve({ code, stdout, stderr });
+        });
+
+        child.on('error', (error) => {
+          resolve({ code: -1, stdout: '', stderr: error.message });
+        });
+      });
+
+      if (result.code === 0) {
+        const indexHtmlPath = path.join(allureReportDir, 'index.html');
+        if (await asyncFs.exists(indexHtmlPath)) {
+          await this.logger.info(`Allure report generated: ${allureReportDir}`);
+
+          // 生成成功后清理 allure-results 目录
+          try {
+            await asyncFs.rm(allureResultsDir, { recursive: true, force: true });
+            await this.logger.info('Cleaned up allure-results directory');
+          } catch (e) {
+            await this.logger.warning(`Failed to clean allure-results: ${e.message}`);
+          }
+
+          return { success: true, reportPath: allureReportDir };
+        } else {
+          await this.logger.error('Report generated but index.html not found');
+          return { success: false, error: '报告生成成功但index.html不存在' };
+        }
+      } else {
+        const errorMsg = result.stderr || result.stdout || 'Unknown error';
+        await this.logger.error(`Allure generate failed (code ${result.code}): ${errorMsg}`);
+        return { success: false, error: `allure generate失败: ${errorMsg}` };
+      }
+    } catch (error) {
+      await this.logger.error(`Generate Allure report failed: ${error.message}`);
+      return { success: false, error: error.message };
+    }
   }
 
   _killProcessTree(pid) {
@@ -113,7 +234,7 @@ class AllureService {
     }
   }
 
-  async openAllureReport(testPlanName = null) {
+  async openAllureReport(testPlanName = null, options = {}) {
     try {
       if (!testPlanName) {
         const allureReportBaseDir = this._getLogsPath('Allure', 'allure-reports');
@@ -139,28 +260,53 @@ class AllureService {
         return { success: false, error: '没有可用的Allure报告，请先生成报告' };
       }
 
-      const allureReportDir = this._getLogsPath('Allure', 'allure-reports', testPlanName);
+      const testPlanDir = this._getLogsPath('Allure', 'allure-reports', testPlanName);
 
-      if (!(await asyncFs.exists(allureReportDir))) {
+      if (!(await asyncFs.exists(testPlanDir))) {
         return { success: false, error: `测试计划 '${testPlanName}' 的Allure报告不存在` };
       }
 
-      const indexHtmlPath = path.join(allureReportDir, 'index.html');
+      // 报告目录结构: allure-reports/testPlanName/timestamp/
+      // 查找最新的timestamp子目录
+      let allureReportDir = null;
+      const subItems = await asyncFs.readdir(testPlanDir);
+      const timestampDirs = [];
 
-      if (!(await asyncFs.exists(indexHtmlPath))) {
-        return { success: false, error: `测试计划 '${testPlanName}' 的报告文件不完整` };
+      for (const item of subItems) {
+        const itemPath = path.join(testPlanDir, item);
+        const stat = await asyncFs.stat(itemPath);
+        if (stat.isDirectory()) {
+          const indexHtml = path.join(itemPath, 'index.html');
+          if (await asyncFs.exists(indexHtml)) {
+            timestampDirs.push({ name: item, path: itemPath, mtime: stat.mtimeMs });
+          }
+        }
+      }
+
+      if (timestampDirs.length === 0) {
+        // 兼容旧格式: index.html 直接在 testPlanDir 下
+        const directIndexHtml = path.join(testPlanDir, 'index.html');
+        if (await asyncFs.exists(directIndexHtml)) {
+          allureReportDir = testPlanDir;
+        } else {
+          return { success: false, error: `测试计划 '${testPlanName}' 的报告文件不完整` };
+        }
+      } else {
+        // 按修改时间排序，取最新的
+        timestampDirs.sort((a, b) => b.mtime - a.mtime);
+        allureReportDir = timestampDirs[0].path;
       }
 
       await this._stopExistingServer();
 
-      return await this._startAllureOpenProcess(allureReportDir);
+      return await this._startAllureOpenProcess(allureReportDir, options);
     } catch (error) {
       await this.logger.error(`打开Allure报告失败: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
 
-  async openReportByPath(reportPath) {
+  async openReportByPath(reportPath, options = {}) {
     try {
       if (!reportPath || !(await asyncFs.exists(reportPath))) {
         return { success: false, error: '报告路径不存在' };
@@ -168,25 +314,39 @@ class AllureService {
 
       await this._stopExistingServer();
 
-      return await this._startAllureOpenProcess(reportPath);
+      return await this._startAllureOpenProcess(reportPath, options);
     } catch (error) {
       await this.logger.error(`打开报告失败: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
 
-  async _startAllureOpenProcess(reportDir) {
+  async _startAllureOpenProcess(reportDir, options = {}) {
     try {
       await this.logger.ensureLogDir();
       this.logger.resetLogPath();
 
-      await this.logger.info(`Starting Allure report server: ${reportDir}`);
+      const { language = 'en', isDark = false } = options;
+      const allureTheme = isDark ? 'dark' : 'default';
+
+      await this.logger.info(`Starting Allure report server: ${reportDir} (theme=${allureTheme}, lang=${language})`);
 
       const indexHtmlPath = path.join(reportDir, 'index.html');
       if (!(await asyncFs.exists(indexHtmlPath))) {
         await this.logger.error('Report directory does not contain valid Allure report file');
         return { success: false, error: '报告目录不包含有效的Allure报告文件' };
       }
+
+      // 预读 index.html 并注入主题和语言设置
+      let indexHtmlContent = await asyncFs.readFile(indexHtmlPath, 'utf8');
+      indexHtmlContent = indexHtmlContent.replace(
+        /"theme"\s*:\s*"[^"]*"/,
+        `"theme":"${allureTheme}"`
+      );
+      indexHtmlContent = indexHtmlContent.replace(
+        /"reportLanguage"\s*:\s*"[^"]*"/,
+        `"reportLanguage":"${language}"`
+      );
 
       const resolvedReportDir = path.resolve(reportDir);
 
@@ -210,6 +370,16 @@ class AllureService {
 
           const ext = path.extname(resolvedPath).toLowerCase();
           const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+          // 对 index.html 返回注入后的内容
+          if (resolvedPath === path.join(resolvedReportDir, 'index.html')) {
+            res.writeHead(200, {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(indexHtmlContent);
+            return;
+          }
 
           const readStream = fs.createReadStream(resolvedPath);
           readStream.on('open', () => {
@@ -427,14 +597,26 @@ class AllureService {
 
   async checkReportExists(testPlanName) {
     try {
-      const allureReportDir = this._getLogsPath('Allure', 'allure-reports', testPlanName);
-      const indexHtmlPath = path.join(allureReportDir, 'index.html');
+      const testPlanDir = this._getLogsPath('Allure', 'allure-reports', testPlanName);
+      const dirExists = await asyncFs.exists(testPlanDir);
+      if (!dirExists) return { exists: false };
 
-      const dirExists = await asyncFs.exists(allureReportDir);
-      const fileExists = await asyncFs.exists(indexHtmlPath);
-      const exists = dirExists && fileExists;
+      // 检查是否有任何timestamp子目录包含index.html
+      const items = await asyncFs.readdir(testPlanDir);
+      for (const item of items) {
+        const itemPath = path.join(testPlanDir, item);
+        const stat = await asyncFs.stat(itemPath);
+        if (stat.isDirectory()) {
+          const indexHtml = path.join(itemPath, 'index.html');
+          if (await asyncFs.exists(indexHtml)) {
+            return { exists: true };
+          }
+        }
+      }
 
-      return { exists: exists };
+      // 兼容旧格式: index.html 直接在 testPlanDir 下
+      const directIndexHtml = path.join(testPlanDir, 'index.html');
+      return { exists: await asyncFs.exists(directIndexHtml) };
     } catch (error) {
       await this.logger.error(`检查报告存在性失败: ${error.message}`);
       return { exists: false };
@@ -452,7 +634,7 @@ class AllureService {
       await this.logger.info(`执行命令查找端口进程: ${findCommand}`);
 
       const result = await new Promise((resolve, reject) => {
-        exec(findCommand, { encoding: 'utf8' }, (err, stdout) => {
+        exec(findCommand, { encoding: 'utf8', windowsHide: true }, (err, stdout) => {
           if (err) reject(err);
           else resolve(stdout);
         });
@@ -474,7 +656,7 @@ class AllureService {
 
             try {
               await new Promise((resolve, reject) => {
-                exec(killCommand, (err) => {
+                exec(killCommand, { windowsHide: true }, (err) => {
                   if (err) reject(err);
                   else resolve();
                 });

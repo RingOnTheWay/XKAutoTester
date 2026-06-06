@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
+    "allure": "^3.9.0",
     "axios": "^1.6.0",
     "i18next": "^25.8.0",
     "i18next-browser-languagedetector": "^8.2.0",
@@ -83,7 +84,9 @@
         "from": "../env",
         "to": "env",
         "filter": [
-          "**/*"
+          "**/*",
+          "!jdk/**/*",
+          "!allure/**/*"
         ]
       },
       {

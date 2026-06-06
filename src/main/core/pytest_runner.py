@@ -35,11 +35,6 @@ class PytestRunner:
         else:
             self.test_plans_file = self.project_root / "config" / "test_plans.json"
         
-        # Allure服务器相关属性
-        self.allure_server_process = None
-        self.allure_server_port = None
-        self.allure_server_start_time = None
-        
         # 加载已有的测试计划历史
         self._load_test_plans()
     
@@ -141,8 +136,8 @@ class PytestRunner:
         # 解析用例级统计
         test_stats = self._parse_test_stats(stdout_content)
         
-        # 生成Allure报告
-        allure_report_path = None
+        # 检查allure结果是否存在
+        allure_results_dir = None
         allure_skipped_reason = None
         if generate_allure and self.allure_results_dir.exists():
             if not self._has_allure_results():
@@ -151,27 +146,29 @@ class PytestRunner:
                     t('python.pytestRunner.noAllureResults', exit_code=exit_code)
                 )
             else:
-                allure_report_path = self._generate_allure_report(test_plan_name)
+                allure_results_dir = str(self.allure_results_dir)
+                # 输出特殊标记行，供Electron侧解析allure-results路径
+                print(f"XKAT_ALLURE_RESULTS_DIR:{allure_results_dir}", flush=True)
 
         if allure_skipped_reason == "no_results":
             logger.warning(t('python.pytestRunner.noTestResults', exit_code=exit_code))
         elif exit_code == 0:
-            if allure_report_path:
+            if allure_results_dir:
                 logger.info(t('python.pytestRunner.testSuccessWithReport'))
             else:
                 logger.info(t('python.pytestRunner.testSuccessNoReport'))
         else:
-            if allure_report_path:
+            if allure_results_dir:
                 logger.warning(t('python.pytestRunner.testFailedWithReport', exit_code=exit_code))
             else:
                 logger.warning(t('python.pytestRunner.testFailedNoReport', exit_code=exit_code))
         
-        # 记录测试计划运行信息
-        self._record_test_plan(test_plan_name, test_paths, markers, allure_report_path)
+        # 记录测试计划运行信息（报告路径由Electron侧生成后更新）
+        self._record_test_plan(test_plan_name, test_paths, markers, None)
         
         return {
             "exit_code": exit_code,
-            "allure_report_path": allure_report_path,
+            "allure_results_dir": allure_results_dir,
             "test_paths": test_paths,
             "markers": markers,
             "keywords": keywords,
@@ -260,106 +257,6 @@ class PytestRunner:
         json_files = [f for f in all_files if f.suffix == ".json"]
         return len(json_files) > 0
 
-    def _generate_allure_report(self, test_plan_name: str) -> Optional[Path]:
-        try:
-            from datetime import datetime
-
-            logger.info(t('python.pytestRunner.startGenerateReport', test_plan_name=test_plan_name))
-
-            if not self._has_allure_results():
-                logger.warning(
-                    t('python.pytestRunner.allureResultsEmpty')
-                )
-                return None
-            
-            # 使用时间戳创建唯一的报告目录，支持同一测试计划多次运行
-            run_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            
-            # 创建测试计划特定的报告目录：test_plan_name/run_timestamp
-            test_plan_dir = self.allure_report_base_dir / test_plan_name
-            allure_report_dir = test_plan_dir / run_timestamp
-            
-            # 确保测试计划目录存在
-            test_plan_dir.mkdir(parents=True, exist_ok=True)
-            
-            # 使用命令行执行Allure报告生成
-            import subprocess
-            
-            # 优先使用项目内的allure命令
-            project_allure_bat = self.project_root / "env" / "allure" / "bin" / "allure.bat"
-            project_allure = self.project_root / "env" / "allure" / "bin" / "allure"
-            
-            if project_allure_bat.exists():
-                # Windows系统使用.bat文件
-                allure_cmd = [str(project_allure_bat)]
-            elif project_allure.exists():
-                # Unix系统使用可执行文件
-                allure_cmd = [str(project_allure)]
-            else:
-                # 回退到系统环境变量中的allure
-                allure_cmd = ["allure"]
-            
-            # 构建完整的Allure命令
-            allure_cmd.extend([
-                "generate",
-                str(self.allure_results_dir),
-                "-o",
-                str(allure_report_dir),
-                "--clean"
-            ])
-            
-            # 执行命令 - 使用二进制模式，避免UTF-8解码错误
-            result = subprocess.run(allure_cmd, capture_output=True)
-            
-            # 手动处理输出编码
-            def decode_output(output):
-                """安全解码输出，处理不同编码"""
-                if not output:
-                    return ""
-                try:
-                    return output.decode('utf-8')
-                except UnicodeDecodeError:
-                    try:
-                        return output.decode('gbk')  # Windows系统常用GBK编码
-                    except UnicodeDecodeError:
-                        return output.decode('utf-8', errors='replace')  # 最后使用replace模式
-            
-            stdout = decode_output(result.stdout)
-            stderr = decode_output(result.stderr)
-            
-            if result.returncode == 0:
-                allure_index = allure_report_dir / "index.html"
-                if allure_index.exists():
-                    logger.info(t('python.pytestRunner.allureReportSuccess', path=allure_report_dir))
-                    
-                    # 生成报告成功后，自动删除allure-results文件夹
-                    try:
-                        if self.allure_results_dir.exists():
-                            shutil.rmtree(self.allure_results_dir)
-                            logger.info(t('python.pytestRunner.allureResultsCleaned'))
-                    except Exception as e:
-                        logger.warning(t('python.pytestRunner.allureResultsCleanFailed', error=e))
-                    
-                    return allure_report_dir
-                else:
-                    logger.error(t('python.pytestRunner.allureReportNoIndex'))
-                    return None
-            else:
-                logger.error(t('python.pytestRunner.allureCommandFailed', error=result.stderr))
-                
-                # 检查Allure是否可用
-                if project_allure_bat.exists() or project_allure.exists():
-                    logger.error(t('python.pytestRunner.allureProjectCmdFailed'))
-                else:
-                    logger.warning(t('python.pytestRunner.allureNotInstalled'))
-                    logger.info(t('python.pytestRunner.allureInstallGuide'))
-                
-                return None
-                
-        except Exception as e:
-            logger.error(t('python.pytestRunner.allureGenerateFailed', error=e))
-            return None
-    
     def _record_test_plan(self, test_plan_name: str, test_paths: List[str], 
                          markers: List[str], allure_report_path: Optional[Path]) -> None:
         """记录测试计划信息，支持一个测试计划关联多个报告"""
@@ -444,254 +341,6 @@ class PytestRunner:
                 return plan.get("runs", [])
         return []
     
-    def open_allure_report(self, test_plan_name: str = None, run_index: int = -1) -> bool:
-        """
-        打开Allure报告
-        
-        Args:
-            test_plan_name: 测试计划名称，如果为None则使用最新的测试计划
-            run_index: 运行记录索引，-1表示最新一次运行，0表示第一次运行
-        """
-        # 如果没有指定测试计划名称，使用最新的测试计划
-        if not test_plan_name:
-            if self.test_plans:
-                test_plan_name = self.test_plans[-1]["name"]
-            else:
-                logger.error(t('python.pytestRunner.noAvailablePlans'))
-                return False
-        
-        # 查找测试计划
-        test_plan = None
-        for plan in self.test_plans:
-            if plan.get("name") == test_plan_name:
-                test_plan = plan
-                break
-        
-        if not test_plan:
-            logger.error(t('python.pytestRunner.planNotExist', test_plan_name=test_plan_name))
-            return False
-        
-        # 获取运行记录
-        runs = test_plan.get("runs", [])
-        if not runs:
-            logger.error(t('python.pytestRunner.planNoRuns', test_plan_name=test_plan_name))
-            return False
-        
-        # 处理索引
-        if run_index < 0:
-            run_index = len(runs) + run_index
-        if run_index < 0 or run_index >= len(runs):
-            logger.error(t('python.pytestRunner.runIndexOutOfRange', index=run_index, max_index=len(runs)-1))
-            return False
-        
-        # 获取指定的运行记录
-        run_record = runs[run_index]
-        report_path = run_record.get("report_path")
-        
-        if not report_path:
-            logger.error(t('python.pytestRunner.runNoReportPath'))
-            return False
-        
-        allure_report_dir = Path(report_path)
-        
-        if not allure_report_dir.exists():
-            logger.error(t('python.pytestRunner.reportDirNotExist', path=allure_report_dir))
-            return False
-        
-        logger.info(t('python.pytestRunner.openingReport', test_plan_name=test_plan_name, index=run_index + 1))
-        
-        try:
-            # 优先使用项目内的allure命令
-            project_allure_bat = self.project_root / "env" / "allure" / "bin" / "allure.bat"
-            project_allure = self.project_root / "env" / "allure" / "bin" / "allure"
-            
-            if project_allure_bat.exists():
-                # Windows系统使用.bat文件
-                allure_cmd = [str(project_allure_bat)]
-            elif project_allure.exists():
-                # Unix系统使用可执行文件
-                allure_cmd = [str(project_allure)]
-            else:
-                # 回退到系统环境变量中的allure
-                allure_cmd = ["allure"]
-            
-            # 使用allure open命令启动服务器
-            allure_cmd.extend(["open", str(allure_report_dir)])
-            
-            # 执行命令（非阻塞方式，让服务器在后台运行）
-            import subprocess
-            import threading
-            
-            # 启动allure服务器进程 - 使用二进制模式，避免UTF-8解码错误
-            allure_process = subprocess.Popen(
-                allure_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                # 不使用text=True，避免UnicodeDecodeError
-            )
-            
-            # 存储服务器进程信息
-            self.allure_server_process = allure_process
-            self.allure_server_port = 4040  # allure默认端口
-            self.allure_server_start_time = time.time()
-            
-            # 启动后台线程监控服务器状态
-            def monitor_allure_server():
-                try:
-                    # 等待服务器启动
-                    time.sleep(3)
-                    
-                    # 检查服务器是否在运行
-                    if allure_process.poll() is None:
-                        logger.info(t('python.pytestRunner.allureServerStarted', test_plan_name=test_plan_name, pid=allure_process.pid))
-                        logger.info(t('python.pytestRunner.reportOpeningInBrowser'))
-                        
-                        # 启动浏览器监控线程
-                        self._start_browser_monitor(test_plan_name)
-                    else:
-                        # 服务器启动失败，尝试直接打开文件
-                        logger.error(t('python.pytestRunner.allureServerStartFailed'))
-                        self._open_report_directly(allure_report_dir, test_plan_name)
-                        
-                except Exception as e:
-                    logger.error(t('python.pytestRunner.allureMonitorFailed', error=e))
-                    # 出错时尝试直接打开文件
-                    self._open_report_directly(allure_report_dir, test_plan_name)
-            
-            # 启动监控线程
-            monitor_thread = threading.Thread(target=monitor_allure_server, daemon=True)
-            monitor_thread.start()
-            
-            return True
-                
-        except Exception as e:
-            logger.error(t('python.pytestRunner.openReportFailed', error=e))
-            # 出错时尝试直接打开文件
-            return self._open_report_directly(allure_report_dir, test_plan_name)
-    
-    def _open_report_directly(self, allure_report_dir, test_plan_name):
-        """直接打开报告文件（不使用allure服务器）"""
-        try:
-            import subprocess
-            import os
-            import sys
-            
-            allure_index = allure_report_dir / "index.html"
-            if allure_index.exists():
-                if sys.platform == "win32":
-                    os.startfile(str(allure_index))
-                elif sys.platform == "darwin":
-                    subprocess.run(["open", str(allure_index)])
-                else:
-                    subprocess.run(["xdg-open", str(allure_index)])
-                logger.info(t('python.pytestRunner.reportOpenedDirectly', test_plan_name=test_plan_name))
-                return True
-            else:
-                logger.error(t('python.pytestRunner.cannotOpenReportNoIndex'))
-                return False
-        except Exception as e:
-            logger.error(t('python.pytestRunner.openReportDirectlyFailed', error=e))
-            return False
-    
-    def _start_browser_monitor(self, test_plan_name):
-        """启动浏览器监控线程"""
-        import threading
-        import time
-        import psutil
-        
-        def monitor_browser():
-            try:
-                # 等待浏览器打开
-                time.sleep(5)
-                
-                # 查找与allure服务器相关的浏览器进程
-                browser_processes = []
-                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                    try:
-                        # 检查是否是浏览器进程且连接到allure服务器端口
-                        if any(browser in proc.info['name'].lower() for browser in ['chrome', 'firefox', 'edge', 'safari']):
-                            # 检查是否连接到allure服务器端口
-                            connections = proc.connections()
-                            for conn in connections:
-                                if conn.status == 'ESTABLISHED' and conn.laddr.port == self.allure_server_port:
-                                    browser_processes.append(proc)
-                                    break
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        continue
-                
-                if browser_processes:
-                    logger.info(t('python.pytestRunner.browsersDetected', count=len(browser_processes)))
-                    
-                    # 监控浏览器进程状态
-                    while True:
-                        time.sleep(10)  # 每10秒检查一次
-                        
-                        # 检查是否还有浏览器进程连接到服务器
-                        active_browsers = []
-                        for proc in browser_processes:
-                            try:
-                                if proc.is_running():
-                                    # 检查是否仍然连接到allure服务器
-                                    connections = proc.connections()
-                                    connected = False
-                                    for conn in connections:
-                                        if conn.status == 'ESTABLISHED' and conn.laddr.port == self.allure_server_port:
-                                            connected = True
-                                            break
-                                    
-                                    if connected:
-                                        active_browsers.append(proc)
-                            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                                continue
-                        
-                        # 如果没有活动的浏览器进程，关闭allure服务器
-                        if not active_browsers:
-                            logger.info(t('python.pytestRunner.allBrowsersClosed'))
-                            self._stop_allure_server()
-                            break
-                        
-                        # 更新浏览器进程列表
-                        browser_processes = active_browsers
-                        
-                else:
-                    # 如果没有检测到浏览器进程，等待一段时间后关闭服务器
-                    logger.info(t('python.pytestRunner.noBrowserDetected'))
-                    time.sleep(30)
-                    self._stop_allure_server()
-                    
-            except Exception as e:
-                logger.error(t('python.pytestRunner.browserMonitorFailed', error=e))
-                # 出错时关闭服务器
-                self._stop_allure_server()
-        
-        # 启动浏览器监控线程
-        browser_monitor_thread = threading.Thread(target=monitor_browser, daemon=True)
-        browser_monitor_thread.start()
-    
-    def _stop_allure_server(self):
-        """停止Allure服务器"""
-        try:
-            if hasattr(self, 'allure_server_process') and self.allure_server_process:
-                if self.allure_server_process.poll() is None:
-                    # 进程仍在运行，终止它
-                    self.allure_server_process.terminate()
-                    try:
-                        # 等待进程终止
-                        self.allure_server_process.wait(timeout=5)
-                        logger.info(t('python.pytestRunner.allureServerStopped'))
-                    except subprocess.TimeoutExpired:
-                        # 如果进程没有正常终止，强制杀死
-                        self.allure_server_process.kill()
-                        logger.info(t('python.pytestRunner.allureServerForceStopped'))
-                
-                # 清理进程引用
-                self.allure_server_process = None
-                self.allure_server_port = None
-                self.allure_server_start_time = None
-                
-        except Exception as e:
-            logger.error(t('python.pytestRunner.stopAllureServerFailed', error=e))
-    
     def _parse_test_stats(self, stdout_content: str) -> Dict[str, int]:
         """从pytest输出中解析用例级统计信息
         
@@ -774,8 +423,8 @@ class PytestRunner:
             summary += t('python.pytestRunner.caseStatsLine', passed=passed, failed=failed, skipped=skipped, broken=broken, total=total)
             summary += t('python.pytestRunner.passRateLine', pass_rate=f'{pass_rate:.2f}')
         
-        if result["allure_report_path"]:
-            summary += t('python.pytestRunner.allureReportLine', path=result['allure_report_path'])
+        if result.get("allure_results_dir"):
+            summary += t('python.pytestRunner.allureResultsLine', path=result['allure_results_dir'])
         
         if result["markers"]:
             summary += t('python.pytestRunner.testMarkersLine', markers=', '.join(result['markers']))
@@ -887,7 +536,7 @@ class PytestRunner:
             logger.error(t('python.pytestRunner.noValidTestPaths'))
             return {
                 "exit_code": 5,
-                "allure_report_path": None,
+                "allure_results_dir": None,
                 "test_paths": test_paths,
                 "markers": markers,
                 "keywords": keywords,
@@ -918,7 +567,3 @@ if __name__ == "__main__":
     
     # 显示结果摘要
     print(runner.get_test_summary(result))
-    
-    # 尝试打开报告
-    if result["allure_report_path"]:
-        runner.open_allure_report()

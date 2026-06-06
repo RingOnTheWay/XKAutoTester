@@ -13,6 +13,22 @@ class TestPlanService extends JsonFileCrudService {
     return this.getData();
   }
 
+  async updateRunReportPath(testPlanName, reportPath) {
+    try {
+      const plans = await this.getData();
+      const plan = plans.find(p => p.name === testPlanName);
+      if (!plan || !plan.runs || plan.runs.length === 0) {
+        return { success: false, error: '未找到测试计划或运行记录' };
+      }
+      // 更新最新一条运行记录的 report_path
+      plan.runs[plan.runs.length - 1].report_path = reportPath;
+      await this.saveData(plans);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   async saveTestPlan(planData) {
     try {
       let existingPlans = await this.getData();

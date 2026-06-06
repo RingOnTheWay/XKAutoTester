@@ -8,7 +8,6 @@ class EnvironmentService {
   constructor(i18nService, projectRoot) {
     this.i18nService = i18nService;
     this.projectRoot = projectRoot;
-    this.cachedEnvOptions = null;
     this.pythonConfigured = false;
   }
 
@@ -158,38 +157,12 @@ class EnvironmentService {
     return null;
   }
 
-  isUsingLocalJdk() {
-    const projectJdkDir = path.join(this.projectRoot, 'env', 'jdk');
-    const jdkBinDir = path.join(projectJdkDir, 'bin');
-    return fs.existsSync(jdkBinDir);
-  }
-
-  async buildEnvWithJdk() {
-    if (this.cachedEnvOptions) {
-      return this.cachedEnvOptions;
-    }
-
-    const envOptions = { ...process.env };
-    const projectJdkDir = path.join(this.projectRoot, 'env', 'jdk');
-    const jdkBinDir = path.join(projectJdkDir, 'bin');
-
-    if (fs.existsSync(jdkBinDir)) {
-      envOptions.JAVA_HOME = projectJdkDir;
-      envOptions.PATH = `${jdkBinDir}${path.delimiter}${process.env.PATH || ''}`;
-    }
-
-    this.cachedEnvOptions = envOptions;
-    return envOptions;
-  }
-
   async executeCommand(command, args = [], options = {}) {
-    const envOptions = await this.buildEnvWithJdk();
-
     return new Promise((resolve, reject) => {
       const proc = spawn(command, args, {
         ...options,
         windowsHide: true,
-        env: { ...envOptions, ...(options.env || {}) }
+        env: { ...process.env, ...(options.env || {}) }
       });
 
       let stdout = '';
@@ -411,42 +384,6 @@ class EnvironmentService {
     }
   }
 
-  async checkJavaVersion() {
-    try {
-      const result = await this.executeCommand('java', ['-version']);
-      const isLocal = this.isUsingLocalJdk();
-      const sourceLabel = isLocal ? `(${this.i18nService.t('splash.checks.sourceBuiltIn')})` : `(${this.i18nService.t('splash.checks.sourceSystem')})`;
-
-      const output = result.stderr;
-      const versionMatch = output.match(/version "(\d+\.\d+\.\d+)/);
-
-      if (versionMatch) {
-        const version = versionMatch[1];
-        if (version === '17.0.9') {
-          return {
-            status: 'success',
-            message: this.i18nService.t('splash.checks.javaVersion', { version: version }) + ' ' + sourceLabel
-          };
-        } else {
-          return {
-            status: 'warning',
-            message: this.i18nService.t('splash.checks.javaVersionRecommended', { version: version, recommended: '17.0.9' }) + ' ' + sourceLabel
-          };
-        }
-      } else {
-        return {
-          status: 'error',
-          message: this.i18nService.t('splash.checks.cannotGetJavaVersion')
-        };
-      }
-    } catch (error) {
-      return {
-        status: 'error',
-        message: this.i18nService.t('splash.checks.checkJavaVersionFailed', { error: error.message })
-      };
-    }
-  }
-
   async checkPythonEnvironment(projectRoot) {
     try {
       const pythonConfig = pathHelper.getPythonConfig();
@@ -632,11 +569,6 @@ class EnvironmentService {
         name: 'Android SDK',
         check: () => this.checkAndroidSDK(),
         isRequired: true
-      },
-      {
-        name: this.i18nService.t('splash.checks.javaVersionCheck'),
-        check: () => this.checkJavaVersion(),
-        isRequired: false
       },
       {
         name: this.i18nService.t('splash.checks.pythonEnvironment'),

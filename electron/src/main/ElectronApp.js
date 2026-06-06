@@ -131,7 +131,7 @@ class ElectronApp {
     });
   }
 
-  createAllureWindow(url, language) {
+  createAllureWindow(url, language, isDark = false) {
     if (this.allureWindow && !this.allureWindow.isDestroyed()) {
       this.allureWindow.close();
       this.allureWindow = null;
@@ -180,11 +180,12 @@ class ElectronApp {
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
     );
 
-    let languageInjected = false;
-    let initialLoadDone = false;
+    let windowShown = false;
     let showTimeout = null;
 
     const showWindow = () => {
+      if (windowShown) return;
+      windowShown = true;
       if (showTimeout) {
         clearTimeout(showTimeout);
         showTimeout = null;
@@ -200,34 +201,10 @@ class ElectronApp {
 
     this.allureWindow.webContents.on('did-navigate', async (event, navigateUrl) => {
       if (!navigateUrl.startsWith('http') || !this.allureWindow || this.allureWindow.isDestroyed()) return;
-
-      if (!languageInjected) {
-        languageInjected = true;
-        try {
-          await this.allureWindow.webContents.executeJavaScript(`
-            try {
-              var existing = localStorage.getItem('ALLURE_REPORT_SETTINGS');
-              var settings = existing ? JSON.parse(existing) : {};
-              settings.language = ${JSON.stringify(language)};
-              localStorage.setItem('ALLURE_REPORT_SETTINGS', JSON.stringify(settings));
-            } catch(e) {}
-          `);
-          this.allureWindow.webContents.reload();
-        } catch (e) {
-          console.error('[Allure] Failed to inject language settings:', e);
-          showWindow();
-        }
-      }
     });
 
     this.allureWindow.webContents.on('did-finish-load', () => {
-      if (!initialLoadDone) {
-        initialLoadDone = true;
-        return;
-      }
-      if (languageInjected) {
-        showWindow();
-      }
+      showWindow();
     });
 
     this.allureWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
