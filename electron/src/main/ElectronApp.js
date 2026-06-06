@@ -131,7 +131,7 @@ class ElectronApp {
     });
   }
 
-  createAllureWindow(url, language, isDark = false) {
+  createAllureWindow(url, language, isDark = false, allureService = null) {
     if (this.allureWindow && !this.allureWindow.isDestroyed()) {
       this.allureWindow.close();
       this.allureWindow = null;
@@ -230,6 +230,10 @@ class ElectronApp {
         showTimeout = null;
       }
       this.allureWindow = null;
+      // 窗口关闭时联动停止HTTP server
+      if (allureService) {
+        allureService._stopServer().catch(() => {});
+      }
     });
   }
 

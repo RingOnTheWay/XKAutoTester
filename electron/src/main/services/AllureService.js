@@ -1,7 +1,7 @@
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
-const { exec, execSync } = require('child_process');
+const { execSync } = require('child_process');
 const asyncFs = require('../utils/asyncFs');
 const Logger = require('../utils/logger');
 
@@ -185,53 +185,28 @@ class AllureService {
     }
   }
 
-  _killProcessTree(pid) {
+  async _stopServer() {
+    if (!this.allureHttpServer) {
+      return { success: true, message: '没有正在运行的服务器' };
+    }
+
+    await this.logger.info('正在停止Allure HTTP服务器...');
+
     try {
-      execSync(`taskkill /PID ${pid} /F /T`, { timeout: 5000, windowsHide: true });
-    } catch (e) {
-      try {
-        process.kill(pid);
-      } catch (e2) {
-        // ignore
-      }
-    }
-  }
-
-  async _killProcessTreeAsync(pid) {
-    try {
-      await new Promise((resolve, reject) => {
-        exec(`taskkill /PID ${pid} /F /T`, { windowsHide: true }, (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    } catch (e) {
-      try {
-        process.kill(pid);
-      } catch (e2) {
-        // ignore
-      }
-    }
-  }
-
-  async _stopExistingServer() {
-    if (!this.allureHttpServer && !this.allureServerPort) {
-      return;
-    }
-
-    await this.logger.info('Auto-stopping existing Allure server before opening new report');
-
-    if (this.allureHttpServer) {
       await new Promise((resolve) => {
         this.allureHttpServer.close(() => resolve());
+        // 超时保底：3秒后强制resolve
+        setTimeout(resolve, 3000);
       });
-      this.allureHttpServer = null;
+    } catch (e) {
+      await this.logger.error(`关闭HTTP服务器异常: ${e.message}`);
     }
 
-    if (this.allureServerPort) {
-      await this.killProcessByPort(this.allureServerPort, 'Allure服务器');
-      this.allureServerPort = null;
-    }
+    this.allureHttpServer = null;
+    this.allureServerPort = null;
+
+    await this.logger.info('Allure HTTP服务器已停止');
+    return { success: true, message: 'Allure HTTP服务器已停止' };
   }
 
   async openAllureReport(testPlanName = null, options = {}) {
@@ -297,7 +272,7 @@ class AllureService {
         allureReportDir = timestampDirs[0].path;
       }
 
-      await this._stopExistingServer();
+      await this._stopServer();
 
       return await this._startAllureOpenProcess(allureReportDir, options);
     } catch (error) {
@@ -312,7 +287,7 @@ class AllureService {
         return { success: false, error: '报告路径不存在' };
       }
 
-      await this._stopExistingServer();
+      await this._stopServer();
 
       return await this._startAllureOpenProcess(reportPath, options);
     } catch (error) {
@@ -423,40 +398,7 @@ class AllureService {
     try {
       await this.logger.ensureLogDir();
       this.logger.resetLogPath();
-
-      await this.logger.info('开始停止Allure服务器进程');
-
-      let stoppedProcesses = [];
-
-      if (this.allureHttpServer) {
-        await this.logger.info('正在关闭HTTP服务器...');
-        await new Promise((resolve) => {
-          this.allureHttpServer.close(() => resolve());
-        });
-        this.allureHttpServer = null;
-        stoppedProcesses.push('HTTP服务器');
-        await this.logger.info('HTTP服务器已关闭');
-      }
-
-      if (this.allureServerPort) {
-        await this.logger.info(`正在按端口 ${this.allureServerPort} 停止Allure服务器...`);
-
-        const result = await this.killProcessByPort(this.allureServerPort, 'Allure服务器');
-        if (result.success && result.killedProcesses) {
-          stoppedProcesses = stoppedProcesses.concat(result.killedProcesses);
-        }
-
-        this.allureServerPort = null;
-      }
-
-      if (stoppedProcesses.length > 0) {
-        const message = `已停止: ${stoppedProcesses.join(', ')}`;
-        await this.logger.info(`停止服务器完成: ${message}`);
-        return { success: true, message };
-      } else {
-        await this.logger.info('没有找到需要停止的进程');
-        return { success: true, message: '没有正在运行的进程需要停止' };
-      }
+      return await this._stopServer();
     } catch (error) {
       await this.logger.error(`停止服务器失败: ${error.message}`);
       return { success: false, error: error.message };
@@ -473,27 +415,7 @@ class AllureService {
         this.allureHttpServer.close();
         this.allureHttpServer = null;
       }
-
-      if (this.allureServerPort) {
-        try {
-          const findCommand = `netstat -ano | findstr :${this.allureServerPort} | findstr LISTENING`;
-          const result = execSync(findCommand, { encoding: 'utf8', timeout: 3000, windowsHide: true });
-
-          if (result.trim()) {
-            const lines = result.trim().split('\n');
-            for (const line of lines) {
-              const parts = line.trim().split(/\s+/);
-              if (parts.length >= 5) {
-                const pid = parts[parts.length - 1];
-                this._killProcessTree(parseInt(pid));
-              }
-            }
-          }
-        } catch (e) {
-          // netstat found nothing or timed out — acceptable
-        }
-        this.allureServerPort = null;
-      }
+      this.allureServerPort = null;
     } catch (error) {
       // cleanup must never throw — app is exiting
     }
@@ -623,70 +545,5 @@ class AllureService {
     }
   }
 
-  async killProcessByPort(port, processName = 'allure open进程') {
-    await this.logger.ensureLogDir();
-    this.logger.resetLogPath();
-
-    await this.logger.info(`开始按端口停止${processName}: ${port}`);
-
-    try {
-      const findCommand = `netstat -ano | findstr :${port} | findstr LISTENING`;
-      await this.logger.info(`执行命令查找端口进程: ${findCommand}`);
-
-      const result = await new Promise((resolve, reject) => {
-        exec(findCommand, { encoding: 'utf8', windowsHide: true }, (err, stdout) => {
-          if (err) reject(err);
-          else resolve(stdout);
-        });
-      });
-      await this.logger.info(`查找结果: ${result}`);
-
-      if (result.trim()) {
-        const lines = result.trim().split('\n');
-        let killedProcesses = [];
-
-        for (const line of lines) {
-          const parts = line.trim().split(/\s+/);
-          if (parts.length >= 5) {
-            const pid = parts[parts.length - 1];
-            await this.logger.info(`找到进程PID: ${pid}`);
-
-            const killCommand = `taskkill /PID ${pid} /F /T`;
-            await this.logger.info(`执行杀死进程命令: ${killCommand}`);
-
-            try {
-              await new Promise((resolve, reject) => {
-                exec(killCommand, { windowsHide: true }, (err) => {
-                  if (err) reject(err);
-                  else resolve();
-                });
-              });
-              await this.logger.info(`成功杀死进程PID: ${pid}`);
-              killedProcesses.push(`端口${port}的进程(PID:${pid})`);
-            } catch (killError) {
-              await this.logger.error(`杀死进程失败: ${killError.message}`);
-            }
-          }
-        }
-
-        if (killedProcesses.length > 0) {
-          const message = `已停止: ${killedProcesses.join(', ')}`;
-          await this.logger.info(`停止${processName}完成: ${message}`);
-          return { success: true, killedProcesses };
-        } else {
-          await this.logger.info(`未找到监听端口 ${port} 的进程`);
-          return { success: false, error: this.i18nService.t('main.processNotFound') };
-        }
-      } else {
-        await this.logger.info(`未找到监听端口 ${port} 的进程`);
-        return { success: false, error: this.i18nService.t('main.processNotFound') };
-      }
-    } catch (error) {
-      const errorMessage = this.i18nService.t('main.stopProcessFailed', { processName, error: error.message });
-      await this.logger.error(errorMessage);
-      return { success: false, error: error.message };
-    }
-  }
 }
-
 module.exports = AllureService;

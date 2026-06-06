@@ -29,7 +29,7 @@ function register(ipcMain, services) {
       const options = { language: mapToAllureLanguage(appLanguage), isDark };
       const result = await allureService.openAllureReport(testPlanName, options);
       if (result.success && result.url) {
-        electronApp.createAllureWindow(result.url, options.language, isDark);
+        electronApp.createAllureWindow(result.url, options.language, isDark, allureService);
       }
       return result;
     },
@@ -40,7 +40,7 @@ function register(ipcMain, services) {
       const options = { language: mapToAllureLanguage(appLanguage), isDark };
       const result = await allureService.openReportByPath(reportPath, options);
       if (result.success && result.url) {
-        electronApp.createAllureWindow(result.url, options.language, isDark);
+        electronApp.createAllureWindow(result.url, options.language, isDark, allureService);
       }
       return result;
     },
