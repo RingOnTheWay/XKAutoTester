@@ -6,7 +6,6 @@ const { spawn } = require('child_process');
 
 const GITHUB_OWNER = 'RingOnTheWay';
 const GITHUB_REPO = 'XKAutoTester';
-const GITHUB_TOKEN = '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';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
 
 class UpdateService {
@@ -61,7 +60,6 @@ class UpdateService {
         try {
             const response = await axios.get(GITHUB_API_URL, {
                 headers: {
-                    'Authorization': `Bearer ${GITHUB_TOKEN}`,
                     'Accept': 'application/vnd.github.v3+json',
                     'User-Agent': 'XKAutoTester-Update-Checker'
                 },
@@ -97,7 +95,7 @@ class UpdateService {
                 }
 
                 if (exeAsset) {
-                    downloadUrl = exeAsset.url;
+                    downloadUrl = exeAsset.browser_download_url;
                     fileName = exeAsset.name;
                     fileSize = exeAsset.size;
                 }
@@ -123,10 +121,6 @@ class UpdateService {
             if (error.response) {
                 const status = error.response.status;
                 switch (status) {
-                    case 401:
-                        errorCode = 'auth_failed';
-                        errorMessage = 'Authentication failed';
-                        break;
                     case 403:
                         if (error.response.headers && error.response.headers['x-ratelimit-remaining'] === '0') {
                             errorCode = 'rate_limited';
