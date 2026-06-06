@@ -220,9 +220,7 @@ class ElectronApp {
 
     this.allureWindow.loadURL(url);
 
-    if (!this.isPackaged) {
-      this.allureWindow.webContents.openDevTools({ mode: 'detach' });
-    }
+    // 开发模式下不自动打开Allure页面控制台
 
     this.allureWindow.on('closed', () => {
       if (showTimeout) {
