@@ -41,7 +41,14 @@ async function initializeServices() {
   const scheduledPlanService = new ScheduledPlanService(userConfigPath);
   const testPlanService = new TestPlanService(userConfigPath, projectRoot);
   const allureService = new AllureService(projectRoot, i18nService, userDataPath);
-  const pythonTestService = new PythonTestService(projectRoot, i18nService, userDataPath, allureService, testPlanService);
+  const pythonTestService = new PythonTestService({
+    projectRoot,
+    i18nService,
+    userDataPath,
+    mainWindow: null,
+    allureService,
+    testPlanService
+  });
   const environmentService = new EnvironmentService(i18nService, projectRoot);
   await environmentService.configurePythonEnvironment();
   const adbService = new ADBService(projectRoot, i18nService);

@@ -115,7 +115,7 @@ class ElectronApp {
     }
 
     if (this.services.pythonTestService) {
-      this.services.pythonTestService.setMainWindow(this.mainWindow);
+      this.services.pythonTestService.mainWindow = this.mainWindow;
     }
 
     this.mainWindow.on('maximize', () => {

@@ -128,3 +128,4 @@ config/test_cases/
 # --- AI Agent 上下文 ---
 AGENTS.md
 /trae-backup
+refactor-rfcs

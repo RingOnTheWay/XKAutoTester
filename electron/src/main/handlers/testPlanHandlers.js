@@ -3,8 +3,8 @@ const { registerHandler } = require('./base/handlerUtils');
 function register(ipcMain, services) {
   const { testPlanService, pythonTestService } = services;
 
-  registerHandler(ipcMain, 'run-python-tests', (testConfig) => pythonTestService.runPythonTests(testConfig));
-  registerHandler(ipcMain, 'stop-python-tests', () => pythonTestService.stopPythonTests());
+  registerHandler(ipcMain, 'run-python-tests', (testConfig) => pythonTestService.run(testConfig));
+  registerHandler(ipcMain, 'stop-python-tests', () => pythonTestService.stop());
   registerHandler(ipcMain, 'get-test-plans', () => testPlanService.getTestPlans());
   registerHandler(ipcMain, 'save-test-plan', (planData) => testPlanService.saveTestPlan(planData));
   registerHandler(ipcMain, 'delete-test-plan', (planId) => testPlanService.deleteTestPlan(planId));

@@ -1,30 +1,49 @@
-const { spawn } = require('child_process');
+const { spawn: defaultSpawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const asyncFs = require('../utils/asyncFs');
 const pathHelper = require('../utils/pathHelper');
 const Logger = require('../utils/logger');
+const FileBasedDialogMonitor = require('./FileBasedDialogMonitor');
 
 class PythonTestService {
-  constructor(projectRoot, i18nService, userDataPath, allureService, testPlanService) {
-    this.projectRoot = projectRoot;
-    this.i18nService = i18nService;
-    this.userDataPath = userDataPath;
-    this.allureService = allureService;
-    this.testPlanService = testPlanService;
+  /**
+   * @param {Object} deps
+   * @param {string}   deps.projectRoot
+   * @param {Object}   deps.i18nService
+   * @param {string}   deps.userDataPath
+   * @param {Electron.BrowserWindow} deps.mainWindow
+   * @param {Object}   deps.allureService
+   * @param {Object}   deps.testPlanService
+   * @param {Object}   [deps.dialogMonitor] - { start(), stop() }，默认 FileBasedDialogMonitor
+   * @param {Function} [deps.spawn] - 子进程 spawn 函数，默认 child_process.spawn
+   */
+  constructor(deps) {
+    this.projectRoot = deps.projectRoot;
+    this.i18nService = deps.i18nService;
+    this.userDataPath = deps.userDataPath;
+    this.mainWindow = deps.mainWindow;
+    this.allureService = deps.allureService;
+    this.testPlanService = deps.testPlanService;
+
+    /** @type {import('child_process').ChildProcess|null} */
     this.currentPythonProcess = null;
-    this.unauthorizedDialogInterval = null;
-    this.mainWindow = null;
+
+    /** @private */
+    this._spawn = deps.spawn || defaultSpawn;
+
+    /** @private */
+    this._dialogMonitor = deps.dialogMonitor || new FileBasedDialogMonitor({
+      mainWindow: this.mainWindow,
+      i18nService: this.i18nService,
+      userDataPath: this.userDataPath
+    });
+
     this.logger = new Logger(this._getLogsPath('XKAT'), 'PythonTest');
   }
 
   _getLogsPath(...subdirs) {
     const baseDir = this.userDataPath || this.projectRoot;
     return path.join(baseDir, 'logs', ...subdirs);
-  }
-
-  setMainWindow(window) {
-    this.mainWindow = window;
   }
 
   buildPythonPathEnv(pythonCmd) {
@@ -50,21 +69,35 @@ class PythonTestService {
     return { command: null, args: [], useVenv: false, error: this.i18nService.t('splash.checks.venvNotFound') };
   }
 
-  runPythonTests(testConfig) {
+  /**
+   * 运行 Python 测试。Best-effort 流水线：退出码权威，副作用失败记入 sideEffectFailures。
+   * @param {Object} testConfig
+   * @param {string[]} testConfig.testPaths
+   * @param {string[]} [testConfig.markers]
+   * @param {string}   [testConfig.testPlanName]
+   * @returns {Promise<Object>}
+   */
+  run(testConfig) {
     return new Promise((resolve, reject) => {
       const { testPaths, markers, testPlanName } = testConfig;
-      
+
       const pythonCmd = this.getPythonCommand();
       if (!pythonCmd.command) {
         resolve({
           success: false,
-          error: pythonCmd.error || this.i18nService.t('splash.checks.uvVenvNotFound')
+          exitCode: -1,
+          output: '',
+          error: pythonCmd.error || this.i18nService.t('splash.checks.uvVenvNotFound'),
+          testPlanName: testPlanName,
+          testStats: { passed: 0, failed: 0, skipped: 0, broken: 0, total: 0 },
+          allureReportPath: null,
+          sideEffectFailures: []
         });
         return;
       }
-      
-      this.startUnauthorizedDialogMonitor();
-      
+
+      this._dialogMonitor.start();
+
       const pythonArgs = [
         '-m', 'main',
         '--test-paths', testPaths.join(',')
@@ -78,7 +111,7 @@ class PythonTestService {
         pythonArgs.push('--test-plan', testPlanName);
       }
 
-      const pythonProcess = spawn(pythonCmd.command, pythonArgs, {
+      const pythonProcess = this._spawn(pythonCmd.command, pythonArgs, {
         cwd: this.projectRoot,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
@@ -91,7 +124,7 @@ class PythonTestService {
         },
         windowsHide: true
       });
-      
+
       this.currentPythonProcess = pythonProcess;
 
       let output = '';
@@ -116,31 +149,15 @@ class PythonTestService {
       });
 
       pythonProcess.on('close', async (code) => {
-        this.stopUnauthorizedDialogMonitor();
+        this._dialogMonitor.stop();
         this.currentPythonProcess = null;
-        
+
         const testStats = this._parseTestStats(output);
-        
-        // 从Python输出中解析allure-results路径标记
-        let allureResultsDir = null;
-        const markerMatch = output.match(/XKAT_ALLURE_RESULTS_DIR:(.+)/);
-        if (markerMatch) {
-          allureResultsDir = markerMatch[1].trim();
-        }
-        
-        // Fallback: 直接检查已知路径
-        if (!allureResultsDir) {
-          const defaultResultsDir = path.join(this._getLogsPath('Allure'), 'allure-results');
-          if (fs.existsSync(defaultResultsDir)) {
-            const files = fs.readdirSync(defaultResultsDir);
-            if (files.some(f => f.endsWith('-result.json') || f.endsWith('.json'))) {
-              allureResultsDir = defaultResultsDir;
-            }
-          }
-        }
-        
-        // 使用AllureService生成报告
+        const sideEffectFailures = [];
+
+        // Best-effort 流水线 Step 1: 生成 Allure 报告
         let allureReportPath = null;
+        const allureResultsDir = this._findAllureResultsDir(output);
         if (this.allureService && allureResultsDir) {
           try {
             const allureResult = await this.allureService.generateAllureReport(
@@ -149,16 +166,23 @@ class PythonTestService {
             );
             if (allureResult.success) {
               allureReportPath = allureResult.reportPath;
-              // 更新test_plans.json中最新运行记录的report_path
-              if (this.testPlanService && testPlanName) {
-                await this.testPlanService.updateRunReportPath(testPlanName, allureReportPath);
-              }
             }
           } catch (e) {
-            this.logger.error(`Failed to generate Allure report: ${e.message}`);
+            sideEffectFailures.push({ step: 'generateReport', error: e.message });
+            this.logger.error(`Pipeline generateReport failed: ${e.message}`);
           }
         }
-        
+
+        // Best-effort 流水线 Step 2: 更新测试计划报告路径
+        if (this.testPlanService && testPlanName && allureReportPath) {
+          try {
+            await this.testPlanService.updateRunReportPath(testPlanName, allureReportPath);
+          } catch (e) {
+            sideEffectFailures.push({ step: 'updatePlanPath', error: e.message });
+            this.logger.error(`Pipeline updatePlanPath failed: ${e.message}`);
+          }
+        }
+
         const result = {
           success: code === 0,
           exitCode: code,
@@ -166,7 +190,8 @@ class PythonTestService {
           error: errorOutput,
           testPlanName: testPlanName,
           testStats: testStats,
-          allureReportPath: allureReportPath
+          allureReportPath: allureReportPath,
+          sideEffectFailures: sideEffectFailures
         };
         resolve(result);
       });
@@ -177,14 +202,18 @@ class PythonTestService {
     });
   }
 
-  stopPythonTests() {
+  /**
+   * 终止运行中的测试进程。
+   * @returns {{ success: boolean, message: string }}
+   */
+  stop() {
     try {
       if (this.currentPythonProcess) {
         this.currentPythonProcess.kill();
         this.currentPythonProcess = null;
-        
-        this.stopUnauthorizedDialogMonitor();
-        
+
+        this._dialogMonitor.stop();
+
         return { success: true, message: this.i18nService.t('testExecution.testManuallyStopped') };
       } else {
         return { success: false, message: this.i18nService.t('testExecution.noSelectedTestPlan') };
@@ -193,6 +222,28 @@ class PythonTestService {
       console.error('Stop test failed:', error);
       return { success: false, message: this.i18nService.t('testExecution.stopTestFailed') + ': ' + error.message };
     }
+  }
+
+  /**
+   * @private 从 Python 输出中检测 allure-results 目录
+   */
+  _findAllureResultsDir(output) {
+    // 优先从输出标记解析
+    const markerMatch = output.match(/XKAT_ALLURE_RESULTS_DIR:(.+)/);
+    if (markerMatch) {
+      return markerMatch[1].trim();
+    }
+
+    // Fallback: 检查已知路径
+    const defaultResultsDir = path.join(this._getLogsPath('Allure'), 'allure-results');
+    if (fs.existsSync(defaultResultsDir)) {
+      const files = fs.readdirSync(defaultResultsDir);
+      if (files.some(f => f.endsWith('-result.json') || f.endsWith('.json'))) {
+        return defaultResultsDir;
+      }
+    }
+
+    return null;
   }
 
   _parseTestStats(output) {
@@ -225,77 +276,6 @@ class PythonTestService {
     stats.total = stats.passed + stats.failed + stats.skipped + stats.broken;
 
     return stats;
-  }
-
-  startUnauthorizedDialogMonitor() {
-    const dialogTriggerFile = path.join(this.userDataPath, 'logs', 'unauthorized_dialog.json');
-    const dialogDir = path.dirname(dialogTriggerFile);
-    
-    const processDialogFile = async () => {
-      try {
-        if (fs.existsSync(dialogTriggerFile)) {
-          const data = await asyncFs.readFile(dialogTriggerFile, 'utf8');
-          const dialogData = JSON.parse(data);
-          
-          await this.showUnauthorizedDialog(dialogData);
-          
-          fs.unlinkSync(dialogTriggerFile);
-        }
-      } catch (error) {
-        console.error('Failed to check unauthorized dialog trigger file:', error);
-      }
-    };
-    
-    if (fs.existsSync(dialogTriggerFile)) {
-      processDialogFile();
-    }
-    
-    try {
-      if (!fs.existsSync(dialogDir)) {
-        fs.mkdirSync(dialogDir, { recursive: true });
-      }
-      
-      this.unauthorizedDialogWatcher = fs.watch(dialogDir, (eventType, filename) => {
-        if (filename === 'unauthorized_dialog.json') {
-          setTimeout(processDialogFile, 100);
-        }
-      });
-      
-      this.unauthorizedDialogWatcher.on('error', (error) => {
-        console.error('Unauthorized dialog file watcher failed, falling back to polling:', error);
-        this.unauthorizedDialogInterval = setInterval(processDialogFile, 2000);
-        this.unauthorizedDialogWatcher = null;
-      });
-    } catch (error) {
-      console.error('Failed to create file watcher, falling back to polling:', error);
-      this.unauthorizedDialogInterval = setInterval(processDialogFile, 2000);
-    }
-  }
-
-  stopUnauthorizedDialogMonitor() {
-    if (this.unauthorizedDialogWatcher) {
-      this.unauthorizedDialogWatcher.close();
-      this.unauthorizedDialogWatcher = null;
-    }
-    if (this.unauthorizedDialogInterval) {
-      clearInterval(this.unauthorizedDialogInterval);
-      this.unauthorizedDialogInterval = null;
-    }
-  }
-
-  async showUnauthorizedDialog(dialogData) {
-    const { dialog } = require('electron');
-    const { device_name, message } = dialogData;
-    
-    await dialog.showMessageBox(this.mainWindow, {
-      type: 'warning',
-      title: this.i18nService.t('testExecution.deviceSelection.deviceUnauthorizedTitle'),
-      message: message || this.i18nService.t('testExecution.deviceSelection.deviceUnauthorizedMessage', { device: device_name }),
-      detail: this.i18nService.t('testExecution.deviceSelection.deviceUnauthorizedDetail'),
-      buttons: [this.i18nService.t('common.confirm')],
-      defaultId: 0,
-      cancelId: 0
-    });
   }
 }
 
