@@ -1,4 +1,4 @@
-class InspectorModal {
+export class InspectorModal {
     constructor() {
         this.screenshotImage = null;
         this.elementsTree = [];
@@ -941,5 +941,3 @@ class InspectorModal {
         return result;
     }
 }
-
-window.InspectorModal = InspectorModal;

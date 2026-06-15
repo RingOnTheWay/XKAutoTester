@@ -1,4 +1,5 @@
-class ProgressModal {
+import { Icons } from '../icons.js';
+export class ProgressModal {
     constructor(options = {}) {
         this.options = options;
         this.overlay = null;
@@ -280,10 +281,10 @@ class ProgressModal {
 
         this.overlay.appendChild(this.container);
 
-        if (window.Icons) {
+        if (Icons) {
             const iconName = this.headerIcon.getAttribute('data-icon');
-            if (window.Icons[iconName]) {
-                this.headerIcon.innerHTML = window.Icons[iconName];
+            if (Icons[iconName]) {
+                this.headerIcon.innerHTML = Icons[iconName];
             }
         }
     }
@@ -297,5 +298,3 @@ class ProgressModal {
         document.addEventListener('keydown', this._escHandler);
     }
 }
-
-window.ProgressModal = ProgressModal;

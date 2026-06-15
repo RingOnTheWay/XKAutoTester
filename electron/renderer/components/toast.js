@@ -2,7 +2,7 @@
  * Toast组件 - 可复用的消息提示组件
  * 支持多种展示类型、自定义依附容器、位置配置
  */
-class ToastManager {
+export class ToastManager {
     constructor() {
         this.containers = new Map();
         this.activeToasts = new Set();
@@ -157,8 +157,5 @@ class ToastManager {
     }
 }
 
-const Toast = new ToastManager();
+export const Toast = new ToastManager();
 
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = Toast;
-}

@@ -176,7 +176,8 @@
     "uploadSuccess": "上传成功",
     "uploadFailed": "上传失败",
     "directoryNotFound": "目录不存在",
-    "directoryNotFoundMessage": "默认下载目录 \"{{path}}\" 不存在且无法创建，是否清除该路径设置？"
+    "directoryNotFoundMessage": "默认下载目录 \"{{path}}\" 不存在且无法创建，是否清除该路径设置？",
+    "internalStorage": "内部存储空间"
   },
   "deviceModal": {
     "title": "设备管理",

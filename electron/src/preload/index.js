@@ -91,8 +91,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateScheduledPlan: (planData) => ipcRenderer.invoke('update-scheduled-plan', planData),
   deleteScheduledPlan: (planId) => ipcRenderer.invoke('delete-scheduled-plan', planId),
   checkTimeConflict: (data) => ipcRenderer.invoke('check-time-conflict', data),
-  onScheduledTestStart: (callback) => ipcRenderer.on('scheduled-test-start', callback),
-  onScheduledPlanExpired: (callback) => ipcRenderer.on('scheduled-plan-expired', callback),
+  onScheduledTestStart: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('scheduled-test-start', listener);
+    return () => ipcRenderer.removeListener('scheduled-test-start', listener);
+  },
+  onScheduledPlanExpired: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('scheduled-plan-expired', listener);
+    return () => ipcRenderer.removeListener('scheduled-plan-expired', listener);
+  },
   getSchedulerStatus: () => ipcRenderer.invoke('get-scheduler-status'),
   
   // 系统操作
@@ -102,8 +110,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPytestMarkers: () => ipcRenderer.invoke('get-pytest-markers'),
   
   // 事件监听
-  onTestOutput: (callback) => ipcRenderer.on('test-output', callback),
-  onTestError: (callback) => ipcRenderer.on('test-error', callback),
+  onTestOutput: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('test-output', listener);
+    return () => ipcRenderer.removeListener('test-output', listener);
+  },
+  onTestError: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('test-error', listener);
+    return () => ipcRenderer.removeListener('test-error', listener);
+  },
   
   // 渲染进程日志回写
   logTestOutput: (text, isError) => ipcRenderer.send('log-test-output', text, isError),
@@ -190,7 +206,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('upload-progress', listener);
   },
   downloadFile: (remotePath, localPath, deviceId) => ipcRenderer.invoke('downloadFile', remotePath, localPath, deviceId),
-  onDownloadProgress: (callback) => ipcRenderer.on('download-progress', callback),
+  onDownloadProgress: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('download-progress', listener);
+    return () => ipcRenderer.removeListener('download-progress', listener);
+  },
   installApk: (apkPath, deviceId) => ipcRenderer.invoke('install-apk', { apkPath, deviceId }),
   onInstallProgress: (callback) => {
     const listener = (event, progress) => callback(progress);

@@ -176,7 +176,8 @@
     "uploadSuccess": "Upload successful",
     "uploadFailed": "Upload failed",
     "directoryNotFound": "Directory Not Found",
-    "directoryNotFoundMessage": "The default download directory \"{{path}}\" does not exist and could not be created. Do you want to clear this path setting?"
+    "directoryNotFoundMessage": "The default download directory \"{{path}}\" does not exist and could not be created. Do you want to clear this path setting?",
+    "internalStorage": "Internal Storage"
   },
   "deviceModal": {
     "title": "Device Management",

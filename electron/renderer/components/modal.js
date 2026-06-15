@@ -1,4 +1,4 @@
-class Modal {
+export class Modal {
   constructor(options = {}) {
     this.id = options.id;
     this.onOpen = options.onOpen || null;
@@ -71,5 +71,3 @@ class Modal {
     });
   }
 }
-
-window.Modal = Modal;

@@ -1,4 +1,4 @@
-const ICON_MAPPING = {
+export const ICON_MAPPING = {
   play_circle: 'CirclePlay',
   devices: 'Smartphone',
   settings: 'Settings',
@@ -85,7 +85,7 @@ const ICON_MAPPING = {
   external_link: 'ExternalLink'
 };
 
-function lucideToSvg(iconData) {
+export function lucideToSvg(iconData) {
   if (!iconData) return '';
   const attrs = {
     xmlns: 'http://www.w3.org/2000/svg',
@@ -113,7 +113,7 @@ function lucideToSvg(iconData) {
   return `<svg ${attrStr}>${inner}</svg>`;
 }
 
-const Icons = {};
+export const Icons = {};
 
 Object.entries(ICON_MAPPING).forEach(([oldName, lucideName]) => {
   const iconData = lucide.icons[lucideName];
@@ -123,11 +123,3 @@ Object.entries(ICON_MAPPING).forEach(([oldName, lucideName]) => {
     console.warn(`Lucide icon "${lucideName}" not found for mapping "${oldName}"`);
   }
 });
-
-if (typeof window !== 'undefined') {
-  window.Icons = Icons;
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = Icons;
-}

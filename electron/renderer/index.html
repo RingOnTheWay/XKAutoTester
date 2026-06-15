@@ -825,7 +825,7 @@
                                     <div class="directory-input-group">
                                         <div class="directory-input-wrapper">
                                             <input type="text" id="default-test-directory" class="directory-input" placeholder="请选择默认下载路径" data-i18n-placeholder="placeholders.defaultDownloadPath" readonly>
-                                            <div class="directory-tooltip"></div>
+                                            <div class="directory-tooltip" id="default-directory-tooltip"></div>
                                         </div>
                                         <button id="browse-default-directory" class="material-button primary small">
                                             <span class="svg-icon" data-icon="folder_open"></span>
@@ -938,7 +938,7 @@
                                     <div class="custom-select-wrapper">
                                         <div class="custom-select" id="custom-notification-platform-select">
                                             <div class="custom-select__selected" id="custom-notification-platform-selected">
-                                                <span class="custom-select__text" data-i18n="settings.none">无</span>
+                                                <span class="custom-select__text">无</span>
                                             </div>
                                             <div class="custom-select__options" id="custom-notification-platform-options">
                                                 <div class="custom-select__option" data-value="none"><span data-i18n="settings.none">无</span></div>
@@ -1703,11 +1703,8 @@
         <div id="inspector-modal-container"></div>
     </div>
     
-    <script src="components/toast.js"></script>
-    <script src="components/progress-indicator.js"></script>
-    <script src="components/progress-modal.js"></script>
     <script src="../node_modules/lucide/dist/umd/lucide.min.js"></script>
-    <script src="icons.js"></script>
-    <script src="script.js"></script>
+    <!-- Phase 4: MVC 清理完成，所有功能由 app.js (ES Module) 管理 -->
+    <script type="module" src="app.js"></script>
 </body>
 </html>

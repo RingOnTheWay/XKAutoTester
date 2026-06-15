@@ -4618,6 +4618,33 @@ body:not(.dark-theme) .confirm-modal .modal-footer {
   background: rgba(0, 0, 0, 0.01);
 }
 
+/* Confirm modal 按钮 loading 状态 */
+.btn-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.6s linear infinite;
+  vertical-align: middle;
+}
+
+body:not(.dark-theme) .btn-spinner {
+  border-color: rgba(0, 0, 0, 0.2);
+  border-top-color: var(--primary, #4CAF50);
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+.confirm-modal .modal-footer button.loading {
+  opacity: 0.8;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* 文件管理器样式 */
 .file-manager-actions {
   gap: 12px;
@@ -6195,7 +6222,9 @@ body.dark-theme .theme-color-option.selected {
 .marker-badge {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding: 5px 10px;
+  margin: 2px 4px 2px 0;
   background: linear-gradient(135deg, rgba(var(--primary-rgb, 33, 150, 243), 0.15), rgba(var(--primary-rgb, 33, 150, 243), 0.08));
   border: 1px solid rgba(var(--primary-rgb, 33, 150, 243), 0.3);
   border-radius: 16px;
@@ -6207,6 +6236,30 @@ body.dark-theme .theme-color-option.selected {
   text-transform: capitalize;
   animation: badgeFadeIn 0.2s ease;
   position: relative;
+}
+
+.marker-badge-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.2);
+  color: var(--primary);
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.marker-badge:hover .marker-badge-remove {
+  background: rgba(244, 67, 54, 0.25);
+  color: var(--error);
 }
 
 @keyframes badgeFadeIn {

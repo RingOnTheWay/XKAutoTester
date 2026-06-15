@@ -1,4 +1,4 @@
-class ProgressIndicator {
+export class ProgressIndicator {
     constructor() {
         this.downloadProgressTimer = null;
         this.countdownUpdateTimer = null;

@@ -374,6 +374,12 @@ class UserDataService {
       return { success: false, error: '目标路径不能为空' };
     }
 
+    // 如果选择的目录名不是 XKAutoTester，自动追加 XKAutoTester 子目录
+    // 防止迁移时误删同级其他文件
+    if (path.basename(newPath) !== 'XKAutoTester') {
+      newPath = path.join(newPath, 'XKAutoTester');
+    }
+
     if (!fs.existsSync(newPath)) {
       fs.mkdirSync(newPath, { recursive: true });
     }

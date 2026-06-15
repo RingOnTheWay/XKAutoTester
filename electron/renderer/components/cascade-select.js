@@ -1,4 +1,4 @@
-class CascadeSelect {
+export class CascadeSelect {
   static activeDropdown = null;
 
   constructor(containerId, options = {}) {
@@ -190,5 +190,3 @@ class CascadeSelect {
     CascadeSelect.activeDropdown = null;
   }
 }
-
-window.CascadeSelect = CascadeSelect;

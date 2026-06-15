@@ -1,4 +1,4 @@
-class DeviceCascadeSelect {
+export class DeviceCascadeSelect {
   static activeDropdown = null;
   static instances = {};
 
@@ -482,5 +482,3 @@ class DeviceCascadeSelect {
     DeviceCascadeSelect.instances = {};
   }
 }
-
-window.DeviceCascadeSelect = DeviceCascadeSelect;

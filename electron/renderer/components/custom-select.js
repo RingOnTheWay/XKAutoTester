@@ -1,4 +1,4 @@
-class CustomSelect {
+export class CustomSelect {
   static activeDropdown = null;
   static scrollPrevented = false;
 
@@ -176,5 +176,3 @@ class CustomSelect {
     }
   }
 }
-
-window.CustomSelect = CustomSelect;
