@@ -1,6 +1,7 @@
 import { Action } from '../../core/Action.js';
 import { ApiBridge } from '../../core/ApiBridge.js';
 import { DeviceCascadeSelect } from '../../components/device-cascade-select.js';
+import { Toast } from '../../components/toast.js';
 
 /**
  * TestCaseController - 测试用例 Tab 控制器
@@ -15,6 +16,8 @@ export class TestCaseController {
   #draggedStepCard = null; // 拖拽中的步骤卡片 DOM
   #unbindModel = [];
   #searchDebounceTimer = null;
+  #searchLoadingTimer = null;
+  #isSearchLoading = false;
   #destroyed = false;
 
   /**
@@ -56,6 +59,13 @@ export class TestCaseController {
     });
 
     this.#on(model, 'files-changed', () => {
+      // 搜索loading期间跳过列表渲染，等待loading动画结束后再渲染
+      if (this.#isSearchLoading) {
+        const hasDirectory = !!model.get('selectedDirectory');
+        this.#view.updateAddButtonState(hasDirectory);
+        this.#view.updateSearchState(hasDirectory);
+        return;
+      }
       this.#view.renderTestFiles(
         model.get('testFiles'),
         model.get('jsonExistsMap'),
@@ -652,12 +662,28 @@ export class TestCaseController {
 
   handleSearchInput(query) {
     clearTimeout(this.#searchDebounceTimer);
+    clearTimeout(this.#searchLoadingTimer);
+    this.#isSearchLoading = false;
     if (!query) {
       this.#model.setSearchQuery('');
       return;
     }
     this.#searchDebounceTimer = setTimeout(() => {
+      this.#isSearchLoading = true;
+      this.#view.renderSearchLoading();
+      const startTime = Date.now();
       this.#model.setSearchQuery(query);
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 1000 - elapsed);
+      this.#searchLoadingTimer = setTimeout(() => {
+        this.#isSearchLoading = false;
+        this.#view.renderTestFiles(
+          this.#model.get('testFiles'),
+          this.#model.get('jsonExistsMap'),
+          this.#model.get('searchQuery')
+        );
+        this.#bindFileListEvents();
+      }, remaining);
     }, 1000);
   }
 
@@ -665,6 +691,8 @@ export class TestCaseController {
     const searchInput = document.querySelector('#tc-search-input');
     if (searchInput) searchInput.value = '';
     clearTimeout(this.#searchDebounceTimer);
+    clearTimeout(this.#searchLoadingTimer);
+    this.#isSearchLoading = false;
     this.#model.setSearchQuery('');
   }
 

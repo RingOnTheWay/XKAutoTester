@@ -25,6 +25,11 @@ function register(ipcMain, services) {
 
     await asyncFs.writeJson(configPath, updatedConfig);
 
+    // 同步后端 i18nService 的语言设置
+    if (newConfig.APP_SETTINGS?.language && i18nService) {
+      i18nService.changeLanguage(newConfig.APP_SETTINGS.language);
+    }
+
     return { success: true };
   });
 

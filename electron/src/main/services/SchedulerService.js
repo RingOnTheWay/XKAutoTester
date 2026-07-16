@@ -345,16 +345,19 @@ class SmartScheduler {
     }
   }
 
-  updatePlan(planId, updates) {
+  async updatePlan(planId, updates) {
     this.removePlan(planId);
 
     if (updates.status === 'pending') {
-      const plans = this.scheduledPlanService.getScheduledPlansSync ? 
-                    this.scheduledPlanService.getScheduledPlansSync() : [];
-      const originalPlan = plans.find(p => p.id === planId);
-      if (originalPlan) {
-        const updatedPlan = { ...originalPlan, ...updates };
-        this.addPlan(updatedPlan);
+      try {
+        const plans = await this.scheduledPlanService.getScheduledPlans();
+        const originalPlan = plans.find(p => p.id === planId);
+        if (originalPlan) {
+          const updatedPlan = { ...originalPlan, ...updates };
+          this.addPlan(updatedPlan);
+        }
+      } catch (error) {
+        console.error('更新调度计划失败:', error);
       }
     }
   }
@@ -462,9 +465,9 @@ class SchedulerService {
     }
   }
 
-  updatePlan(planId, updates) {
+  async updatePlan(planId, updates) {
     if (this.scheduler) {
-      this.scheduler.updatePlan(planId, updates);
+      await this.scheduler.updatePlan(planId, updates);
     }
   }
 }

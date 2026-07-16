@@ -45,6 +45,22 @@ export class SettingsController {
     this.#model.destroy();
   }
 
+  /**
+   * Tab 被激活时调用
+   * 确保下拉框状态正确（修复其他 tab 操作后下拉失效的问题）
+   */
+  onTabActivated() {
+    // 关闭可能残留的 dropdown-open 状态
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+      mainContent.classList.remove('dropdown-open');
+    }
+    // 关闭所有可能残留的 show 状态的下拉
+    document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+      opt.classList.remove('show');
+    });
+  }
+
   // ─── Model 事件 → View 渲染 ──────────────────────────────
 
   #bindModelEvents() {
@@ -114,17 +130,9 @@ export class SettingsController {
       this.#model.saveConfig({ dark_mode: checked });
     });
 
-    // 主题色选项 - 点击预览块切换显示
+    // 主题色选择器 — 开关逻辑在全局点击 handler 中（事件委托）
     const themeColorPreview = document.getElementById('theme-color-preview');
     const themeColorOptions = document.getElementById('theme-color-options');
-    if (themeColorPreview && themeColorOptions) {
-      const toggleHandler = (e) => {
-        e.stopPropagation();
-        themeColorOptions.classList.toggle('show');
-      };
-      themeColorPreview.addEventListener('click', toggleHandler);
-      this.#unbinds.push(() => themeColorPreview.removeEventListener('click', toggleHandler));
-    }
 
     // 主题色选项 - 点击选项选择颜色
     if (themeColorOptions) {
@@ -145,15 +153,6 @@ export class SettingsController {
       themeColorOptions.addEventListener('click', handler);
       this.#unbinds.push(() => themeColorOptions.removeEventListener('click', handler));
     }
-
-    // 主题色选项 - 点击外部关闭
-    const closeThemeColorOptions = (e) => {
-      if (themeColorOptions && !themeColorOptions.contains(e.target) && e.target !== themeColorPreview) {
-        themeColorOptions.classList.remove('show');
-      }
-    };
-    document.addEventListener('click', closeThemeColorOptions);
-    this.#unbinds.push(() => document.removeEventListener('click', closeThemeColorOptions));
 
     // 主题色 HEX 输入
     const themeColorHex = document.getElementById('theme-color-hex');
@@ -217,6 +216,7 @@ export class SettingsController {
       const handler = (e) => {
         const option = e.target.closest('.custom-select__option');
         if (!option) return;
+        e.stopPropagation();
         const lang = option.dataset.value;
         if (lang) {
           this.#model.changeLanguage(lang);
@@ -228,39 +228,22 @@ export class SettingsController {
           languageOptions.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
           option.classList.add('selected');
         }
+        // 关闭下拉框 + 恢复滚动
+        languageOptions.classList.remove('show');
+        this.#enablePageScroll();
       };
       languageOptions.addEventListener('click', handler);
       this.#unbinds.push(() => languageOptions.removeEventListener('click', handler));
     }
 
-    // 语言下拉框开关
-    const languageSelect = document.getElementById('custom-language-select');
-    if (languageSelect) {
-      const selected = languageSelect.querySelector('.custom-select__selected');
-      const options = document.getElementById('custom-language-options');
-      if (selected && options) {
-        // 将 options 移到 body，避免父容器 transform 影响 position:fixed 定位
-        if (!options.dataset.moved) {
-          document.body.appendChild(options);
-          options.dataset.moved = 'true';
-        }
-        const handler = (e) => {
-          e.stopPropagation();
-          document.querySelectorAll('.custom-select__options.show').forEach(opt => {
-            if (opt !== options) opt.classList.remove('show');
-          });
-          const isShowing = options.classList.contains('show');
-          if (isShowing) {
-            options.classList.remove('show');
-            this.#enablePageScroll();
-          } else {
-            this.#positionDropdown(selected, options);
-            options.classList.add('show');
-            this.#disablePageScroll();
-          }
-        };
-        selected.addEventListener('click', handler);
-        this.#unbinds.push(() => selected.removeEventListener('click', handler));
+    // 语言下拉框开关（使用事件委托，避免其他 tab 操作导致事件绑定失效）
+    // languageOptions 已在上方声明，复用同一引用
+    const languageSelectedEl = document.querySelector('#custom-language-select .custom-select__selected');
+    if (languageOptions && languageSelectedEl) {
+      // 将 options 移到 body，避免父容器 transform 影响 position:fixed 定位
+      if (!languageOptions.dataset.moved) {
+        document.body.appendChild(languageOptions);
+        languageOptions.dataset.moved = 'true';
       }
     }
 
@@ -270,6 +253,7 @@ export class SettingsController {
       const handler = (e) => {
         const option = e.target.closest('.custom-select__option');
         if (!option) return;
+        e.stopPropagation();
         const platform = option.dataset.value;
         if (platform) {
           const notification = { ...this.#model.notification, platform };
@@ -282,39 +266,22 @@ export class SettingsController {
           notificationOptions.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
           option.classList.add('selected');
         }
+        // 关闭下拉框 + 恢复滚动
+        notificationOptions.classList.remove('show');
+        this.#enablePageScroll();
       };
       notificationOptions.addEventListener('click', handler);
       this.#unbinds.push(() => notificationOptions.removeEventListener('click', handler));
     }
 
-    // 通知平台下拉框开关
-    const notificationSelect = document.getElementById('custom-notification-platform-select');
-    if (notificationSelect) {
-      const selected = notificationSelect.querySelector('.custom-select__selected');
-      const options = document.getElementById('custom-notification-platform-options');
-      if (selected && options) {
-        // 将 options 移到 body，避免父容器 transform 影响 position:fixed 定位
-        if (!options.dataset.moved) {
-          document.body.appendChild(options);
-          options.dataset.moved = 'true';
-        }
-        const handler = (e) => {
-          e.stopPropagation();
-          document.querySelectorAll('.custom-select__options.show').forEach(opt => {
-            if (opt !== options) opt.classList.remove('show');
-          });
-          const isShowing = options.classList.contains('show');
-          if (isShowing) {
-            options.classList.remove('show');
-            this.#enablePageScroll();
-          } else {
-            this.#positionDropdown(selected, options);
-            options.classList.add('show');
-            this.#disablePageScroll();
-          }
-        };
-        selected.addEventListener('click', handler);
-        this.#unbinds.push(() => selected.removeEventListener('click', handler));
+    // 通知平台下拉框开关（使用事件委托，避免其他 tab 操作导致事件绑定失效）
+    // notificationOptions 已在上方声明，复用同一引用
+    const notificationSelectEl = document.querySelector('#custom-notification-platform-select .custom-select__selected');
+    if (notificationOptions && notificationSelectEl) {
+      // 将 options 移到 body，避免父容器 transform 影响 position:fixed 定位
+      if (!notificationOptions.dataset.moved) {
+        document.body.appendChild(notificationOptions);
+        notificationOptions.dataset.moved = 'true';
       }
     }
 
@@ -484,23 +451,96 @@ export class SettingsController {
       this.#model.openExternal('https://github.com/RiNG-XK/XKAutoTester');
     });
 
-    // 全局点击关闭下拉框
+    // 全局点击：处理下拉框开关 + 关闭（捕获阶段，确保在 app.js 的冒泡阶段 handler 之前执行）
     const globalClickHandler = (e) => {
-      if (!e.target.closest('.custom-select')) {
-        const hadOpen = document.querySelectorAll('.custom-select__options.show').length > 0;
+      // 1. 检查是否点击了语言下拉的 selected
+      const langSelected = e.target.closest('#custom-language-select .custom-select__selected');
+      if (langSelected) {
+        e.stopPropagation();
+        const langOptions = document.getElementById('custom-language-options');
+        if (langOptions) {
+          document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+            if (opt !== langOptions) opt.classList.remove('show');
+          });
+          const themeOpts = document.getElementById('theme-color-options');
+          if (themeOpts) themeOpts.classList.remove('show');
+          const isShowing = langOptions.classList.contains('show');
+          if (isShowing) {
+            langOptions.classList.remove('show');
+            this.#enablePageScroll();
+          } else {
+            this.#positionDropdown(langSelected, langOptions);
+            langOptions.classList.add('show');
+            this.#disablePageScroll();
+          }
+        }
+        return;
+      }
+
+      // 2. 检查是否点击了通知平台下拉的 selected
+      const notifSelected = e.target.closest('#custom-notification-platform-select .custom-select__selected');
+      if (notifSelected) {
+        e.stopPropagation();
+        const notifOptions = document.getElementById('custom-notification-platform-options');
+        if (notifOptions) {
+          document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+            if (opt !== notifOptions) opt.classList.remove('show');
+          });
+          const themeOpts = document.getElementById('theme-color-options');
+          if (themeOpts) themeOpts.classList.remove('show');
+          const isShowing = notifOptions.classList.contains('show');
+          if (isShowing) {
+            notifOptions.classList.remove('show');
+            this.#enablePageScroll();
+          } else {
+            this.#positionDropdown(notifSelected, notifOptions);
+            notifOptions.classList.add('show');
+            this.#disablePageScroll();
+          }
+        }
+        return;
+      }
+
+      // 3. 检查是否点击了主题色预览块
+      const themePreview = e.target.closest('#theme-color-preview');
+      if (themePreview) {
+        e.stopPropagation();
+        const themeOpts = document.getElementById('theme-color-options');
+        if (themeOpts) {
+          document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+            opt.classList.remove('show');
+          });
+          this.#enablePageScroll();
+          themeOpts.classList.toggle('show');
+        }
+        return;
+      }
+
+      // 4. 检查是否点击了下拉选项（已在各自的 options handler 中处理，这里不再处理）
+      const isInCustomSelect = e.target.closest('.custom-select') ||
+        e.target.closest('.custom-select__options') ||
+        e.target.closest('.custom-select__option') ||
+        e.target.closest('.theme-color-options') ||
+        e.target.closest('#theme-color-preview');
+      if (!isInCustomSelect) {
+        // 5. 点击其他区域：关闭所有下拉框 + 恢复滚动
         document.querySelectorAll('.custom-select__options.show').forEach(opt => {
           opt.classList.remove('show');
         });
-        if (hadOpen) this.#enablePageScroll();
+        const themeOpts = document.getElementById('theme-color-options');
+        if (themeOpts) themeOpts.classList.remove('show');
+        this.#enablePageScroll();
       }
     };
-    document.addEventListener('click', globalClickHandler);
-    this.#unbinds.push(() => document.removeEventListener('click', globalClickHandler));
+    // 使用捕获阶段注册，确保在 app.js 的冒泡阶段 handler 之前执行
+    // 这样 stopPropagation() 能有效阻止 app.js handler 干扰
+    document.addEventListener('click', globalClickHandler, true);
+    this.#unbinds.push(() => document.removeEventListener('click', globalClickHandler, true));
 
     // Confirm modal 按钮（事件委托，因 HTML 动态加载）
     document.addEventListener('click', (e) => {
       if (e.target.id === 'confirm-modal-confirm-btn' || e.target.closest('#confirm-modal-confirm-btn')) {
-        const callback = this.#view._confirmCallback;
+        const callback = window.__XKAT_CONFIRM_CALLBACK__ || this.#view._confirmCallback;
         // 显示 loading，保持 modal 开着
         this.#view.setConfirmButtonLoading(true);
         // 延迟执行：让浏览器先渲染 loading 动画
@@ -578,33 +618,38 @@ export class SettingsController {
    */
   #positionDropdown(selected, options) {
     const rect = selected.getBoundingClientRect();
-    const gap = 4;
-    options.style.width = `${rect.width}px`;
-    options.style.transform = '';
-    options.style.left = `${rect.left}px`;
 
+    // 守卫：如果 selected 不可见（如 tab 未激活），跳过定位
+    if (rect.width === 0 && rect.height === 0) return;
+
+    const gap = 4;
+    const threshold = 2;
     const viewportHeight = window.innerHeight;
-    // 临时显示测量实际高度（用 .show 类触发 display:block）
-    options.style.visibility = 'hidden';
-    options.classList.add('show');
-    const actualHeight = options.offsetHeight || 100;
-    options.classList.remove('show');
-    options.style.visibility = '';
+
+    // 临时显示测量高度（原始方式）
+    const prevDisplay = options.style.display;
+    options.style.display = 'block';
+    const actualHeight = options.offsetHeight || 200;
+    options.style.display = prevDisplay;
 
     const spaceBelow = viewportHeight - rect.bottom - gap;
     const spaceAbove = rect.top - gap;
-    // 阈值：下方空间不足 1.5 倍高度时优先向上展开
-    const threshold = 1.5;
 
+    let top;
     if (spaceAbove >= actualHeight && spaceBelow < actualHeight * threshold) {
-      options.style.top = `${rect.top - actualHeight - gap}px`;
+      top = rect.top - actualHeight - gap;
     } else if (spaceBelow >= actualHeight) {
-      options.style.top = `${rect.bottom + gap}px`;
+      top = rect.bottom + gap;
     } else if (spaceAbove >= actualHeight) {
-      options.style.top = `${rect.top - actualHeight - gap}px`;
+      top = rect.top - actualHeight - gap;
     } else {
-      options.style.top = `${rect.bottom + gap}px`;
+      top = spaceBelow >= spaceAbove ? rect.bottom + gap : Math.max(10, rect.top - actualHeight - gap);
     }
+
+    options.style.top = `${top}px`;
+    options.style.left = `${rect.left}px`;
+    options.style.width = `${rect.width}px`;
+    options.style.transform = 'none';
   }
 
   #disablePageScroll() {

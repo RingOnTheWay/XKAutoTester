@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -65,12 +66,15 @@ class InspectorService:
         self.appium_server: AppiumServer | None = None
         self._cached_source: str | None = None
         self._cached_tree: dict | None = None
+        self._device_name: str = ""
+        self._adb_path: str = os.environ.get("XKAUTOTESTER_ADB_PATH", "adb")
 
     def start_session(self, device_name: str, app_package: str, app_activity: str, platform_version: str = "", no_reset: bool = True) -> dict:
         try:
             if self.driver is not None:
                 return {"success": False, "error": t("inspector.errorSessionExists")}
 
+            self._device_name = device_name
             port_warning = ""
             if _check_port_in_use(DEFAULT_PORT):
                 port_warning = f"Port {DEFAULT_PORT} is in use by another Appium instance. Inspector will use port {INSPECTOR_PORT}."
@@ -98,6 +102,11 @@ class InspectorService:
 
             server_url = f"http://{AppiumServer.DEFAULT_HOST}:{INSPECTOR_PORT}"
             self.driver = webdriver.Remote(command_executor=server_url, options=options)
+            # 设置HTTP请求超时，防止息屏后请求挂起
+            try:
+                self.driver.command_executor.set_timeout(15)
+            except Exception:
+                pass
 
             self._notify_progress("session-created")
 
@@ -248,6 +257,9 @@ class InspectorService:
             if self.driver is None:
                 return {"success": False, "error": t("inspector.errorNoSession")}
 
+            # 先唤醒设备屏幕，防止息屏后无法截图
+            self._wake_device()
+
             screenshot_result = self.get_screenshot()
             if not screenshot_result.get("success"):
                 return screenshot_result
@@ -292,6 +304,19 @@ class InspectorService:
             self.driver = None
             self.appium_server = None
             return {"success": False, "error": _map_appium_error(str(e))}
+
+    def _wake_device(self):
+        """通过ADB唤醒设备屏幕，防止息屏后Appium会话失效"""
+        if not self._device_name or not self._adb_path:
+            return
+        try:
+            # KEYCODE_WAKEUP (224) 唤醒屏幕
+            subprocess.run(
+                [self._adb_path, '-s', self._device_name, 'shell', 'input', 'keyevent', '224'],
+                capture_output=True, text=True, timeout=5
+            )
+        except Exception:
+            pass
 
     def _find_element_by_path(self, tree: dict, path: str) -> dict | None:
         parts = path.split(".")

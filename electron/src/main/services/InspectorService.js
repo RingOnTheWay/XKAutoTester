@@ -13,6 +13,7 @@ class InspectorService {
         this._requestCounter = 0;
         this._buffer = '';
         this._onProgress = null;
+        this._adbPath = pathHelper.getAdbPath(projectRoot);
     }
 
     setProgressCallback(callback) {
@@ -47,7 +48,8 @@ class InspectorService {
                 PYTHONIOENCODING: 'utf-8',
                 PYTHONUTF8: '1',
                 ...(pythonConfig.isEmbedded ? {} : pythonPathEnv),
-                XKAUTOTESTER_USER_DATA: this.userDataPath
+                XKAUTOTESTER_USER_DATA: this.userDataPath,
+                XKAUTOTESTER_ADB_PATH: this._adbPath
             },
             windowsHide: true
         });

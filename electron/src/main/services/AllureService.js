@@ -379,7 +379,7 @@ class AllureService {
             success: true,
             url: `http://127.0.0.1:${port}`,
             port: port,
-            message: '正在打开Allure报告...'
+            message: this.i18nService ? this.i18nService.t('allure.openingReport') : '正在打开Allure报告...'
           });
         });
 

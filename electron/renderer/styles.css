@@ -760,6 +760,11 @@ body.dark-theme #test-execution .test-output {
   border-color: var(--primary);
 }
 
+.checkbox-container.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* 目录选择器 */
 #test-execution .selected-path {
   background: rgba(255, 255, 255, 0.05);
@@ -1101,6 +1106,10 @@ body:not(.dark-theme) #test-execution .scheduled-plan-item .scheduled-status.run
   display: flex;
   gap: var(--spacing-sm);
   margin-bottom: var(--spacing-lg);
+}
+
+#test-execution .scheduled-plan-controls .material-button {
+  flex: 1;
 }
 
 #test-execution .scheduled-plans-list {
@@ -3653,6 +3662,25 @@ body:not(.dark-theme) #test-case .tc-no-search-results {
     border-color: rgba(0, 0, 0, 0.08);
 }
 
+.tc-search-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-md);
+    padding: 40px 20px;
+    color: var(--text-secondary);
+}
+
+.tc-search-loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(var(--primary-rgb), 0.15);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: tc-spin 0.8s linear infinite;
+}
+
 .test-file-item {
   display: flex;
   align-items: center;
@@ -3871,14 +3899,15 @@ body:not(.dark-theme) #test-case .tc-no-search-results {
 }
 
 .checkbox-container input[type="checkbox"]:checked + .checkmark::after {
-  content: '✓';
+  content: '';
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: white;
-  font-size: 12px;
-  font-weight: bold;
+  left: 4px;
+  top: 0px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 /* 测试输出区域 */
@@ -3892,7 +3921,9 @@ body:not(.dark-theme) #test-case .tc-no-search-results {
   flex: 1;
   min-height: 0;
   overflow-y: hidden;
+  overflow-x: hidden;
   white-space: pre-wrap;
+  word-break: break-all;
   line-height: 1.4;
   display: flex;
   align-items: center;
@@ -7629,7 +7660,7 @@ body:not(.dark-theme) .notification-input:focus {
     color: var(--text-secondary);
     cursor: default;
     text-align: center;
-    padding: 20px;
+    padding: 10px 12px;
 }
 
 .cascade-select__option.empty:hover {
@@ -10090,19 +10121,32 @@ body:not(.dark-theme) .inspector-search-hint {
 
 .inspector-canvas-container {
     flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     overflow: hidden;
     position: relative;
-    padding: 12px;
+    min-height: 0;
 }
 
 .inspector-canvas {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
+    position: absolute;
     display: block;
+}
+
+.inspector-highlighter-container {
+    position: absolute;
+    pointer-events: auto;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.inspector-highlighter-box {
+    position: absolute;
+    pointer-events: none;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.inspector-highlighter-box.inspector-selected-element {
+    background: rgba(76, 175, 80, 0.15);
+    border: 3px solid #4CAF50;
 }
 
 .inspector-loading {

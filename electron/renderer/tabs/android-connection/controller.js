@@ -1,6 +1,7 @@
 import { Action } from '../../core/Action.js';
 import { ApiBridge } from '../../core/ApiBridge.js';
 import DeviceSelectionModal from '../../components/device-selection-modal.js';
+import { Toast } from '../../components/toast.js';
 
 /**
  * AndroidConnectionController - 安卓连接 Tab 控制器
@@ -118,8 +119,11 @@ export class AndroidConnectionController {
 
     // 投屏控制结果
     this.#onModel(model, 'screen-control-result', (result) => {
-      if (!result.success && typeof Toast !== 'undefined') {
-        Toast.error(result.error || window.i18n.t('android.scrcpyStartFailed') || '投屏启动失败');
+      if (typeof Toast === 'undefined') return;
+      if (result.success) {
+        Toast.success(window.i18n.t('android.scrcpyStartSuccess'));
+      } else {
+        Toast.error(result.error || window.i18n.t('android.scrcpyStartFailed'));
       }
     });
 
@@ -261,7 +265,6 @@ export class AndroidConnectionController {
     }
 
     // ── 重命名弹窗 ───────────────────────────────────────────
-    this.#addAction('#rename-modal-save-btn', () => this.handleRenameSave());
     this.#addAction('#rename-modal-cancel-btn', () => view.closeRenameModal());
     this.#addAction('#rename-modal-close-btn', () => view.closeRenameModal());
 
@@ -293,7 +296,7 @@ export class AndroidConnectionController {
     // scrcpy 错误
     const unsubScrcpyError = this.#model.listenScrcpyError?.((data) => {
       if (typeof Toast !== 'undefined') {
-        Toast.error(data?.error || data?.message || window.i18n.t('android.scrcpyError') || '投屏错误');
+        Toast.error(data?.error || data?.message || window.i18n.t('android.scrcpyError'));
       }
     });
     if (unsubScrcpyError) this.#cleanups.push(unsubScrcpyError);
@@ -497,7 +500,7 @@ export class AndroidConnectionController {
     });
   }
 
-  handleContextMenuAction(action) {
+  async handleContextMenuAction(action) {
     const target = this.#model.contextMenuTarget;
     if (!target) return;
 
@@ -508,7 +511,7 @@ export class AndroidConnectionController {
         }
         break;
       case 'download':
-        this.#model.downloadFile(target, '');
+        await this.#handleDownloadSingleFile(target);
         break;
       case 'rename':
         this.#view.openRenameModal(target.name);
@@ -647,7 +650,25 @@ export class AndroidConnectionController {
       await this.#model.downloadFile(file, downloadDir);
     }
     if (typeof Toast !== 'undefined') {
-      Toast.success(window.i18n.t('fileManager.downloadSuccess') || '下载成功');
+      Toast.success(window.i18n.t('fileManager.downloadSuccess'));
+    }
+  }
+
+  async #handleDownloadSingleFile(file) {
+    try {
+      let downloadDir = await this.#model.resolveDownloadDirectory();
+      if (!downloadDir) {
+        downloadDir = await this.#model.selectDownloadDirectory();
+        if (!downloadDir) return;
+      }
+      await this.#model.downloadFile(file, downloadDir);
+      if (typeof Toast !== 'undefined') {
+        Toast.success(window.i18n.t('fileManager.downloadSuccess'));
+      }
+    } catch (error) {
+      if (typeof Toast !== 'undefined') {
+        Toast.error(window.i18n.t('fileManager.downloadFailed'));
+      }
     }
   }
 
@@ -705,15 +726,52 @@ export class AndroidConnectionController {
     }
   }
 
-  async #showConfirmDialog(title, message) {
-    const result = await window.electronAPI?.showDialog?.({
-      type: 'question',
-      title,
-      message,
-      buttons: [window.i18n?.t('common.confirm') || '确认', window.i18n?.t('common.cancel') || '取消'],
-      defaultId: 0,
-      cancelId: 1,
+  #showConfirmDialog(title, message) {
+    return new Promise((resolve) => {
+      const titleElement = document.getElementById('confirm-modal-title');
+      const messageElement = document.getElementById('confirm-modal-message');
+
+      if (titleElement) titleElement.textContent = title;
+      if (messageElement) messageElement.textContent = message;
+
+      // 重置确认按钮状态
+      const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.classList.remove('loading');
+        // 清除旧的 originalText，使用当前语言重新翻译
+        delete confirmBtn.dataset.originalText;
+        const i18nKey = confirmBtn.getAttribute('data-i18n');
+        confirmBtn.innerHTML = i18nKey ? window.i18n?.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
+      }
+
+      window.__XKAT_CONFIRM_CALLBACK__ = () => {
+        window.__XKAT_CONFIRM_CALLBACK__ = null;
+        resolve(true);
+      };
+
+      // 绑定一次性确认按钮点击（确保 callback 在 close 前被调用）
+      const handleConfirmClick = () => {
+        resolve(true);
+      };
+      if (confirmBtn) confirmBtn.addEventListener('click', handleConfirmClick, { once: true });
+
+      // 取消按钮 → reject
+      const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
+      const handleCancelClick = (e) => {
+        e.stopPropagation();
+        if (confirmBtn) confirmBtn.removeEventListener('click', handleConfirmClick);
+        window.__XKAT_CONFIRM_CALLBACK__ = null;
+        resolve(false);
+      };
+      if (cancelBtn) cancelBtn.addEventListener('click', handleCancelClick, { once: true });
+
+      const confirmModal = window.__XKAT_MODALS__?.confirm;
+      if (confirmModal) {
+        confirmModal.open();
+      } else {
+        resolve(window.confirm(message));
+      }
     });
-    return result?.response === 0;
   }
 }

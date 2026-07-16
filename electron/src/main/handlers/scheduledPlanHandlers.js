@@ -34,13 +34,16 @@ function register(ipcMain, services) {
     return scheduledPlanService.checkTimeConflict(scheduledTime, excludeId);
   });
 
-  registerHandler(ipcMain, 'scheduled-test-complete', (planId) =>
-    scheduledPlanService.updateScheduledPlan({
+  registerHandler(ipcMain, 'scheduled-test-complete', async (planId) => {
+    const result = await scheduledPlanService.updateScheduledPlan({
       id: planId,
       status: 'completed',
       lastRun: new Date().toISOString()
-    })
-  );
+    });
+    // 通知调度器该计划已完成
+    schedulerService.updatePlan(planId, { status: 'completed' });
+    return result;
+  });
 
   registerHandler(ipcMain, 'get-scheduler-status', () => schedulerService.getStatus());
 }

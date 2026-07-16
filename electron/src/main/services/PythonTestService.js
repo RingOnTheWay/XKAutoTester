@@ -152,7 +152,7 @@ class PythonTestService {
         this._dialogMonitor.stop();
         this.currentPythonProcess = null;
 
-        const testStats = this._parseTestStats(output);
+        const testStats = this._parseTestStats(output + '\n' + errorOutput);
         const sideEffectFailures = [];
 
         // Best-effort 流水线 Step 1: 生成 Allure 报告

@@ -26,6 +26,8 @@ export class TestExecutionModel extends EventEmitter {
     selectDirectory: 'selectDirectory',
     viewReport: 'viewReport',
     checkReportExists: 'checkReportExists',
+    getTestPlanRuns: 'getTestPlanRuns',
+    openReportByPath: 'openReportByPath',
     stopAllureServer: 'stopAllureServer',
     sendDingTalkNotification: 'sendDingTalkNotification',
     getConfig: 'getConfig',
@@ -36,6 +38,7 @@ export class TestExecutionModel extends EventEmitter {
     testCaseGet: 'testCase.get',
     testCaseSaveAndGenerate: 'testCase.saveAndGenerate',
     getConnectedDevices: 'getConnectedDevices',
+    scheduledTestComplete: 'scheduledTestComplete',
   });
 
   #state = {
@@ -85,6 +88,10 @@ export class TestExecutionModel extends EventEmitter {
   get selectedDevice() { return this.#state.selectedDevice; }
 
   get(key) { return this.#state[key]; }
+
+  setSelectedTestFiles(files) {
+    this.#set('selectedTestFiles', files, 'selectedTestFiles-changed');
+  }
 
   // ── Private State Helper ───────────────────────────────────────
 
@@ -163,7 +170,10 @@ export class TestExecutionModel extends EventEmitter {
       const result = await this.#api.scanTestFiles(this.#state.selectedDirectory);
       if (result && result.success !== false) {
         const files = result.files || result || [];
-        this.#set('selectedTestFiles', files, 'test-files-scanned');
+        // 仅在无选中计划时更新 selectedTestFiles，避免弹窗中的扫描覆盖计划文件列表
+        if (!this.#state.currentTestPlan) {
+          this.#set('selectedTestFiles', files, 'test-files-scanned');
+        }
         return files;
       }
       return [];
@@ -185,6 +195,18 @@ export class TestExecutionModel extends EventEmitter {
       const result = await this.#api.getTestPlans();
       const plans = result?.data || result || [];
       this.#set('testPlans', plans, 'testPlans-changed');
+      // 同步 currentTestPlan：若已选中计划，从新列表中找到对应项更新引用
+      if (this.#state.currentTestPlan) {
+        const updated = plans.find(p => p.id === this.#state.currentTestPlan.id);
+        if (updated) {
+          if (updated !== this.#state.currentTestPlan) {
+            this.#set('currentTestPlan', updated, 'currentTestPlan-changed');
+          }
+        } else {
+          // 计划已被删除，清空 currentTestPlan
+          this.#set('currentTestPlan', null, 'currentTestPlan-changed');
+        }
+      }
       return plans;
     } catch (error) {
       this.emit('error', { source: 'loadTestPlans', error });
@@ -206,7 +228,8 @@ export class TestExecutionModel extends EventEmitter {
 
   async updateTestPlan(planId, planData) {
     try {
-      const result = await this.#api.updateTestPlan(planId, planData);
+      // preload updateTestPlan 只接收单个 planData 参数，需将 id 合并进去
+      const result = await this.#api.updateTestPlan({ ...planData, id: planId });
       await this.loadTestPlans();
       this.emit('testPlan-updated', result);
       return result;
@@ -245,18 +268,17 @@ export class TestExecutionModel extends EventEmitter {
       return;
     }
 
-    // 检查安卓设备配置
-    const deviceConfigOk = await this.checkAndroidDeviceConfig();
-    if (!deviceConfigOk) return;
+    // 检查安卓用例是否已填写设备信息
+    const deviceCheckResult = await this.checkAndroidDeviceConfig();
+    if (!deviceCheckResult.valid) {
+      this.emit('run-warning', { message: deviceCheckResult.message });
+      return;
+    }
 
-    // 检查蓝牙端口配置
-    const bleConfigOk = await this.checkBlePortConfig();
-    if (!bleConfigOk) return;
-
-    // 检查是否需要安卓设备，需要时弹出设备选择
-    const androidRequired = await this.checkAndroidDeviceRequired(testPlan);
-    if (androidRequired && !this.#state.selectedDevice) {
-      this.emit('run-error', { message: '请先选择安卓设备' });
+    // 检查蓝牙用例是否已填写端口信息
+    const blePortCheckResult = await this.checkBlePortConfig();
+    if (!blePortCheckResult.valid) {
+      this.emit('run-warning', { message: blePortCheckResult.message });
       return;
     }
 
@@ -268,42 +290,176 @@ export class TestExecutionModel extends EventEmitter {
     }
     this.clearOutput();
 
+    // 输出测试计划详情
+    const loopCount = testPlan.loopCount || 1;
+    const continueOnFailure = testPlan.continueOnFailure !== false;
+    this.appendOutput('>>> ========== ' + (window.i18n?.t('testExecution.testPlanDetails') || '测试计划详情') + ' ==========');
+    this.appendOutput('>>> ' + (window.i18n?.t('testExecution.planName') || '计划名称') + ': ' + (testPlan.name || ''));
+    this.appendOutput('>>> ' + (window.i18n?.t('testExecution.planDescription') || '计划描述') + ': ' + (testPlan.description || window.i18n?.t('common.none') || '无'));
+    const testFileNames = this.#state.selectedTestFiles.map(f => f.name || f.path).join(', ');
+    this.appendOutput('>>> ' + (window.i18n?.t('testExecution.testFiles') || '测试文件') + ': ' + (testFileNames || window.i18n?.t('common.none') || '无'));
+    const testTypes = this.getSelectedTestTypes().join(', ');
+    this.appendOutput('>>> ' + (window.i18n?.t('testExecution.testTypes') || '测试类型') + ': ' + (testTypes || window.i18n?.t('testExecution.allTypes') || '全部'));
+    this.appendOutput('>>> ' + (window.i18n?.t('testExecution.loopSettings') || '循环设置') + ': ' + (window.i18n?.t('testExecution.loopCount') || '循环次数') + ' ' + loopCount + ', ' + (window.i18n?.t('testExecution.continueOnFailure') || '失败继续') + ': ' + (continueOnFailure ? (window.i18n?.t('common.yes') || '是') : (window.i18n?.t('common.no') || '否')));
+
+    if (scheduledPlanInfo) {
+      this.appendOutput('>>> ---------- ' + (window.i18n?.t('testExecution.scheduledPlanInfo') || '定时计划信息') + ' ----------');
+      this.appendOutput('>>> ' + (window.i18n?.t('testExecution.scheduledPlanName') || '定时计划名称') + ': ' + (scheduledPlanInfo.name || ''));
+      this.appendOutput('>>> ' + (window.i18n?.t('testExecution.executionTime') || '执行时间') + ': ' + (scheduledPlanInfo.executionTime || new Date().toLocaleString()));
+    }
+    this.appendOutput('>>> ==================================\n');
+
+    let hasFailure = false;
+    let stoppedEarly = false;
+    let lastResult = null;
+    const loopResults = [];
+    const aggregatedStats = { passed: 0, failed: 0, skipped: 0, broken: 0, total: 0 };
+
     try {
-      const loopCount = testPlan.loopCount || 1;
-      let continueOnFailure = testPlan.continueOnFailure !== false;
-      let lastResult = null;
-
-      for (let i = 0; i < loopCount; i++) {
-        if (!this.#state.isRunning) break;
-
-        // 如果是循环执行，输出当前轮次
-        if (loopCount > 1) {
-          this.appendOutput(`\n========== 第 ${i + 1}/${loopCount} 轮 ==========\n`);
+      for (let i = 1; i <= loopCount; i++) {
+        if (!this.#state.isRunning) {
+          stoppedEarly = true;
+          break;
         }
 
-        const testPaths = testPlan.testPaths || testPlan.testFiles || [];
-        const markers = testPlan.markers || [];
+        this.emit('loop-progress-changed', { current: i, total: loopCount });
+
+        const testPaths = this.#state.selectedTestFiles.map(f => f.path || f);
+        const markers = this.getSelectedTestTypes();
         const planName = testPlan.name;
 
-        lastResult = await this.#api.runPythonTests(testPaths, markers, planName);
+        const testConfig = {
+          testPaths,
+          markers,
+          testPlanName: planName,
+          loopIndex: i,
+          totalLoops: loopCount,
+        };
 
-        // 执行失败且不继续时中断
-        if (lastResult && lastResult.success === false && !continueOnFailure) {
+        this.appendOutput(`\n>>> ${window.i18n?.t('testExecution.loopProgress', { current: i, total: loopCount }) || `第 ${i}/${loopCount} 轮`}`);
+
+        lastResult = await this.#api.runPythonTests(testConfig);
+
+        if (lastResult) {
+          if (!lastResult.success) {
+            hasFailure = true;
+            loopResults.push({ loop: i, success: false, testStats: lastResult.testStats || null });
+            if (!continueOnFailure) {
+              this.appendError(`>>> ${window.i18n?.t('testExecution.loopStopped', { current: i }) || `第 ${i} 轮停止`}`);
+              break;
+            }
+            this.appendError(`>>> ${window.i18n?.t('testExecution.loopFailed', { current: i }) || `第 ${i} 轮失败`}`);
+          } else {
+            loopResults.push({ loop: i, success: true, testStats: lastResult.testStats || null });
+            this.appendOutput(`>>> ${window.i18n?.t('testExecution.loopCompleted', { current: i }) || `第 ${i} 轮完成`}`);
+          }
+
+          if (lastResult.testStats) {
+            aggregatedStats.passed += lastResult.testStats.passed || 0;
+            aggregatedStats.failed += lastResult.testStats.failed || 0;
+            aggregatedStats.skipped += lastResult.testStats.skipped || 0;
+            aggregatedStats.broken += lastResult.testStats.broken || 0;
+            aggregatedStats.total += lastResult.testStats.total || 0;
+          }
+        }
+
+        if (!this.#state.isRunning) {
+          stoppedEarly = true;
           break;
         }
       }
 
-      // 发送钉钉通知
-      await this.sendTestNotification(testPlan, lastResult, scheduledPlanInfo);
-
-      this.emit('run-complete', { testPlan, result: lastResult, scheduledPlanInfo });
+      if (!stoppedEarly) {
+        if (!hasFailure || continueOnFailure) {
+          this.appendOutput('>>> ' + (window.i18n?.t('testExecution.allLoopsCompleted') || '所有循环执行完成'));
+        }
+        this.emit('run-report-available');
+      }
     } catch (error) {
       this.emit('error', { source: 'runTests', error });
-      this.emit('run-error', { message: error.message });
+      this.appendError(`>>> ${window.i18n?.t('testExecution.testRunFailed') || '测试执行失败'}: ${error.message}`);
     } finally {
+      // 输出统计摘要
+      this.appendOutput('>>> ========== ' + (window.i18n?.t('testExecution.summaryInfo') || '统计摘要') + ' ==========');
+      let passRate = '0.00';
+      let passedLoops = 0;
+      if (loopCount > 1) {
+        passedLoops = loopResults.filter(r => r.success).length;
+        passRate = loopResults.length > 0 ? ((passedLoops / loopResults.length) * 100).toFixed(2) : '0.00';
+        this.appendOutput('>>> ' + (window.i18n?.t('testExecution.totalLoops') || '总循环') + ': ' + loopResults.length);
+        this.appendOutput('>>> ' + (window.i18n?.t('testExecution.passedLoops') || '通过循环') + ': ' + passedLoops);
+        this.appendOutput('>>> ' + (window.i18n?.t('testExecution.passRate') || '通过率') + ': ' + passRate + '%');
+      } else {
+        const lastLoopResult = loopResults[loopResults.length - 1];
+        if (lastLoopResult && lastLoopResult.success) {
+          passedLoops = 1;
+          passRate = '100.00';
+        }
+      }
+
+      // 用例级统计
+      const effectiveTotal = aggregatedStats.passed + aggregatedStats.failed + aggregatedStats.broken;
+      const casePassRate = effectiveTotal > 0 ? ((aggregatedStats.passed / effectiveTotal) * 100).toFixed(2) : '0.00';
+      if (aggregatedStats.total > 0) {
+        this.appendOutput('>>> ' + (window.i18n?.t('testExecution.caseStats') || '用例统计') + ': ' +
+          (window.i18n?.t('testExecution.casePassed') || '通过') + ' ' + aggregatedStats.passed + ', ' +
+          (window.i18n?.t('testExecution.caseFailed') || '失败') + ' ' + aggregatedStats.failed + ', ' +
+          (window.i18n?.t('testExecution.caseSkipped') || '跳过') + ' ' + aggregatedStats.skipped + ', ' +
+          (window.i18n?.t('testExecution.caseBroken') || '损坏') + ' ' + aggregatedStats.broken + ', ' +
+          (window.i18n?.t('testExecution.caseTotal') || '总计') + ' ' + aggregatedStats.total);
+        this.appendOutput('>>> ' + (window.i18n?.t('testExecution.casePassRate') || '用例通过率') + ': ' + casePassRate + '% (' + (window.i18n?.t('testExecution.excludingSkipped') || '不含跳过') + ')');
+      }
+
+      // 测试状态判断
+      let testStatus = 'passed';
+      if (aggregatedStats.total === 0) {
+        testStatus = 'noTests';
+      } else if (aggregatedStats.failed > 0 || aggregatedStats.broken > 0) {
+        testStatus = aggregatedStats.passed > 0 ? 'partialPassed' : 'failed';
+      } else if (aggregatedStats.skipped > 0 && aggregatedStats.passed === 0) {
+        testStatus = 'skipped';
+      } else if (aggregatedStats.skipped > 0 && aggregatedStats.passed > 0) {
+        testStatus = 'partialPassed';
+      }
+      const lastLoopResult = loopResults[loopResults.length - 1];
+      if (lastLoopResult && !lastLoopResult.success && aggregatedStats.total === 0) {
+        testStatus = 'noTests';
+      }
+
+      const statusMessages = {
+        passed: window.i18n?.t('testExecution.testPassed') || '✓ 测试通过',
+        failed: window.i18n?.t('testExecution.testFailed') || '✗ 测试失败',
+        skipped: window.i18n?.t('testExecution.testSkipped') || '⊙ 测试跳过',
+        partialPassed: window.i18n?.t('testExecution.testPartialPassed') || '◐ 部分通过',
+        noTests: window.i18n?.t('testExecution.noTests') || '? 未收集到测试用例',
+      };
+      this.appendOutput('>>> ' + (statusMessages[testStatus] || statusMessages.passed));
+      this.appendOutput('>>> ==================================\n');
+
+      // 发送钉钉通知
+      const notificationInfo = {
+        testPlanName: testPlan?.name || '',
+        testFileNames: testFileNames,
+        testTypes: testTypes,
+        loopCount: loopCount,
+        totalLoops: loopResults.length,
+        passRate: passRate,
+        hasFailure: hasFailure,
+        stoppedEarly: stoppedEarly,
+        testStatus: testStatus,
+        aggregatedStats: aggregatedStats,
+        casePassRate: casePassRate
+      };
+      if (scheduledPlanInfo) {
+        notificationInfo.scheduledPlanName = scheduledPlanInfo.name;
+        notificationInfo.scheduledPlanExecutionTime = scheduledPlanInfo.executionTime;
+      }
+      await this.sendTestNotification(notificationInfo);
+
       this.#set('isRunning', false, 'isRunning-changed');
       this.#set('runningTestPlanName', null, 'runningTestPlanName-changed');
       this.#set('runningScheduledPlanId', null, 'runningScheduledPlanId-changed');
+      this.emit('run-complete', { testPlan, result: lastResult, scheduledPlanInfo, testStatus, aggregatedStats });
     }
   }
 
@@ -322,12 +478,22 @@ export class TestExecutionModel extends EventEmitter {
   }
 
   appendOutput(text) {
-    this.#state.outputBuffer.push({ text, isError: false });
+    if (!text) return;
+    // 按行过滤空白行
+    const filteredLines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+    if (filteredLines.length === 0) return;
+    const filteredText = filteredLines.join('\n');
+    this.#state.outputBuffer.push({ text: filteredText, isError: false });
     this._scheduleOutputFlush();
   }
 
   appendError(text) {
-    this.#state.outputBuffer.push({ text: `[ERROR] ${text}`, isError: true });
+    if (!text) return;
+    // 按行过滤空白行
+    const filteredLines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+    if (filteredLines.length === 0) return;
+    const filteredText = filteredLines.join('\n');
+    this.#state.outputBuffer.push({ text: filteredText, isError: true });
     this._scheduleOutputFlush();
   }
 
@@ -354,45 +520,138 @@ export class TestExecutionModel extends EventEmitter {
 
   // ── 设备选择（从 Phase 3.3 迁移） ─────────────────────────────
 
+  /**
+   * 检查测试计划是否包含Android平台的测试用例
+   * @param {Object} testPlan - 测试计划对象
+   * @returns {Promise<{required: boolean, cases: Array}>}
+   */
   async checkAndroidDeviceRequired(testPlan) {
-    if (!testPlan) return false;
-    const testPaths = testPlan.testPaths || testPlan.testFiles || [];
-    // 检查是否有安卓相关用例
-    const androidCases = testPaths.filter(p =>
-      p.includes('android') || p.includes('appium') || p.includes('device')
-    );
-    return androidCases.length > 0;
+    if (!testPlan || !testPlan.testFiles || testPlan.testFiles.length === 0) {
+      return { required: false, cases: [] };
+    }
+
+    const androidCases = [];
+
+    for (const testFile of testPlan.testFiles) {
+      try {
+        let fileName = testFile.name || testFile.path;
+        if (fileName.endsWith('.py')) fileName = fileName.slice(0, -3);
+        if (fileName.includes('/') || fileName.includes('\\')) fileName = fileName.split(/[\\/]/).pop();
+
+        const result = await this.#api.testCaseGet(fileName);
+
+        if (result && result.success && result.data) {
+          const caseData = result.data;
+          const platform = caseData.platform || 'android';
+          if (platform.toLowerCase() === 'android') {
+            androidCases.push({
+              fileName,
+              filePath: testFile.path,
+              caseData
+            });
+          }
+        }
+      } catch (error) {
+        console.warn(`检查测试文件平台失败: ${testFile.name}`, error);
+      }
+    }
+
+    return {
+      required: androidCases.length > 0,
+      cases: androidCases
+    };
   }
 
+  /**
+   * 检查Android用例的DEVICE_NAME是否为占位符或未设置
+   * @param {Array} androidCases - Android测试用例数组
+   * @returns {{hasPlaceholder: boolean, existingDevice: string|null}}
+   */
   checkDeviceNamePlaceholder(androidCases) {
-    // 检查用例中是否包含设备名占位符
-    return androidCases.some(p => p.includes('{{DEVICE_NAME}}') || p.includes('{{device_name}}'));
+    if (!androidCases || androidCases.length === 0) {
+      return { hasPlaceholder: true, existingDevice: null };
+    }
+
+    let hasPlaceholder = false;
+    let existingDevice = null;
+
+    for (const caseItem of androidCases) {
+      const deviceName = caseItem.caseData?.deviceConfig?.deviceName;
+      if (!deviceName || deviceName === '' || deviceName === '{{DEVICE_NAME}}') {
+        hasPlaceholder = true;
+      } else if (deviceName && !existingDevice) {
+        existingDevice = deviceName;
+      }
+    }
+
+    return { hasPlaceholder, existingDevice };
   }
 
+  /**
+   * 显示设备选择弹窗并处理设备选择
+   * @param {Array} androidCases - Android测试用例数组
+   * @returns {Promise<boolean>} - 是否成功选择设备
+   */
   async showDeviceSelectionForTest(androidCases) {
     try {
       const modal = new DeviceSelectionModal();
       const deviceId = await modal.show({ mode: 'test' });
 
-      // 检查当前是否有已选设备，如有则提示是否替换
-      if (this.#state.selectedDevice) {
-        const shouldReplace = await this.showReplaceDeviceConfirm(this.#state.selectedDevice);
-        if (!shouldReplace) return this.#state.selectedDevice;
+      // 获取设备Android版本
+      let platformVersion = '';
+      try {
+        const versionResult = await this.#api.executeAdbCommand('getprop ro.build.version.release', deviceId);
+        if (versionResult.success) {
+          platformVersion = versionResult.output.trim() || '';
+        }
+      } catch (error) {
+        console.warn('获取Android版本失败:', error);
+      }
+
+      // 更新所有Android用例的DEVICE_NAME和PLATFORM_VERSION并重新生成Python文件
+      if (androidCases && androidCases.length > 0) {
+        for (const caseItem of androidCases) {
+          try {
+            if (!caseItem.caseData.deviceConfig) {
+              caseItem.caseData.deviceConfig = {};
+            }
+            caseItem.caseData.deviceConfig.deviceName = deviceId;
+            if (platformVersion) {
+              caseItem.caseData.deviceConfig.platformVersion = platformVersion;
+            }
+
+            // 从文件路径中提取输出目录
+            const filePath = caseItem.filePath;
+            let outputDir = this.#state.selectedDirectory;
+            if (filePath) {
+              const pathParts = filePath.split(/[\\/]/);
+              outputDir = pathParts.slice(0, -1).join('/');
+            }
+            if (!outputDir) {
+              outputDir = this.#state.selectedDirectory;
+            }
+
+            const result = await this.#api.testCaseSaveAndGenerate(caseItem.caseData, outputDir);
+            if (!result.success) {
+              console.error(`保存并生成测试用例失败: ${caseItem.fileName}`, result.error);
+            }
+          } catch (error) {
+            console.error(`更新测试用例设备信息失败: ${caseItem.fileName}`, error);
+          }
+        }
       }
 
       this.#set('selectedDevice', deviceId, 'selectedDevice-changed');
       AppState.instance.set('selectedDevice', deviceId);
-      return deviceId;
+      return true;
     } catch (error) {
-      // 用户取消选择
-      if (error.message === 'cancelled') return null;
+      if (error.message === 'cancelled') return false;
       this.emit('error', { source: 'showDeviceSelectionForTest', error });
-      return null;
+      return false;
     }
   }
 
   async showReplaceDeviceConfirm(currentDevice) {
-    // 通过事件让 View 层显示确认弹窗，返回 Promise
     return new Promise((resolve) => {
       this.emit('confirm-replace-device', {
         currentDevice,
@@ -402,50 +661,226 @@ export class TestExecutionModel extends EventEmitter {
     });
   }
 
+  /**
+   * 检查安卓用例是否已填写设备信息
+   * @returns {Promise<{valid: boolean, message: string}>}
+   */
   async checkAndroidDeviceConfig() {
-    try {
-      const config = await this.#api.getConfig();
-      const androidCases = this.#state.currentTestPlan?.testPaths?.filter(p =>
-        p.includes('android') || p.includes('appium') || p.includes('device')
-      ) || [];
-
-      if (androidCases.length === 0) return true;
-
-      // 需要安卓设备但未选择设备
-      if (!this.#state.selectedDevice) {
-        const deviceId = await this.showDeviceSelectionForTest(androidCases);
-        if (!deviceId) {
-          this.emit('run-error', { message: '需要选择安卓设备才能执行测试' });
-          return false;
-        }
-      }
-
-      return true;
-    } catch (error) {
-      this.emit('error', { source: 'checkAndroidDeviceConfig', error });
-      return false;
+    if (!this.#state.selectedTestFiles || this.#state.selectedTestFiles.length === 0) {
+      return { valid: true, message: '' };
     }
+
+    const unconfiguredFiles = [];
+
+    for (const file of this.#state.selectedTestFiles) {
+      let fileName = file.name || file.path;
+      if (fileName.endsWith('.py')) fileName = fileName.slice(0, -3);
+      if (fileName.includes('/') || fileName.includes('\\')) fileName = fileName.split(/[\\/]/).pop();
+
+      try {
+        const result = await this.#api.testCaseGet(fileName);
+        if (result && result.success && result.data) {
+          const caseData = result.data;
+          const platform = caseData.platform;
+
+          if (platform && platform.toLowerCase() === 'android') {
+            const deviceName = caseData.deviceConfig?.deviceName;
+            if (!deviceName || deviceName === '{{DEVICE_NAME}}' || deviceName.trim() === '') {
+              unconfiguredFiles.push(file.name || file.path);
+            }
+          }
+        }
+      } catch (error) {
+        // 忽略单个文件的错误
+      }
+    }
+
+    if (unconfiguredFiles.length > 0) {
+      const fileList = unconfiguredFiles.length > 3
+        ? unconfiguredFiles.slice(0, 3).join(', ') + '...'
+        : unconfiguredFiles.join(', ');
+      return {
+        valid: false,
+        message: window.i18n.t('testExecution.deviceSelection.deviceNotConfigured', { files: fileList })
+      };
+    }
+
+    return { valid: true, message: '' };
   }
 
+  /**
+   * 检查蓝牙用例是否已填写端口信息
+   * @returns {Promise<{valid: boolean, message: string}>}
+   */
   async checkBlePortConfig() {
+    if (!this.#state.selectedTestFiles || this.#state.selectedTestFiles.length === 0) {
+      return { valid: true, message: '' };
+    }
+
+    const unconfiguredFiles = [];
+
+    for (const file of this.#state.selectedTestFiles) {
+      let fileName = file.name || file.path;
+      if (fileName.endsWith('.py')) fileName = fileName.slice(0, -3);
+      if (fileName.includes('/') || fileName.includes('\\')) fileName = fileName.split(/[\\/]/).pop();
+
+      try {
+        const result = await this.#api.testCaseGet(fileName);
+        if (result && result.success && result.data) {
+          const caseData = result.data;
+          const steps = caseData.steps || [];
+
+          const hasBleSteps = steps.some(step => step.type === 'ble');
+
+          if (hasBleSteps) {
+            const blePort = caseData.bleDevice?.port;
+            if (!blePort || blePort.trim() === '') {
+              unconfiguredFiles.push(file.name || file.path);
+            }
+          }
+        }
+      } catch (error) {
+        // 忽略单个文件的错误
+      }
+    }
+
+    if (unconfiguredFiles.length > 0) {
+      const fileList = unconfiguredFiles.length > 3
+        ? unconfiguredFiles.slice(0, 3).join(', ') + '...'
+        : unconfiguredFiles.join(', ');
+      return {
+        valid: false,
+        message: window.i18n.t('testExecution.deviceSelection.blePortNotConfigured', { files: fileList })
+      };
+    }
+
+    return { valid: true, message: '' };
+  }
+
+  /**
+   * 显示编辑设备连接标识弹窗
+   * @param {string} fileName - 测试用例文件名（不含.py）
+   * @param {string} filePath - 测试用例文件完整路径
+   */
+  async showEditDeviceIdModal(fileName, filePath) {
+    this._editDeviceIdFileName = fileName;
+    this._editDeviceIdFilePath = filePath;
+
+    let isAndroid = false;
+    let hasBleSteps = false;
+    let deviceName = '';
+    let platformVersion = '';
+    let blePort = '';
+
     try {
-      const config = await this.#api.getConfig();
-      // 检查是否有蓝牙相关用例
-      const testPaths = this.#state.currentTestPlan?.testPaths || [];
-      const bleCases = testPaths.filter(p =>
-        p.includes('ble') || p.includes('bluetooth')
-      );
-
-      if (bleCases.length === 0) return true;
-
-      // 检查蓝牙端口配置
-      const bleDeviceConfig = await this.#api.getConfig();
-      // 如果没有配置蓝牙端口，提示用户
-      // 此处简化处理，实际可扩展
-      return true;
+      const result = await this.#api.testCaseGet(fileName);
+      if (result && result.success && result.data) {
+        deviceName = result.data.deviceConfig?.deviceName || '';
+        platformVersion = result.data.deviceConfig?.platformVersion || '';
+        blePort = result.data.bleDevice?.port || '';
+        isAndroid = result.data.platform && result.data.platform.toLowerCase() === 'android';
+        hasBleSteps = result.data.steps && result.data.steps.some(step => step.type === 'ble');
+      }
     } catch (error) {
-      this.emit('error', { source: 'checkBlePortConfig', error });
-      return false;
+      console.error('获取测试用例设备信息失败:', error);
+    }
+
+    // 保存是否有蓝牙步骤的标记
+    this._editDeviceIdHasBle = hasBleSteps;
+
+    // 通过事件通知 View 层打开弹窗并填充数据
+    this.emit('show-edit-device-id-modal', {
+      fileName,
+      filePath,
+      deviceName: (deviceName && deviceName !== '{{DEVICE_NAME}}') ? deviceName : '',
+      platformVersion: (platformVersion && platformVersion !== '{{PLATFORM_VERSION}}') ? platformVersion : '',
+      blePort,
+      isAndroid,
+      hasBleSteps,
+    });
+  }
+
+  /**
+   * 确认编辑设备连接标识
+   * @param {string} deviceName - 设备名称
+   * @param {string} platformVersion - 平台版本
+   * @param {string} blePort - 蓝牙端口
+   */
+  async confirmEditDeviceId(deviceName, platformVersion, blePort) {
+    if (!this._editDeviceIdFileName) return;
+
+    try {
+      const result = await this.#api.testCaseGet(this._editDeviceIdFileName);
+      if (result && result.success && result.data) {
+        const caseData = result.data;
+
+        // 更新设备配置
+        if (!caseData.deviceConfig) {
+          caseData.deviceConfig = {};
+        }
+        caseData.deviceConfig.deviceName = deviceName || '{{DEVICE_NAME}}';
+        caseData.deviceConfig.platformVersion = platformVersion || '{{PLATFORM_VERSION}}';
+
+        // 更新蓝牙端口配置
+        if (this._editDeviceIdHasBle) {
+          if (!caseData.bleDevice) {
+            caseData.bleDevice = {};
+          }
+          caseData.bleDevice.port = blePort || '';
+        }
+
+        // 从文件路径中提取输出目录
+        let outputDir = this.#state.selectedDirectory;
+        if (this._editDeviceIdFilePath) {
+          const pathParts = this._editDeviceIdFilePath.split(/[\\/]/);
+          outputDir = pathParts.slice(0, -1).join('/');
+        }
+        if (!outputDir) {
+          outputDir = this.#state.selectedDirectory;
+        }
+
+        const saveResult = await this.#api.testCaseSaveAndGenerate(caseData, outputDir);
+
+        if (saveResult && saveResult.success) {
+          this.emit('edit-device-id-saved', { fileName: this._editDeviceIdFileName, caseData });
+        } else {
+          this.emit('error', { source: 'confirmEditDeviceId', error: new Error(saveResult?.error || '保存失败') });
+        }
+      }
+    } catch (error) {
+      this.emit('error', { source: 'confirmEditDeviceId', error });
+    }
+
+    // 清理状态
+    this._editDeviceIdFileName = null;
+    this._editDeviceIdFilePath = null;
+    this._editDeviceIdHasBle = false;
+  }
+
+  /**
+   * 为编辑设备ID弹窗中的"设备管理"按钮选择设备后回填
+   * @returns {Promise<{deviceName: string, platformVersion: string}|null>}
+   */
+  async selectDeviceForEdit() {
+    try {
+      const modal = new DeviceSelectionModal();
+      const deviceId = await modal.show({ mode: 'test' });
+
+      let platformVersion = '';
+      try {
+        const versionResult = await this.#api.executeAdbCommand('getprop ro.build.version.release', deviceId);
+        if (versionResult.success) {
+          platformVersion = versionResult.output.trim() || '';
+        }
+      } catch (error) {
+        console.warn('获取Android版本失败:', error);
+      }
+
+      return { deviceName: deviceId, platformVersion };
+    } catch (error) {
+      if (error.message === 'cancelled') return null;
+      this.emit('error', { source: 'selectDeviceForEdit', error });
+      return null;
     }
   }
 
@@ -456,6 +891,15 @@ export class TestExecutionModel extends EventEmitter {
       const result = await this.#api.getScheduledPlans();
       const plans = result?.data || result || [];
       this.#set('scheduledPlans', plans, 'scheduledPlans-changed');
+      // 同步 currentScheduledPlan：若已选中计划被删除，清空
+      if (this.#state.currentScheduledPlan) {
+        const updated = plans.find(p => p.id === this.#state.currentScheduledPlan.id);
+        if (!updated) {
+          this.#set('currentScheduledPlan', null, 'currentScheduledPlan-changed');
+        } else if (updated !== this.#state.currentScheduledPlan) {
+          this.#set('currentScheduledPlan', updated, 'currentScheduledPlan-changed');
+        }
+      }
       return plans;
     } catch (error) {
       this.emit('error', { source: 'loadScheduledPlans', error });
@@ -477,7 +921,8 @@ export class TestExecutionModel extends EventEmitter {
 
   async updateScheduledPlan(planId, planData) {
     try {
-      const result = await this.#api.updateScheduledPlan(planId, planData);
+      // preload updateScheduledPlan 只接收单个 planData 参数，需将 id 合并进去
+      const result = await this.#api.updateScheduledPlan({ ...planData, id: planId });
       await this.loadScheduledPlans();
       this.emit('scheduledPlan-updated', result);
       return result;
@@ -536,10 +981,57 @@ export class TestExecutionModel extends EventEmitter {
    * 处理定时计划触发执行事件
    */
   async handleScheduledTestStart(data) {
-    this.emit('scheduled-test-started', data);
-    // 自动运行测试
-    if (data?.testPlanName) {
-      await this.runTests({ id: data.planId, name: data.testPlanName });
+    const message = window.i18n?.t('scheduledPlan.testStarting', { name: data.planName }) || `定时计划「${data.planName}」开始执行...`;
+    this.appendOutput(`\n>>> ${message}`);
+
+    // 重新加载定时计划列表，显示"执行中"状态
+    await this.loadScheduledPlans();
+
+    try {
+      const testPlansResult = await this.#api.getTestPlans();
+      const allTestPlans = testPlansResult?.data || testPlansResult || [];
+
+      if (!data.testPlans || data.testPlans.length === 0) {
+        this.appendError('>>> ' + (window.i18n?.t('testExecution.scheduledNoTestPlans') || '定时计划没有关联的测试计划'));
+        return;
+      }
+
+      for (const testPlanObj of data.testPlans) {
+        const testPlanId = typeof testPlanObj === 'string' ? testPlanObj : testPlanObj.id;
+        const testPlan = allTestPlans.find(p => p.id === testPlanId);
+
+        if (!testPlan) {
+          this.appendError(`>>> ${window.i18n?.t('testExecution.testPlanNotExist') || '测试计划不存在'}: ${testPlanId}`);
+          continue;
+        }
+
+        this.appendOutput(`>>> ${window.i18n?.t('testExecution.executingTestPlan') || '正在执行测试计划'}: ${testPlan.name}`);
+
+        // 设置当前测试计划
+        this.#set('currentTestPlan', testPlan, 'currentTestPlan-changed');
+
+        const scheduledPlanInfo = {
+          id: data.planId,
+          name: data.planName,
+          executionTime: data.executionTime || new Date().toLocaleString(),
+        };
+
+        await this.runTests(scheduledPlanInfo);
+      }
+    } catch (error) {
+      console.error('执行定时计划失败:', error);
+      this.appendError('>>> ' + (window.i18n?.t('testExecution.executeScheduledPlanFailed') || '执行定时计划失败') + ': ' + error.message);
+    } finally {
+      // 通知主进程测试执行完成，更新定时计划状态
+      if (data.planId) {
+        try {
+          await this.#api.scheduledTestComplete(data.planId);
+        } catch (e) {
+          console.error('通知定时计划完成失败:', e);
+        }
+      }
+      // 执行完成后重新加载定时计划列表，显示"已完成"状态
+      await this.loadScheduledPlans();
     }
   }
 
@@ -616,7 +1108,14 @@ export class TestExecutionModel extends EventEmitter {
           return [];
         }
 
-        const result = await this.#api.extractPytestMarkers(files);
+        // 统一转为路径字符串数组（兼容对象数组与字符串数组）
+        const filePaths = files.map(f => (typeof f === 'string' ? f : f?.path)).filter(Boolean);
+        if (filePaths.length === 0) {
+          this.#set('currentMarkers', [], 'currentMarkers-changed');
+          return [];
+        }
+
+        const result = await this.#api.extractPytestMarkers(filePaths);
         const markers = result?.markers || result || [];
         this.#set('currentMarkers', markers, 'currentMarkers-changed');
         return markers;
@@ -630,6 +1129,25 @@ export class TestExecutionModel extends EventEmitter {
 
     this.#state.extractingMarkers = promise;
     return promise;
+  }
+
+  /**
+   * 从指定文件列表提取 pytest 标记（用于弹窗内文件选择变更时实时提取）
+   * @param {Array} files - 文件对象数组或路径字符串数组
+   * @returns {Promise<Array>} 标记数组
+   */
+  async extractMarkersFromFiles(files) {
+    try {
+      const filePaths = (files || [])
+        .map(f => (typeof f === 'string' ? f : f?.path))
+        .filter(Boolean);
+      if (filePaths.length === 0) return [];
+      const result = await this.#api.extractPytestMarkers(filePaths);
+      return result?.markers || result || [];
+    } catch (error) {
+      this.emit('error', { source: 'extractMarkersFromFiles', error });
+      return [];
+    }
   }
 
   async loadPytestMarkers() {
@@ -650,14 +1168,61 @@ export class TestExecutionModel extends EventEmitter {
 
   // ── 报告 ───────────────────────────────────────────────────────
 
-  async viewReport(testPlan) {
+  async showReportModal(testPlan) {
+    if (!testPlan) {
+      this.appendOutput('>>> ' + (window.i18n?.t('testExecution.selectTestPlanFirst') || '请先选择一个测试计划'));
+      return;
+    }
+
+    // 重置选中状态
+    this.#state.selectedReportRun = null;
+    this.emit('show-report-modal', testPlan);
+
     try {
-      const result = await this.#api.viewReport(testPlan);
-      this.emit('report-viewed', { testPlan, result });
-      return result;
+      const result = await this.#api.getTestPlanRuns(testPlan.name);
+
+      if (!result.success) {
+        this.emit('report-runs-error', result.error || window.i18n?.t('reportModal.loadFailed') || '加载失败');
+        return;
+      }
+
+      this.emit('report-runs-loaded', result.runs || []);
     } catch (error) {
-      this.emit('error', { source: 'viewReport', error });
-      return { success: false, error: error.message };
+      this.emit('report-runs-error', error.message);
+    }
+  }
+
+  selectReportRun(runId) {
+    this.#state.selectedReportRun = runId;
+    this.emit('report-run-selected', runId);
+  }
+
+  async openSelectedReport(testPlan) {
+    const run = this.#state.selectedReportRun;
+    if (!run || !run.reportPath) {
+      this.appendOutput('>>> ' + (window.i18n?.t('reportModal.selectReport') || '请先选择一个报告'));
+      return;
+    }
+
+    const openingMsg = window.i18n?.t('python.pytestRunner.openingReport') || "正在打开测试计划 '{test_plan_name}' 的第 {index} 次运行报告";
+    const formattedMsg = openingMsg
+      .replace('{test_plan_name}', testPlan?.name || '')
+      .replace('{index}', run.index);
+    this.appendOutput('>>> ' + formattedMsg);
+
+    try {
+      const result = await this.#api.openReportByPath(run.reportPath);
+
+      if (result.success) {
+        this.appendOutput('>>> ' + (window.i18n?.t('python.pytestRunner.reportOpened') || '报告已打开'));
+        this.emit('report-opened');
+      } else {
+        this.appendError('>>> ' + (window.i18n?.t('python.pytestRunner.reportOpenFailed') || '打开报告失败') + ': ' + (result.error || ''));
+        this.emit('report-open-failed');
+      }
+    } catch (error) {
+      this.appendError('>>> ' + (window.i18n?.t('python.pytestRunner.reportOpenFailed') || '打开报告失败') + ': ' + error.message);
+      this.emit('report-open-failed');
     }
   }
 
@@ -673,22 +1238,69 @@ export class TestExecutionModel extends EventEmitter {
 
   // ── 钉钉通知 ───────────────────────────────────────────────────
 
-  async sendTestNotification(testPlan, result, scheduledPlanInfo = null) {
+  async sendTestNotification(testInfo) {
     try {
       const config = await this.#api.getConfig();
-      const notification = config?.APP_SETTINGS?.notification;
-      if (!notification || notification.platform === 'none') return;
 
-      const planName = testPlan?.name || '未知计划';
-      const status = result?.success ? '✅ 通过' : '❌ 失败';
-      const text = scheduledPlanInfo
-        ? `[定时任务] ${planName} 执行完毕: ${status}`
-        : `${planName} 执行完毕: ${status}`;
+      const notificationConfig = config?.APP_SETTINGS?.notification;
+      if (!notificationConfig || notificationConfig.platform !== 'dingtalk') {
+        return;
+      }
 
-      await this.#api.sendDingTalkNotification(text);
+      const dingtalkConfig = notificationConfig.dingtalk;
+      if (!dingtalkConfig || !dingtalkConfig.access_token || !dingtalkConfig.secret) {
+        return;
+      }
+
+      const statusLabels = {
+        passed: '✅ ' + (window.i18n?.t('testExecution.testPassed') || '测试通过'),
+        failed: '❌ ' + (window.i18n?.t('testExecution.testFailed') || '测试失败'),
+        skipped: '⏭️ ' + (window.i18n?.t('testExecution.testSkipped') || '测试跳过'),
+        partialPassed: '⚠️ ' + (window.i18n?.t('testExecution.testPartialPassed') || '部分通过'),
+        noTests: '⚠️ ' + (window.i18n?.t('testExecution.noTests') || '未收集到测试用例')
+      };
+      const testResult = statusLabels[testInfo.testStatus] || (testInfo.hasFailure ? '❌ ' + (window.i18n?.t('testExecution.testFailed') || '测试失败') : '✅ ' + (window.i18n?.t('testExecution.testPassed') || '测试通过'));
+
+      let message = (window.i18n?.t('testExecution.notification.title') || '测试执行结果通知') + '\n';
+
+      if (testInfo.scheduledPlanName) {
+        message += '\n' + (window.i18n?.t('testExecution.notification.scheduledPlan') || '定时计划') + ': ' + testInfo.scheduledPlanName + '\n';
+        message += (window.i18n?.t('testExecution.notification.executionTime') || '执行时间') + ': ' + (testInfo.scheduledPlanExecutionTime || new Date().toLocaleString()) + '\n';
+      }
+
+      message += '\n' + (window.i18n?.t('testExecution.notification.testPlan') || '测试计划') + ': ' + testInfo.testPlanName + '\n';
+      message += (window.i18n?.t('testExecution.notification.testFiles') || '测试文件') + ': ' + (testInfo.testFileNames || (window.i18n?.t('testExecution.notification.none') || '无')) + '\n';
+      message += (window.i18n?.t('testExecution.notification.testTypes') || '测试类型') + ': ' + (testInfo.testTypes || (window.i18n?.t('testExecution.notification.all') || '全部')) + '\n';
+      message += (window.i18n?.t('testExecution.notification.loopCount') || '循环次数') + ': ' + testInfo.loopCount + '\n';
+      message += '\n' + (window.i18n?.t('testExecution.notification.roundInfo') || '循环信息') + ':\n';
+      message += (window.i18n?.t('testExecution.notification.totalRounds') || '总轮数') + ': ' + testInfo.totalLoops + '\n';
+      if (testInfo.loopCount > 1) {
+        message += (window.i18n?.t('testExecution.notification.passRate') || '通过率') + ': ' + testInfo.passRate + '%\n';
+      }
+
+      if (testInfo.aggregatedStats && testInfo.aggregatedStats.total > 0) {
+        const stats = testInfo.aggregatedStats;
+        message += '\n' + (window.i18n?.t('testExecution.notification.caseStats') || '用例统计') + ':\n';
+        message += (window.i18n?.t('testExecution.notification.casePassed') || '通过') + ': ' + stats.passed + ', ' + (window.i18n?.t('testExecution.notification.caseFailed') || '失败') + ': ' + stats.failed + ', ' + (window.i18n?.t('testExecution.notification.caseSkipped') || '跳过') + ': ' + stats.skipped + ', ' + (window.i18n?.t('testExecution.notification.caseBroken') || '损坏') + ': ' + stats.broken + ', ' + (window.i18n?.t('testExecution.notification.caseTotal') || '总计') + ': ' + stats.total + '\n';
+        message += (window.i18n?.t('testExecution.notification.casePassRate') || '用例通过率') + ': ' + testInfo.casePassRate + '% (' + (window.i18n?.t('testExecution.notification.excludingSkipped') || '不含跳过') + ')\n';
+      }
+
+      message += '\n' + (window.i18n?.t('testExecution.notification.testResult') || '测试结果') + ': ' + testResult;
+
+      const notificationData = {
+        message: message
+      };
+
+      this.appendOutput('>>> ' + (window.i18n?.t('testExecution.sendingNotification') || '正在发送通知') + '...');
+      const result = await this.#api.sendDingTalkNotification(notificationData);
+
+      if (result.success) {
+        this.appendOutput('>>> ' + (window.i18n?.t('testExecution.notificationSent') || '通知发送成功'));
+      } else {
+        this.appendError('>>> ' + (window.i18n?.t('testExecution.notificationFailed') || '通知发送失败') + ': ' + (result.error || ''));
+      }
     } catch (error) {
-      // 通知失败不影响主流程，仅记录
-      this.emit('notification-error', { source: 'sendTestNotification', error });
+      this.appendError('>>> ' + (window.i18n?.t('testExecution.notificationFailed') || '通知发送失败') + ': ' + error.message);
     }
   }
 
@@ -697,7 +1309,9 @@ export class TestExecutionModel extends EventEmitter {
   listenTestOutput() {
     const unlisten = ApiBridge.listen({
       'test-output': (text) => {
-        this.appendOutput(text);
+        // 清理 ANSI 转义码和 \r 字符
+        const cleaned = text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '');
+        this.appendOutput(cleaned);
       },
     });
     this.#ipcUnsubscribers.push(unlisten);
@@ -707,7 +1321,9 @@ export class TestExecutionModel extends EventEmitter {
   listenTestError() {
     const unlisten = ApiBridge.listen({
       'test-error': (text) => {
-        this.appendError(text);
+        // 清理 ANSI 转义码和 \r 字符
+        const cleaned = text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '');
+        this.appendError(cleaned);
       },
     });
     this.#ipcUnsubscribers.push(unlisten);

@@ -104,6 +104,10 @@ export class App {
       window.__XKAT_DEVICE_SELECTION_MODAL__ = DeviceSelectionModal;
       window.__XKAT_PROGRESS_INDICATOR__ = this.progressIndicator;
 
+      // 13. 首次翻译所有 data-i18n 元素（含移到 body 的下拉选项）
+      this.updateUIText();
+      this.updateComponentTranslations();
+
       this.#initialized = true;
       console.log('[App] Phase 4: full initialization complete');
     } catch (err) {

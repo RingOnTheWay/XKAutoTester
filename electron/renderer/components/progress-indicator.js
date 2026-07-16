@@ -1,3 +1,5 @@
+import { Toast } from './toast.js';
+
 export class ProgressIndicator {
     constructor() {
         this.downloadProgressTimer = null;

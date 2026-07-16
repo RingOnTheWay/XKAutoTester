@@ -1005,7 +1005,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 code += `                            try:\n`;
                 code += `                                displayed_num = float(displayed_value)\n`;
                 code += `                                expected_num = float(expected_value)\n`;
-                code += `                                diff = abs(displayed_num - expected_num)\n`;
+                code += `                                diff = round(abs(displayed_num - expected_num), 10)\n`;
                 code += `                                logger.info(f"数据差值: {displayed_num} - {expected_num} = {diff}")\n`;
                 code += `                                if diff <= ${tolerance}:\n`;
                 code += `                                    compare_success = True\n`;

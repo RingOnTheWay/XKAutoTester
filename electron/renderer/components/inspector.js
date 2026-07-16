@@ -1,3 +1,5 @@
+import { Toast } from './toast.js';
+
 export class InspectorModal {
     constructor() {
         this.screenshotImage = null;
@@ -8,13 +10,13 @@ export class InspectorModal {
         this.canvasScale = 1;
         this.deviceResolution = null;
         this._escHandler = null;
-        this._boundCanvasMouseMove = this.handleCanvasMouseMove.bind(this);
-        this._boundCanvasClick = this.handleCanvasClick.bind(this);
-        this._boundCanvasMouseLeave = this.handleCanvasMouseLeave.bind(this);
         this._allElements = [];
+        this._scaleRatio = 1;
         this._loadingStepIndex = 0;
         this._loadingTimer = null;
         this._sessionParams = null;
+        this._refreshing = false;
+        this._stepGeneration = 0;
         this._progressUnsubscribe = null;
         this.init();
     }
@@ -24,6 +26,7 @@ export class InspectorModal {
         if (!this.overlay) return;
 
         this.canvas = document.getElementById('inspector-canvas');
+        this.highlighterContainer = document.getElementById('inspector-highlighter-container');
         this.canvasContainer = document.getElementById('inspector-canvas-container');
         this.treeContainer = document.getElementById('inspector-tree-container');
         this.treeSearch = document.getElementById('inspector-tree-search');
@@ -35,6 +38,7 @@ export class InspectorModal {
         this.closeBtn = document.getElementById('inspector-modal-close-btn');
 
         this.bindEvents();
+        this._initResizeObserver();
     }
 
     bindEvents() {
@@ -141,6 +145,8 @@ export class InspectorModal {
 
         this._removeEscListener();
         this._unsubscribeProgress();
+        this._destroyResizeObserver();
+        this._removeHighlighterListeners();
         this.overlay.classList.add('hidden');
         this.removeCanvasListeners();
 
@@ -155,11 +161,13 @@ export class InspectorModal {
         this.screenshotImage = null;
         this.elementsTree = [];
         this._allElements = [];
+        this._highlighterElements = [];
         this.selectedElement = null;
         this.hoveredElement = null;
         this.selectedLocator = null;
         this.canvasScale = 1;
         this.deviceResolution = null;
+        this._scaleRatio = 1;
 
         if (this.treeContainer) this.treeContainer.innerHTML = '';
         if (this.locatorList) {
@@ -171,6 +179,7 @@ export class InspectorModal {
             const ctx = this.canvas.getContext('2d');
             ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         }
+        if (this.highlighterContainer) this.highlighterContainer.innerHTML = '';
 
         this._searchResults = [];
         this._searchResultIndex = -1;
@@ -186,6 +195,8 @@ export class InspectorModal {
     }
 
     async refreshView(options = {}) {
+        if (this._refreshing) return;
+        this._refreshing = true;
         const { showSteps = false, preserveSteps = false, hideLoading = true } = options;
         this.showLoading(true, !preserveSteps, showSteps);
         try {
@@ -200,7 +211,9 @@ export class InspectorModal {
                     const startResult = await window.electronAPI.inspector.startSession(
                         this._sessionParams.deviceName,
                         this._sessionParams.appPackage,
-                        this._sessionParams.appActivity
+                        this._sessionParams.appActivity,
+                        '',
+                        this._sessionParams.noReset
                     );
                     this._unsubscribeProgress();
                     if (startResult && startResult.success) {
@@ -226,12 +239,14 @@ export class InspectorModal {
                 this.elementsTree = this.parsePageSource(result.elements);
                 this._allElements = this.flattenElements(this.elementsTree);
                 this.renderElementTree(this.elementsTree);
+                this.renderHighlighterRects();
             }
 
             this._advanceLoadingStep(4);
         } catch (err) {
             Toast.error(err.message || window.i18n?.t('inspector.refreshFailed') || 'Failed to refresh');
         } finally {
+            this._refreshing = false;
             if (hideLoading) {
                 this.showLoading(false);
             }
@@ -242,20 +257,7 @@ export class InspectorModal {
         const img = new Image();
         img.onload = () => {
             this.screenshotImage = img;
-
-            const containerWidth = this.canvasContainer.clientWidth;
-            const containerHeight = this.canvasContainer.clientHeight;
-
-            this.canvasScale = containerWidth / img.naturalWidth;
-            const displayWidth = containerWidth;
-            const displayHeight = img.naturalHeight * this.canvasScale;
-
-            this.canvas.width = displayWidth;
-            this.canvas.height = displayHeight;
-            this.canvas.style.width = displayWidth + 'px';
-            this.canvas.style.height = displayHeight + 'px';
-
-            this.redrawCanvas();
+            this._updateCanvasAndHighlighter();
 
             this.deviceResolution = { width: img.naturalWidth, height: img.naturalHeight };
             this.setupCanvasListeners();
@@ -266,18 +268,56 @@ export class InspectorModal {
         img.src = base64Data.startsWith('data:') ? base64Data : 'data:image/png;base64,' + base64Data;
     }
 
+    _updateCanvasAndHighlighter() {
+        if (!this.screenshotImage || !this.canvasContainer || !this.canvas) return;
+
+        const img = this.screenshotImage;
+        const padding = 12;
+        const containerWidth = this.canvasContainer.clientWidth;
+        const containerHeight = this.canvasContainer.clientHeight;
+        const contentWidth = containerWidth - padding * 2;
+        const contentHeight = containerHeight - padding * 2;
+
+        if (contentWidth <= 0 || contentHeight <= 0) return;
+
+        const scaleByWidth = contentWidth / img.naturalWidth;
+        const scaleByHeight = contentHeight / img.naturalHeight;
+        const scale = Math.min(scaleByWidth, scaleByHeight);
+
+        const displayWidth = Math.floor(img.naturalWidth * scale);
+        const displayHeight = Math.floor(img.naturalHeight * scale);
+
+        // Center position within the container
+        const offsetX = Math.floor((containerWidth - displayWidth) / 2);
+        const offsetY = Math.floor((containerHeight - displayHeight) / 2);
+
+        this.canvasScale = scale;
+        this.canvas.width = displayWidth;
+        this.canvas.height = displayHeight;
+        this.canvas.style.width = displayWidth + 'px';
+        this.canvas.style.height = displayHeight + 'px';
+        this.canvas.style.left = offsetX + 'px';
+        this.canvas.style.top = offsetY + 'px';
+
+        this._scaleRatio = img.naturalWidth / displayWidth;
+
+        if (this.highlighterContainer) {
+            this.highlighterContainer.style.width = displayWidth + 'px';
+            this.highlighterContainer.style.height = displayHeight + 'px';
+            this.highlighterContainer.style.left = offsetX + 'px';
+            this.highlighterContainer.style.top = offsetY + 'px';
+        }
+
+        this.redrawCanvas();
+        this.renderHighlighterRects();
+    }
+
     setupCanvasListeners() {
-        this.removeCanvasListeners();
-        this.canvas.addEventListener('mousemove', this._boundCanvasMouseMove);
-        this.canvas.addEventListener('click', this._boundCanvasClick);
-        this.canvas.addEventListener('mouseleave', this._boundCanvasMouseLeave);
+        // Canvas only displays screenshot; interaction handled by highlighter overlay divs
     }
 
     removeCanvasListeners() {
-        if (!this.canvas) return;
-        this.canvas.removeEventListener('mousemove', this._boundCanvasMouseMove);
-        this.canvas.removeEventListener('click', this._boundCanvasClick);
-        this.canvas.removeEventListener('mouseleave', this._boundCanvasMouseLeave);
+        // No-op: canvas no longer has mouse listeners
     }
 
     renderElementTree(elements) {
@@ -353,14 +393,14 @@ export class InspectorModal {
         node.addEventListener('mouseenter', (e) => {
             e.stopPropagation();
             this.hoveredElement = element;
-            this.redrawCanvas();
+            this._updateHighlighterHover();
         });
 
         node.addEventListener('mouseleave', (e) => {
             e.stopPropagation();
             if (this.hoveredElement === element) {
                 this.hoveredElement = null;
-                this.redrawCanvas();
+                this._updateHighlighterHover();
             }
         });
 
@@ -392,6 +432,7 @@ export class InspectorModal {
     selectElement(element) {
         this.selectedElement = element;
         this.redrawCanvas();
+        this._updateHighlighterSelection();
         this.showLocators(element);
         if (this.confirmBtn) this.confirmBtn.disabled = false;
 
@@ -414,38 +455,11 @@ export class InspectorModal {
         }
     }
 
-    handleCanvasMouseMove(event) {
-        const coords = this.getCanvasCoords(event);
-        if (!coords) return;
-
-        const element = this.findElementAtPoint(coords.x, coords.y, this.elementsTree);
-        if (element !== this.hoveredElement) {
-            this.hoveredElement = element;
-            this.redrawCanvas();
-
-            this.treeContainer.querySelectorAll('.inspector-tree-node.hovered').forEach(n => n.classList.remove('hovered'));
-            if (element) {
-                this.highlightTreeNode(element, true);
-            }
-        }
-    }
-
-    handleCanvasClick(event) {
-        const coords = this.getCanvasCoords(event);
-        if (!coords) return;
-
-        const element = this.findElementAtPoint(coords.x, coords.y, this.elementsTree);
-        if (element === this.selectedElement) {
-            this.deselectElement();
-        } else if (element) {
-            this.selectElement(element);
-        }
-    }
-
     deselectElement() {
         this.selectedElement = null;
         this.selectedLocator = null;
         this.redrawCanvas();
+        this._updateHighlighterSelection();
         if (this.locatorList) {
             this.locatorList.innerHTML = `<div class="inspector-locator-empty" data-i18n="inspector.noLocators">${window.i18n?.t('inspector.noLocators') || '请选择一个元素查看定位方式'}</div>`;
         }
@@ -455,55 +469,6 @@ export class InspectorModal {
             n.classList.remove('selected');
         });
         if (this.confirmBtn) this.confirmBtn.disabled = true;
-    }
-
-    handleCanvasMouseLeave() {
-        if (this.hoveredElement) {
-            this.hoveredElement = null;
-            this.redrawCanvas();
-            this.treeContainer.querySelectorAll('.inspector-tree-node.hovered').forEach(n => n.classList.remove('hovered'));
-        }
-    }
-
-    getCanvasCoords(event) {
-        if (!this.canvas) return null;
-        const rect = this.canvas.getBoundingClientRect();
-        const mouseX = event.clientX - rect.left;
-        const mouseY = event.clientY - rect.top;
-        const deviceX = mouseX / this.canvasScale;
-        const deviceY = mouseY / this.canvasScale;
-        return { x: deviceX, y: deviceY };
-    }
-
-    findElementAtPoint(x, y, elements) {
-        if (!elements || elements.length === 0) return null;
-
-        const matches = [];
-        this._collectElementsAtPoint(x, y, elements, matches);
-
-        if (matches.length === 0) return null;
-
-        matches.sort((a, b) => {
-            const areaA = (a.bounds.x2 - a.bounds.x1) * (a.bounds.y2 - a.bounds.y1);
-            const areaB = (b.bounds.x2 - b.bounds.x1) * (b.bounds.y2 - b.bounds.y1);
-            return areaA - areaB;
-        });
-
-        return matches[0].element;
-    }
-
-    _collectElementsAtPoint(x, y, elements, matches) {
-        if (!elements || elements.length === 0) return;
-
-        for (const element of elements) {
-            const bounds = this.parseBounds(element.attributes?.bounds);
-            if (!bounds) continue;
-
-            if (x >= bounds.x1 && x <= bounds.x2 && y >= bounds.y1 && y <= bounds.y2) {
-                matches.push({ element, bounds });
-                this._collectElementsAtPoint(x, y, element.children, matches);
-            }
-        }
     }
 
     parseBounds(boundsStr) {
@@ -518,47 +483,230 @@ export class InspectorModal {
         };
     }
 
+    parseCoordinates(element) {
+        const {bounds, x, y, width, height} = element.attributes || {};
+        if (bounds) {
+            const boundsArray = bounds.split(/\[|\]|,/).filter(str => str !== '');
+            const [x1, y1, x2, y2] = boundsArray.map(val => parseInt(val, 10));
+            return {x1, y1, x2, y2};
+        } else if (x !== undefined && x !== null) {
+            const xInt = parseInt(x, 10);
+            const yInt = parseInt(y, 10);
+            const widthInt = parseInt(width, 10);
+            const heightInt = parseInt(height, 10);
+            return {x1: xInt, y1: yInt, x2: xInt + widthInt, y2: yInt + heightInt};
+        }
+        return {};
+    }
+
+    _getElements(sourceJSON) {
+        const elementsList = [];
+
+        if (Array.isArray(sourceJSON)) {
+            for (const el of sourceJSON) {
+                this._buildElementsWithProps(el, elementsList);
+            }
+        } else if (sourceJSON) {
+            this._buildElementsWithProps(sourceJSON, elementsList);
+        }
+
+        return elementsList;
+    }
+
+    _buildElementsWithProps(sourceJSON, elements) {
+        if (!sourceJSON) return;
+        const coords = this.parseCoordinates(sourceJSON);
+        const scaleRatio = this._scaleRatio;
+
+        if (coords && (coords.x1 || coords.x1 === 0)) {
+            elements.push({
+                element: sourceJSON,
+                properties: {
+                    left: coords.x1 / scaleRatio,
+                    top: coords.y1 / scaleRatio,
+                    width: (coords.x2 - coords.x1) / scaleRatio,
+                    height: (coords.y2 - coords.y1) / scaleRatio,
+                    path: sourceJSON.path,
+                }
+            });
+        }
+
+        if (sourceJSON.children) {
+            for (const childEl of sourceJSON.children) {
+                this._buildElementsWithProps(childEl, elements);
+            }
+        }
+    }
+
+    renderHighlighterRects() {
+        if (!this.highlighterContainer) return;
+        this.highlighterContainer.innerHTML = '';
+
+        if (!this.elementsTree || !this._scaleRatio) return;
+
+        // Cache elements for coordinate-based lookup
+        this._highlighterElements = this._getElements(this.elementsTree);
+
+        // Remove old container listeners and add new ones
+        this._removeHighlighterListeners();
+        this._addHighlighterListeners();
+
+        for (const elem of this._highlighterElements) {
+            if (!elem.properties.width || !elem.properties.height) continue;
+
+            const box = document.createElement('div');
+            box.className = 'inspector-highlighter-box';
+            if (this.selectedElement && this.selectedElement.path === elem.element.path) {
+                box.classList.add('inspector-selected-element');
+            }
+            box.style.left = elem.properties.left + 'px';
+            box.style.top = elem.properties.top + 'px';
+            box.style.width = elem.properties.width + 'px';
+            box.style.height = elem.properties.height + 'px';
+            box.dataset.path = elem.element.path;
+            this.highlighterContainer.appendChild(box);
+        }
+    }
+
+    _addHighlighterListeners() {
+        if (!this.highlighterContainer) return;
+
+        this._highlighterClickHandler = (e) => {
+            const elem = this._findElementAtPoint(e);
+            if (elem) {
+                if (this.selectedElement && this.selectedElement.path === elem.element.path) {
+                    this.deselectElement();
+                } else {
+                    this.selectElement(elem.element);
+                }
+            }
+        };
+
+        this._highlighterMoveHandler = (e) => {
+            const elem = this._findElementAtPoint(e);
+            const prevHovered = this.hoveredElement;
+            if (elem) {
+                this.hoveredElement = elem.element;
+                this._updateHighlighterHover(elem.element.path);
+                if (prevHovered !== elem.element) {
+                    if (prevHovered) this.highlightTreeNode(prevHovered, false);
+                    this.highlightTreeNode(elem.element, true);
+                }
+            } else {
+                this.hoveredElement = null;
+                this._updateHighlighterHover(null);
+                if (prevHovered) this.highlightTreeNode(prevHovered, false);
+            }
+        };
+
+        this._highlighterLeaveHandler = () => {
+            if (this.hoveredElement) {
+                this.highlightTreeNode(this.hoveredElement, false);
+                this.hoveredElement = null;
+            }
+            this._updateHighlighterHover(null);
+        };
+
+        this.highlighterContainer.addEventListener('click', this._highlighterClickHandler);
+        this.highlighterContainer.addEventListener('mousemove', this._highlighterMoveHandler);
+        this.highlighterContainer.addEventListener('mouseleave', this._highlighterLeaveHandler);
+    }
+
+    _removeHighlighterListeners() {
+        if (!this.highlighterContainer) return;
+        if (this._highlighterClickHandler) {
+            this.highlighterContainer.removeEventListener('click', this._highlighterClickHandler);
+            this._highlighterClickHandler = null;
+        }
+        if (this._highlighterMoveHandler) {
+            this.highlighterContainer.removeEventListener('mousemove', this._highlighterMoveHandler);
+            this._highlighterMoveHandler = null;
+        }
+        if (this._highlighterLeaveHandler) {
+            this.highlighterContainer.removeEventListener('mouseleave', this._highlighterLeaveHandler);
+            this._highlighterLeaveHandler = null;
+        }
+    }
+
+    _findElementAtPoint(e) {
+        if (!this._highlighterElements || !this.highlighterContainer) return null;
+
+        const containerRect = this.highlighterContainer.getBoundingClientRect();
+        const x = e.clientX - containerRect.left;
+        const y = e.clientY - containerRect.top;
+
+        // Find the deepest (last in tree order = most specific) element containing the point
+        // Iterate in reverse to find the most specific element first
+        let bestMatch = null;
+        let bestArea = Infinity;
+
+        for (let i = this._highlighterElements.length - 1; i >= 0; i--) {
+            const elem = this._highlighterElements[i];
+            const {left, top, width, height} = elem.properties;
+            if (x >= left && x <= left + width && y >= top && y <= top + height) {
+                const area = width * height;
+                // Prefer smaller elements (more specific) at the same depth
+                if (area < bestArea) {
+                    bestArea = area;
+                    bestMatch = elem;
+                }
+            }
+        }
+
+        return bestMatch;
+    }
+
+    _updateHighlighterHover(hoveredPath) {
+        if (!this.highlighterContainer) return;
+        this.highlighterContainer.querySelectorAll('.inspector-highlighter-box').forEach(box => {
+            if (hoveredPath && box.dataset.path === hoveredPath) {
+                box.style.background = 'rgba(76, 175, 80, 0.2)';
+                box.style.border = '2px solid rgba(76, 175, 80, 0.6)';
+            } else if (!box.classList.contains('inspector-selected-element')) {
+                box.style.background = '';
+                box.style.border = '';
+            }
+        });
+    }
+
+    _updateHighlighterSelection() {
+        if (!this.highlighterContainer) return;
+        this.highlighterContainer.querySelectorAll('.inspector-selected-element').forEach(el => {
+            el.classList.remove('inspector-selected-element');
+        });
+        if (this.selectedElement) {
+            const escapedPath = CSS.escape(this.selectedElement.path);
+            const box = this.highlighterContainer.querySelector(`[data-path="${escapedPath}"]`);
+            if (box) box.classList.add('inspector-selected-element');
+        }
+    }
+
+    _updateHighlighterHover() {
+        // Hover is handled directly on overlay divs; this method is for tree-node hover sync
+    }
+
+    _initResizeObserver() {
+        if (!this.canvasContainer) return;
+        this._resizeObserver = new ResizeObserver(() => {
+            this._updateCanvasAndHighlighter();
+        });
+        this._resizeObserver.observe(this.canvasContainer);
+    }
+
+    _destroyResizeObserver() {
+        if (this._resizeObserver) {
+            this._resizeObserver.disconnect();
+            this._resizeObserver = null;
+        }
+    }
+
     redrawCanvas() {
         if (!this.screenshotImage || !this.canvas) return;
 
         const ctx = this.canvas.getContext('2d');
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         ctx.drawImage(this.screenshotImage, 0, 0, this.canvas.width, this.canvas.height);
-
-        if (this.hoveredElement) {
-            this.drawHighlight(this.hoveredElement, 'hover');
-        }
-        if (this.selectedElement) {
-            this.drawHighlight(this.selectedElement, 'selected');
-        }
-    }
-
-    drawHighlight(element, type) {
-        if (!this.canvas) return;
-        const bounds = this.parseBounds(element.attributes?.bounds);
-        if (!bounds) return;
-
-        const ctx = this.canvas.getContext('2d');
-        const x1 = bounds.x1 * this.canvasScale;
-        const y1 = bounds.y1 * this.canvasScale;
-        const x2 = bounds.x2 * this.canvasScale;
-        const y2 = bounds.y2 * this.canvasScale;
-        const width = x2 - x1;
-        const height = y2 - y1;
-
-        if (type === 'hover') {
-            ctx.fillStyle = 'rgba(76, 175, 80, 0.25)';
-            ctx.fillRect(x1, y1, width, height);
-            ctx.strokeStyle = 'rgba(76, 175, 80, 0.8)';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(x1, y1, width, height);
-        } else if (type === 'selected') {
-            ctx.strokeStyle = '#4CAF50';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(x1, y1, width, height);
-            ctx.fillStyle = 'rgba(76, 175, 80, 0.1)';
-            ctx.fillRect(x1, y1, width, height);
-        }
+        // Highlight drawing is now handled by overlay divs
     }
 
     async showLocators(element) {
@@ -782,6 +930,7 @@ export class InspectorModal {
     }
 
     _resetLoadingSteps() {
+        this._stepGeneration++;
         this._loadingStepIndex = 0;
         this._stepQueue = [];
         this._stepProcessing = false;
@@ -807,8 +956,10 @@ export class InspectorModal {
     async _processStepQueue() {
         if (this._stepProcessing) return;
         this._stepProcessing = true;
+        const gen = this._stepGeneration;
 
         while (this._stepQueue.length > 0) {
+            if (this._stepGeneration !== gen) { this._stepProcessing = false; return; }
             const nextStep = this._stepQueue.shift();
             const elapsed = Date.now() - this._lastStepTime;
             const minDelay = 600;
@@ -816,6 +967,8 @@ export class InspectorModal {
             if (elapsed < minDelay) {
                 await new Promise(resolve => setTimeout(resolve, minDelay - elapsed));
             }
+
+            if (this._stepGeneration !== gen) { this._stepProcessing = false; return; }
 
             const steps = this.loadingEl?.querySelectorAll('.inspector-loading-step');
             if (!steps || steps.length === 0) break;

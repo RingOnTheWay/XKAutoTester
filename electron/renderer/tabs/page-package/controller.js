@@ -1,6 +1,7 @@
 import { Action } from '../../core/Action.js';
 import { ApiBridge } from '../../core/ApiBridge.js';
 import { AppState } from '../../core/AppState.js';
+import { Toast } from '../../components/toast.js';
 
 /**
  * PagePackageController - 页面封装 Tab 控制器
@@ -396,7 +397,7 @@ export class PagePackageController {
       e.stopPropagation();
       const files = e.dataTransfer.files;
       if (files.length === 0) { this.#view.resetApkDropZone(); return; }
-      const filePath = this.#model.getFilePath(files[0]);
+      const filePath = await this.#model.getFilePath(files[0]);
       await handleApkFile(filePath);
     };
     const clickHandler = async () => {

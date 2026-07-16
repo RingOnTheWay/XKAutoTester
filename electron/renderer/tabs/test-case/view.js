@@ -172,6 +172,17 @@ export class TestCaseView {
         if (el) el.value = '';
     }
 
+    renderSearchLoading() {
+        const container = this.els.testFilesList;
+        if (!container) return;
+        container.innerHTML = `
+            <div class="tc-search-loading">
+                <div class="tc-search-loading-spinner"></div>
+                <span data-i18n="testCase.searchingFiles">${window.i18n.t('testCase.searchingFiles')}</span>
+            </div>
+        `;
+    }
+
     // ─── Editor State ──────────────────────────────────────────────
 
     showEditor() {
@@ -803,11 +814,16 @@ export class TestCaseView {
         const container = this.els.stepsList;
         if (!container) return;
 
-        // Cleanup cascade selects and moved options
+        // Cleanup cascade selects and moved options (only test-case's own options)
         if (DeviceCascadeSelect && DeviceCascadeSelect.destroyAll) {
             DeviceCascadeSelect.destroyAll();
         }
-        document.querySelectorAll('.custom-select__options[data-moved]').forEach(opt => opt.remove());
+        document.querySelectorAll('.custom-select__options[data-moved]').forEach(opt => {
+            // 只移除 test-case 的 options（ID 以 tc- 开头），避免误删其他 tab 的 options
+            if (opt.id && opt.id.startsWith('tc-')) {
+                opt.remove();
+            }
+        });
 
         container.innerHTML = '';
 

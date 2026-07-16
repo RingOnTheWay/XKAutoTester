@@ -47,7 +47,23 @@ function register(ipcMain, services) {
     'get-allure-server-status': () => allureService.getAllureServerStatus(),
     'clear-allure-reports': () => allureService.clearAllureReports(),
     'clear-all-logs': () => allureService.clearAllLogs(),
-    'send-dingtalk-notification': (notificationData) => notificationService.sendDingTalkNotification(notificationData)
+    'send-dingtalk-notification': async (notificationData) => {
+      // 从配置中读取 dingtalk access_token 和 secret，注入到 notificationData
+      try {
+        const configPath = path.join(electronApp.userConfigPath, 'config.json');
+        if (await asyncFs.exists(configPath)) {
+          const config = await asyncFs.readJson(configPath);
+          const dingtalkConfig = config.APP_SETTINGS?.notification?.dingtalk;
+          if (dingtalkConfig) {
+            notificationData.accessToken = dingtalkConfig.access_token;
+            notificationData.secret = dingtalkConfig.secret;
+          }
+        }
+      } catch (e) {
+        // 读取配置失败，继续使用原始数据
+      }
+      return notificationService.sendDingTalkNotification(notificationData);
+    }
   });
 }
 

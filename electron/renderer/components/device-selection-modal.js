@@ -2,6 +2,8 @@
  * DeviceSelectionModal - 设备选择模态框组件
  * Promise-based API，支持 select / test / inspector 三种模式
  */
+import { Toast } from './toast.js';
+
 class DeviceSelectionModal {
     // ---- 私有状态 ----
     #resolve = null;
@@ -561,6 +563,11 @@ class DeviceSelectionModal {
 
             if (result.success) {
                 this.#showAddDeviceResult(`${window.i18n.t('deviceModal.connectSuccess')}: ${deviceAddress}`, 'success');
+                // 延迟返回设备列表并自动选中新设备
+                setTimeout(() => {
+                    this.#hideAddDeviceInput();
+                    this.#selectDeviceInList(deviceAddress);
+                }, 1000);
             } else {
                 this.#showAddDeviceResult(`${window.i18n.t('deviceModal.connectFailed')}: ${result.error}`, 'error');
             }
@@ -581,6 +588,13 @@ class DeviceSelectionModal {
 
         if (type) addDeviceResult.classList.add(type);
         addDeviceResult.classList.remove('hidden');
+    }
+
+    #selectDeviceInList(deviceAddress) {
+        const deviceElement = document.querySelector(`.device-item[data-device-id="${deviceAddress}"]`);
+        if (deviceElement) {
+            deviceElement.click();
+        }
     }
 
     // ==================== 开放5555端口 ====================

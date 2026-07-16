@@ -354,7 +354,8 @@ export class SettingsView {
     if (titleElement) titleElement.textContent = title;
     if (messageElement) messageElement.textContent = message;
 
-    // 保存回调供确认按钮使用
+    // 保存回调到全局，供 confirm 按钮事件委托使用（跨 tab 共享）
+    window.__XKAT_CONFIRM_CALLBACK__ = onConfirm;
     this._confirmCallback = onConfirm;
 
     // 重置确认按钮状态
@@ -362,7 +363,10 @@ export class SettingsView {
     if (confirmBtn) {
       confirmBtn.disabled = false;
       confirmBtn.classList.remove('loading');
-      confirmBtn.innerHTML = confirmBtn.dataset.originalText || confirmBtn.textContent;
+      // 清除旧的 originalText，使用当前语言重新翻译
+      delete confirmBtn.dataset.originalText;
+      const i18nKey = confirmBtn.getAttribute('data-i18n');
+      confirmBtn.innerHTML = i18nKey ? window.i18n?.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
     }
 
     const confirmModal = window.__XKAT_MODALS__?.confirm;
@@ -390,7 +394,10 @@ export class SettingsView {
     } else {
       confirmBtn.disabled = false;
       confirmBtn.classList.remove('loading');
-      confirmBtn.innerHTML = confirmBtn.dataset.originalText || confirmBtn.textContent;
+      // 清除 originalText，使用当前语言重新翻译
+      delete confirmBtn.dataset.originalText;
+      const i18nKey = confirmBtn.getAttribute('data-i18n');
+      confirmBtn.innerHTML = i18nKey ? window.i18n?.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
     }
   }
 
@@ -402,13 +409,16 @@ export class SettingsView {
       if (confirmBtn) {
         confirmBtn.disabled = false;
         confirmBtn.classList.remove('loading');
-        confirmBtn.innerHTML = confirmBtn.dataset.originalText || confirmBtn.textContent;
+        delete confirmBtn.dataset.originalText;
+        const i18nKey = confirmBtn.getAttribute('data-i18n');
+        confirmBtn.innerHTML = i18nKey ? window.i18n?.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
       }
       return;
     }
     const confirmModal = window.__XKAT_MODALS__?.confirm;
     if (confirmModal) confirmModal.close();
     this._confirmCallback = null;
+    window.__XKAT_CONFIRM_CALLBACK__ = null;
     this.setConfirmButtonLoading(false);
   }
 }

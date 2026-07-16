@@ -526,6 +526,18 @@ export class AndroidConnectionModel extends EventEmitter {
     return null;
   }
 
+  async selectDownloadDirectory() {
+    try {
+      const result = await this.#api.selectDirectory();
+      if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
+        return result.filePaths[0];
+      }
+    } catch (error) {
+      this.emit('error', { source: 'selectDownloadDirectory', error });
+    }
+    return null;
+  }
+
   // ── APK 安装 ───────────────────────────────────────────────────
 
   async installApk() {
