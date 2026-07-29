@@ -16,6 +16,5 @@ export function createTestCaseTab() {
   const model = new TestCaseModel();
   const view = new TestCaseView();
   const controller = new TestCaseController(model, view);
-  model.setView(view);
   return { model, view, controller };
 }

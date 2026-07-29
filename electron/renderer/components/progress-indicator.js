@@ -18,7 +18,7 @@ export class ProgressIndicator {
         }
     }
     
-    show(message = '准备中...', type = 'download') {
+    show(message = window.i18n.t('environment.preparing'), type = 'download') {
         this.type = type;
         const progressContainer = document.getElementById('download-progress-container');
         if (progressContainer) {
@@ -26,25 +26,25 @@ export class ProgressIndicator {
             if (progressBar) {
                 progressBar.style.width = '0%';
             }
-            
+
             const percentageElement = document.getElementById('download-percentage');
             if (percentageElement) {
                 percentageElement.textContent = '0%';
             }
-            
+
             const filenameElement = document.getElementById('download-filename');
             if (filenameElement) {
                 filenameElement.textContent = message;
             }
-            
+
             const fileCountElement = document.getElementById('download-file-count');
             if (fileCountElement) {
                 if (this.totalFiles > 1) {
-                    fileCountElement.textContent = `文件: ${this.currentFileIndex} / ${this.totalFiles}`;
+                    fileCountElement.textContent = window.i18n.t('fileManager.fileCount', { current: this.currentFileIndex, total: this.totalFiles });
                 } else if (this.totalFiles === 1) {
                     fileCountElement.textContent = '';
                 } else {
-                    fileCountElement.textContent = '文件: 0 / 0';
+                    fileCountElement.textContent = window.i18n.t('fileManager.fileCountZero');
                 }
             }
             
@@ -98,41 +98,41 @@ export class ProgressIndicator {
                 filenameElement.textContent = progress.message;
             } else if (overallPercentage === 100) {
                 const completeMessages = {
-                    download: '下载完成',
-                    install: '安装完成',
-                    upload: '上传完成'
+                    download: window.i18n.t('fileManager.downloadComplete'),
+                    install: window.i18n.t('fileManager.installComplete'),
+                    upload: window.i18n.t('fileManager.uploadComplete')
                 };
-                filenameElement.textContent = completeMessages[this.type] || '完成';
+                filenameElement.textContent = completeMessages[this.type] || window.i18n.t('common.done');
             } else {
                 const progressMessages = {
-                    download: '正在下载',
-                    install: '正在安装',
-                    upload: '正在上传'
+                    download: window.i18n.t('fileManager.downloadProgress'),
+                    install: window.i18n.t('fileManager.installProgress'),
+                    upload: window.i18n.t('fileManager.uploadProgress')
                 };
-                filenameElement.textContent = progressMessages[this.type] || '进行中';
+                filenameElement.textContent = progressMessages[this.type] || window.i18n.t('fileManager.inProgress');
             }
         }
-        
+
         const progressBar = document.getElementById('download-progress-bar');
         if (progressBar) {
             progressBar.style.width = `${overallPercentage}%`;
         }
-        
+
         const percentageElement = document.getElementById('download-percentage');
         if (percentageElement) {
             percentageElement.textContent = `${Math.round(overallPercentage)}%`;
         }
-        
+
         const fileCountElement = document.getElementById('download-file-count');
         if (fileCountElement) {
             if (progress.fileSize) {
-                fileCountElement.textContent = `大小: ${progress.fileSize}`;
+                fileCountElement.textContent = window.i18n.t('fileManager.sizeLabel', { size: progress.fileSize });
             } else if (this.totalFiles > 1) {
-                fileCountElement.textContent = `文件: ${this.currentFileIndex} / ${this.totalFiles}`;
+                fileCountElement.textContent = window.i18n.t('fileManager.fileCount', { current: this.currentFileIndex, total: this.totalFiles });
             } else {
                 const transferred = progress.transferred || 0;
                 const totalSize = progress.totalSize || 1;
-                fileCountElement.textContent = `文件: ${transferred} / ${totalSize}`;
+                fileCountElement.textContent = window.i18n.t('fileManager.fileCount', { current: transferred, total: totalSize });
             }
         }
         
@@ -166,7 +166,7 @@ export class ProgressIndicator {
             
             const updateCountdown = () => {
                 if (countdownElement) {
-                    countdownElement.textContent = `${countdownSeconds}秒后自动关闭`;
+                    countdownElement.textContent = window.i18n.t('fileManager.autoCloseCountdown', { seconds: countdownSeconds });
                 }
                 
                 if (countdownSeconds <= 0) {
@@ -213,11 +213,11 @@ export class ProgressIndicator {
         if (errorContainer && errorMessageElement && errorTooltipElement) {
             if (filenameElement) {
                 const failMessages = {
-                    download: '下载失败',
-                    install: '安装失败',
-                    upload: '上传失败'
+                    download: window.i18n.t('fileManager.downloadFailed'),
+                    install: window.i18n.t('fileManager.installFailed'),
+                    upload: window.i18n.t('fileManager.uploadFailed')
                 };
-                filenameElement.textContent = failMessages[this.type] || '操作失败';
+                filenameElement.textContent = failMessages[this.type] || window.i18n.t('fileManager.operationFailed');
             }
             
             if (errorTitleElement) {

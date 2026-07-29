@@ -169,15 +169,14 @@ XKAutoTester/
 │   │   ├── adb_manager.py      # ADB 设备管理
 │   │   ├── appium_server.py    # Appium 服务管理
 │   │   ├── pytest_runner.py    # Pytest 运行器
-│   │   └── mock_ble_device.py  # BLE 蓝牙设备模拟
+│   │   └── ble_device.py  # BLE 蓝牙设备模拟
 │   ├── device/                 # 设备模块
 │   │   └── temperature/        # 体温计数据生成
 │   ├── recognition/            # 识别模块（验证码 OCR）
 │   └── utils/                  # 工具模块
 │       ├── config.py           # 配置管理器
 │       ├── logger.py           # 日志管理
-│       ├── test_initializer.py # 测试初始化
-│       └── test_utils.py       # 测试工具
+│       └── test_initializer.py # 测试初始化
 ├── config/                      # 配置文件
 │   ├── config.json             # 应用配置
 │   ├── ble_device.json         # 蓝牙设备配置

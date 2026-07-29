@@ -89,8 +89,15 @@ class ElectronApp {
     
     this.mainWindow.setMenu(null);
 
-    const htmlPath = path.join(pathHelper.getRendererPath(this.isPackaged, __dirname), 'index.html');
-    this.mainWindow.loadFile(htmlPath);
+    // 开发模式 (electron-vite dev): loadURL (dev server + HMR)
+    // 生产/旧开发模式: loadFile (源码 renderer/ 或打包后 renderer/)
+    const devServerUrl = process.env.ELECTRON_VITE_DEV_SERVER_URL;
+    if (devServerUrl) {
+      this.mainWindow.loadURL(devServerUrl);
+    } else {
+      const htmlPath = path.join(pathHelper.getRendererPath(this.isPackaged, __dirname), 'index.html');
+      this.mainWindow.loadFile(htmlPath);
+    }
 
     // 开发模式下自动打开DevTools
     if (!this.isPackaged) {
@@ -230,7 +237,7 @@ class ElectronApp {
       this.allureWindow = null;
       // 窗口关闭时联动停止HTTP server
       if (allureService) {
-        allureService._stopServer().catch(() => {});
+        allureService.stopAllureServer().catch(() => {});
       }
     });
   }
@@ -279,7 +286,8 @@ class ElectronApp {
           userDataService: this.services.userDataService,
           updateService: this.services.updateService,
           inspectorService: this.services.inspectorService,
-          dataTransferService: this.services.dataTransferService
+          dataTransferService: this.services.dataTransferService,
+          environmentStartupService: this.services.environmentStartupService,
         });
       }
 

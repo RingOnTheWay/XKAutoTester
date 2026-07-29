@@ -1,11 +1,12 @@
 const { registerHandler } = require('./base/handlerUtils');
+const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
   const { scheduledPlanService, schedulerService } = services;
 
-  registerHandler(ipcMain, 'get-scheduled-plans', () => scheduledPlanService.getScheduledPlans());
+  registerHandler(ipcMain, IPC_CHANNELS.GET_SCHEDULED_PLANS, () => scheduledPlanService.getScheduledPlans());
 
-  registerHandler(ipcMain, 'save-scheduled-plan', async (planData) => {
+  registerHandler(ipcMain, IPC_CHANNELS.SAVE_SCHEDULED_PLAN, async (planData) => {
     const result = await scheduledPlanService.saveScheduledPlan(planData);
     if (result.success) {
       schedulerService.addPlan(result.plan);
@@ -13,7 +14,7 @@ function register(ipcMain, services) {
     return result;
   });
 
-  registerHandler(ipcMain, 'update-scheduled-plan', async (planData) => {
+  registerHandler(ipcMain, IPC_CHANNELS.UPDATE_SCHEDULED_PLAN, async (planData) => {
     const result = await scheduledPlanService.updateScheduledPlan(planData);
     if (result.success) {
       schedulerService.updatePlan(planData.id, planData);
@@ -21,7 +22,7 @@ function register(ipcMain, services) {
     return result;
   });
 
-  registerHandler(ipcMain, 'delete-scheduled-plan', async (planId) => {
+  registerHandler(ipcMain, IPC_CHANNELS.DELETE_SCHEDULED_PLAN, async (planId) => {
     const result = await scheduledPlanService.deleteScheduledPlan(planId);
     if (result.success) {
       schedulerService.removePlan(planId);
@@ -29,12 +30,12 @@ function register(ipcMain, services) {
     return result;
   });
 
-  registerHandler(ipcMain, 'check-time-conflict', (data) => {
+  registerHandler(ipcMain, IPC_CHANNELS.CHECK_TIME_CONFLICT, (data) => {
     const { scheduledTime, excludeId } = data || {};
     return scheduledPlanService.checkTimeConflict(scheduledTime, excludeId);
   });
 
-  registerHandler(ipcMain, 'scheduled-test-complete', async (planId) => {
+  registerHandler(ipcMain, IPC_CHANNELS.SCHEDULED_TEST_COMPLETE, async (planId) => {
     const result = await scheduledPlanService.updateScheduledPlan({
       id: planId,
       status: 'completed',
@@ -45,7 +46,7 @@ function register(ipcMain, services) {
     return result;
   });
 
-  registerHandler(ipcMain, 'get-scheduler-status', () => schedulerService.getStatus());
+  registerHandler(ipcMain, IPC_CHANNELS.GET_SCHEDULER_STATUS, () => schedulerService.getStatus());
 }
 
 module.exports = { register };

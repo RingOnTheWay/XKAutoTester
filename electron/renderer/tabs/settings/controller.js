@@ -14,7 +14,6 @@ export class SettingsController {
   #unbinds = [];
   #unbindModel = [];
   #destroyed = false;
-  #scrollPreventHandler = null;
 
   /**
    * @param {import('./model.js').SettingsModel} model
@@ -50,15 +49,8 @@ export class SettingsController {
    * 确保下拉框状态正确（修复其他 tab 操作后下拉失效的问题）
    */
   onTabActivated() {
-    // 关闭可能残留的 dropdown-open 状态
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) {
-      mainContent.classList.remove('dropdown-open');
-    }
-    // 关闭所有可能残留的 show 状态的下拉
-    document.querySelectorAll('.custom-select__options.show').forEach(opt => {
-      opt.classList.remove('show');
-    });
+    // 关闭可能残留的 dropdown-open 状态 + 所有 show 状态的下拉
+    this.#view.closeAllDropdowns();
   }
 
   // ─── Model 事件 → View 渲染 ──────────────────────────────
@@ -103,7 +95,7 @@ export class SettingsController {
     });
 
     this.#on(model, 'update-not-available', () => {
-      Toast?.success(window.i18n?.t('settings.alreadyLatest') || '当前已是最新版本');
+      Toast?.success(window.i18n.t('settings.alreadyLatest'));
     });
 
     this.#on(model, 'download-progress', (progress) => {
@@ -115,9 +107,13 @@ export class SettingsController {
     });
 
     this.#on(model, 'error', (err) => {
-      const msg = err.message || err.source || String(err);
-      const translated = window.i18n?.t(`settings.${msg}`) || window.i18n?.t(msg) || msg;
-      Toast?.error(translated);
+      const source = err.source || '';
+      const failedKey = `settings.${source}Failed`;
+      const translated = source ? window.i18n.t(failedKey) : '';
+      const msg = (translated && translated !== failedKey)
+        ? translated
+        : (err.error?.message || err.message || err.source || String(err));
+      Toast?.error(msg);
     });
   }
 
@@ -130,61 +126,37 @@ export class SettingsController {
       this.#model.saveConfig({ dark_mode: checked });
     });
 
-    // 主题色选择器 — 开关逻辑在全局点击 handler 中（事件委托）
-    const themeColorPreview = document.getElementById('theme-color-preview');
-    const themeColorOptions = document.getElementById('theme-color-options');
-
     // 主题色选项 - 点击选项选择颜色
-    if (themeColorOptions) {
-      const handler = (e) => {
-        const option = e.target.closest('.theme-color-option');
-        if (!option) return;
-        const color = option.dataset.color;
-        if (color) {
-          this.#model.applyThemeColor(color);
-          this.#model.saveConfig({ theme_color: color });
-          if (this.#view.els.themeColorHex) {
-            this.#view.els.themeColorHex.value = color;
-          }
-          // 选择后关闭选项面板
-          themeColorOptions.classList.remove('show');
-        }
-      };
-      themeColorOptions.addEventListener('click', handler);
-      this.#unbinds.push(() => themeColorOptions.removeEventListener('click', handler));
-    }
+    this.#unbinds.push(
+      this.#view.bindThemeColorOptionsClick((color) => {
+        this.#model.applyThemeColor(color);
+        this.#model.saveConfig({ theme_color: color });
+      })
+    );
 
     // 主题色 HEX 输入
-    const themeColorHex = document.getElementById('theme-color-hex');
-    if (themeColorHex) {
-      const handler = (e) => {
-        const color = e.target.value.trim();
-        if (/^#[0-9a-fA-F]{6}$/.test(color)) {
-          this.#model.applyThemeColor(color);
-          this.#model.saveConfig({ theme_color: color });
-        }
-      };
-      themeColorHex.addEventListener('change', handler);
-      this.#unbinds.push(() => themeColorHex.removeEventListener('change', handler));
-    }
+    this.#unbinds.push(
+      this.#view.bindThemeColorHexChange((color) => {
+        this.#model.applyThemeColor(color);
+        this.#model.saveConfig({ theme_color: color });
+      })
+    );
 
     // 默认测试目录 - 浏览
     this.#bindClick('browse-default-directory', async () => {
       const result = await this.#model.selectDirectory();
       if (result && !result.canceled && result.filePaths.length > 0) {
         const path = result.filePaths[0];
-        if (this.#view.els.defaultTestDirectory) {
-          this.#view.els.defaultTestDirectory.value = path;
-        }
+        // MVC: input value 通过 view.setDefaultTestDirectory
+        this.#view.setDefaultTestDirectory(path);
         this.#model.saveConfig({ default_download_directory: path });
       }
     });
 
     // 默认测试目录 - 清除
     this.#bindClick('clear-default-directory', () => {
-      if (this.#view.els.defaultTestDirectory) {
-        this.#view.els.defaultTestDirectory.value = '';
-      }
+      // MVC: input value 通过 view.setDefaultTestDirectory
+      this.#view.setDefaultTestDirectory('');
       this.#model.saveConfig({ default_download_directory: '' });
     });
 
@@ -194,8 +166,8 @@ export class SettingsController {
       if (result && !result.canceled && result.filePaths.length > 0) {
         const newPath = result.filePaths[0];
         this.#view.showConfirmModal(
-          window.i18n?.t('settings.confirmChangeConfigPath') || '确认更改配置路径',
-          window.i18n?.t('settings.changeConfigPathMessage') || '更改配置存放位置后需要重启应用才能生效，是否继续？',
+          window.i18n.t('settings.confirmChangeConfigPath'),
+          window.i18n.t('settings.changeConfigPathMessage'),
           () => this.#model.changeDataPath(newPath)
         );
       }
@@ -204,110 +176,53 @@ export class SettingsController {
     // 配置存储路径 - 重置
     this.#bindClick('reset-config-storage', () => {
       this.#view.showConfirmModal(
-        window.i18n?.t('settings.confirmResetConfigPath') || '确认重置配置路径',
-        window.i18n?.t('settings.resetConfigPathMessage') || '重置为默认路径后需要重启应用才能生效，是否继续？',
+        window.i18n.t('settings.confirmResetConfigPath'),
+        window.i18n.t('settings.resetConfigPathMessage'),
         () => this.#model.resetDataPath()
       );
     });
 
-    // 语言选择
-    const languageOptions = document.getElementById('custom-language-options');
-    if (languageOptions) {
-      const handler = (e) => {
-        const option = e.target.closest('.custom-select__option');
-        if (!option) return;
-        e.stopPropagation();
-        const lang = option.dataset.value;
-        if (lang) {
-          this.#model.changeLanguage(lang);
-          this.#model.saveConfig({ language: lang });
-          // 更新选中显示
-          const textSpan = this.#view.els.customLanguageSelected?.querySelector('.custom-select__text');
-          if (textSpan) textSpan.textContent = option.querySelector('span')?.textContent || lang;
-          // 更新选项选中状态
-          languageOptions.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
-          option.classList.add('selected');
-        }
-        // 关闭下拉框 + 恢复滚动
-        languageOptions.classList.remove('show');
-        this.#enablePageScroll();
-      };
-      languageOptions.addEventListener('click', handler);
-      this.#unbinds.push(() => languageOptions.removeEventListener('click', handler));
-    }
+    // 语言选择 - 选项点击
+    this.#unbinds.push(
+      this.#view.bindLanguageOptionsClick((lang) => {
+        this.#model.changeLanguage(lang);
+        this.#model.saveConfig({ language: lang });
+      })
+    );
 
-    // 语言下拉框开关（使用事件委托，避免其他 tab 操作导致事件绑定失效）
-    // languageOptions 已在上方声明，复用同一引用
-    const languageSelectedEl = document.querySelector('#custom-language-select .custom-select__selected');
-    if (languageOptions && languageSelectedEl) {
-      // 将 options 移到 body，避免父容器 transform 影响 position:fixed 定位
-      if (!languageOptions.dataset.moved) {
-        document.body.appendChild(languageOptions);
-        languageOptions.dataset.moved = 'true';
-      }
-    }
+    // 语言下拉框：将 options 移到 body
+    this.#view.moveLanguageOptionsToBody();
 
-    // 通知平台选择
-    const notificationOptions = document.getElementById('custom-notification-platform-options');
-    if (notificationOptions) {
-      const handler = (e) => {
-        const option = e.target.closest('.custom-select__option');
-        if (!option) return;
-        e.stopPropagation();
-        const platform = option.dataset.value;
-        if (platform) {
-          const notification = { ...this.#model.notification, platform };
-          this.#model.get('notification').platform = platform;
-          this.#view.updateNotificationConfig(notification);
-          this.#model.saveNotificationConfig();
-          // 更新选中显示
-          const textSpan = this.#view.els.customNotificationPlatformSelected?.querySelector('.custom-select__text');
-          if (textSpan) textSpan.textContent = option.querySelector('span')?.textContent || platform;
-          notificationOptions.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
-          option.classList.add('selected');
-        }
-        // 关闭下拉框 + 恢复滚动
-        notificationOptions.classList.remove('show');
-        this.#enablePageScroll();
-      };
-      notificationOptions.addEventListener('click', handler);
-      this.#unbinds.push(() => notificationOptions.removeEventListener('click', handler));
-    }
+    // 通知平台选择 - 选项点击
+    this.#unbinds.push(
+      this.#view.bindNotificationOptionsClick((platform) => {
+        const notification = { ...this.#model.notification, platform };
+        this.#model.get('notification').platform = platform;
+        this.#view.updateNotificationConfig(notification);
+        this.#model.saveNotificationConfig();
+      })
+    );
 
-    // 通知平台下拉框开关（使用事件委托，避免其他 tab 操作导致事件绑定失效）
-    // notificationOptions 已在上方声明，复用同一引用
-    const notificationSelectEl = document.querySelector('#custom-notification-platform-select .custom-select__selected');
-    if (notificationOptions && notificationSelectEl) {
-      // 将 options 移到 body，避免父容器 transform 影响 position:fixed 定位
-      if (!notificationOptions.dataset.moved) {
-        document.body.appendChild(notificationOptions);
-        notificationOptions.dataset.moved = 'true';
-      }
-    }
+    // 通知平台下拉框：将 options 移到 body
+    this.#view.moveNotificationOptionsToBody();
 
     // 钉钉 access_token
-    const accessToken = document.getElementById('notification-access-token');
-    if (accessToken) {
-      const handler = () => {
+    this.#unbinds.push(
+      this.#view.bindAccessTokenChange(() => {
         this.#model.get('notification').dingtalk = this.#model.get('notification').dingtalk || {};
-        this.#model.get('notification').dingtalk.access_token = accessToken.value;
+        this.#model.get('notification').dingtalk.access_token = this.#view.getAccessToken();
         this.#model.saveNotificationConfig();
-      };
-      accessToken.addEventListener('change', handler);
-      this.#unbinds.push(() => accessToken.removeEventListener('change', handler));
-    }
+      })
+    );
 
     // 钉钉 secret
-    const secret = document.getElementById('notification-secret');
-    if (secret) {
-      const handler = () => {
+    this.#unbinds.push(
+      this.#view.bindSecretChange(() => {
         this.#model.get('notification').dingtalk = this.#model.get('notification').dingtalk || {};
-        this.#model.get('notification').dingtalk.secret = secret.value;
+        this.#model.get('notification').dingtalk.secret = this.#view.getSecret();
         this.#model.saveNotificationConfig();
-      };
-      secret.addEventListener('change', handler);
-      this.#unbinds.push(() => secret.removeEventListener('change', handler));
-    }
+      })
+    );
 
     // 导出配置
     this.#bindClick('export-config-btn', async () => {
@@ -315,14 +230,11 @@ export class SettingsController {
       if (result && !result.canceled && result.filePath) {
         this.#view.setButtonLoading('export-config-btn', true);
         try {
-          const exportResult = await this.#model.exportConfig(result.filePath);
-          if (exportResult?.success !== false) {
-            Toast?.success(window.i18n?.t('settings.exportConfigSuccess') || '配置导出成功');
-          } else {
-            Toast?.error(exportResult?.error || window.i18n?.t('settings.exportConfigFailed') || '配置导出失败');
-          }
+          // wrapper 已处理 IPC 失败,错误由外层 catch 接
+          await this.#model.exportConfig(result.filePath);
+          Toast?.success(window.i18n.t('settings.exportConfigSuccess'));
         } catch {
-          Toast?.error(window.i18n?.t('settings.exportConfigFailed') || '配置导出失败');
+          Toast?.error(window.i18n.t('settings.exportConfigFailed'));
         } finally {
           this.#view.setButtonLoading('export-config-btn', false);
         }
@@ -335,14 +247,11 @@ export class SettingsController {
       if (result && !result.canceled && result.filePath) {
         this.#view.setButtonLoading('export-logs-btn', true);
         try {
-          const exportResult = await this.#model.exportLogs(result.filePath);
-          if (exportResult?.success !== false) {
-            Toast?.success(window.i18n?.t('settings.exportLogsSuccess') || '日志导出成功');
-          } else {
-            Toast?.error(exportResult?.error || window.i18n?.t('settings.exportLogsFailed') || '日志导出失败');
-          }
+          // wrapper 已处理 IPC 失败,错误由外层 catch 接
+          await this.#model.exportLogs(result.filePath);
+          Toast?.success(window.i18n.t('settings.exportLogsSuccess'));
         } catch {
-          Toast?.error(window.i18n?.t('settings.exportLogsFailed') || '日志导出失败');
+          Toast?.error(window.i18n.t('settings.exportLogsFailed'));
         } finally {
           this.#view.setButtonLoading('export-logs-btn', false);
         }
@@ -354,23 +263,20 @@ export class SettingsController {
       const result = await this.#model.selectImportPath();
       if (result && !result.canceled && result.filePaths?.length > 0) {
         this.#view.showConfirmModal(
-          window.i18n?.t('settings.importConfig') || '导入配置',
-          window.i18n?.t('settings.importConfigConfirm') || '导入配置将覆盖当前配置，是否继续？',
+          window.i18n.t('settings.importConfig'),
+          window.i18n.t('settings.importConfigConfirm'),
           async () => {
+            // wrapper 已处理 IPC 失败,错误由 model 层 catch emit + 外层 try-catch 接
             const importResult = await this.#model.importConfig(result.filePaths[0]);
-            if (importResult?.success !== false) {
-              Toast?.success(window.i18n?.t('settings.importConfigSuccess') || '配置导入成功');
-              if (importResult?.needRestart) {
-                // 标记保持 modal 打开，阻止 hideConfirmModal 关闭
-                this.#view._keepModalOpen = true;
-                this.#view.showConfirmModal(
-                  window.i18n?.t('settings.restartRequired') || '需要重启',
-                  window.i18n?.t('settings.restartMessage') || '配置已更改，需要重启应用才能生效。是否立即重启？',
-                  () => this.#model.relaunchApp()
-                );
-              }
-            } else {
-              Toast?.error(importResult?.error || window.i18n?.t('settings.importConfigFailed') || '配置导入失败');
+            Toast?.success(window.i18n.t('settings.importConfigSuccess'));
+            if (importResult?.needRestart) {
+              // 标记保持 modal 打开，阻止 hideConfirmModal 关闭
+              this.#view._keepModalOpen = true;
+              this.#view.showConfirmModal(
+                window.i18n.t('settings.restartRequired'),
+                window.i18n.t('settings.restartMessage'),
+                () => this.#model.relaunchApp()
+              );
             }
           }
         );
@@ -380,13 +286,12 @@ export class SettingsController {
     // 清理 Allure 报告
     this.#bindClick('clear-allure-reports-btn', async () => {
       this.#view.showConfirmModal(
-        window.i18n?.t('settings.clearAllureReports') || '清空Allure报告数据',
-        window.i18n?.t('settings.clearAllureReportsConfirm') || '确定要清空所有Allure报告数据吗？此操作不可恢复。',
+        window.i18n.t('settings.clearAllureReports'),
+        window.i18n.t('settings.clearAllureReportsConfirm'),
         async () => {
-          const result = await this.#model.clearAllureReports();
-          if (result?.success !== false) {
-            Toast?.success(window.i18n?.t('settings.clearAllureReportsSuccess') || 'Allure报告数据已清空');
-          }
+          // wrapper 已处理 IPC 失败,错误由 model 层 catch emit
+          await this.#model.clearAllureReports();
+          Toast?.success(window.i18n.t('settings.clearAllureReportsSuccess'));
         }
       );
     });
@@ -394,15 +299,12 @@ export class SettingsController {
     // 清理所有日志
     this.#bindClick('clear-all-logs-btn', async () => {
       this.#view.showConfirmModal(
-        window.i18n?.t('settings.clearAllLogs') || '清除所有日志数据',
-        window.i18n?.t('settings.clearAllLogsConfirm') || '确定要清除所有日志数据吗？此操作不可恢复。',
+        window.i18n.t('settings.clearAllLogs'),
+        window.i18n.t('settings.clearAllLogsConfirm'),
         async () => {
-          const result = await this.#model.clearAllLogs();
-          if (result?.success !== false) {
-            Toast?.success(window.i18n?.t('settings.clearAllLogsSuccess') || '所有日志数据已清除');
-          } else {
-            Toast?.error(window.i18n?.t('settings.clearAllLogsFailed') || '清除日志数据失败');
-          }
+          // wrapper 已处理 IPC 失败,错误由 model 层 catch emit
+          await this.#model.clearAllLogs();
+          Toast?.success(window.i18n.t('settings.clearAllLogsSuccess'));
         }
       );
     });
@@ -414,15 +316,19 @@ export class SettingsController {
 
     // 防止睡眠
     this.#bindToggle('prevent-sleep-toggle', async (checked) => {
-      const result = await this.#model.setPreventSleep(checked);
-      if (result?.success !== false) {
-        this.#model.saveConfig({ preventSleep: checked });
-      }
+      // wrapper 已处理 IPC 失败,错误由 model 层 catch emit
+      await this.#model.setPreventSleep(checked);
+      this.#model.saveConfig({ preventSleep: checked });
     });
 
     // 检查更新
-    this.#bindClick('check-update-btn', () => {
-      this.#model.checkForUpdate();
+    this.#bindClick('check-update-btn', async () => {
+      this.#view.setButtonLoading('check-update-btn', true);
+      try {
+        await this.#model.checkForUpdate();
+      } finally {
+        this.#view.setButtonLoading('check-update-btn', false);
+      }
     });
 
     // 更新弹窗 - 下载/安装按钮
@@ -452,113 +358,41 @@ export class SettingsController {
     });
 
     // 全局点击：处理下拉框开关 + 关闭（捕获阶段，确保在 app.js 的冒泡阶段 handler 之前执行）
-    const globalClickHandler = (e) => {
-      // 1. 检查是否点击了语言下拉的 selected
-      const langSelected = e.target.closest('#custom-language-select .custom-select__selected');
-      if (langSelected) {
-        e.stopPropagation();
-        const langOptions = document.getElementById('custom-language-options');
-        if (langOptions) {
-          document.querySelectorAll('.custom-select__options.show').forEach(opt => {
-            if (opt !== langOptions) opt.classList.remove('show');
-          });
-          const themeOpts = document.getElementById('theme-color-options');
-          if (themeOpts) themeOpts.classList.remove('show');
-          const isShowing = langOptions.classList.contains('show');
-          if (isShowing) {
-            langOptions.classList.remove('show');
-            this.#enablePageScroll();
-          } else {
-            this.#positionDropdown(langSelected, langOptions);
-            langOptions.classList.add('show');
-            this.#disablePageScroll();
-          }
-        }
-        return;
-      }
-
-      // 2. 检查是否点击了通知平台下拉的 selected
-      const notifSelected = e.target.closest('#custom-notification-platform-select .custom-select__selected');
-      if (notifSelected) {
-        e.stopPropagation();
-        const notifOptions = document.getElementById('custom-notification-platform-options');
-        if (notifOptions) {
-          document.querySelectorAll('.custom-select__options.show').forEach(opt => {
-            if (opt !== notifOptions) opt.classList.remove('show');
-          });
-          const themeOpts = document.getElementById('theme-color-options');
-          if (themeOpts) themeOpts.classList.remove('show');
-          const isShowing = notifOptions.classList.contains('show');
-          if (isShowing) {
-            notifOptions.classList.remove('show');
-            this.#enablePageScroll();
-          } else {
-            this.#positionDropdown(notifSelected, notifOptions);
-            notifOptions.classList.add('show');
-            this.#disablePageScroll();
-          }
-        }
-        return;
-      }
-
-      // 3. 检查是否点击了主题色预览块
-      const themePreview = e.target.closest('#theme-color-preview');
-      if (themePreview) {
-        e.stopPropagation();
-        const themeOpts = document.getElementById('theme-color-options');
-        if (themeOpts) {
-          document.querySelectorAll('.custom-select__options.show').forEach(opt => {
-            opt.classList.remove('show');
-          });
-          this.#enablePageScroll();
-          themeOpts.classList.toggle('show');
-        }
-        return;
-      }
-
-      // 4. 检查是否点击了下拉选项（已在各自的 options handler 中处理，这里不再处理）
-      const isInCustomSelect = e.target.closest('.custom-select') ||
-        e.target.closest('.custom-select__options') ||
-        e.target.closest('.custom-select__option') ||
-        e.target.closest('.theme-color-options') ||
-        e.target.closest('#theme-color-preview');
-      if (!isInCustomSelect) {
-        // 5. 点击其他区域：关闭所有下拉框 + 恢复滚动
-        document.querySelectorAll('.custom-select__options.show').forEach(opt => {
-          opt.classList.remove('show');
-        });
-        const themeOpts = document.getElementById('theme-color-options');
-        if (themeOpts) themeOpts.classList.remove('show');
-        this.#enablePageScroll();
-      }
-    };
-    // 使用捕获阶段注册，确保在 app.js 的冒泡阶段 handler 之前执行
-    // 这样 stopPropagation() 能有效阻止 app.js handler 干扰
-    document.addEventListener('click', globalClickHandler, true);
-    this.#unbinds.push(() => document.removeEventListener('click', globalClickHandler, true));
+    this.#unbinds.push(
+      this.#view.bindGlobalClickForDropdowns({
+        onLanguageToggle: () => { this.#view.toggleLanguageDropdown(); },
+        onNotificationToggle: () => { this.#view.toggleNotificationDropdown(); },
+        onThemeToggle: () => { this.#view.toggleThemeColorOptions(); },
+        onOutsideClick: () => {
+          this.#view.hideAllCustomSelectOptions();
+          this.#view.hideThemeColorOptions();
+          this.#view.enablePageScroll();
+        },
+      })
+    );
 
     // Confirm modal 按钮（事件委托，因 HTML 动态加载）
-    document.addEventListener('click', (e) => {
-      if (e.target.id === 'confirm-modal-confirm-btn' || e.target.closest('#confirm-modal-confirm-btn')) {
-        const callback = window.__XKAT_CONFIRM_CALLBACK__ || this.#view._confirmCallback;
-        // 显示 loading，保持 modal 开着
-        this.#view.setConfirmButtonLoading(true);
-        // 延迟执行：让浏览器先渲染 loading 动画
-        setTimeout(async () => {
-          try {
-            if (callback) await callback();
-          } catch (err) {
-            console.error('Confirm action failed:', err);
-          }
-          // 非重启操作：callback 完成后关闭 modal
-          // 重启操作：进程已退出，这行不会执行
-          this.#view.hideConfirmModal();
-        }, 150);
-      }
-      if (e.target.id === 'confirm-modal-cancel-btn' || e.target.closest('#confirm-modal-cancel-btn')) {
-        this.#view.hideConfirmModal();
-      }
-    });
+    this.#unbinds.push(
+      this.#view.bindGlobalClickForConfirmModal({
+        onConfirm: () => {
+          const callback = window.__XKAT_CONFIRM_CALLBACK__ || this.#view._confirmCallback;
+          // 显示 loading，保持 modal 开着
+          this.#view.setConfirmButtonLoading(true);
+          // 延迟执行：让浏览器先渲染 loading 动画
+          setTimeout(async () => {
+            try {
+              if (callback) await callback();
+            } catch (err) {
+              console.error('Confirm action failed:', err);
+            }
+            // 非重启操作：callback 完成后关闭 modal
+            // 重启操作：进程已退出，这行不会执行
+            this.#view.hideConfirmModal();
+          }, 150);
+        },
+        onCancel: () => this.#view.hideConfirmModal(),
+      })
+    );
 
     // 导出/导入进度监听
     this.#bindProgressListeners();
@@ -570,7 +404,7 @@ export class SettingsController {
     if (ApiBridge.api.onExportProgress) {
       const removeExport = ApiBridge.api.onExportProgress((data) => {
         if (data?.percent !== undefined) {
-          Toast?.info(`${window.i18n?.t('settings.exporting') || '导出中'} ${data.percent}%`);
+          Toast?.info(`${window.i18n.t('settings.exporting')} ${data.percent}%`);
         }
       });
       this.#unbinds.push(() => { if (removeExport) removeExport(); });
@@ -579,7 +413,7 @@ export class SettingsController {
     if (ApiBridge.api.onImportProgress) {
       const removeImport = ApiBridge.api.onImportProgress((data) => {
         if (data?.percent !== undefined) {
-          Toast?.info(`${window.i18n?.t('settings.importing') || '导入中'} ${data.percent}%`);
+          Toast?.info(`${window.i18n.t('settings.importing')} ${data.percent}%`);
         }
       });
       this.#unbinds.push(() => { if (removeImport) removeImport(); });
@@ -594,81 +428,10 @@ export class SettingsController {
   }
 
   #bindClick(elementId, handler) {
-    const el = document.getElementById(elementId);
-    if (!el) return;
-    const wrappedHandler = () => {
-      if (el.disabled) return;
-      handler();
-    };
-    el.addEventListener('click', wrappedHandler);
-    this.#unbinds.push(() => el.removeEventListener('click', wrappedHandler));
+    this.#unbinds.push(this.#view.bindClickById(elementId, handler));
   }
 
   #bindToggle(elementId, handler) {
-    const el = document.getElementById(elementId);
-    if (!el) return;
-    const changeHandler = (e) => handler(e.target.checked);
-    el.addEventListener('change', changeHandler);
-    this.#unbinds.push(() => el.removeEventListener('change', changeHandler));
-  }
-
-  /**
-   * 定位下拉框到 selected 元素下方
-   * 与 script.js 的 positionDropdown 逻辑一致
-   */
-  #positionDropdown(selected, options) {
-    const rect = selected.getBoundingClientRect();
-
-    // 守卫：如果 selected 不可见（如 tab 未激活），跳过定位
-    if (rect.width === 0 && rect.height === 0) return;
-
-    const gap = 4;
-    const threshold = 2;
-    const viewportHeight = window.innerHeight;
-
-    // 临时显示测量高度（原始方式）
-    const prevDisplay = options.style.display;
-    options.style.display = 'block';
-    const actualHeight = options.offsetHeight || 200;
-    options.style.display = prevDisplay;
-
-    const spaceBelow = viewportHeight - rect.bottom - gap;
-    const spaceAbove = rect.top - gap;
-
-    let top;
-    if (spaceAbove >= actualHeight && spaceBelow < actualHeight * threshold) {
-      top = rect.top - actualHeight - gap;
-    } else if (spaceBelow >= actualHeight) {
-      top = rect.bottom + gap;
-    } else if (spaceAbove >= actualHeight) {
-      top = rect.top - actualHeight - gap;
-    } else {
-      top = spaceBelow >= spaceAbove ? rect.bottom + gap : Math.max(10, rect.top - actualHeight - gap);
-    }
-
-    options.style.top = `${top}px`;
-    options.style.left = `${rect.left}px`;
-    options.style.width = `${rect.width}px`;
-    options.style.transform = 'none';
-  }
-
-  #disablePageScroll() {
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) {
-      mainContent.classList.add('dropdown-open');
-      this.#scrollPreventHandler = (e) => e.preventDefault();
-      mainContent.addEventListener('wheel', this.#scrollPreventHandler, { passive: false });
-    }
-  }
-
-  #enablePageScroll() {
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) {
-      mainContent.classList.remove('dropdown-open');
-      if (this.#scrollPreventHandler) {
-        mainContent.removeEventListener('wheel', this.#scrollPreventHandler);
-        this.#scrollPreventHandler = null;
-      }
-    }
+    this.#unbinds.push(this.#view.bindToggleById(elementId, handler));
   }
 }

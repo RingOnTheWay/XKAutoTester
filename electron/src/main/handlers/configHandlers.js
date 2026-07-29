@@ -1,11 +1,12 @@
 const { registerHandler } = require('./base/handlerUtils');
 const path = require('path');
 const asyncFs = require('../utils/asyncFs');
+const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
   const { electronApp, i18nService, versionService, userDataService } = services;
 
-  registerHandler(ipcMain, 'get-config', async () => {
+  registerHandler(ipcMain, IPC_CHANNELS.GET_CONFIG, async () => {
     const configPath = path.join(electronApp.userConfigPath, 'config.json');
     if (await asyncFs.exists(configPath)) {
       return await asyncFs.readJson(configPath);
@@ -13,7 +14,7 @@ function register(ipcMain, services) {
     return {};
   });
 
-  registerHandler(ipcMain, 'save-config', async (newConfig) => {
+  registerHandler(ipcMain, IPC_CHANNELS.SAVE_CONFIG, async (newConfig) => {
     const configPath = path.join(electronApp.userConfigPath, 'config.json');
     let currentConfig = {};
 
@@ -33,13 +34,13 @@ function register(ipcMain, services) {
     return { success: true };
   });
 
-  registerHandler(ipcMain, 'get-project-info', () => ({
+  registerHandler(ipcMain, IPC_CHANNELS.GET_PROJECT_INFO, () => ({
     root: electronApp.projectRoot,
     version: versionService ? versionService.getDisplayVersion() : 'v0.1.3-dev.1',
     name: 'XKAutoTester'
   }));
 
-  registerHandler(ipcMain, 'show-dialog', async (options) => {
+  registerHandler(ipcMain, IPC_CHANNELS.SHOW_DIALOG, async (options) => {
     const { dialog } = require('electron');
     const { type, title, message, buttons } = options;
     const browserWindow = electronApp.mainWindow || null;
@@ -53,7 +54,7 @@ function register(ipcMain, services) {
     });
   });
 
-  registerHandler(ipcMain, 'get-data-path', () => {
+  registerHandler(ipcMain, IPC_CHANNELS.GET_DATA_PATH, () => {
     if (!userDataService) return { currentPath: '', defaultPath: '' };
     return {
       currentPath: userDataService.getUserDataPath(),
@@ -61,7 +62,7 @@ function register(ipcMain, services) {
     };
   });
 
-  registerHandler(ipcMain, 'change-data-path', async (newPath) => {
+  registerHandler(ipcMain, IPC_CHANNELS.CHANGE_DATA_PATH, async (newPath) => {
     if (!userDataService) return { success: false, error: '服务未初始化' };
     const result = await userDataService.changeDataPath(newPath);
     if (result.success) {
@@ -71,7 +72,7 @@ function register(ipcMain, services) {
     return result;
   });
 
-  registerHandler(ipcMain, 'reset-data-path', async () => {
+  registerHandler(ipcMain, IPC_CHANNELS.RESET_DATA_PATH, async () => {
     if (!userDataService) return { success: false, error: '服务未初始化' };
     const result = await userDataService.resetToDefaultPath();
     if (result.success) {
@@ -81,7 +82,7 @@ function register(ipcMain, services) {
     return result;
   });
 
-  registerHandler(ipcMain, 'relaunch-app', () => {
+  registerHandler(ipcMain, IPC_CHANNELS.RELAUNCH_APP, () => {
     const { app } = require('electron');
     app.relaunch();
     app.exit(0);

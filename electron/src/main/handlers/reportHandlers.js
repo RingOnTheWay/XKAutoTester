@@ -1,6 +1,7 @@
 const { registerHandlers } = require('./base/handlerUtils');
 const path = require('path');
 const asyncFs = require('../utils/asyncFs');
+const { IPC_CHANNELS } = require('../../shared/constants');
 
 function mapToAllureLanguage(appLanguage) {
   if (appLanguage && appLanguage.startsWith('zh')) return 'zh';
@@ -9,21 +10,16 @@ function mapToAllureLanguage(appLanguage) {
 }
 
 function register(ipcMain, services) {
-  const { allureService, notificationService, electronApp, i18nService, userDataService } = services;
+  const { allureService, notificationService, electronApp, i18nService, userDataService, testPlanService } = services;
 
   async function getAppTheme() {
-    try {
-      const configPath = path.join(electronApp.userConfigPath, 'config.json');
-      if (await asyncFs.exists(configPath)) {
-        const config = await asyncFs.readJson(configPath);
-        return config.APP_SETTINGS?.dark_mode === true;
-      }
-    } catch {}
-    return false;
+    const configPath = path.join(electronApp.userConfigPath, 'config.json');
+    const config = await asyncFs.readConfigIfExists(configPath);
+    return config?.APP_SETTINGS?.dark_mode === true;
   }
 
   registerHandlers(ipcMain, {
-    'view-report': async (testPlanName) => {
+    [IPC_CHANNELS.VIEW_REPORT]: async (testPlanName) => {
       const appLanguage = i18nService ? i18nService.getLanguage() : 'zh-CN';
       const isDark = await getAppTheme();
       const options = { language: mapToAllureLanguage(appLanguage), isDark };
@@ -33,8 +29,8 @@ function register(ipcMain, services) {
       }
       return result;
     },
-    'check-report-exists': (testPlanName) => allureService.checkReportExists(testPlanName),
-    'open-report-by-path': async (reportPath) => {
+    [IPC_CHANNELS.CHECK_REPORT_EXISTS]: (testPlanName) => allureService.checkReportExists(testPlanName),
+    [IPC_CHANNELS.OPEN_REPORT_BY_PATH]: async (reportPath) => {
       const appLanguage = i18nService ? i18nService.getLanguage() : 'zh-CN';
       const isDark = await getAppTheme();
       const options = { language: mapToAllureLanguage(appLanguage), isDark };
@@ -44,23 +40,18 @@ function register(ipcMain, services) {
       }
       return result;
     },
-    'get-allure-server-status': () => allureService.getAllureServerStatus(),
-    'clear-allure-reports': () => allureService.clearAllureReports(),
-    'clear-all-logs': () => allureService.clearAllLogs(),
-    'send-dingtalk-notification': async (notificationData) => {
+    [IPC_CHANNELS.GET_ALLURE_SERVER_STATUS]: () => allureService.getAllureServerStatus(),
+    [IPC_CHANNELS.CLEAR_ALLURE_REPORTS]: () => allureService.clearAllureReports(),
+    [IPC_CHANNELS.DELETE_REPORT_RUN]: ({ testPlanName, reportPath }) => testPlanService.deleteReportRun(testPlanName, reportPath),
+    [IPC_CHANNELS.CLEAR_ALL_LOGS]: () => allureService.clearAllLogs(),
+    [IPC_CHANNELS.SEND_DINGTALK_NOTIFICATION]: async (notificationData) => {
       // 从配置中读取 dingtalk access_token 和 secret，注入到 notificationData
-      try {
-        const configPath = path.join(electronApp.userConfigPath, 'config.json');
-        if (await asyncFs.exists(configPath)) {
-          const config = await asyncFs.readJson(configPath);
-          const dingtalkConfig = config.APP_SETTINGS?.notification?.dingtalk;
-          if (dingtalkConfig) {
-            notificationData.accessToken = dingtalkConfig.access_token;
-            notificationData.secret = dingtalkConfig.secret;
-          }
-        }
-      } catch (e) {
-        // 读取配置失败，继续使用原始数据
+      const configPath = path.join(electronApp.userConfigPath, 'config.json');
+      const config = await asyncFs.readConfigIfExists(configPath);
+      const dingtalkConfig = config?.APP_SETTINGS?.notification?.dingtalk;
+      if (dingtalkConfig) {
+        notificationData.accessToken = dingtalkConfig.access_token;
+        notificationData.secret = dingtalkConfig.secret;
       }
       return notificationService.sendDingTalkNotification(notificationData);
     }

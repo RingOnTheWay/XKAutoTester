@@ -1,7 +1,9 @@
+const { IPC_CHANNELS } = require('../../shared/constants');
+
 function register(ipcMain, services) {
   const { adbService } = services;
 
-  ipcMain.handle('install-apk', async (event, { apkPath, deviceId }) => {
+  ipcMain.handle(IPC_CHANNELS.INSTALL_APK, async (event, { apkPath, deviceId }) => {
     if (!adbService) {
       return { success: false, error: 'ADB service not initialized' };
     }

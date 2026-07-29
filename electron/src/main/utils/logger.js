@@ -14,7 +14,10 @@ class Logger {
 
   _resolveLogPath() {
     if (!this.currentLogPath) {
-      const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      // 本地时间格式 YYYY-MM-DD-HH-MM-SS, 与 Appium 日志一致 (appium_server.py L250)
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const currentTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
       this.currentLogPath = path.join(this.baseLogDir, `XKAT-${currentTime}.log`);
     }
     return this.currentLogPath;

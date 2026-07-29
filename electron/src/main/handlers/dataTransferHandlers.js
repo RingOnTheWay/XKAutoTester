@@ -1,14 +1,14 @@
 const { registerHandler } = require('./base/handlerUtils');
 const { dialog } = require('electron');
+const { getTimestamp } = require('../utils/pathHelper');
+const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
   const { electronApp, dataTransferService } = services;
 
-  registerHandler(ipcMain, 'select-export-path', async (options) => {
+  registerHandler(ipcMain, IPC_CHANNELS.SELECT_EXPORT_PATH, async (options) => {
     const type = options?.type || 'config';
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const timestamp = getTimestamp();
     const defaultName = type === 'logs'
       ? `XKAutoTester_Logs_${timestamp}.zip`
       : `XKAutoTester_Config_${timestamp}.zip`;
@@ -25,7 +25,7 @@ function register(ipcMain, services) {
     return result;
   });
 
-  registerHandler(ipcMain, 'select-import-path', async () => {
+  registerHandler(ipcMain, IPC_CHANNELS.SELECT_IMPORT_PATH, async () => {
     const result = await dialog.showOpenDialog(electronApp.mainWindow, {
       title: '导入配置',
       properties: ['openFile'],
@@ -38,17 +38,17 @@ function register(ipcMain, services) {
     return result;
   });
 
-  registerHandler(ipcMain, 'export-config', async (outputPath) => {
+  registerHandler(ipcMain, IPC_CHANNELS.EXPORT_CONFIG, async (outputPath) => {
     dataTransferService.setMainWindow(electronApp.mainWindow);
     return await dataTransferService.exportConfig(outputPath);
   });
 
-  registerHandler(ipcMain, 'export-logs', async (outputPath) => {
+  registerHandler(ipcMain, IPC_CHANNELS.EXPORT_LOGS, async (outputPath) => {
     dataTransferService.setMainWindow(electronApp.mainWindow);
     return await dataTransferService.exportLogs(outputPath);
   });
 
-  registerHandler(ipcMain, 'import-config', async (zipPath) => {
+  registerHandler(ipcMain, IPC_CHANNELS.IMPORT_CONFIG, async (zipPath) => {
     dataTransferService.setMainWindow(electronApp.mainWindow);
     return await dataTransferService.importConfig(zipPath);
   });

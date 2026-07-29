@@ -1,17 +1,18 @@
 const { registerHandler } = require('./base/handlerUtils');
+const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
   const { electronApp } = services;
   let dragStartPos = null;
   let winStartPos = null;
 
-  registerHandler(ipcMain, 'window-minimize', () => {
+  registerHandler(ipcMain, IPC_CHANNELS.WINDOW_MINIMIZE, () => {
     if (electronApp.mainWindow) {
       electronApp.mainWindow.minimize();
     }
   });
 
-  registerHandler(ipcMain, 'window-maximize', () => {
+  registerHandler(ipcMain, IPC_CHANNELS.WINDOW_MAXIMIZE, () => {
     if (electronApp.mainWindow) {
       if (electronApp.mainWindow.isMaximized()) {
         electronApp.mainWindow.unmaximize();
@@ -23,20 +24,20 @@ function register(ipcMain, services) {
     return false;
   });
 
-  registerHandler(ipcMain, 'window-close', () => {
+  registerHandler(ipcMain, IPC_CHANNELS.WINDOW_CLOSE, () => {
     if (electronApp.mainWindow) {
       electronApp.mainWindow.close();
     }
   });
 
-  registerHandler(ipcMain, 'window-is-maximized', () => {
+  registerHandler(ipcMain, IPC_CHANNELS.WINDOW_IS_MAXIMIZED, () => {
     if (electronApp.mainWindow) {
       return electronApp.mainWindow.isMaximized();
     }
     return false;
   });
 
-  registerHandler(ipcMain, 'window-set-ignore-mouse-events', (ignore, options, windowType) => {
+  registerHandler(ipcMain, IPC_CHANNELS.WINDOW_SET_IGNORE_MOUSE_EVENTS, (ignore, options, windowType) => {
     const targetWindow = windowType === 'splash' ? electronApp.splashWindow : electronApp.mainWindow;
     if (targetWindow) {
       targetWindow.setIgnoreMouseEvents(ignore, options);
@@ -45,14 +46,14 @@ function register(ipcMain, services) {
     return false;
   });
 
-  ipcMain.on('window-drag-start', (event, mouseX, mouseY) => {
+  ipcMain.on(IPC_CHANNELS.WINDOW_DRAG_START, (event, mouseX, mouseY) => {
     if (electronApp.mainWindow && !electronApp.mainWindow.isMaximized()) {
       dragStartPos = { x: mouseX, y: mouseY };
       winStartPos = electronApp.mainWindow.getPosition();
     }
   });
 
-  ipcMain.on('window-drag-move', (event, mouseX, mouseY) => {
+  ipcMain.on(IPC_CHANNELS.WINDOW_DRAG_MOVE, (event, mouseX, mouseY) => {
     if (electronApp.mainWindow && dragStartPos && winStartPos) {
       const deltaX = mouseX - dragStartPos.x;
       const deltaY = mouseY - dragStartPos.y;
@@ -62,7 +63,7 @@ function register(ipcMain, services) {
     }
   });
 
-  ipcMain.on('window-drag-end', () => {
+  ipcMain.on(IPC_CHANNELS.WINDOW_DRAG_END, () => {
     dragStartPos = null;
     winStartPos = null;
   });

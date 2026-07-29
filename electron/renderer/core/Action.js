@@ -30,9 +30,8 @@ export class Action {
         continue;
       }
 
-      const wrappedHandler = options.passive ? handler : handler;
-      el.addEventListener(eventType, wrappedHandler, { passive: !!options.passive });
-      cleanups.push(() => el.removeEventListener(eventType, wrappedHandler));
+      el.addEventListener(eventType, handler, { passive: !!options.passive });
+      cleanups.push(() => el.removeEventListener(eventType, handler));
     }
 
     return () => cleanups.forEach(fn => fn());

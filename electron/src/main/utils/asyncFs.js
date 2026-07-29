@@ -58,6 +58,17 @@ async function appendFile(path, data, encoding = 'utf8') {
   return fs.appendFile(path, data, encoding);
 }
 
+async function readConfigIfExists(configPath) {
+  try {
+    if (await exists(configPath)) {
+      return await readJson(configPath);
+    }
+  } catch (error) {
+    console.error('读取配置文件失败:', error);
+  }
+  return null;
+}
+
 module.exports = {
   exists,
   readJson,
@@ -70,5 +81,6 @@ module.exports = {
   stat,
   readdir,
   mkdir,
-  appendFile
+  appendFile,
+  readConfigIfExists
 };

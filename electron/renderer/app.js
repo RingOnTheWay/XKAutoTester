@@ -54,6 +54,9 @@ export class App {
       // 1. 初始化 i18n
       await this.#initializeI18n();
 
+      // 加载 Tab HTML（import.meta.glob 注入到各 page 容器）
+      await this.#loadTabHtml();
+
       // 2. 加载组件 HTML
       await this.#loadComponents();
 
@@ -202,6 +205,37 @@ export class App {
     } catch (error) {
       console.error('加载组件失败:', error);
     }
+  }
+
+  async #loadTabHtml() {
+    // 加载 5 tab HTML 片段 (兼容 npm start loadFile + npm run dev server)
+    const tabs = [
+      'test-execution',
+      'page-package',
+      'test-case',
+      'android-connection',
+      'settings',
+    ];
+    await Promise.all(
+      tabs.map(async (name) => {
+        try {
+          const response = await fetch(`tabs/${name}/tab.html`);
+          if (!response.ok) {
+            console.error(`加载 tab HTML 失败: tabs/${name}/tab.html (${response.status})`);
+            return;
+          }
+          const html = await response.text();
+          const container = document.getElementById(name);
+          if (container) {
+            container.innerHTML = html;
+          } else {
+            console.error(`Tab container not found: ${name}`);
+          }
+        } catch (err) {
+          console.error(`加载 tab HTML 异常: ${name}`, err);
+        }
+      })
+    );
   }
 
   // ==================== 模态框 ====================

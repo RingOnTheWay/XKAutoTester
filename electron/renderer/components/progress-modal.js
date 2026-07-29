@@ -107,7 +107,7 @@ export class ProgressModal {
         setTimeout(() => {
             if (this._destroyed) return;
             if (this.statusElement) {
-                this.statusElement.textContent = message || window.i18n?.t('common.done') || '完成';
+                this.statusElement.textContent = message || window.i18n.t('common.done');
             }
             if (this.barElement) {
                 this.barElement.classList.add('progress-modal-bar-complete');
@@ -126,7 +126,7 @@ export class ProgressModal {
         this.isError = true;
 
         if (this.statusElement) {
-            this.statusElement.textContent = window.i18n?.t('common.error') || '错误';
+            this.statusElement.textContent = window.i18n.t('common.error');
         }
         if (this.barElement) {
             this.barElement.classList.add('progress-modal-bar-error');
@@ -269,7 +269,7 @@ export class ProgressModal {
 
         this.closeBtn = document.createElement('button');
         this.closeBtn.className = 'material-button outlined small progress-modal-close-btn';
-        this.closeBtn.textContent = window.i18n?.t('common.close') || '关闭';
+        this.closeBtn.textContent = window.i18n.t('common.close');
         this.closeBtn.style.display = 'none';
         this.closeBtn.addEventListener('click', () => this.hide());
 

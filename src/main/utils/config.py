@@ -1,41 +1,16 @@
 """
 配置管理模块
 负责加载和管理JSON配置文件
+
+配置权威源: config/config.json (项目根目录)
+其他消费方 (JS UserDataService / Python ConfigManager) 均从此文件读取,
+不再维护硬编码副本。读取失败时抛 FileNotFoundError, 由调用方处理。
 """
+
 import json
-import os
 from pathlib import Path
 
-DEFAULT_CONFIG = {
-    "LOG_CONFIG": {
-        "level": "INFO",
-        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        "file_path": ".",
-        "max_bytes": 10485760,
-        "backup_count": 5
-    },
-    "SCRCPY_PARAMS": {
-        "max_size": "1920",
-        "video_bit_rate": "8",
-        "max_fps": "60",
-        "video_codec": "h264",
-        "always_on_top": True
-    },
-    "APP_SETTINGS": {
-        "default_download_directory": "",
-        "dark_mode": False,
-        "theme_color": "#4CAF50",
-        "language": "zh-CN",
-        "notification": {
-            "platform": "none",
-            "dingtalk": {
-                "access_token": "",
-                "secret": ""
-            }
-        },
-        "autoCheckUpdate": True
-    }
-}
+from main.utils.paths import get_config_file
 
 
 class ConfigManager:
@@ -53,44 +28,33 @@ class ConfigManager:
     def _detect_config_path(self) -> Path:
         """自动检测配置文件路径
 
-        优先使用环境变量 XKAUTOTESTER_USER_DATA 指定的用户数据目录，
+        通过 paths.get_config_file() 统一解析：
+        优先 XKAUTOTESTER_USER_DATA 环境变量指定的用户数据目录，
         回退到项目根目录下的 config 目录（开发模式）
 
         Returns:
             配置文件路径
         """
-        user_data = os.environ.get('XKAUTOTESTER_USER_DATA')
-        if user_data:
-            return Path(user_data) / 'config' / 'config.json'
-        return Path(__file__).parent.parent.parent.parent / "config" / "config.json"
+        return get_config_file()
 
     def _load_config(self) -> dict:
-        """加载JSON配置文件，文件不存在时自动创建默认配置
+        """加载JSON配置文件
+
+        配置文件不存在或损坏时抛 FileNotFoundError, 不再写默认配置。
+        Electron 启动 Python 子进程前已通过 UserDataService seed AppData,
+        正常情况下配置文件必然存在。
 
         Returns:
             配置字典
+
+        Raises:
+            FileNotFoundError: 配置文件不存在
+            json.JSONDecodeError: 配置文件 JSON 解析失败
         """
         if not self.config_path.exists():
-            self._ensure_config_dir()
-            self._save_default_config()
-            return DEFAULT_CONFIG.copy()
-
-        try:
-            with open(self.config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            self._save_default_config()
-            return DEFAULT_CONFIG.copy()
-
-    def _ensure_config_dir(self):
-        """确保配置文件所在目录存在"""
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
-
-    def _save_default_config(self):
-        """保存默认配置到文件"""
-        self._ensure_config_dir()
-        with open(self.config_path, 'w', encoding='utf-8') as f:
-            json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
+            raise FileNotFoundError(f"Config file not found: {self.config_path}")
+        with open(self.config_path, encoding="utf-8") as f:
+            return json.load(f)
 
     def get(self, key: str, default=None):
         """获取配置值
@@ -102,7 +66,7 @@ class ConfigManager:
         Returns:
             配置值
         """
-        keys = key.split('.')
+        keys = key.split(".")
         value = self.config
 
         for k in keys:
@@ -119,9 +83,18 @@ class ConfigManager:
 
     def save(self):
         """保存配置文件"""
-        self._ensure_config_dir()
-        with open(self.config_path, 'w', encoding='utf-8') as f:
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.config_path, "w", encoding="utf-8") as f:
             json.dump(self.config, f, indent=4, ensure_ascii=False)
 
 
-config_manager = ConfigManager()
+# 模块级懒加载实例（避免导入时触发文件 I/O）
+_config_manager_instance = None
+
+
+def get_config_manager() -> "ConfigManager":
+    """获取 ConfigManager 单例（首次调用时构造）"""
+    global _config_manager_instance
+    if _config_manager_instance is None:
+        _config_manager_instance = ConfigManager()
+    return _config_manager_instance

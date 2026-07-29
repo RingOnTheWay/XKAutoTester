@@ -1,0 +1,49 @@
+/* ========================================
+   测试计划元信息样式
+   ======================================== */
+
+.test-plan-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.test-plan-meta .loop-info,
+.test-plan-meta .continue-info {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.test-plan-meta .loop-info .svg-icon,
+.test-plan-meta .continue-info .svg-icon {
+    width: 18px;
+    height: 18px;
+}
+
+.test-plan-meta .loop-info .svg-icon svg,
+.test-plan-meta .continue-info .svg-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* 循环设置中的勾选框样式 - 去除悬浮背景效果 */
+.loop-setting-item.checkbox-item:hover {
+    background: transparent;
+}
+
+body.dark-theme .loop-setting-item.checkbox-item:hover {
+    background: transparent;
+}
+
+body:not(.dark-theme) .loop-setting-item.checkbox-item:hover {
+    background: transparent;
+}
+
+.test-plan-meta .continue-info {
+    color: var(--warning);
+}
+

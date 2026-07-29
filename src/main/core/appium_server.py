@@ -1,217 +1,380 @@
 """
 Appium服务器启动器
 使用subprocess自动启动和管理Appium服务器
+
+深模块重构 (2026-07-24):
+- 接口收窄: start() + stop() 两方法, stop() 统一优雅终止 + 端口清理
+- 实现藏深: _LogPump (日志文件+线程) + _PortProcessKiller (策略模式) 私有类
+- 消除 shell=True: 两步法 (netstat + Python 过滤)
+- 可测: subprocess_module 模块级注入
 """
-import subprocess
-import time
-import threading
-import requests
+
+import datetime
 import logging
 import os
+import platform
+import subprocess
+import threading
+import time
 from pathlib import Path
-import datetime
+
+import requests
+
+from main.utils.paths import get_logs_path
+from main.utils.text import clean_ansi_escape
 
 logger = logging.getLogger(__name__)
 
 
-def _get_data_root():
-    user_data = os.environ.get('XKAUTOTESTER_USER_DATA')
-    if user_data:
-        return Path(user_data)
-    return Path(__file__).parent.parent.parent.parent
+class _LogPump:
+    """Appium 子进程日志泵: 读 stdout -> 清洗 ANSI -> 写文件. 线程安全.
+
+    全权拥有日志文件句柄 + 读取线程. AppiumServer 不再直接管理这些资源.
+    """
+
+    def __init__(self, log_file_path: Path, process: subprocess.Popen):
+        """打开日志文件 (utf-8, w 模式). 不启动线程.
+
+        Args:
+            log_file_path: 日志文件路径
+            process: Appium 子进程对象 (需有 stdout/poll)
+        """
+        self._log_file_path = log_file_path
+        self._process = process
+        self._file = open(log_file_path, "w", encoding="utf-8")
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+
+    def start(self) -> None:
+        """启动 daemon 线程读 process.stdout.readline -> _write_clean_log."""
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        """日志读取线程主循环. 退出条件: _stop_event / process.poll() 非 None."""
+        try:
+            while not self._stop_event.is_set():
+                if self._process is None or self._process.poll() is not None:
+                    logger.info("进程已结束，日志读取线程退出")
+                    break
+                line = self._process.stdout.readline()
+                if not line:
+                    time.sleep(0.1)
+                    continue
+                self._write_clean_log(line)
+        except Exception as e:
+            logger.error(f"日志读取线程异常: {e}")
+
+    def _write_clean_log(self, text: str) -> None:
+        """清洗 ANSI 转义后写入文件 + flush."""
+        clean_text = clean_ansi_escape(text)
+        self._file.write(clean_text)
+        self._file.flush()
+
+    def stop(self) -> None:
+        """幂等停止: set event -> join 线程 (timeout=5) -> 关闭文件."""
+        if self._stop_event.is_set():
+            return
+        self._stop_event.set()
+        if self._thread is not None and self._thread.is_alive():
+            logger.info("等待日志读取线程安全退出...")
+            self._thread.join(timeout=5)
+            if self._thread.is_alive():
+                logger.warning("日志读取线程未在5秒内退出，继续执行")
+        try:
+            self._file.flush()
+            self._file.close()
+        except Exception as e:
+            logger.error(f"关闭日志文件时出错: {e}")
+
+
+class _PortProcessKiller:
+    """端口进程清理基类. 策略模式: 按 platform.system() 选具体子类."""
+
+    def __init__(self, port: int, subprocess_module=subprocess):
+        self.port = port
+        self._subprocess = subprocess_module
+
+    def kill(self) -> None:
+        """查找并终止占用 self.port 的进程. 幂等."""
+        raise NotImplementedError
+
+    @staticmethod
+    def factory(port: int, subprocess_module=subprocess) -> "_PortProcessKiller":
+        """按 platform.system() 选具体子类."""
+        if platform.system() == "Windows":
+            return _WindowsPortKiller(port, subprocess_module)
+        return _UnixPortKiller(port, subprocess_module)
+
+
+class _WindowsPortKiller(_PortProcessKiller):
+    """Windows: netstat -ano (无 shell) + Python 过滤 + taskkill /F /PID."""
+
+    def kill(self) -> None:
+        """两步法: netstat 取全量 -> Python 过滤 LISTENING+端口 -> taskkill."""
+        try:
+            logger.info(f"开始查找占用端口{self.port}的进程...")
+            result = self._subprocess.run(
+                ["netstat", "-ano"], capture_output=True, text=True, encoding="gbk", errors="replace", timeout=10
+            )
+            logger.info(f"netstat命令执行结果 - 返回码: {result.returncode}")
+            if result.stdout:
+                logger.info(f"netstat输出内容长度: {len(result.stdout)}字符")
+            if result.stderr:
+                logger.warning(f"netstat错误输出: {result.stderr}")
+
+            pids = self._extract_pids(result.stdout or "")
+            if pids:
+                logger.info(f"发现{len(pids)}个需要终止的进程: {pids}")
+                for pid in pids:
+                    self._kill_pid(pid)
+            else:
+                logger.info(f"未发现占用端口{self.port}的进程")
+        except Exception as e:
+            logger.error(f"端口清理时出错: {e}")
+
+    def _extract_pids(self, netstat_output: str) -> list[str]:
+        """从 netstat -ano 输出中提取占用 self.port 的 LISTENING PID.
+
+        匹配规则: local_addr 列 endswith :{port} + state == LISTENING + pid isdigit.
+        精确匹配, 避免子串误匹配 (如 :4723 vs :47230).
+        """
+        pids = []
+        port_suffix = f":{self.port}"
+        for line in netstat_output.split("\n"):
+            parts = line.split()
+            if len(parts) < 5:
+                continue
+            local_addr = parts[1]
+            state = parts[3]
+            pid = parts[4]
+            if local_addr.endswith(port_suffix) and state == "LISTENING" and pid.isdigit():
+                logger.info(f"找到占用端口{self.port}的进程ID: {pid}")
+                pids.append(pid)
+        return pids
+
+    def _kill_pid(self, pid: str) -> None:
+        """taskkill /F /PID {pid}."""
+        try:
+            logger.info(f"开始终止进程ID {pid}")
+            kill_result = self._subprocess.run(
+                ["taskkill", "/F", "/PID", pid],
+                capture_output=True,
+                text=True,
+                encoding="gbk",
+                errors="replace",
+                timeout=10,
+            )
+            logger.info(f"taskkill命令执行结果 - 返回码: {kill_result.returncode}")
+            if kill_result.stdout:
+                logger.info(f"taskkill输出: {kill_result.stdout}")
+            if kill_result.stderr:
+                logger.warning(f"taskkill错误: {kill_result.stderr}")
+            logger.info(f"已终止进程ID {pid}")
+        except Exception as e:
+            logger.error(f"终止进程ID {pid}时出错: {e}")
+
+
+class _UnixPortKiller(_PortProcessKiller):
+    """Unix/Linux: fuser -k {port}/tcp."""
+
+    def kill(self) -> None:
+        """fuser -k {port}/tcp."""
+        try:
+            logger.info(f"Unix/Linux系统端口{self.port}清理...")
+            result = self._subprocess.run(
+                ["fuser", "-k", f"{self.port}/tcp"], capture_output=True, text=True, timeout=10
+            )
+            logger.info(f"Unix/Linux系统端口{self.port}清理完成 - 返回码: {result.returncode}")
+        except Exception as e:
+            logger.error(f"Unix端口清理时出错: {e}")
 
 
 class AppiumServer:
-    """Appium服务器管理器"""
-    
-    DEFAULT_HOST = '127.0.0.1'
+    """Appium服务器管理器
+
+    深模块接口:
+    - start(): 启动服务器, 已在运行则复用, 失败自动 stop()
+    - stop(): 统一停止 (优雅终止 process + 端口清理兜底), 幂等
+    - server_url: @property, 从 host/port 计算
+    - apply_default_capabilities(): 静态方法, 应用 6 个默认 capabilities
+
+    内部实现藏深:
+    - _LogPump: 日志文件 + 读取线程 (全权拥有)
+    - _PortProcessKiller: 跨平台端口清理 (策略模式)
+    """
+
+    DEFAULT_HOST = "127.0.0.1"
     DEFAULT_PORT = 4723
-    DEFAULT_AUTOMATION_NAME = 'UiAutomator2'
+    DEFAULT_AUTOMATION_NAME = "UiAutomator2"
     DEFAULT_SETTINGS_TIMEOUT = 10000
     DEFAULT_SESSION_TIMEOUT = 60
-    
+
     DEFAULT_CAPABILITIES = {
-        'ensure_webviews_have_pages': True,
-        'native_web_screenshot': True,
-        'new_command_timeout': 3600,
-        'connect_hardware_keyboard': True,
+        "ensure_webviews_have_pages": True,
+        "native_web_screenshot": True,
+        "new_command_timeout": 3600,
+        "connect_hardware_keyboard": True,
     }
-    
-    def __init__(self, host='127.0.0.1', port=4723, log_level='info'):
-        """
-        初始化Appium服务器配置
-        
+
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 4723,
+        log_level: str = "info",
+        *,
+        subprocess_module=subprocess,
+    ):
+        """初始化Appium服务器配置. 不启动服务器.
+
         Args:
             host: 服务器主机地址
             port: 服务器端口
             log_level: 日志级别
+            subprocess_module: subprocess 模块 (测试注入, 默认用真实 subprocess)
         """
         self.host = host
         self.port = port
         self.log_level = log_level
-        self.server_url = f"http://{host}:{port}"
-        self.process = None
-        self._is_running = False
-        
+        self.process: subprocess.Popen | None = None
+        self._subprocess = subprocess_module
+        self._log_pump: _LogPump | None = None
+
         # 查找Appium可执行文件路径
         self.appium_executable = self._find_appium_executable()
-        
+
         # 日志文件路径固定为项目根目录下的logs/Appium
-        self.log_dir = _get_data_root() / "logs" / "Appium"
+        self.log_dir = get_logs_path("Appium")
         self.log_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # 生成与XKAT日志格式一致的日志文件名
         current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         self.log_file = self.log_dir / f"Appium-{current_time}.log"
-    
+
+    @property
+    def server_url(self) -> str:
+        """从 host/port 计算, 保证同步."""
+        return f"http://{self.host}:{self.port}"
+
     @staticmethod
     def apply_default_capabilities(options):
-        """
-        将默认的Appium高级配置应用到options对象
-        
+        """将默认的Appium高级配置应用到options对象.
+
         Args:
             options: UiAutomator2Options对象
-            
+
         Returns:
             options: 应用了默认配置的options对象
         """
         options.automation_name = AppiumServer.DEFAULT_AUTOMATION_NAME
-        options.ensureWebviewsHavePages = AppiumServer.DEFAULT_CAPABILITIES['ensure_webviews_have_pages']
-        options.nativeWebScreenshot = AppiumServer.DEFAULT_CAPABILITIES['native_web_screenshot']
-        options.newCommandTimeout = AppiumServer.DEFAULT_CAPABILITIES['new_command_timeout']
-        options.connectHardwareKeyboard = AppiumServer.DEFAULT_CAPABILITIES['connect_hardware_keyboard']
+        options.ensureWebviewsHavePages = AppiumServer.DEFAULT_CAPABILITIES["ensure_webviews_have_pages"]
+        options.nativeWebScreenshot = AppiumServer.DEFAULT_CAPABILITIES["native_web_screenshot"]
+        options.newCommandTimeout = AppiumServer.DEFAULT_CAPABILITIES["new_command_timeout"]
+        options.connectHardwareKeyboard = AppiumServer.DEFAULT_CAPABILITIES["connect_hardware_keyboard"]
         options.androidInstallTimeout = AppiumServer.DEFAULT_SETTINGS_TIMEOUT
         options.appWaitDuration = AppiumServer.DEFAULT_SETTINGS_TIMEOUT
         return options
-    
+
     def _find_appium_executable(self):
-        """
-        查找Appium可执行文件路径
-        
+        """查找Appium可执行文件路径.
+
         Returns:
             Appium可执行文件完整路径
         """
         # 检查PATH环境变量中的appium
-        for path in os.environ.get('PATH', '').split(os.pathsep):
-            appium_path = os.path.join(path, 'appium.cmd')
+        for path in os.environ.get("PATH", "").split(os.pathsep):
+            appium_path = os.path.join(path, "appium.cmd")
             if os.path.exists(appium_path):
                 return appium_path
-        
+
         # 如果都找不到，返回'appium'让系统尝试查找
-        return 'appium'
-    
-    def _clean_ansi_escape(self, text):
-        """清理ANSI转义字符"""
-        import re
-        # 匹配ANSI转义序列的正则表达式
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        return ansi_escape.sub('', text)
-    
-    def _write_clean_log(self, log_file, text):
-        """写入清理后的日志"""
-        clean_text = self._clean_ansi_escape(text)
-        log_file.write(clean_text)
-        log_file.flush()
-    
+        return "appium"
+
     def start(self, timeout=30):
-        """
-        启动Appium服务器
-        
+        """启动Appium服务器.
+
         Args:
             timeout: 启动超时时间（秒）
-            
+
         Returns:
-            bool: 启动是否成功
+            bool: 启动是否成功. 已在运行也返 True (复用现有服务器).
+            失败时自动调 stop() 后返 False.
         """
         try:
             # 检查是否已经在运行
             if self.is_server_running():
                 logger.info(f"Appium服务器已在运行: {self.server_url}")
-                self._is_running = True
                 return True
-            
+
             # 构建启动命令 - Appium 3.x需要使用server子命令
             cmd = [
                 self.appium_executable,
-                "--address", self.host,
-                "--port", str(self.port),
-                "--log-no-colors"  # 禁用颜色输出，减少转义字符
+                "--address",
+                self.host,
+                "--port",
+                str(self.port),
+                "--log-no-colors",  # 禁用颜色输出，减少转义字符
             ]
-            
+
             logger.info(f"启动Appium服务器: {' '.join(cmd)} > {self.log_file}")
-            
-            # 使用自定义日志处理器来清理转义字符
-            self.log_file_handle = open(self.log_file, 'w', encoding='utf-8')
-            self.process = subprocess.Popen(
+
+            # 启动子进程 (用注入的 subprocess_module)
+            self.process = self._subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                encoding='utf-8',
-                errors='replace',
-                bufsize=1  # 设置行缓冲
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,  # 设置行缓冲
             )
-            
-            # 启动日志读取线程
-            def read_logs():
-                try:
-                    while True:
-                        # 检查进程对象是否存在
-                        if self.process is None:
-                            logger.info("进程对象已为None，日志读取线程退出")
-                            break
-                        
-                        # 检查进程是否已结束
-                        if self.process.poll() is not None:
-                            logger.info("进程已结束，日志读取线程退出")
-                            break
-                        
-                        line = self.process.stdout.readline()
-                        if not line:
-                            time.sleep(0.1)  # 短暂休眠避免CPU占用过高
-                            continue
-                        
-                        # 检查日志文件句柄是否已关闭
-                        if hasattr(self, 'log_file_handle') and self.log_file_handle and not self.log_file_handle.closed:
-                            self._write_clean_log(self.log_file_handle, line)
-                        else:
-                            # 如果文件句柄已关闭，直接输出到控制台
-                            clean_text = self._clean_ansi_escape(line)
-                            print(clean_text, end='')
-                except Exception as e:
-                    logger.error(f"日志读取线程异常: {e}")
-            
-            self.log_thread = threading.Thread(target=read_logs, daemon=True)
-            self.log_thread.start()
-            
+
+            # 启动日志泵 (全权管理文件 + 线程)
+            self._log_pump = _LogPump(self.log_file, self.process)
+            self._log_pump.start()
+
             # 等待线程启动
             time.sleep(0.5)
-            
+
             # 等待服务器启动
             start_time = time.time()
             while time.time() - start_time < timeout:
                 if self.is_server_running():
-                    self._is_running = True
                     logger.info(f"Appium服务器启动成功: {self.server_url}")
                     return True
                 time.sleep(2)
-            
+
             # 超时处理
             logger.error(f"Appium服务器启动超时 ({timeout}秒)")
             self.stop()
             return False
-            
+
         except Exception as e:
             logger.error(f"启动Appium服务器失败: {e}")
+            self.stop()
             return False
-    
+
     def stop(self):
-        """停止Appium服务器"""
-        if self.process:
+        """统一停止: 优雅终止 self.process + 端口扫描清理兜底. 幂等.
+
+        顺序:
+        1. _LogPump.stop() (join 线程 + 关日志文件)
+        2. self.process.terminate() + wait(timeout=10), 超时 kill()
+        3. _PortProcessKiller.kill(port) 兜底 (杀端口上残留进程)
+        4. self.process = None
+        """
+        # 1. 停止日志泵
+        if self._log_pump is not None:
             try:
-                # 先终止进程
+                self._log_pump.stop()
+            except Exception as e:
+                logger.error(f"停止日志泵时出错: {e}")
+            self._log_pump = None
+
+        # 2. 优雅终止进程
+        if self.process is not None:
+            try:
                 self.process.terminate()
-                # 等待进程结束
                 self.process.wait(timeout=10)
                 logger.info("Appium服务器已停止")
             except subprocess.TimeoutExpired:
@@ -220,208 +383,34 @@ class AppiumServer:
             except Exception as e:
                 logger.error(f"停止Appium服务器时出错: {e}")
             finally:
-                # 关闭日志文件句柄
-                if hasattr(self, 'log_file_handle') and self.log_file_handle:
-                    try:
-                        self.log_file_handle.flush()
-                        self.log_file_handle.close()
-                    except Exception as e:
-                        logger.error(f"关闭日志文件时出错: {e}")
-                
-                # 等待日志读取线程安全退出
-                if hasattr(self, 'log_thread') and self.log_thread.is_alive():
-                    logger.info("等待日志读取线程安全退出...")
-                    self.log_thread.join(timeout=5)
-                    if self.log_thread.is_alive():
-                        logger.warning("日志读取线程未在5秒内退出，继续执行")
-                
-                # 最后设置process为None
                 self.process = None
-                self._is_running = False
-    
-    def force_cleanup(self):
-        """
-        强制清理Appium相关进程 - 通过端口号4723查找并终止进程
-        """
+
+        # 3. 端口清理兜底 (不管是否有 process, 都扫一遍端口)
         try:
-            import platform
-            
-            if platform.system() == "Windows":
-                # Windows系统：通过端口号查找并终止进程
-                # 使用netstat查找占用指定端口的进程
-                logger.info(f"开始查找占用端口{self.port}的进程...")
-                
-                # 方法1：直接使用findstr过滤端口号
-                result = subprocess.run(f'netstat -ano | findstr ":{self.port}"', 
-                                      shell=True, capture_output=True, text=True, timeout=10)
-                
-                # 记录详细的netstat输出用于调试
-                logger.info(f"netstat命令执行结果 - 返回码: {result.returncode}")
-                if result.stdout:
-                    logger.info(f"netstat输出内容:\n{result.stdout}")
-                if result.stderr:
-                    logger.warning(f"netstat错误输出: {result.stderr}")
-                
-                # 查找占用指定端口的进程ID
-                pids_to_kill = []
-                if result.stdout:
-                    for line in result.stdout.split('\n'):
-                        if line and f':{self.port}' in line and 'LISTENING' in line:
-                            logger.info(f"找到匹配的行: {line}")
-                            parts = line.split()
-                            logger.info(f"行分割结果: {parts}")
-                            if len(parts) >= 5:
-                                pid = parts[-1]
-                                logger.info(f"提取的PID: {pid}")
-                                if pid and pid.isdigit():
-                                    pids_to_kill.append(pid)
-                                    logger.info(f"发现占用端口{self.port}的进程ID: {pid}")
-                                else:
-                                    logger.warning(f"PID不是数字: {pid}")
-                            else:
-                                logger.warning(f"行分割后长度不足5: {len(parts)}")
-                        elif line and f':{self.port}' in line:
-                            logger.info(f"找到端口{self.port}但不处于LISTENING状态: {line}")
-                
-                # 如果方法1没有找到，使用方法2：获取完整netstat输出再过滤
-                if not pids_to_kill:
-                    logger.info("使用方法2：获取完整netstat输出")
-                    result = subprocess.run(['netstat', '-ano'], 
-                                          capture_output=True, text=True, encoding='utf-8', timeout=10)
-                    
-                    logger.info(f"方法2 netstat命令执行结果 - 返回码: {result.returncode}")
-                    if result.stdout:
-                        logger.info(f"方法2 netstat输出内容长度: {len(result.stdout)}字符")
-                        # 在完整输出中查找端口
-                        for line in result.stdout.split('\n'):
-                            if line and f':{self.port}' in line and 'LISTENING' in line:
-                                logger.info(f"方法2找到匹配的行: {line}")
-                                parts = line.split()
-                                if len(parts) >= 5:
-                                    pid = parts[-1]
-                                    if pid and pid.isdigit():
-                                        pids_to_kill.append(pid)
-                                        logger.info(f"方法2发现占用端口{self.port}的进程ID: {pid}")
-                    else:
-                        logger.warning("方法2 netstat命令没有输出内容")
-                
-                # 终止所有占用端口的进程
-                if pids_to_kill:
-                    logger.info(f"发现{len(pids_to_kill)}个需要终止的进程: {pids_to_kill}")
-                    for pid in pids_to_kill:
-                        try:
-                            logger.info(f"开始终止进程ID {pid}")
-                            kill_result = subprocess.run(['taskkill', '/F', '/PID', pid], 
-                                          capture_output=True, text=True, timeout=10)
-                            logger.info(f"taskkill命令执行结果 - 返回码: {kill_result.returncode}")
-                            if kill_result.stdout:
-                                logger.info(f"taskkill输出: {kill_result.stdout}")
-                            if kill_result.stderr:
-                                logger.warning(f"taskkill错误: {kill_result.stderr}")
-                            logger.info(f"已终止进程ID {pid}")
-                        except Exception as e:
-                            logger.error(f"终止进程ID {pid}时出错: {e}")
-                else:
-                    logger.info(f"未发现占用端口{self.port}的进程")
-                    
-                # 额外清理：查找并终止node.exe和appium相关进程
-                try:
-                    logger.info("开始查找node.exe进程...")
-                    # 查找node.exe进程
-                    result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq node.exe'], 
-                                          capture_output=True, text=True, timeout=10)
-                    logger.info(f"tasklist命令执行结果 - 返回码: {result.returncode}")
-                    if result.stdout:
-                        logger.info(f"tasklist输出:\n{result.stdout}")
-                        if 'node.exe' in result.stdout:
-                            logger.info("发现node.exe进程，开始终止...")
-                            kill_result = subprocess.run(['taskkill', '/F', '/IM', 'node.exe'], 
-                                      capture_output=True, text=True, timeout=10)
-                            logger.info(f"node.exe终止结果 - 返回码: {kill_result.returncode}")
-                            if kill_result.stdout:
-                                logger.info(f"node.exe终止输出: {kill_result.stdout}")
-                            logger.info("已终止node.exe进程")
-                        else:
-                            logger.info("未发现node.exe进程")
-                    if result.stderr:
-                        logger.warning(f"tasklist错误: {result.stderr}")
-                except Exception as e:
-                    logger.warning(f"清理node.exe进程时出错: {e}")
-                    
-            else:
-                # Unix/Linux系统：通过端口号查找并终止进程
-                logger.info("Unix/Linux系统端口清理...")
-                result = subprocess.run(['fuser', '-k', f'{self.port}/tcp'], 
-                              capture_output=True, text=True, timeout=10)
-                logger.info(f"Unix/Linux系统端口{self.port}清理完成 - 返回码: {result.returncode}")
-                
-            # 重置实例状态
-            self.process = None
-            self._is_running = False
-            logger.info("Appium服务器强制清理完成")
-                
+            killer = _PortProcessKiller.factory(self.port, self._subprocess)
+            killer.kill()
+            logger.info("Appium服务器端口清理完成")
         except Exception as e:
-            logger.error(f"强制清理进程时出错: {e}")
-    
+            logger.error(f"端口清理时出错: {e}")
+
     def is_server_running(self):
-        """检查Appium服务器是否在运行"""
+        """检查Appium服务器是否在运行.
+
+        Returns:
+            bool: 服务器是否在运行 (HTTP GET /status, 200 = running)
+        """
         try:
             response = requests.get(f"{self.server_url}/status", timeout=5)
             return response.status_code == 200
-        except:
+        except Exception:
             return False
 
-    
-    def get_status(self):
-        """获取服务器状态"""
-        return {
-            "is_running": self._is_running,
-            "server_url": self.server_url,
-            "process_alive": self.process is not None and self.process.poll() is None
-        }
-    
-    def __enter__(self):
-        """上下文管理器入口"""
-        self.start()
+    def __enter__(self) -> "AppiumServer":
+        """上下文管理器入口. start() 失败 raise RuntimeError."""
+        if not self.start():
+            raise RuntimeError("Appium server start failed")
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """上下文管理器出口"""
+        """上下文管理器出口."""
         self.stop()
-
-
-def start_appium_server(host='127.0.0.1', port=4723, timeout=30):
-    """
-    快速启动Appium服务器的便捷函数
-    
-    Args:
-        host: 服务器主机地址
-        port: 服务器端口
-        timeout: 启动超时时间（秒）
-        
-    Returns:
-        AppiumServer: 服务器实例
-    """
-    server = AppiumServer(host, port)
-    if server.start(timeout):
-        return server
-    else:
-        return None
-
-
-if __name__ == "__main__":
-    # 测试代码
-    import sys
-    
-    # 配置日志
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # 启动服务器
-    with AppiumServer() as server:
-        print(f"Appium服务器状态: {server.get_status()}")
-        
-        # 保持运行，直到用户输入
-        input("按Enter键停止服务器...")

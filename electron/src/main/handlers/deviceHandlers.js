@@ -1,23 +1,24 @@
 const { registerHandler } = require('./base/handlerUtils');
+const { IPC_CHANNELS } = require('../../shared/constants');
 
 const SCRCPY_CRASH_WINDOW_MS = 2000;
 
 function register(ipcMain, services) {
   const { adbService, scrcpyService, electronApp } = services;
 
-  registerHandler(ipcMain, 'getConnectedDevices', () =>
+  registerHandler(ipcMain, IPC_CHANNELS.GET_CONNECTED_DEVICES, () =>
     adbService.getConnectedDevices()
   );
 
-  registerHandler(ipcMain, 'executeAdbCommand', (cmd, deviceId) =>
+  registerHandler(ipcMain, IPC_CHANNELS.EXECUTE_ADB_COMMAND, (cmd, deviceId) =>
     adbService.executeAdbCommand(cmd, deviceId)
   );
 
-  registerHandler(ipcMain, 'uploadFile', (localPath, remotePath, deviceId, event) =>
+  registerHandler(ipcMain, IPC_CHANNELS.UPLOAD_FILE, (localPath, remotePath, deviceId, event) =>
     adbService.uploadFile(localPath, remotePath, deviceId, event.sender)
   , { withEvent: true });
 
-  registerHandler(ipcMain, 'start-scrcpy', async (deviceId, scrcpyParams) => {
+  registerHandler(ipcMain, IPC_CHANNELS.START_SCRCPY, async (deviceId, scrcpyParams) => {
     const result = await scrcpyService.startScrcpy(deviceId, scrcpyParams);
 
     if (result.success && result.process) {
@@ -27,7 +28,7 @@ function register(ipcMain, services) {
       childProcess.on('error', (err) => {
         const mainWindow = electronApp.mainWindow;
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('scrcpy-error', {
+          mainWindow.webContents.send(IPC_CHANNELS.SCRCPY_ERROR, {
             error: err.message || 'Unknown spawn error'
           });
         }
@@ -38,7 +39,7 @@ function register(ipcMain, services) {
         if (code !== 0 && elapsed < SCRCPY_CRASH_WINDOW_MS) {
           const mainWindow = electronApp.mainWindow;
           if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('scrcpy-error', {
+            mainWindow.webContents.send(IPC_CHANNELS.SCRCPY_ERROR, {
               error: 'crash',
               code,
               signal
@@ -53,7 +54,7 @@ function register(ipcMain, services) {
     return result;
   });
 
-  registerHandler(ipcMain, 'downloadFile', (remotePath, localPath, deviceId, event) =>
+  registerHandler(ipcMain, IPC_CHANNELS.DOWNLOAD_FILE, (remotePath, localPath, deviceId, event) =>
     adbService.downloadFile(remotePath, localPath, deviceId, event.sender)
   , { withEvent: true });
 }

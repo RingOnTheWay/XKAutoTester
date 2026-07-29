@@ -246,6 +246,40 @@ export class PagePackageView {
     this.updateBadge('element', 0);
   }
 
+  /**
+   * 删除后重置 select 状态 (保留当前层级卡片展开, 不 disabled 当前层级 select)
+   * MVC: 删除后 UI 状态归 view, 与常规 reset 区分
+   * @param {string} type - 'app' | 'page' | 'element'
+   */
+  resetForDelete(type) {
+    // 当前层级: 仅清文本 + 移除选项选中态, 保留卡片展开 + select 可用
+    const clearCurrent = (wrapper) => {
+      if (!wrapper) return;
+      const textSpan = wrapper.querySelector('.cascade-select__text');
+      if (textSpan) {
+        textSpan.textContent = window.i18n.t(`pagePackage.select${type.charAt(0).toUpperCase() + type.slice(1)}`);
+        textSpan.classList.add('placeholder');
+      }
+      wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
+    };
+
+    if (type === 'app') {
+      clearCurrent(this.els.appSelectWrapper);
+      this.els.appCard?.classList.remove('selected');
+      // 子层级: page/element reset (disabled + collapse, 因为无父选中)
+      this.resetPageSelect();
+      this.resetElementSelect();
+    } else if (type === 'page') {
+      clearCurrent(this.els.pageSelectWrapper);
+      this.els.pageCard?.classList.remove('selected');
+      // 子层级: element reset
+      this.resetElementSelect();
+    } else if (type === 'element') {
+      clearCurrent(this.els.elementSelectWrapper);
+      this.els.elementCard?.classList.remove('selected');
+    }
+  }
+
   // ─── Card Expand/Collapse ──────────────────────────────────────
 
   expandCard(type) {
@@ -528,5 +562,117 @@ export class PagePackageView {
       locator: this.getCustomSelectValue('pp-element-locator-wrapper') || 'id',
       value: this.els.elementValueInput?.value?.trim() || '',
     };
+  }
+
+  // ─── 级联选择器 / 子 Tab 访问桥（Controller → View 迁移） ───
+
+  /**
+   * 获取指定类型的级联选择器 wrapper
+   * @param {'app'|'page'|'element'} type
+   * @returns {Element|null}
+   */
+  getCascadeSelectWrapper(type) {
+    const key = `${type}SelectWrapper`;
+    return this.els[key] || null;
+  }
+
+  /**
+   * 关闭除指定 select 外所有打开的级联下拉
+   * @param {Element|null} exceptSelect - 不需要关闭的 select 元素
+   */
+  closeOtherCascadeSelects(exceptSelect = null) {
+    document.querySelectorAll('.cascade-select.open').forEach(s => {
+      if (s !== exceptSelect) {
+        s.classList.remove('open');
+        const otherCard = s.closest('.pp-card');
+        if (otherCard) otherCard.classList.remove('dropdown-open');
+      }
+    });
+  }
+
+  /**
+   * 获取指定 tab id 对应的 content 元素
+   * @param {string} tabId
+   * @returns {Element|null}
+   */
+  getTabContent(tabId) {
+    return document.getElementById(`pp-${tabId}-content`);
+  }
+
+  /**
+   * 切换级联选择器的 open 状态（同时同步 card dropdown-open）
+   * MVC: classList 管理归 view
+   * @param {Element} select - .cascade-select 元素
+   * @param {Element|null} card - 所属 .pp-card 元素
+   * @returns {boolean} 切换后是否为打开
+   */
+  toggleCascadeSelectOpen(select, card) {
+    if (!select) return false;
+    const isOpen = select.classList.toggle('open');
+    if (card) card.classList.toggle('dropdown-open', isOpen);
+    return isOpen;
+  }
+
+  /**
+   * 关闭级联选择器（移除 open + dropdown-open）
+   * MVC: classList 管理归 view
+   * @param {Element} select - .cascade-select 元素
+   * @param {Element|null} card - 所属 .pp-card 元素
+   */
+  closeCascadeSelect(select, card) {
+    if (!select) return;
+    select.classList.remove('open');
+    if (card) card.classList.remove('dropdown-open');
+  }
+
+  /**
+   * 切换子 tab 的 active 状态（清除其他 tab/contents 的 active）
+   * MVC: classList active 管理归 view
+   * @param {Element} activeTab - 被点击的 tab 元素
+   * @param {Element} targetContent - 目标 content 元素
+   */
+  setActiveSubTab(activeTab, targetContent) {
+    this.els.ppTabs.forEach(t => t.classList.remove('active'));
+    if (activeTab) activeTab.classList.add('active');
+    this.els.ppContents.forEach(c => c.classList.remove('active'));
+    if (targetContent) targetContent.classList.add('active');
+  }
+
+  /**
+   * 设置 APK 错误消息文本
+   * MVC: textContent 写入归 view
+   * @param {string} message - 错误消息
+   */
+  setApkErrorMessage(message) {
+    if (this.els.apkErrorMessage) {
+      this.els.apkErrorMessage.textContent = message;
+    }
+  }
+
+  /**
+   * 设置 APK 拖拽区 drag-over 状态
+   * MVC: classList drag-over 归 view
+   * @param {boolean} isDragOver - 是否处于 drag-over 状态
+   */
+  setApkDropZoneDragOver(isDragOver) {
+    const dropZone = this.els.apkDropZone;
+    if (!dropZone) return;
+    if (isDragOver) {
+      dropZone.classList.add('drag-over');
+    } else {
+      dropZone.classList.remove('drag-over');
+    }
+  }
+
+  /**
+   * 显示设备选择弹窗 (封装 DeviceSelectionModal)
+   * MVC: UI 组件实例化归 view,与 test-execution/test-case 一致
+   * @param {Object} options - { mode: 'select' | 'inspector' | 'test' }
+   * @returns {Promise<string|null>} 选中的 deviceId
+   */
+  async showDeviceSelection(options) {
+    const { default: DeviceSelectionModal } = await import('../../components/device-selection-modal.js');
+    const modal = new DeviceSelectionModal();
+    return await modal.show(options);
   }
 }

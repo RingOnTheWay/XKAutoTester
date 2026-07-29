@@ -22,7 +22,12 @@
     "deleteConfirm": "Are you sure you want to delete?",
     "error": "Error",
     "close": "Close",
-    "done": "Done"
+    "done": "Done",
+    "pleaseSelect": "Please select",
+    "unknownError": "Unknown error",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "copy": "Copy"
   },
   "tabs": {
     "testExecution": "Test Execution",
@@ -143,7 +148,8 @@
     "apkInstallFailed": "APK installation failed",
     "deviceNameRequired": "Please enter device name",
     "blePortFormatError": "BLE port format should be COM+number",
-    "deviceIdUpdated": "Device info updated"
+    "deviceIdUpdated": "Device info updated",
+    "updateDeviceInfoFailed": "Failed to update device info"
   },
   "fileManager": {
     "title": "File Manager",
@@ -172,12 +178,12 @@
     "loadingFiles": "Loading file list...",
     "emptyDirectory": "This directory is empty",
     "justNow": "Just now",
-    "minutesAgo": "minutes ago",
-    "hoursAgo": "hours ago",
-    "daysAgo": "days ago",
-    "weeksAgo": "weeks ago",
-    "monthsAgo": "months ago",
-    "yearsAgo": "years ago",
+    "minutesAgo": "{{n}} minutes ago",
+    "hoursAgo": "{{n}} hours ago",
+    "daysAgo": "{{n}} days ago",
+    "weeksAgo": "{{n}} weeks ago",
+    "monthsAgo": "{{n}} months ago",
+    "yearsAgo": "{{n}} years ago",
     "selectDeviceFirst": "Please select a device first",
     "adbCommandFailed": "ADB command execution failed",
     "zipCreationFailed": "Failed to create zip file",
@@ -193,7 +199,34 @@
     "uploadFailed": "Upload failed",
     "directoryNotFound": "Directory Not Found",
     "directoryNotFoundMessage": "The default download directory \"{{path}}\" does not exist and could not be created. Do you want to clear this path setting?",
-    "internalStorage": "Internal Storage"
+    "internalStorage": "Internal Storage",
+    "downloadComplete": "Download Complete",
+    "installComplete": "Install Complete",
+    "uploadComplete": "Upload Complete",
+    "downloadProgress": "Downloading",
+    "installProgress": "Installing",
+    "uploadProgress": "Uploading",
+    "inProgress": "In Progress",
+    "operationFailed": "Operation Failed",
+    "fileCount": "File: {{current}} / {{total}}",
+    "fileCountZero": "File: 0 / 0",
+    "sizeLabel": "Size: {{size}}",
+    "autoCloseCountdown": "Auto-close in {{seconds}}s",
+    "invalidNewName": "Invalid new name",
+    "clickToViewMorePath": "Click to view more paths"
+  },
+  "deviceCascadeSelect": {
+    "placeholder": "Select device...",
+    "manufacturerPlaceholder": "Select Manufacturer",
+    "typePlaceholder": "Select Type",
+    "modelPlaceholder": "Select Model",
+    "noManufacturer": "No device manufacturers",
+    "noType": "No device types",
+    "noDevice": "No devices"
+  },
+  "cascadeSelect": {
+    "placeholder": "Select...",
+    "searchPlaceholder": "Search..."
   },
   "deviceModal": {
     "title": "Device Management",
@@ -217,7 +250,10 @@
     "openPortBtnNotFound": "Open port button not found",
     "openingPort": "Opening port 5555...",
     "portOpenSuccess": "Port 5555 opened successfully",
-    "portOpenFailed": "Failed to open port"
+    "portOpenFailed": "Failed to open port",
+    "unauthorizedTip": "Device unauthorized",
+    "offlineTip": "Device offline",
+    "unavailableTip": "Device unavailable"
   },
   "controlParams": {
     "title": "Control Parameters",
@@ -257,7 +293,9 @@
     "allureServerStartFailed": "Allure server start failed",
     "processNotFound": "Process not found",
     "stopProcessFailed": "Failed to stop {{processName}} by port: {{error}}",
-    "openReportFailed": "Failed to open report with allure open: {{error}}"
+    "openReportFailed": "Failed to open report with allure open: {{error}}",
+    "tarExecFailed": "exec-out tar failed (code={{code}}): {{error}}",
+    "pullFailed": "pull failed (code={{code}}): {{error}}"
   },
   "placeholders": {
     "defaultDownloadPath": "Please select default download path",
@@ -314,6 +352,8 @@
       "editDeviceId": "Edit Device Connection Identifier",
       "deviceId": "Android ADB Connection Identifier",
       "deviceIdPlaceholder": "Enter device IP or ID",
+      "androidVersion": "Android Version",
+      "androidVersionPlaceholder": "Enter Android version, e.g. 14",
       "deviceManagement": "Device Management",
       "notSet": "Not Set",
       "updateSuccess": "Device connection ID updated successfully",
@@ -337,7 +377,8 @@
     "deletePlan": "Delete Plan",
     "deletePlanConfirm": "Are you sure you want to delete this test plan? This action cannot be undone.",
     "deleteScheduledPlanConfirm": "Are you sure you want to delete this scheduled plan? This action cannot be undone.",
-    "selectTestDirectoryFirstPlaceholder": "Please select test directory first",
+    "selectTestPlanFirstPlaceholder": "Please select a test plan to display test types",
+    "loadingFiles": "Loading...",
     "testType": "Test Type",
     "testOutput": "Test Output",
     "openXkatFolder": "Open Logs Folder",
@@ -498,7 +539,9 @@
     "month": "",
     "hour": "Hour",
     "minute": "Min",
-    "second": "Sec"
+    "second": "Sec",
+    "yearSuffix": "",
+    "monthSuffix": ""
   },
   "modal": {
     "newTestPlan": "New Test Plan",
@@ -557,7 +600,12 @@
     "reportUnavailable": "Deleted",
     "selectReport": "Please select a report",
     "loadFailed": "Failed to load reports",
-    "latest": "Latest"
+    "latest": "Latest",
+    "delete": "Delete",
+    "deleteConfirm": "Are you sure you want to delete this run record and its report? This action cannot be undone.",
+    "deleteSuccess": "Run record deleted",
+    "deleteFailed": "Failed to delete run record",
+    "invalidReport": "Invalid report record"
   },
   "splash": {
     "subtitle": "Automated Testing Tool",
@@ -774,7 +822,36 @@
     "unsavedChangesTitle": "Unsaved Changes",
     "unsavedChangesMessage": "You have unsaved changes. Do you want to save them?",
     "saveChanges": "Save",
-    "discardChanges": "Don't Save"
+    "discardChanges": "Don't Save",
+    "stepType": "Step Type",
+    "elementOperation": "Element Operation",
+    "pageOperation": "Page Operation",
+    "systemOperation": "System Operation",
+    "bleOperation": "Bluetooth Operation",
+    "selectPage": "Select page",
+    "selectElement": "Select element",
+    "operationType": "Operation Type",
+    "selectOperation": "Select operation",
+    "pageSelect": "Page Selection",
+    "elementSelect": "Element Selection",
+    "elementMulti": "Element Multi-select",
+    "clickCountLabel": "Click Count",
+    "randomSelectFromElements": "Randomly select from {{count}} elements",
+    "addElement": "Add Element",
+    "swipeDuration": "Swipe Duration (ms)",
+    "inputTextContent": "Input text content",
+    "integer": "Integer",
+    "decimalPlaces": "{{n}} decimal places",
+    "minValue": "Min Value",
+    "maxValue": "Max Value",
+    "precision": "Precision",
+    "selectPrecision": "Select precision",
+    "opClick": "Click",
+    "opSwipeUp": "Swipe up (page down)",
+    "opSwipeDown": "Swipe down (page up)",
+    "opSendText": "Send Text",
+    "defaultStepName": "Step {{n}}",
+    "copySuffix": "{{name}} (Copy)"
   },
   "pagePackage": {
     "appSelection": "App Selection",
@@ -846,6 +923,7 @@
       "permissionDenied": "Permission denied, unable to execute aapt2 tool",
       "fileCorrupted": "APK file may be corrupted or in an incorrect format",
       "parseError": "Failed to parse APK output",
+      "parseFailed": "APK parse failed (code={{code}})",
       "noPackageName": "Unable to extract package name from APK, file may be corrupted or in an incorrect format"
     },
     "pagePackageTab": "Page Package"
@@ -954,7 +1032,6 @@
       "runIndexOutOfRange": "Run record index {index} out of range (0-{max_index})",
       "runNoReportPath": "Run record has no associated report path",
       "reportDirNotExist": "Report directory does not exist: {path}",
-      "openingReport": "Opening run report #{index} for test plan '{test_plan_name}'",
       "reportOpened": "Report opened",
       "reportOpenFailed": "Failed to open report",
       "allureServerStarted": "Allure report server started for test plan '{test_plan_name}' (PID: {pid})",
@@ -1075,6 +1152,7 @@
       "logcatMonitorStarted": "Logcat monitor started, PID: {pid}",
       "logcatMonitorStartFailed": "Logcat monitor failed to start",
       "logcatMonitorStopped": "Logcat monitor stopped",
+      "logcatMonitorNotStarted": "Logcat monitor not started, skipping PID update",
       "gettingConnectedDevices": "Getting connected device list",
       "adbDeviceListReturnCode": "ADB device list command result - return code: {code}",
       "parsedDeviceList": "Parsed device list: {devices}",

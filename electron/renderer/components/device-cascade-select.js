@@ -4,10 +4,10 @@ export class DeviceCascadeSelect {
 
   constructor(containerId, options = {}) {
     this.containerId = containerId;
-    this.placeholder = options.placeholder || '请选择设备...';
-    this.manufacturerPlaceholder = options.manufacturerPlaceholder || '选择厂商';
-    this.typePlaceholder = options.typePlaceholder || '选择类型';
-    this.modelPlaceholder = options.modelPlaceholder || '选择型号';
+    this.placeholder = options.placeholder || window.i18n.t('deviceCascadeSelect.placeholder');
+    this.manufacturerPlaceholder = options.manufacturerPlaceholder || window.i18n.t('deviceCascadeSelect.manufacturerPlaceholder');
+    this.typePlaceholder = options.typePlaceholder || window.i18n.t('deviceCascadeSelect.typePlaceholder');
+    this.modelPlaceholder = options.modelPlaceholder || window.i18n.t('deviceCascadeSelect.modelPlaceholder');
     this.onSelect = options.onSelect || (() => {});
     this.labelKey = options.labelKey || 'name';
     this.valueKey = options.valueKey || 'deviceId';
@@ -251,7 +251,7 @@ export class DeviceCascadeSelect {
 
     const manufacturers = Object.values(this.groupedDevices);
     if (manufacturers.length === 0) {
-      this.manufacturerOptionsEl.innerHTML = `<div class="device-cascade-select__empty">暂无设备厂商</div>`;
+      this.manufacturerOptionsEl.innerHTML = `<div class="device-cascade-select__empty">${window.i18n.t('deviceCascadeSelect.noManufacturer')}</div>`;
       return;
     }
 
@@ -296,7 +296,7 @@ export class DeviceCascadeSelect {
 
     const types = Object.values(this.groupedDevices[this.selectedManufacturer].types);
     if (types.length === 0) {
-      this.typeOptionsEl.innerHTML = `<div class="device-cascade-select__empty">暂无设备类型</div>`;
+      this.typeOptionsEl.innerHTML = `<div class="device-cascade-select__empty">${window.i18n.t('deviceCascadeSelect.noType')}</div>`;
       return;
     }
 
@@ -332,7 +332,7 @@ export class DeviceCascadeSelect {
 
     const typeGroup = this.groupedDevices[this.selectedManufacturer].types[this.selectedType];
     if (!typeGroup || typeGroup.devices.length === 0) {
-      this.modelOptionsEl.innerHTML = `<div class="device-cascade-select__empty">暂无设备</div>`;
+      this.modelOptionsEl.innerHTML = `<div class="device-cascade-select__empty">${window.i18n.t('deviceCascadeSelect.noDevice')}</div>`;
       return;
     }
 

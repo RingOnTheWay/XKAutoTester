@@ -2,15 +2,16 @@ const { registerHandler } = require('./base/handlerUtils');
 const { dialog, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
-  const { electronApp } = services;
+  const { electronApp, i18nService } = services;
 
-  registerHandler(ipcMain, 'select-directory', () =>
+  registerHandler(ipcMain, IPC_CHANNELS.SELECT_DIRECTORY, () =>
     dialog.showOpenDialog(electronApp.mainWindow, { properties: ['openDirectory'] })
   );
 
-  registerHandler(ipcMain, 'select-file', () =>
+  registerHandler(ipcMain, IPC_CHANNELS.SELECT_FILE, () =>
     dialog.showOpenDialog(electronApp.mainWindow, {
       properties: ['openFile'],
       filters: [
@@ -20,21 +21,24 @@ function register(ipcMain, services) {
     })
   );
 
-  registerHandler(ipcMain, 'selectFiles', () =>
-    dialog.showOpenDialog(electronApp.mainWindow, {
+  registerHandler(ipcMain, IPC_CHANNELS.SELECT_FILES, () => {
+    const title = i18nService ? i18nService.t('fileManager.upload') : 'Upload';
+    return dialog.showOpenDialog(electronApp.mainWindow, {
+      title,
+      buttonLabel: title,
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'All Files', extensions: ['*'] }]
-    })
-  );
+    });
+  });
 
-  registerHandler(ipcMain, 'select-apk-file', () =>
+  registerHandler(ipcMain, IPC_CHANNELS.SELECT_APK_FILE, () =>
     dialog.showOpenDialog(electronApp.mainWindow, {
       properties: ['openFile'],
       filters: [{ name: 'Android Package', extensions: ['apk'] }]
     })
   );
 
-  registerHandler(ipcMain, 'checkPathExists', (pathToCheck) => {
+  registerHandler(ipcMain, IPC_CHANNELS.CHECK_PATH_EXISTS, (pathToCheck) => {
     try {
       return fs.existsSync(pathToCheck);
     } catch (error) {
@@ -43,32 +47,22 @@ function register(ipcMain, services) {
     }
   });
 
-  registerHandler(ipcMain, 'createDirectory', (dirPath) => {
-    try {
-      fs.mkdirSync(dirPath, { recursive: true });
-      return { success: true };
-    } catch (error) {
-      console.error('创建目录失败:', error);
-      return { success: false, error: error.message };
-    }
+  registerHandler(ipcMain, IPC_CHANNELS.CREATE_DIRECTORY, (dirPath) => {
+    fs.mkdirSync(dirPath, { recursive: true });
+    return { success: true };
   });
 
-  registerHandler(ipcMain, 'open-external', (url) => shell.openExternal(url));
+  registerHandler(ipcMain, IPC_CHANNELS.OPEN_EXTERNAL, (url) => shell.openExternal(url));
 
-  registerHandler(ipcMain, 'open-path', (pathToOpen) => {
-    try {
-      if (!fs.existsSync(pathToOpen)) {
-        return { success: false, error: 'Path does not exist' };
-      }
-      shell.openPath(pathToOpen);
-      return { success: true };
-    } catch (error) {
-      console.error('打开路径失败:', error);
-      return { success: false, error: error.message };
+  registerHandler(ipcMain, IPC_CHANNELS.OPEN_PATH, (pathToOpen) => {
+    if (!fs.existsSync(pathToOpen)) {
+      return { success: false, error: 'Path does not exist' };
     }
+    shell.openPath(pathToOpen);
+    return { success: true };
   });
 
-  registerHandler(ipcMain, 'save-test-case', (data) => {
+  registerHandler(ipcMain, IPC_CHANNELS.SAVE_TEST_CASE, (data) => {
     const { directory, fileName, content } = data;
 
     let finalFileName = fileName.trim();
@@ -102,7 +96,7 @@ class Test${finalFileName.replace('.py', '').replace(/[-\s]/g, '_')}:
     };
   });
 
-  registerHandler(ipcMain, 'delete-test-case', async (data) => {
+  registerHandler(ipcMain, IPC_CHANNELS.DELETE_TEST_CASE, async (data) => {
     const { filePath } = data;
 
     if (!filePath || !fs.existsSync(filePath)) {

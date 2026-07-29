@@ -5,10 +5,13 @@
   "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev",
+    "dev": "electron-vite dev",
+    "dev:legacy": "electron . --dev",
+    "test": "node --require ../tests/electron/_setup.js --test --test-force-exit ../tests/electron/test_*.js",
     "build": "electron-builder",
     "build-win": "electron-builder --win",
     "build-lite-win": "electron-builder --win --config electron-builder.lite.yml",
+    "build:vite": "electron-vite build",
     "pack": "electron-builder --dir",
     "version:bump": "python ../scripts/sync_version.py",
     "version:verify": "python ../scripts/sync_version.py --verify",
@@ -27,8 +30,12 @@
   "author": "RiNG",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^38.4.0",
-    "electron-builder": "^24.0.0"
+    "electron": "^38.8.6",
+    "electron-builder": "^24.0.0",
+    "electron-vite": "^2.3.0",
+    "jsdom": "^25.0.0",
+    "vite": "^5.4.0",
+    "vite-plugin-html-include": "^1.0.0"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",

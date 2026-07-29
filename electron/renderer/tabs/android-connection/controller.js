@@ -1,6 +1,5 @@
 import { Action } from '../../core/Action.js';
 import { ApiBridge } from '../../core/ApiBridge.js';
-import DeviceSelectionModal from '../../components/device-selection-modal.js';
 import { Toast } from '../../components/toast.js';
 
 /**
@@ -11,7 +10,6 @@ export class AndroidConnectionController {
   #model;
   #view;
   #cleanups = [];
-  #deviceSelectionModal = null;
   #initialized = false;
 
   constructor(model, view) {
@@ -112,37 +110,22 @@ export class AndroidConnectionController {
 
     // scrcpy 参数保存成功
     this.#onModel(model, 'scrcpy-params-saved', () => {
-      if (typeof Toast !== 'undefined') {
-        Toast.success(window.i18n.t('android.controlParamsSaved') || '控制参数已保存');
-      }
+      Toast.success(window.i18n.t('android.controlParamsSaved') || '控制参数已保存');
     });
 
-    // 投屏控制结果
-    this.#onModel(model, 'screen-control-result', (result) => {
-      if (typeof Toast === 'undefined') return;
-      if (result.success) {
-        Toast.success(window.i18n.t('android.scrcpyStartSuccess'));
-      } else {
-        Toast.error(result.error || window.i18n.t('android.scrcpyStartFailed'));
-      }
+    // 投屏控制结果（invokeWithCheck 已保证失败时抛错，走到这里即成功）
+    this.#onModel(model, 'screen-control-result', () => {
+      Toast.success(window.i18n.t('android.scrcpyStartSuccess'));
     });
 
     // 投屏控制错误
     this.#onModel(model, 'screen-control-error', ({ message }) => {
-      if (typeof Toast !== 'undefined') {
-        Toast.error(message);
-      }
+      Toast.error(message);
     });
 
-    // APK 安装结果
-    this.#onModel(model, 'install-apk-result', (result) => {
-      if (typeof Toast !== 'undefined') {
-        if (result.success) {
-          Toast.success(window.i18n.t('android.apkInstallSuccess') || 'APK 安装成功');
-        } else {
-          Toast.error(result.error || window.i18n.t('android.apkInstallFailed') || 'APK 安装失败');
-        }
-      }
+    // APK 安装结果（invokeWithCheck 已保证失败时抛错，走到这里即成功）
+    this.#onModel(model, 'install-apk-result', () => {
+      Toast.success(window.i18n.t('android.apkInstallSuccess') || 'APK 安装成功');
     });
 
     // 串口列表加载完成
@@ -151,17 +134,14 @@ export class AndroidConnectionController {
       const ports = result?.ports || result || [];
       view.renderPortList(ports, (port) => {
         // 选中端口后填充到蓝牙端口输入框
-        const blePortInput = document.getElementById('edit-ble-port-input');
-        if (blePortInput) blePortInput.value = port.deviceId;
+        view.setBlePortInput(port.deviceId);
       });
     });
 
     // 通用错误
     this.#onModel(model, 'error', ({ source, error, message }) => {
-      const msg = message || error?.message || '未知错误';
-      if (typeof Toast !== 'undefined') {
-        Toast.error(msg);
-      }
+      const msg = message || error?.message || window.i18n.t('common.unknownError');
+      Toast.error(msg);
       console.error(`[AndroidConnection] ${source} error:`, error);
     });
   }
@@ -180,30 +160,16 @@ export class AndroidConnectionController {
     this.#addAction('#open-port-btn', () => this.handleOpenPort5555());
 
     // ── 编辑设备 ID 弹窗 ─────────────────────────────────────
+    // 注意：edit-device-id-manage-btn 由 test-execution controller 通过 addEventListener 绑定
+    // （遵循 memory 规则：编辑设备弹窗按钮统一由 test-execution controller 处理）
+    // 此处不再重复绑定，避免双 handler 触发导致 DeviceSelectionModal 实例冲突
     this.#addAction('#edit-device-id-modal-close-btn', () => view.closeEditDeviceIdModal());
     this.#addAction('#edit-device-id-cancel-btn', () => view.closeEditDeviceIdModal());
     this.#addAction('#edit-device-id-confirm-btn', () => this.handleConfirmEditDeviceId());
-    this.#addAction('#edit-device-id-manage-btn', () => this.handleShowDeviceManagementForEdit());
     this.#addAction('#edit-port-manage-btn', () => this.handleShowPortModal());
 
     // BLE 端口输入校验
-    const blePortInput = document.getElementById('edit-ble-port-input');
-    if (blePortInput) {
-      const validateBlePort = () => {
-        const val = blePortInput.value.trim();
-        if (val && !/^COM\d+$/i.test(val)) {
-          blePortInput.style.borderColor = 'var(--error)';
-        } else {
-          blePortInput.style.borderColor = '';
-        }
-      };
-      blePortInput.addEventListener('input', validateBlePort);
-      blePortInput.addEventListener('blur', validateBlePort);
-      this.#cleanups.push(() => {
-        blePortInput.removeEventListener('input', validateBlePort);
-        blePortInput.removeEventListener('blur', validateBlePort);
-      });
-    }
+    this.#cleanups.push(this.#view.bindBlePortValidation());
 
     // ── 端口管理弹窗 ─────────────────────────────────────────
     this.#addAction('#port-modal-close-btn', () => view.closePortModal());
@@ -228,66 +194,42 @@ export class AndroidConnectionController {
     this.#addAction('#install-apk-btn', () => model.installApk());
 
     // 全选复选框
-    const selectAll = document.getElementById('select-all');
-    if (selectAll) {
-      const handler = (e) => this.handleToggleSelectAll(e.target.checked);
-      selectAll.addEventListener('change', handler);
-      this.#cleanups.push(() => selectAll.removeEventListener('change', handler));
-    }
+    this.#cleanups.push(
+      this.#view.bindSelectAllChange((checked) => this.handleToggleSelectAll(checked))
+    );
 
     // ── 右键菜单 ─────────────────────────────────────────────
-    const docClickHandler = (e) => {
-      const contextMenu = document.getElementById('context-menu');
-      if (contextMenu && !contextMenu.contains(e.target)) {
-        view.hideContextMenu();
-      }
-      // 省略号下拉菜单
-      const ellipsisDropdown = document.getElementById('ellipsis-dropdown');
-      if (ellipsisDropdown && !ellipsisDropdown.contains(e.target) && e.target.id !== 'unique-ellipsis') {
-        ellipsisDropdown.classList.remove('show');
-      }
-    };
-    document.addEventListener('click', docClickHandler);
-    this.#cleanups.push(() => document.removeEventListener('click', docClickHandler));
+    this.#cleanups.push(
+      this.#view.bindGlobalClickForDropdowns({
+        onOutsideContextMenu: () => view.hideContextMenu(),
+        onOutsideEllipsis: () => view.hideEllipsisDropdown(),
+      })
+    );
 
     // 右键菜单项点击
-    const contextMenu = document.getElementById('context-menu');
-    if (contextMenu) {
-      const menuClickHandler = (e) => {
-        const actionEl = e.target.closest('[data-action]');
-        if (actionEl) {
-          this.handleContextMenuAction(actionEl.dataset.action);
-          view.hideContextMenu();
-        }
-      };
-      contextMenu.addEventListener('click', menuClickHandler);
-      this.#cleanups.push(() => contextMenu.removeEventListener('click', menuClickHandler));
-    }
+    this.#cleanups.push(
+      this.#view.bindContextMenuActionClick((action) => {
+        this.handleContextMenuAction(action);
+        view.hideContextMenu();
+      })
+    );
 
     // ── 重命名弹窗 ───────────────────────────────────────────
     this.#addAction('#rename-modal-cancel-btn', () => view.closeRenameModal());
     this.#addAction('#rename-modal-close-btn', () => view.closeRenameModal());
 
-    const renameForm = document.getElementById('rename-modal-form');
-    if (renameForm) {
-      const submitHandler = (e) => {
-        e.preventDefault();
-        this.handleRenameSave();
-      };
-      renameForm.addEventListener('submit', submitHandler);
-      this.#cleanups.push(() => renameForm.removeEventListener('submit', submitHandler));
-    }
+    this.#cleanups.push(
+      this.#view.bindRenameFormSubmit(() => this.handleRenameSave())
+    );
 
     // ── 导航 Tab 切换 ────────────────────────────────────────
-    document.querySelectorAll('.nav-tab').forEach(tab => {
-      const handler = () => {
-        if (tab.dataset.tab === 'android-connection' && this.#model.selectedDevice) {
+    this.#cleanups.push(
+      this.#view.bindNavTabsClick((tabName) => {
+        if (tabName === 'android-connection' && this.#model.selectedDevice) {
           model.loadFileList();
         }
-      };
-      tab.addEventListener('click', handler);
-      this.#cleanups.push(() => tab.removeEventListener('click', handler));
-    });
+      })
+    );
   }
 
   // ─── IPC 事件绑定 ──────────────────────────────────────────
@@ -295,9 +237,7 @@ export class AndroidConnectionController {
   #bindIpcEvents() {
     // scrcpy 错误
     const unsubScrcpyError = this.#model.listenScrcpyError?.((data) => {
-      if (typeof Toast !== 'undefined') {
-        Toast.error(data?.error || data?.message || window.i18n.t('android.scrcpyError'));
-      }
+      Toast.error(data?.error || data?.message || window.i18n.t('android.scrcpyError'));
     });
     if (unsubScrcpyError) this.#cleanups.push(unsubScrcpyError);
 
@@ -323,11 +263,9 @@ export class AndroidConnectionController {
   // ─── Handler 方法 ──────────────────────────────────────────
 
   async handleShowDeviceModal() {
-    if (!this.#deviceSelectionModal) {
-      this.#deviceSelectionModal = new DeviceSelectionModal();
-    }
+    // MVC: DeviceSelectionModal 实例化委托给 view.showDeviceSelection
     try {
-      const deviceId = await this.#deviceSelectionModal.show({ mode: 'select' });
+      const deviceId = await this.#view.showDeviceSelection({ mode: 'select' });
       this.#model.selectDevice(deviceId);
       this.#view.updateSelectedDeviceDisplay(deviceId);
       this.#view.toggleFileManagerEnabled(true);
@@ -348,15 +286,12 @@ export class AndroidConnectionController {
   }
 
   handleConfirmDeviceSelection() {
-    const selectedElement = document.querySelector('.device-item.selected');
-    if (!selectedElement) {
-      if (typeof Toast !== 'undefined') {
-        const modalContainer = document.querySelector('#device-modal-overlay .modal-container');
-        Toast.error(window.i18n.t('testExecution.deviceSelection.deviceRequired'), { container: modalContainer });
-      }
+    const deviceId = this.#view.getSelectedDeviceId();
+    if (!deviceId) {
+      const modalContainer = this.#view.getDeviceModalContainer();
+      Toast.error(window.i18n.t('testExecution.deviceSelection.deviceRequired'), { container: modalContainer });
       return;
     }
-    const deviceId = selectedElement.getAttribute('data-device-id');
     this.#model.selectDevice(deviceId);
     this.#view.closeDeviceModal();
     this.#view.updateSelectedDeviceDisplay(deviceId);
@@ -370,26 +305,24 @@ export class AndroidConnectionController {
     // 隐藏编辑设备 ID 弹窗
     this.#view.closeEditDeviceIdModal();
 
-    if (!this.#deviceSelectionModal) {
-      this.#deviceSelectionModal = new DeviceSelectionModal();
-    }
+    // MVC: DeviceSelectionModal 实例化委托给 view.showDeviceSelection
     try {
-      const deviceId = await this.#deviceSelectionModal.show({ mode: 'select' });
+      const deviceId = await this.#view.showDeviceSelection({ mode: 'select' });
       // 选中设备后填充到编辑弹窗输入框
-      const editDeviceIdInput = document.getElementById('edit-device-id-input');
-      if (editDeviceIdInput) editDeviceIdInput.value = deviceId;
+      this.#view.setEditDeviceIdInput(deviceId);
 
-      // 获取 Android 版本并填充
-      const versionResult = await this.#model.executeAdbCommand('getprop ro.build.version.release', deviceId);
-      const editAndroidVersionInput = document.getElementById('edit-android-version-input');
-      if (editAndroidVersionInput && versionResult.success) {
-        editAndroidVersionInput.value = versionResult.output.trim();
-      }
+      // 获取 Android 版本并填充（失败时容错,platformVersion 留空）
+      let platformVersion = '';
+      try {
+        const versionResult = await this.#model.executeAdbCommand('getprop ro.build.version.release', deviceId);
+        platformVersion = versionResult.output.trim();
+        this.#view.setEditAndroidVersionInput(platformVersion);
+      } catch (e) { /* 获取版本失败容错,留空 */ }
 
       // 重新打开编辑弹窗
       this.#view.openEditDeviceIdModal({
         deviceName: deviceId,
-        platformVersion: versionResult.success ? versionResult.output.trim() : '',
+        platformVersion,
         blePort: '',
         hasBleSteps: false,
       });
@@ -405,56 +338,42 @@ export class AndroidConnectionController {
   }
 
   async handleConfirmEditDeviceId() {
-    const editDeviceIdInput = document.getElementById('edit-device-id-input');
-    const editAndroidVersionInput = document.getElementById('edit-android-version-input');
-    const editBlePortInput = document.getElementById('edit-ble-port-input');
-
-    const deviceName = editDeviceIdInput?.value?.trim();
-    const platformVersion = editAndroidVersionInput?.value?.trim();
-    const blePort = editBlePortInput?.value?.trim();
+    const { deviceName, platformVersion, blePort } = this.#view.getEditDeviceIdFormData();
 
     if (!deviceName) {
-      if (typeof Toast !== 'undefined') {
-        Toast.error(window.i18n.t('android.deviceNameRequired') || '请输入设备名称');
-      }
+      Toast.error(window.i18n.t('android.deviceNameRequired') || '请输入设备名称');
       return;
     }
 
     // BLE 端口格式校验
     if (blePort && !/^COM\d+$/i.test(blePort)) {
-      if (typeof Toast !== 'undefined') {
-        Toast.error(window.i18n.t('android.blePortFormatError') || '蓝牙端口格式应为 COM+数字');
-      }
+      Toast.error(window.i18n.t('android.blePortFormatError') || '蓝牙端口格式应为 COM+数字');
       return;
     }
 
     try {
       // 获取当前测试用例数据并更新设备信息
       const fileName = this.#model.selectedDevice;
-      if (window.electronAPI?.testCase?.get && window.electronAPI?.testCase?.saveAndGenerate) {
-        const caseResult = await window.electronAPI.testCase.get(fileName);
-        if (caseResult?.success && caseResult?.data) {
-          const caseData = caseResult.data;
-          caseData.deviceName = deviceName;
-          caseData.platformVersion = platformVersion;
-          if (blePort) {
-            caseData.blePort = blePort;
-          }
+      // MVC: controller 调 model wrapper,不直接调 window.electronAPI
+      const caseResult = await this.#model.getTestCase(fileName);
+      if (caseResult?.success && caseResult?.data) {
+        const caseData = caseResult.data;
+        caseData.deviceName = deviceName;
+        caseData.platformVersion = platformVersion;
+        if (blePort) {
+          caseData.blePort = blePort;
+        }
 
-          const outputDir = await window.electronAPI.getDataPath?.() || '';
-          const saveResult = await window.electronAPI.testCase.saveAndGenerate(caseData, outputDir);
-          if (saveResult?.success) {
-            if (typeof Toast !== 'undefined') {
-              Toast.success(window.i18n.t('android.deviceIdUpdated') || '设备信息已更新');
-            }
-          }
+        const dataPathResult = await this.#model.getDataPath();
+        const outputDir = dataPathResult?.currentPath || '';
+        const saveResult = await this.#model.saveAndGenerateTestCase(caseData, outputDir);
+        if (saveResult?.success) {
+          Toast.success(window.i18n.t('android.deviceIdUpdated') || '设备信息已更新');
         }
       }
       this.#view.closeEditDeviceIdModal();
     } catch (error) {
-      if (typeof Toast !== 'undefined') {
-        Toast.error(error.message || '更新设备信息失败');
-      }
+      Toast.error(error.message || window.i18n.t('android.updateDeviceInfoFailed'));
     }
   }
 
@@ -465,13 +384,9 @@ export class AndroidConnectionController {
   }
 
   handleConfirmPortSelection() {
-    const selectedPort = document.querySelector('#port-list .device-item.selected');
-    if (selectedPort) {
-      const portId = selectedPort.getAttribute('data-port-id');
-      const blePortInput = document.getElementById('edit-ble-port-input');
-      if (blePortInput && portId) {
-        blePortInput.value = portId;
-      }
+    const portId = this.#view.getSelectedPortId();
+    if (portId) {
+      this.#view.setBlePortInput(portId);
     }
     this.#view.closePortModal();
   }
@@ -495,9 +410,7 @@ export class AndroidConnectionController {
   handleToggleSelectAll(checked) {
     this.#model.toggleSelectAll?.(checked);
     // 更新所有复选框视觉状态
-    document.querySelectorAll('.file-checkbox').forEach(cb => {
-      cb.checked = checked;
-    });
+    this.#view.setAllFileCheckboxes(checked);
   }
 
   async handleContextMenuAction(action) {
@@ -526,12 +439,9 @@ export class AndroidConnectionController {
   }
 
   async handleRenameSave() {
-    const renameInput = document.getElementById('rename-input');
-    const newName = renameInput?.value?.trim();
+    const newName = this.#view.getRenameInputValue();
     if (!newName) {
-      if (typeof Toast !== 'undefined') {
-        Toast.error(window.i18n.t('fileManager.nameRequired') || '请输入新名称');
-      }
+      Toast.error(window.i18n.t('fileManager.nameRequired') || '请输入新名称');
       return;
     }
     const target = this.#model.contextMenuTarget;
@@ -541,28 +451,20 @@ export class AndroidConnectionController {
     }
     const result = await this.#model.renameFile(target, newName);
     if (result?.success) {
-      if (typeof Toast !== 'undefined') {
-        Toast.success(window.i18n.t('fileManager.renameSuccess') || '重命名成功');
-      }
+      Toast.success(window.i18n.t('fileManager.renameSuccess') || '重命名成功');
     } else if (result?.error) {
-      if (typeof Toast !== 'undefined') {
-        Toast.error(result.error);
-      }
+      Toast.error(result.error);
     }
     this.#view.closeRenameModal();
   }
 
   async handleOpenPort5555() {
     const result = await this.#model.openPort5555();
-    const modalContainer = document.querySelector('#device-modal-overlay .modal-container');
+    const modalContainer = this.#view.getDeviceModalContainer();
     if (result?.success) {
-      if (typeof Toast !== 'undefined') {
-        Toast.success(window.i18n.t('deviceModal.portOpenSuccess'), { container: modalContainer });
-      }
+      Toast.success(window.i18n.t('deviceModal.portOpenSuccess'), { container: modalContainer });
     } else {
-      if (typeof Toast !== 'undefined') {
-        Toast.error(result?.error || window.i18n.t('deviceModal.portOpenFailed'), { container: modalContainer });
-      }
+      Toast.error(result?.error || window.i18n.t('deviceModal.portOpenFailed'), { container: modalContainer });
     }
   }
 
@@ -602,9 +504,7 @@ export class AndroidConnectionController {
     if (!confirmed) return;
 
     await this.#model.deleteSelectedFiles();
-    if (typeof Toast !== 'undefined') {
-      Toast.success(window.i18n.t('fileManager.deleteSuccess') || '删除成功');
-    }
+    Toast.success(window.i18n.t('fileManager.deleteSuccess') || '删除成功');
   }
 
   async #handleDeleteSingleFile(file) {
@@ -616,14 +516,10 @@ export class AndroidConnectionController {
 
     const result = await this.#model.deleteFile(file);
     if (result?.success) {
-      if (typeof Toast !== 'undefined') {
-        Toast.success(window.i18n.t('fileManager.deleteSuccess') || '删除成功');
-      }
+      Toast.success(window.i18n.t('fileManager.deleteSuccess') || '删除成功');
       await this.#model.loadFileList();
     } else if (result?.error) {
-      if (typeof Toast !== 'undefined') {
-        Toast.error(result.error);
-      }
+      Toast.error(result.error);
     }
   }
 
@@ -631,12 +527,20 @@ export class AndroidConnectionController {
     const filePaths = await this.#model.uploadFiles();
     if (!filePaths || filePaths.length === 0) return;
 
+    const results = [];
     for (const localPath of filePaths) {
-      const remotePath = `${this.#model.currentPath}/`;
-      await this.#model.uploadFile(localPath, remotePath);
+      const fileName = localPath.split(/[\\/]/).pop();
+      const remotePath = `${this.#model.currentPath}/${fileName}`;
+      const result = await this.#model.uploadFile(localPath, remotePath);
+      results.push({ fileName, result });
     }
-    if (typeof Toast !== 'undefined') {
+
+    const failed = results.filter(r => !r.result?.success);
+    if (failed.length === 0) {
       Toast.success(window.i18n.t('fileManager.uploadSuccess') || '上传成功');
+    } else {
+      const failedNames = failed.map(r => r.fileName).join(', ');
+      Toast.error(`${window.i18n.t('fileManager.uploadFailed') || '上传失败'}: ${failedNames}`);
     }
     await this.#model.loadFileList();
   }
@@ -649,9 +553,7 @@ export class AndroidConnectionController {
     for (const file of files) {
       await this.#model.downloadFile(file, downloadDir);
     }
-    if (typeof Toast !== 'undefined') {
-      Toast.success(window.i18n.t('fileManager.downloadSuccess'));
-    }
+    Toast.success(window.i18n.t('fileManager.downloadSuccess'));
   }
 
   async #handleDownloadSingleFile(file) {
@@ -662,13 +564,9 @@ export class AndroidConnectionController {
         if (!downloadDir) return;
       }
       await this.#model.downloadFile(file, downloadDir);
-      if (typeof Toast !== 'undefined') {
-        Toast.success(window.i18n.t('fileManager.downloadSuccess'));
-      }
+      Toast.success(window.i18n.t('fileManager.downloadSuccess'));
     } catch (error) {
-      if (typeof Toast !== 'undefined') {
-        Toast.error(window.i18n.t('fileManager.downloadFailed'));
-      }
+      Toast.error(window.i18n.t('fileManager.downloadFailed'));
     }
   }
 
@@ -699,7 +597,7 @@ export class AndroidConnectionController {
   #buildPathSegments(path) {
     if (!path) return [];
     const rootPath = '/storage/emulated/0';
-    const rootLabel = window.i18n?.t('fileManager.internalStorage') || '内部存储空间';
+    const rootLabel = window.i18n.t('fileManager.internalStorage');
 
     // 根目录
     if (path === rootPath) {
@@ -727,51 +625,6 @@ export class AndroidConnectionController {
   }
 
   #showConfirmDialog(title, message) {
-    return new Promise((resolve) => {
-      const titleElement = document.getElementById('confirm-modal-title');
-      const messageElement = document.getElementById('confirm-modal-message');
-
-      if (titleElement) titleElement.textContent = title;
-      if (messageElement) messageElement.textContent = message;
-
-      // 重置确认按钮状态
-      const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
-      if (confirmBtn) {
-        confirmBtn.disabled = false;
-        confirmBtn.classList.remove('loading');
-        // 清除旧的 originalText，使用当前语言重新翻译
-        delete confirmBtn.dataset.originalText;
-        const i18nKey = confirmBtn.getAttribute('data-i18n');
-        confirmBtn.innerHTML = i18nKey ? window.i18n?.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
-      }
-
-      window.__XKAT_CONFIRM_CALLBACK__ = () => {
-        window.__XKAT_CONFIRM_CALLBACK__ = null;
-        resolve(true);
-      };
-
-      // 绑定一次性确认按钮点击（确保 callback 在 close 前被调用）
-      const handleConfirmClick = () => {
-        resolve(true);
-      };
-      if (confirmBtn) confirmBtn.addEventListener('click', handleConfirmClick, { once: true });
-
-      // 取消按钮 → reject
-      const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
-      const handleCancelClick = (e) => {
-        e.stopPropagation();
-        if (confirmBtn) confirmBtn.removeEventListener('click', handleConfirmClick);
-        window.__XKAT_CONFIRM_CALLBACK__ = null;
-        resolve(false);
-      };
-      if (cancelBtn) cancelBtn.addEventListener('click', handleCancelClick, { once: true });
-
-      const confirmModal = window.__XKAT_MODALS__?.confirm;
-      if (confirmModal) {
-        confirmModal.open();
-      } else {
-        resolve(window.confirm(message));
-      }
-    });
+    return this.#view.showConfirmDialog(title, message);
   }
 }

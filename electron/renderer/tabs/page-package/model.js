@@ -70,11 +70,10 @@ export class PagePackageModel extends EventEmitter {
 
   async loadApps() {
     try {
+      // wrapper 已在 success=false 时抛错，此处无需再判断
       const result = await this.#api.getApps();
-      if (result.success) {
-        this.#set('apps', result.data || [], 'apps-changed');
-        this.emit('apps-count-changed', (result.data || []).length);
-      }
+      this.#set('apps', result.data || [], 'apps-changed');
+      this.emit('apps-count-changed', (result.data || []).length);
     } catch (error) {
       this.emit('error', { source: 'loadApps', error });
     }
@@ -87,11 +86,10 @@ export class PagePackageModel extends EventEmitter {
       return;
     }
     try {
+      // wrapper 已在 success=false 时抛错，此处无需再判断
       const result = await this.#api.getPages(appId);
-      if (result.success) {
-        this.#set('pages', result.data || [], 'pages-changed');
-        this.emit('pages-count-changed', (result.data || []).length);
-      }
+      this.#set('pages', result.data || [], 'pages-changed');
+      this.emit('pages-count-changed', (result.data || []).length);
     } catch (error) {
       this.#set('pages', [], 'pages-changed');
       this.emit('pages-count-changed', 0);
@@ -106,11 +104,10 @@ export class PagePackageModel extends EventEmitter {
       return;
     }
     try {
+      // wrapper 已在 success=false 时抛错，此处无需再判断
       const result = await this.#api.getElements(appId, pageId);
-      if (result.success) {
-        this.#set('elements', result.data || [], 'elements-changed');
-        this.emit('elements-count-changed', (result.data || []).length);
-      }
+      this.#set('elements', result.data || [], 'elements-changed');
+      this.emit('elements-count-changed', (result.data || []).length);
     } catch (error) {
       this.#set('elements', [], 'elements-changed');
       this.emit('elements-count-changed', 0);
@@ -151,21 +148,17 @@ export class PagePackageModel extends EventEmitter {
       return;
     }
     try {
-      let result;
+      // wrapper 已在 success=false 时抛错，此处无需再判断
       if (this.#state.isEditing && this.#state.selectedApp) {
-        result = await this.#api.updateApp(this.#state.selectedApp.id, appData);
+        await this.#api.updateApp(this.#state.selectedApp.id, appData);
       } else {
-        result = await this.#api.addApp(appData);
+        await this.#api.addApp(appData);
       }
-      if (result.success) {
-        this.emit('save-success', { type: 'app' });
-        await this.loadApps();
-        if (this.#state.isEditing && this.#state.selectedApp) {
-          Object.assign(this.#state.selectedApp, appData);
-          this.emit('selected-app-changed', this.#state.selectedApp);
-        }
-      } else {
-        this.emit('error', { source: 'saveApp', message: result.error || 'saveFailed' });
+      this.emit('save-success', { type: 'app' });
+      await this.loadApps();
+      if (this.#state.isEditing && this.#state.selectedApp) {
+        Object.assign(this.#state.selectedApp, appData);
+        this.emit('selected-app-changed', this.#state.selectedApp);
       }
     } catch (error) {
       this.emit('error', { source: 'saveApp', message: 'saveFailed', error });
@@ -184,21 +177,17 @@ export class PagePackageModel extends EventEmitter {
       return;
     }
     try {
-      let result;
+      // wrapper 已在 success=false 时抛错，此处无需再判断
       if (this.#state.isEditing && this.#state.selectedPage) {
-        result = await this.#api.updatePage(this.#state.selectedApp.id, this.#state.selectedPage.id, name);
+        await this.#api.updatePage(this.#state.selectedApp.id, this.#state.selectedPage.id, name);
       } else {
-        result = await this.#api.addPage(this.#state.selectedApp.id, name);
+        await this.#api.addPage(this.#state.selectedApp.id, name);
       }
-      if (result.success) {
-        this.emit('save-success', { type: 'page' });
-        await this.loadPages(this.#state.selectedApp.id);
-        if (this.#state.isEditing && this.#state.selectedPage) {
-          this.#state.selectedPage.name = name;
-          this.emit('selected-page-changed', this.#state.selectedPage);
-        }
-      } else {
-        this.emit('error', { source: 'savePage', message: result.error || 'saveFailed' });
+      this.emit('save-success', { type: 'page' });
+      await this.loadPages(this.#state.selectedApp.id);
+      if (this.#state.isEditing && this.#state.selectedPage) {
+        this.#state.selectedPage.name = name;
+        this.emit('selected-page-changed', this.#state.selectedPage);
       }
     } catch (error) {
       this.emit('error', { source: 'savePage', message: 'saveFailed', error });
@@ -221,30 +210,26 @@ export class PagePackageModel extends EventEmitter {
       return;
     }
     try {
-      let result;
+      // wrapper 已在 success=false 时抛错，此处无需再判断
       if (this.#state.isEditing && this.#state.selectedElement) {
-        result = await this.#api.updateElement(
+        await this.#api.updateElement(
           this.#state.selectedApp.id,
           this.#state.selectedPage.id,
           this.#state.selectedElement.id,
           elementData
         );
       } else {
-        result = await this.#api.addElement(
+        await this.#api.addElement(
           this.#state.selectedApp.id,
           this.#state.selectedPage.id,
           elementData
         );
       }
-      if (result.success) {
-        this.emit('save-success', { type: 'element' });
-        await this.loadElements(this.#state.selectedApp.id, this.#state.selectedPage.id);
-        if (this.#state.isEditing && this.#state.selectedElement) {
-          Object.assign(this.#state.selectedElement, elementData);
-          this.emit('selected-element-changed', this.#state.selectedElement);
-        }
-      } else {
-        this.emit('error', { source: 'saveElement', message: result.error || 'saveFailed' });
+      this.emit('save-success', { type: 'element' });
+      await this.loadElements(this.#state.selectedApp.id, this.#state.selectedPage.id);
+      if (this.#state.isEditing && this.#state.selectedElement) {
+        Object.assign(this.#state.selectedElement, elementData);
+        this.emit('selected-element-changed', this.#state.selectedElement);
       }
     } catch (error) {
       this.emit('error', { source: 'saveElement', message: 'saveFailed', error });
@@ -255,48 +240,37 @@ export class PagePackageModel extends EventEmitter {
 
   async deleteItem(type) {
     try {
-      let result;
+      // wrapper 已在 success=false 时抛错，case 内无需再判断 result.success
       switch (type) {
         case 'app':
           if (!this.#state.selectedApp) return;
-          result = await this.#api.deleteApp(this.#state.selectedApp.id);
-          if (result.success) {
-            this.#set('selectedApp', null, 'selected-app-changed');
-            this.#set('selectedPage', null, 'selected-page-changed');
-            this.#set('selectedElement', null, 'selected-element-changed');
-            await this.loadApps();
-            this.emit('reset-all-selects');
-          }
+          await this.#api.deleteApp(this.#state.selectedApp.id);
+          // 删除后只清 state, 不 emit selected-*-changed (避免触发旧 reset collapse 当前层)
+          // UI 由 controller 监听 delete-success 调 view.resetForDelete 处理
+          this.#state.selectedApp = null;
+          this.#state.selectedPage = null;
+          this.#state.selectedElement = null;
+          await this.loadApps();
           break;
         case 'page':
           if (!this.#state.selectedPage) return;
-          result = await this.#api.deletePage(this.#state.selectedApp.id, this.#state.selectedPage.id);
-          if (result.success) {
-            this.#set('selectedPage', null, 'selected-page-changed');
-            this.#set('selectedElement', null, 'selected-element-changed');
-            await this.loadPages(this.#state.selectedApp.id);
-            this.emit('reset-page-select');
-          }
+          await this.#api.deletePage(this.#state.selectedApp.id, this.#state.selectedPage.id);
+          this.#state.selectedPage = null;
+          this.#state.selectedElement = null;
+          await this.loadPages(this.#state.selectedApp.id);
           break;
         case 'element':
           if (!this.#state.selectedElement) return;
-          result = await this.#api.deleteElement(
+          await this.#api.deleteElement(
             this.#state.selectedApp.id,
             this.#state.selectedPage.id,
             this.#state.selectedElement.id
           );
-          if (result.success) {
-            this.#set('selectedElement', null, 'selected-element-changed');
-            await this.loadElements(this.#state.selectedApp.id, this.#state.selectedPage.id);
-            this.emit('reset-element-select');
-          }
+          this.#state.selectedElement = null;
+          await this.loadElements(this.#state.selectedApp.id, this.#state.selectedPage.id);
           break;
       }
-      if (result?.success) {
-        this.emit('delete-success', { type });
-      } else {
-        this.emit('error', { source: 'deleteItem', message: result?.error || 'deleteFailed' });
-      }
+      this.emit('delete-success', { type });
     } catch (error) {
       this.emit('error', { source: 'deleteItem', message: 'deleteFailed', error });
     }

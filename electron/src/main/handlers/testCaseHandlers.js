@@ -1,64 +1,36 @@
 const { registerHandler } = require('./base/handlerUtils');
+const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
   const { testCaseService } = services;
 
-  registerHandler(ipcMain, 'test-case:list', () => testCaseService.listTestCases());
+  registerHandler(ipcMain, IPC_CHANNELS.TEST_CASE_LIST, () => testCaseService.listTestCases());
 
-  registerHandler(ipcMain, 'test-case:get', (fileName) => testCaseService.getTestCase(fileName));
+  registerHandler(ipcMain, IPC_CHANNELS.TEST_CASE_GET, (fileName) => testCaseService.getTestCase(fileName));
 
-  registerHandler(ipcMain, 'test-case:save', async (caseData) => {
-    const saveResult = await testCaseService.saveTestCase(caseData);
-    if (!saveResult.success) {
-      return saveResult;
-    }
+  // saveTestCase 内化条件生成 (若 pyOutputDir 存在自动调 generatePythonFile)
+  registerHandler(ipcMain, IPC_CHANNELS.TEST_CASE_SAVE, (caseData) => testCaseService.saveTestCase(caseData));
 
-    const savedData = saveResult.data;
-    if (savedData.pyOutputDir) {
-      try {
-        await testCaseService.generatePythonFile(savedData, savedData.pyOutputDir);
-      } catch (e) {
-        console.error('同步更新Python文件失败:', e);
-      }
-    }
+  registerHandler(ipcMain, IPC_CHANNELS.TEST_CASE_DELETE, (fileName) => testCaseService.deleteTestCase(fileName));
 
-    return saveResult;
-  });
-
-  registerHandler(ipcMain, 'test-case:delete', (fileName) => testCaseService.deleteTestCase(fileName));
-
-  registerHandler(ipcMain, 'test-case:check-json-exists', async (fileName) => {
+  registerHandler(ipcMain, IPC_CHANNELS.TEST_CASE_CHECK_JSON_EXISTS, async (fileName) => {
     const exists = await testCaseService.checkJsonExists(fileName);
     return { exists };
   });
 
-  registerHandler(ipcMain, 'test-case:batch-check-json-exists', async (fileNames) => {
+  registerHandler(ipcMain, IPC_CHANNELS.TEST_CASE_BATCH_CHECK_JSON_EXISTS, async (fileNames) => {
     const results = await testCaseService.batchCheckJsonExists(fileNames);
     return { success: true, data: results };
   });
 
-  registerHandler(ipcMain, 'test-case:generate-python', ({ caseData, outputDir }) =>
+  registerHandler(ipcMain, IPC_CHANNELS.TEST_CASE_GENERATE_PYTHON, ({ caseData, outputDir }) =>
     testCaseService.generatePythonFile(caseData, outputDir)
   );
 
-  registerHandler(ipcMain, 'test-case:save-and-generate', async ({ caseData, outputDir }) => {
-    const saveResult = await testCaseService.saveTestCase(caseData);
-    if (!saveResult.success) {
-      return saveResult;
-    }
-
-    const generateResult = await testCaseService.generatePythonFile(saveResult.data, outputDir);
-    if (!generateResult.success) {
-      return generateResult;
-    }
-
-    return {
-      success: true,
-      data: saveResult.data,
-      jsonPath: saveResult.path,
-      pyPath: generateResult.path
-    };
-  });
+  // saveAndGenerate 内化 save + 强制 generate + 双路径返 (吸收原 L45-62 双委托)
+  registerHandler(ipcMain, IPC_CHANNELS.TEST_CASE_SAVE_AND_GENERATE, ({ caseData, outputDir }) =>
+    testCaseService.saveAndGenerate(caseData, outputDir)
+  );
 }
 
 module.exports = { register };

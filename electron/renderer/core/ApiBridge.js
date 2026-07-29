@@ -63,10 +63,11 @@ export class ApiBridge {
       const camelName = methodName.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       const fn = this.api[camelName];
       if (fn) {
-        fn(handler);
-        unsubscribers.push(() => {
-          // IPC 事件监听器通常不支持移除，记录以便未来扩展
-        });
+        // preload on* 方法应返回 unsubscribe 函数；兼容旧版本未返回的情况
+        const unsubscribe = fn(handler);
+        if (typeof unsubscribe === 'function') {
+          unsubscribers.push(unsubscribe);
+        }
       }
     }
     return () => unsubscribers.forEach(fn => fn());

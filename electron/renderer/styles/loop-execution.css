@@ -1,0 +1,80 @@
+/* ========================================
+   循环执行设置样式
+   ======================================== */
+
+.loop-settings-group {
+    margin-top: 0;
+    flex-shrink: 0;
+}
+
+.loop-settings-container {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+}
+
+.loop-setting-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+}
+
+.loop-setting-item > label {
+    margin-bottom: 0;
+    flex-shrink: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    line-height: 28px;
+    height: 28px;
+}
+
+.loop-setting-item input[type="number"] {
+    width: 60px;
+    height: 28px;
+    padding: 4px 8px;
+    text-align: center;
+    font-size: 13px;
+}
+
+.loop-setting-item.checkbox-item {
+    padding: 0;
+    height: 28px;
+}
+
+.loop-setting-item.checkbox-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--primary);
+}
+
+.loop-setting-item.checkbox-item label {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    line-height: 28px;
+    height: 28px;
+}
+
+/* 深色主题下的循环设置样式 */
+body.dark-theme .loop-settings-container {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* 亮色主题下的循环设置样式 */
+body:not(.dark-theme) .loop-settings-container {
+    background: rgba(0, 0, 0, 0.02);
+    border-color: rgba(0, 0, 0, 0.05);
+}
+

@@ -1,20 +1,21 @@
 const { registerHandler } = require('./base/handlerUtils');
+const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
   const { testPlanService, pythonTestService } = services;
 
-  registerHandler(ipcMain, 'run-python-tests', (testConfig) => pythonTestService.run(testConfig));
-  registerHandler(ipcMain, 'stop-python-tests', () => pythonTestService.stop());
-  registerHandler(ipcMain, 'get-test-plans', () => testPlanService.getTestPlans());
-  registerHandler(ipcMain, 'save-test-plan', (planData) => testPlanService.saveTestPlan(planData));
-  registerHandler(ipcMain, 'delete-test-plan', (planId) => testPlanService.deleteTestPlan(planId));
-  registerHandler(ipcMain, 'update-test-plan', (planData) => testPlanService.updateTestPlan(planData));
-  registerHandler(ipcMain, 'get-test-plan-runs', (testPlanName) => testPlanService.getTestPlanRuns(testPlanName));
-  registerHandler(ipcMain, 'scan-test-files', (directoryPath) => testPlanService.scanTestFiles(directoryPath));
-  registerHandler(ipcMain, 'extract-pytest-markers', (filePaths) => testPlanService.extractPytestMarkers(filePaths));
-  registerHandler(ipcMain, 'get-pytest-markers', () => testPlanService.getPytestMarkers());
+  registerHandler(ipcMain, IPC_CHANNELS.RUN_PYTHON_TESTS, (testConfig) => pythonTestService.run(testConfig));
+  registerHandler(ipcMain, IPC_CHANNELS.STOP_PYTHON_TESTS, () => pythonTestService.stop());
+  registerHandler(ipcMain, IPC_CHANNELS.GET_TEST_PLANS, () => testPlanService.getTestPlans());
+  registerHandler(ipcMain, IPC_CHANNELS.SAVE_TEST_PLAN, (planData) => testPlanService.saveTestPlan(planData));
+  registerHandler(ipcMain, IPC_CHANNELS.DELETE_TEST_PLAN, (planId) => testPlanService.deleteTestPlan(planId));
+  registerHandler(ipcMain, IPC_CHANNELS.UPDATE_TEST_PLAN, (planData) => testPlanService.updateTestPlan(planData));
+  registerHandler(ipcMain, IPC_CHANNELS.GET_TEST_PLAN_RUNS, (testPlanName) => testPlanService.getTestPlanRuns(testPlanName));
+  registerHandler(ipcMain, IPC_CHANNELS.SCAN_TEST_FILES, (directoryPath) => testPlanService.scanTestFiles(directoryPath));
+  registerHandler(ipcMain, IPC_CHANNELS.EXTRACT_PYTEST_MARKERS, (filePaths) => testPlanService.extractPytestMarkers(filePaths));
+  registerHandler(ipcMain, IPC_CHANNELS.GET_PYTEST_MARKERS, () => testPlanService.getPytestMarkers());
 
-  ipcMain.on('log-test-output', (event, text, isError) => {
+  ipcMain.on(IPC_CHANNELS.LOG_TEST_OUTPUT, (event, text, isError) => {
     if (pythonTestService.logger) {
       const trimmed = typeof text === 'string' ? text.trimEnd() : '';
       if (trimmed) {

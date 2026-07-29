@@ -124,13 +124,12 @@ export class SettingsModel extends EventEmitter {
     try {
       const config = this.#state.config || {};
       config.APP_SETTINGS = { ...config.APP_SETTINGS, ...settings };
+      // wrapper 已处理 IPC 失败,错误由外层 catch 接
       const result = await this.#api.saveConfig(config);
-      if (result && result.success !== false) {
-        this.#state.config = config;
-        this.emit('config-changed', config);
-        // 同步到 AppState 供其他 Tab 读取
-        AppState.instance.set('config', config);
-      }
+      this.#state.config = config;
+      this.emit('config-changed', config);
+      // 同步到 AppState 供其他 Tab 读取
+      AppState.instance.set('config', config);
       return result;
     } catch (error) {
       this.emit('error', { source: 'saveConfig', error });
@@ -163,10 +162,9 @@ export class SettingsModel extends EventEmitter {
 
   async changeDataPath(newPath) {
     try {
+      // wrapper 已处理 IPC 失败,错误由外层 catch 接
       const result = await this.#api.changeDataPath(newPath);
-      if (result && result.success !== false) {
-        await this.#api.relaunchApp();
-      }
+      await this.#api.relaunchApp();
       return result;
     } catch (error) {
       this.emit('error', { source: 'changeDataPath', error });
@@ -176,10 +174,9 @@ export class SettingsModel extends EventEmitter {
 
   async resetDataPath() {
     try {
+      // wrapper 已处理 IPC 失败,错误由外层 catch 接
       const result = await this.#api.resetDataPath();
-      if (result && result.success !== false) {
-        await this.#api.relaunchApp();
-      }
+      await this.#api.relaunchApp();
       return result;
     } catch (error) {
       this.emit('error', { source: 'resetDataPath', error });
@@ -191,7 +188,7 @@ export class SettingsModel extends EventEmitter {
 
   async selectExportPath(type = 'config') {
     try {
-      return await this.#api.selectExportPath({ type, title: window.i18n?.t('settings.selectExportPath') || '选择导出路径' });
+      return await this.#api.selectExportPath({ type, title: window.i18n.t('settings.selectExportPath') });
     } catch (error) {
       this.emit('error', { source: 'selectExportPath', error });
       return null;
@@ -229,10 +226,9 @@ export class SettingsModel extends EventEmitter {
 
   async importConfig(zipPath) {
     try {
+      // wrapper 已处理 IPC 失败,错误由外层 catch 接
       const result = await this.#api.importConfig(zipPath);
-      if (result && result.success !== false) {
-        await this.loadConfig();
-      }
+      await this.loadConfig();
       return result;
     } catch (error) {
       this.emit('error', { source: 'importConfig', error });
@@ -252,7 +248,7 @@ export class SettingsModel extends EventEmitter {
       }
       return result;
     } catch (error) {
-      this.emit('error', { source: 'checkForUpdate', error });
+      this.emit('error', { source: 'checkUpdate', error });
       return { success: false, error: error.message };
     }
   }
@@ -334,10 +330,9 @@ export class SettingsModel extends EventEmitter {
 
   async setPreventSleep(enable) {
     try {
+      // wrapper 已处理 IPC 失败,错误由外层 catch 接
       const result = await this.#api.setPreventSleep(enable);
-      if (result && result.success !== false) {
-        this.#set('preventSleep', enable);
-      }
+      this.#set('preventSleep', enable);
       return result;
     } catch (error) {
       this.emit('error', { source: 'setPreventSleep', error });
@@ -364,6 +359,17 @@ export class SettingsModel extends EventEmitter {
     } catch (error) {
       this.emit('error', { source: 'selectDirectory', error });
       return null;
+    }
+  }
+
+  // ── Open External URL ──────────────────────────────────────────
+
+  async openExternal(url) {
+    try {
+      return await this.#api.openExternal(url);
+    } catch (error) {
+      this.emit('error', { source: 'openExternal', error });
+      return { success: false, error: error.message };
     }
   }
 

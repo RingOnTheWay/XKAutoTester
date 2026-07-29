@@ -169,15 +169,14 @@ XKAutoTester/
 │   │   ├── adb_manager.py      # ADB device management
 │   │   ├── appium_server.py    # Appium service management
 │   │   ├── pytest_runner.py    # Pytest runner
-│   │   └── mock_ble_device.py  # BLE Bluetooth device simulation
+│   │   └── ble_device.py  # BLE Bluetooth device simulation
 │   ├── device/                 # Device modules
 │   │   └── temperature/        # Thermometer data generation
 │   ├── recognition/            # Recognition modules (captcha OCR)
 │   └── utils/                  # Utility modules
 │       ├── config.py           # Config manager
 │       ├── logger.py           # Logger
-│       ├── test_initializer.py # Test initializer
-│       └── test_utils.py       # Test utilities
+│       └── test_initializer.py # Test initializer
 ├── config/                      # Config files
 │   ├── config.json             # App config
 │   ├── ble_device.json         # Bluetooth device config

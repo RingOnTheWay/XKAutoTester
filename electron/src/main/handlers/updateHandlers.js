@@ -1,9 +1,10 @@
 const { registerHandler } = require('./base/handlerUtils');
+const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
   const { updateService } = services;
 
-  registerHandler(ipcMain, 'check-for-update', async () => {
+  registerHandler(ipcMain, IPC_CHANNELS.CHECK_FOR_UPDATE, async () => {
     try {
       const data = await updateService.checkForUpdate();
       return {
@@ -20,14 +21,14 @@ function register(ipcMain, services) {
     }
   });
 
-  registerHandler(ipcMain, 'download-update', (downloadUrl, fileName) => {
+  registerHandler(ipcMain, IPC_CHANNELS.DOWNLOAD_UPDATE, (downloadUrl, fileName) => {
     if (!downloadUrl || !fileName) {
       return { success: false, error: 'Download URL or file name not provided' };
     }
     return updateService.downloadUpdate(downloadUrl, fileName);
   });
 
-  registerHandler(ipcMain, 'install-update', (filePath) => updateService.installUpdate(filePath));
+  registerHandler(ipcMain, IPC_CHANNELS.INSTALL_UPDATE, (filePath) => updateService.installUpdate(filePath));
 }
 
 module.exports = { register };

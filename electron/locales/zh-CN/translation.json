@@ -22,7 +22,12 @@
     "deleteConfirm": "确定要删除吗？",
     "error": "错误",
     "close": "关闭",
-    "done": "完成"
+    "done": "完成",
+    "pleaseSelect": "请选择",
+    "unknownError": "未知错误",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "copy": "复制"
   },
   "tabs": {
     "testExecution": "测试执行",
@@ -143,7 +148,8 @@
     "apkInstallFailed": "APK 安装失败",
     "deviceNameRequired": "请输入设备名称",
     "blePortFormatError": "蓝牙端口格式应为 COM+数字",
-    "deviceIdUpdated": "设备信息已更新"
+    "deviceIdUpdated": "设备信息已更新",
+    "updateDeviceInfoFailed": "更新设备信息失败"
   },
   "fileManager": {
     "title": "文件管理器",
@@ -172,12 +178,12 @@
     "loadingFiles": "正在加载文件列表...",
     "emptyDirectory": "该目录为空",
     "justNow": "刚刚",
-    "minutesAgo": "分钟前",
-    "hoursAgo": "小时前",
-    "daysAgo": "天前",
-    "weeksAgo": "周前",
-    "monthsAgo": "月前",
-    "yearsAgo": "年前",
+    "minutesAgo": "{{n}} 分钟前",
+    "hoursAgo": "{{n}} 小时前",
+    "daysAgo": "{{n}} 天前",
+    "weeksAgo": "{{n}} 周前",
+    "monthsAgo": "{{n}} 月前",
+    "yearsAgo": "{{n}} 年前",
     "selectDeviceFirst": "请先选择设备",
     "adbCommandFailed": "ADB命令执行失败",
     "zipCreationFailed": "创建zip文件失败",
@@ -193,7 +199,34 @@
     "uploadFailed": "上传失败",
     "directoryNotFound": "目录不存在",
     "directoryNotFoundMessage": "默认下载目录 \"{{path}}\" 不存在且无法创建，是否清除该路径设置？",
-    "internalStorage": "内部存储空间"
+    "internalStorage": "内部存储空间",
+    "downloadComplete": "下载完成",
+    "installComplete": "安装完成",
+    "uploadComplete": "上传完成",
+    "downloadProgress": "正在下载",
+    "installProgress": "正在安装",
+    "uploadProgress": "正在上传",
+    "inProgress": "进行中",
+    "operationFailed": "操作失败",
+    "fileCount": "文件: {{current}} / {{total}}",
+    "fileCountZero": "文件: 0 / 0",
+    "sizeLabel": "大小: {{size}}",
+    "autoCloseCountdown": "{{seconds}}秒后自动关闭",
+    "invalidNewName": "无效的新名称",
+    "clickToViewMorePath": "点击查看更多路径"
+  },
+  "deviceCascadeSelect": {
+    "placeholder": "请选择设备...",
+    "manufacturerPlaceholder": "选择厂商",
+    "typePlaceholder": "选择类型",
+    "modelPlaceholder": "选择型号",
+    "noManufacturer": "暂无设备厂商",
+    "noType": "暂无设备类型",
+    "noDevice": "暂无设备"
+  },
+  "cascadeSelect": {
+    "placeholder": "请选择...",
+    "searchPlaceholder": "搜索..."
   },
   "deviceModal": {
     "title": "设备管理",
@@ -217,7 +250,10 @@
     "openPortBtnNotFound": "开放端口按钮未找到",
     "openingPort": "正在开放5555端口...",
     "portOpenSuccess": "5555端口开放成功",
-    "portOpenFailed": "端口开放失败"
+    "portOpenFailed": "端口开放失败",
+    "unauthorizedTip": "设备未授权",
+    "offlineTip": "设备离线",
+    "unavailableTip": "设备不可用"
   },
   "controlParams": {
     "title": "控制参数",
@@ -257,7 +293,9 @@
     "allureServerStartFailed": "Allure服务器启动失败",
     "processNotFound": "未找到进程",
     "stopProcessFailed": "按端口停止{{processName}}失败: {{error}}",
-    "openReportFailed": "使用allure open打开报告失败: {{error}}"
+    "openReportFailed": "使用allure open打开报告失败: {{error}}",
+    "tarExecFailed": "exec-out tar 失败 (code={{code}}): {{error}}",
+    "pullFailed": "pull 失败 (code={{code}}): {{error}}"
   },
   "placeholders": {
     "defaultDownloadPath": "请选择默认下载路径",
@@ -339,7 +377,8 @@
     "deletePlan": "删除计划",
     "deletePlanConfirm": "确定要删除该测试计划吗？此操作不可撤销。",
     "deleteScheduledPlanConfirm": "确定要删除该定时计划吗？此操作不可撤销。",
-    "selectTestDirectoryFirstPlaceholder": "请先选择测试目录",
+    "selectTestPlanFirstPlaceholder": "请选择测试计划以显示测试类型",
+    "loadingFiles": "加载中...",
     "testType": "测试类型",
     "testOutput": "测试输出",
     "openXkatFolder": "打开日志文件夹",
@@ -500,7 +539,9 @@
     "month": "月",
     "hour": "时",
     "minute": "分",
-    "second": "秒"
+    "second": "秒",
+    "yearSuffix": "年",
+    "monthSuffix": "月"
   },
   "modal": {
     "newTestPlan": "新建测试计划",
@@ -559,7 +600,12 @@
     "reportUnavailable": "已删除",
     "selectReport": "请选择一个报告",
     "loadFailed": "加载报告失败",
-    "latest": "最新"
+    "latest": "最新",
+    "delete": "删除",
+    "deleteConfirm": "确定要删除该运行记录及其报告吗？此操作不可恢复。",
+    "deleteSuccess": "运行记录已删除",
+    "deleteFailed": "删除运行记录失败",
+    "invalidReport": "无效的报告记录"
   },
   "splash": {
     "subtitle": "自动化测试工具",
@@ -776,7 +822,36 @@
     "unsavedChangesTitle": "未保存的更改",
     "unsavedChangesMessage": "当前编辑有未保存的更改，是否保存？",
     "saveChanges": "保存",
-    "discardChanges": "不保存"
+    "discardChanges": "不保存",
+    "stepType": "步骤类型",
+    "elementOperation": "元素操作",
+    "pageOperation": "页面操作",
+    "systemOperation": "系统操作",
+    "bleOperation": "蓝牙操作",
+    "selectPage": "请选择页面",
+    "selectElement": "请选择元素",
+    "operationType": "操作类型",
+    "selectOperation": "请选择操作",
+    "pageSelect": "页面选择",
+    "elementSelect": "元素选择",
+    "elementMulti": "元素多选",
+    "clickCountLabel": "点击数量",
+    "randomSelectFromElements": "从 {{count}} 个元素中随机选择",
+    "addElement": "添加元素",
+    "swipeDuration": "滑动时间(ms)",
+    "inputTextContent": "输入文本内容",
+    "integer": "整数",
+    "decimalPlaces": "{{n}}位小数",
+    "minValue": "最小值",
+    "maxValue": "最大值",
+    "precision": "精度",
+    "selectPrecision": "请选择精度",
+    "opClick": "点击",
+    "opSwipeUp": "向上滑动(页面向下)",
+    "opSwipeDown": "向下滑动(页面向上)",
+    "opSendText": "发送文本",
+    "defaultStepName": "步骤 {{n}}",
+    "copySuffix": "{{name}} (副本)"
   },
   "pagePackage": {
     "appSelection": "应用选择",
@@ -848,6 +923,7 @@
       "permissionDenied": "权限不足，无法执行aapt2工具",
       "fileCorrupted": "APK文件可能已损坏或格式不正确",
       "parseError": "解析APK输出失败",
+      "parseFailed": "APK解析失败 (code={{code}})",
       "noPackageName": "无法从APK中提取包名信息，文件可能已损坏或格式不正确"
     },
     "pagePackageTab": "页面封装"
@@ -956,7 +1032,6 @@
       "runIndexOutOfRange": "运行记录索引 {index} 超出范围 (0-{max_index})",
       "runNoReportPath": "运行记录没有关联的报告路径",
       "reportDirNotExist": "报告目录不存在: {path}",
-      "openingReport": "正在打开测试计划 '{test_plan_name}' 的第 {index} 次运行报告",
       "reportOpened": "报告已打开",
       "reportOpenFailed": "打开报告失败",
       "allureServerStarted": "测试计划 '{test_plan_name}' 的Allure报告服务器已启动 (PID: {pid})",
@@ -1077,6 +1152,7 @@
       "logcatMonitorStarted": "logcat 实时监控已启动，PID: {pid}",
       "logcatMonitorStartFailed": "logcat 实时监控启动失败",
       "logcatMonitorStopped": "logcat 实时监控已停止",
+      "logcatMonitorNotStarted": "logcat 监控未启动，跳过 PID 更新",
       "gettingConnectedDevices": "获取连接的设备列表",
       "adbDeviceListReturnCode": "ADB设备列表命令执行结果 - 返回码: {code}",
       "parsedDeviceList": "解析到的设备列表: {devices}",

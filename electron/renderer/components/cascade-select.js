@@ -3,8 +3,8 @@ export class CascadeSelect {
 
   constructor(containerId, options = {}) {
     this.containerId = containerId;
-    this.placeholder = options.placeholder || '请选择...';
-    this.searchPlaceholder = options.searchPlaceholder || '搜索...';
+    this.placeholder = options.placeholder || window.i18n.t('cascadeSelect.placeholder');
+    this.searchPlaceholder = options.searchPlaceholder || window.i18n.t('cascadeSelect.searchPlaceholder');
     this.showActions = options.showActions !== false;
     this.onSelect = options.onSelect || (() => {});
     this.onAdd = options.onAdd || null;

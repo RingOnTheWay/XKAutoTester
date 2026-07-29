@@ -1,0 +1,513 @@
+/* ========================================
+   自定义日期时间选择器样式
+   ======================================== */
+
+.datetime-picker-container {
+  position: relative;
+  width: 100%;
+}
+
+.datetime-picker-container input {
+  width: 100%;
+  padding: 12px 40px 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.datetime-picker-container input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 33, 150, 243), 0.1);
+}
+
+.datetime-picker-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.datetime-picker-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border-radius: 16px;
+}
+
+.datetime-picker-overlay.hidden {
+  display: none;
+}
+
+.datetime-picker-panel {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.98) 100%);
+  backdrop-filter: blur(8px) saturate(180%);
+  -webkit-backdrop-filter: blur(8px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 20px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    0 24px 64px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  padding: 20px;
+  width: 340px;
+  max-width: 90vw;
+}
+
+.datetime-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.datetime-picker-nav {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(241, 245, 249, 0.95) 100%);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  color: var(--text-primary);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.datetime-picker-nav:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%);
+  border-color: var(--primary);
+  box-shadow:
+    0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+  transform: translateY(-1px);
+}
+
+.datetime-picker-nav:active {
+  transform: translateY(0);
+  box-shadow:
+    0 2px 4px rgba(33, 150, 243, 0.15),
+    inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.datetime-picker-nav .svg-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.datetime-picker-nav .svg-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.datetime-picker-nav .svg-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.datetime-picker-title {
+  display: flex;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.datetime-picker-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.datetime-picker-weekdays span {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px;
+}
+
+.datetime-picker-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.datetime-picker-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--text-primary);
+  border: 1px solid transparent;
+}
+
+.datetime-picker-day:hover:not(.disabled):not(.empty) {
+  background: linear-gradient(135deg, rgba(var(--primary-rgb, 33, 150, 243), 0.1) 0%, rgba(var(--primary-rgb, 33, 150, 243), 0.05) 100%);
+  border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.15);
+}
+
+.datetime-picker-day.selected {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: white;
+  border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.5);
+  box-shadow:
+    0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.datetime-picker-day.selected:hover:not(.disabled):not(.empty) {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+  color: white;
+  border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.6);
+  box-shadow:
+    0 6px 16px rgba(var(--primary-rgb, 33, 150, 243), 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.datetime-picker-day.today {
+  background: linear-gradient(135deg, rgba(var(--primary-rgb, 33, 150, 243), 0.15) 0%, rgba(var(--primary-rgb, 33, 150, 243), 0.08) 100%);
+  border: 1px solid rgba(var(--primary-rgb, 33, 150, 243), 0.4);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.datetime-picker-day.disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+  opacity: 0.4;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.datetime-picker-day.empty {
+  background: transparent;
+  cursor: default;
+}
+
+.datetime-picker-time {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.time-input-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.time-input-group label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.time-input {
+  width: 64px;
+  padding: 10px 8px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.95) 100%);
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  font-family: inherit;
+  -moz-appearance: textfield;
+  -webkit-appearance: textfield;
+  appearance: textfield;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.time-input::-webkit-outer-spin-button,
+.time-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.time-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.time-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 100%);
+  box-shadow:
+    0 4px 16px rgba(var(--primary-rgb, 33, 150, 243), 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+  transform: translateY(-1px);
+}
+
+.time-separator {
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--text-primary);
+  margin-top: 16px;
+}
+
+.datetime-picker-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.datetime-picker-btn {
+  padding: 10px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border: none;
+}
+
+.datetime-picker-btn.cancel-btn {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(241, 245, 249, 0.95) 100%);
+  color: var(--text-primary);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.datetime-picker-btn.cancel-btn:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%);
+  border-color: rgba(33, 150, 243, 0.3);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+  transform: translateY(-1px);
+}
+
+.datetime-picker-btn.confirm-btn {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: white;
+  box-shadow:
+    0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.datetime-picker-btn.confirm-btn:hover {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+  box-shadow:
+    0 6px 20px rgba(var(--primary-rgb, 33, 150, 243), 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.datetime-picker-btn:active {
+  transform: translateY(0);
+}
+
+/* 深色主题适配 - 玻璃拟态风格 */
+body.dark-theme .datetime-picker-panel {
+  background: linear-gradient(135deg, rgba(30, 30, 46, 0.95) 0%, rgba(40, 40, 60, 0.98) 100%);
+  backdrop-filter: blur(8px) saturate(180%);
+  -webkit-backdrop-filter: blur(8px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    0 24px 64px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .datetime-picker-nav {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme .datetime-picker-nav:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
+  border-color: var(--primary);
+  box-shadow:
+    0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+body.dark-theme .datetime-picker-day {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: transparent;
+}
+
+body.dark-theme .datetime-picker-day:hover:not(.disabled):not(.empty) {
+  background: linear-gradient(135deg, rgba(var(--primary-rgb, 33, 150, 243), 0.2) 0%, rgba(var(--primary-rgb, 33, 150, 243), 0.1) 100%);
+  border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.4);
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.2);
+}
+
+body.dark-theme .datetime-picker-day.selected {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.6);
+  box-shadow:
+    0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+body.dark-theme .datetime-picker-day.selected:hover:not(.disabled):not(.empty) {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+  border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.7);
+  box-shadow:
+    0 6px 16px rgba(var(--primary-rgb, 33, 150, 243), 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+body.dark-theme .datetime-picker-day.today {
+  background: linear-gradient(135deg, rgba(var(--primary-rgb, 33, 150, 243), 0.2) 0%, rgba(var(--primary-rgb, 33, 150, 243), 0.1) 100%);
+  border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.5);
+}
+
+body.dark-theme .datetime-picker-day.disabled {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+body.dark-theme .time-input {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme .time-input:focus {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
+  border-color: var(--primary);
+  box-shadow:
+    0 4px 16px rgba(var(--primary-rgb, 33, 150, 243), 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+body.dark-theme .datetime-picker-btn.cancel-btn {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme .datetime-picker-btn.cancel-btn:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
+  border-color: rgba(33, 150, 243, 0.4);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+body.dark-theme .datetime-picker-btn.confirm-btn {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  box-shadow:
+    0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+body.dark-theme .datetime-picker-btn.confirm-btn:hover {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+  box-shadow:
+    0 6px 20px rgba(var(--primary-rgb, 33, 150, 243), 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* 定时标识样式 */
+.scheduled-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(156, 39, 176, 0.2);
+  color: #9C27B0;
+  margin-left: 8px;
+}
+
+.scheduled-label .svg-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* 深色主题下的定时计划样式 */
+body.dark-theme #test-execution .scheduled-plan-item {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme #test-execution .scheduled-plan-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body.dark-theme input[type="datetime-local"] {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 测试执行页面 - 左侧面板卡片高度调整 */
+#test-execution .left-panel .material-card:nth-child(1) {
+  height: auto;
+  min-height: unset;
+  flex: 0 0 auto;
+}
+
+#test-execution .left-panel .material-card:nth-child(2) {
+  height: 280px;
+}
+
+#test-execution .left-panel .material-card:nth-child(3) {
+  height: 200px;
+}
+
+/* 定时计划卡片（第4个） */
+#test-execution .left-panel .material-card:nth-child(4) {
+  height: 200px;
+}
+

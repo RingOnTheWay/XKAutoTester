@@ -1,40 +1,67 @@
+// VersionService — 应用版本信息深模块。
+//
+// 藏 fs 同步读取 + JSON 解析兜底 + cache 语义。
+// 1 factory-or-default (fileSystemFactory) + 懒初始化 _initialized flag (对称 UpdateService/TestCaseService)。
+//
+// 生产: new VersionService(projectRoot)  # 1 参
+// 测试: new VersionService(projectRoot, { fileSystemFactory: fakeFs })
+
 const fs = require('fs');
 const path = require('path');
 
+/** @typedef {Object} VersionFileSystem
+ * @property {(p: string) => boolean} exists
+ * @property {(p: string, encoding?: string) => string} readFileSync
+ */
+/** @typedef {Object} VersionServiceOptions
+ * @property {() => VersionFileSystem} [fileSystemFactory]
+ */
+
+const DEFAULT_VERSION_INFO = Object.freeze({
+  version: '0.0.0',
+  buildDate: '',
+  prerelease: '',
+  fullVersion: '0.0.0'
+});
+
 class VersionService {
-  constructor(projectRoot) {
+  /**
+   * @param {string} projectRoot
+   * @param {VersionServiceOptions} [opts] - factory-or-default
+   */
+  constructor(projectRoot, opts = {}) {
     this.projectRoot = projectRoot;
-    this.versionData = null;
+    this._versionFile = path.join(projectRoot, 'version.json');
+    this._initialized = false;
+    this._versionData = null;
+    this._fileSystemFactory = opts.fileSystemFactory || (() => ({
+      exists: (p) => fs.existsSync(p),
+      readFileSync: (p, encoding) => fs.readFileSync(p, encoding)
+    }));
+    this._fs = this._fileSystemFactory();
   }
 
-  getVersionInfo() {
-    if (this.versionData) {
-      return this.versionData;
-    }
-
+  _ensureInitialized() {
+    if (this._initialized) return;
     try {
-      const versionFile = path.join(this.projectRoot, 'version.json');
-      
-      if (fs.existsSync(versionFile)) {
-        const content = fs.readFileSync(versionFile, 'utf-8');
-        this.versionData = JSON.parse(content);
-        return this.versionData;
+      if (this._fs.exists(this._versionFile)) {
+        const content = this._fs.readFileSync(this._versionFile, 'utf-8');
+        this._versionData = JSON.parse(content);
       }
     } catch (error) {
       console.error('[VersionService] Failed to read version.json:', error.message);
     }
+    this._initialized = true;
+  }
 
-    return {
-      version: '0.0.0',
-      buildDate: '',
-      prerelease: '',
-      fullVersion: '0.0.0'
-    };
+  getVersionInfo() {
+    this._ensureInitialized();
+    if (this._versionData) return this._versionData;
+    return { ...DEFAULT_VERSION_INFO };
   }
 
   getVersion() {
-    const info = this.getVersionInfo();
-    return info.version || '0.0.0';
+    return this.getVersionInfo().version || '0.0.0';
   }
 
   getFullVersion() {
@@ -43,21 +70,19 @@ class VersionService {
   }
 
   getBuildDate() {
-    const info = this.getVersionInfo();
-    return info.buildDate || '';
+    return this.getVersionInfo().buildDate || '';
   }
 
   getDisplayVersion() {
     const info = this.getVersionInfo();
-    if (info.fullVersion) {
-      return `v${info.fullVersion}`;
-    }
+    if (info.fullVersion) return `v${info.fullVersion}`;
     return `v${info.version || '0.0.0'}`;
   }
 
   clearCache() {
-    this.versionData = null;
+    this._initialized = false;
+    this._versionData = null;
   }
 }
 
-module.exports = VersionService;
+module.exports = { VersionService };

@@ -1,10 +1,11 @@
 const { registerHandler } = require('./base/handlerUtils');
 const { powerSaveBlocker } = require('electron');
+const { IPC_CHANNELS } = require('../../shared/constants');
 
 let sleepBlockerId = null;
 
 function register(ipcMain, services) {
-  registerHandler(ipcMain, 'set-prevent-sleep', (enable) => {
+  registerHandler(ipcMain, IPC_CHANNELS.SET_PREVENT_SLEEP, (enable) => {
     if (enable) {
       if (sleepBlockerId === null) {
         sleepBlockerId = powerSaveBlocker.start('prevent-display-sleep');

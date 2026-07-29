@@ -1,0 +1,1479 @@
+/* ========================================
+   Glassmorphism 安卓连接页面样式
+   ======================================== */
+
+/* 安卓连接页面 Glassmorphism 卡片 */
+#android-connection .material-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-amount));
+  -webkit-backdrop-filter: blur(var(--blur-amount));
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: 
+    0 8px 32px var(--glass-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  position: relative;
+}
+
+#android-connection .material-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+}
+
+/* 安卓连接页面卡片头部 */
+#android-connection .card-header {
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 14px 20px;
+}
+
+#android-connection .card-header h3 {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+#android-connection .card-header .svg-icon {
+  color: var(--primary);
+}
+
+/* 安卓连接页面卡片内容 */
+#android-connection .card-content {
+  padding: 20px;
+}
+
+/* 设备信息卡片 */
+#android-connection #device-info-card {
+  background: var(--glass-bg);
+}
+
+/* 设备信息网格 */
+#android-connection .device-info-content-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+#android-connection .status-item {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+
+#android-connection .status-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* 查看报告模态框样式 */
+.report-modal {
+  max-width: 600px;
+  width: 90%;
+}
+
+.report-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 8px 0;
+}
+
+.report-plan-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(var(--primary-rgb), 0.08);
+  border-radius: 12px;
+  border: 1px solid rgba(var(--primary-rgb), 0.15);
+}
+
+.report-plan-info .svg-icon {
+  color: var(--primary);
+  font-size: 24px;
+}
+
+.report-plan-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.report-runs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.report-runs-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.report-runs-header .svg-icon {
+  font-size: 18px;
+}
+
+.report-runs-list {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 8px 4px 4px;
+}
+
+.report-runs-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.report-runs-list::-webkit-scrollbar-track {
+  background: rgba(128, 128, 128, 0.1);
+  border-radius: 3px;
+}
+
+.report-runs-list::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 3px;
+}
+
+.report-runs-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
+}
+
+.report-run-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.report-run-item:hover {
+  background: rgba(var(--primary-rgb), 0.08);
+  border-color: rgba(var(--primary-rgb), 0.2);
+  transform: translateX(4px);
+}
+
+.report-run-item.selected {
+  background: rgba(var(--primary-rgb), 0.12);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.report-run-item.selected .report-run-index {
+  background: var(--primary);
+  color: white;
+}
+
+.report-run-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.report-run-index {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--primary-rgb), 0.15);
+  color: var(--primary);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.report-run-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.report-run-time {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-latest-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 400;
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary, #2196F3) 0%, var(--primary-dark, #1976D2) 100%);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(var(--primary-rgb, 33, 150, 243), 0.3);
+  animation: latestPulse 2s ease-in-out infinite;
+}
+
+@keyframes latestPulse {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(var(--primary-rgb, 33, 150, 243), 0.3);
+  }
+  50% {
+    box-shadow: 0 2px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.5);
+  }
+}
+
+.report-run-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-run-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--error, #F44336);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.report-run-delete-btn:hover {
+  background: rgba(244, 67, 54, 0.12);
+}
+
+.report-run-delete-btn .svg-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.report-run-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.report-run-status.available {
+  background: rgba(76, 175, 80, 0.12);
+  color: #4CAF50;
+}
+
+.report-run-status.unavailable {
+  background: rgba(244, 67, 54, 0.12);
+  color: #F44336;
+}
+
+.report-run-status .svg-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.report-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  color: var(--text-secondary);
+}
+
+.report-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(var(--primary-rgb), 0.2);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.report-no-runs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.report-no-runs .svg-icon {
+  font-size: 20px;
+  opacity: 0.6;
+}
+
+.report-modal .modal-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+body.dark-theme .report-modal .modal-footer {
+  border-top-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+body:not(.dark-theme) .report-modal .modal-footer {
+  border-top-color: rgba(0, 0, 0, 0.05);
+  background: rgba(0, 0, 0, 0.01);
+}
+
+/* 报告模态框按钮加载状态 */
+.report-modal .modal-footer .material-button.loading {
+  pointer-events: none;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.report-modal .modal-footer .material-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.8s linear infinite;
+}
+
+body:not(.dark-theme) .btn-spinner {
+  border-color: rgba(0, 0, 0, 0.2);
+  border-top-color: var(--primary);
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 文件管理器样式 */
+#android-connection .file-list-container {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#android-connection .file-list-container::-webkit-scrollbar {
+  display: none;
+}
+
+#android-connection .file-list-container.scroll-locked {
+  overflow: hidden;
+}
+
+#android-connection .file-list-table {
+  background: transparent;
+}
+
+#android-connection .file-list-table th {
+  background: rgba(30, 30, 30, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+#android-connection .file-list-table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+}
+
+#android-connection .file-list-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#android-connection .file-list-table tbody tr.selected {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.15);
+}
+
+/* 路径显示 */
+#android-connection .current-path {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+/* 文件管理器按钮 */
+#android-connection .file-manager-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+#android-connection .file-manager-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+/* 下载进度容器 */
+#android-connection .download-progress-container {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+#android-connection .download-progress-bar {
+  background: linear-gradient(90deg, var(--primary), var(--primary-light));
+  border-radius: 4px;
+  box-shadow: 0 0 12px rgba(var(--primary-rgb, 33, 150, 243), 0.4);
+}
+
+/* 下载错误样式 */
+#android-connection .download-error {
+  background: rgba(244, 67, 54, 0.15);
+  border-radius: 8px;
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+/* 上下文菜单 */
+#android-connection .context-menu {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+
+#android-connection .context-menu-item {
+  transition: all 0.2s ease;
+}
+
+#android-connection .context-menu-item:hover {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.15);
+}
+
+/* 深色主题下的安卓连接页面 */
+body.dark-theme #android-connection::before {
+  background: 
+    radial-gradient(circle at 20% 30%, rgba(var(--primary-rgb, 33, 150, 243), 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(76, 175, 80, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 60% 20%, rgba(255, 152, 0, 0.06) 0%, transparent 40%);
+}
+
+body.dark-theme #android-connection .material-card {
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme #android-connection .card-header {
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme #android-connection .status-item {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme #android-connection .status-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body.dark-theme #android-connection .file-list-container {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme #android-connection .file-list-table th {
+  background: rgba(20, 20, 20, 0.98);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+body.dark-theme #android-connection .file-list-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme #android-connection .current-path {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme #android-connection .file-manager-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme #android-connection .file-manager-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme #android-connection .download-progress-container {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme #android-connection .download-error {
+  background: rgba(244, 67, 54, 0.2);
+  border-color: rgba(244, 67, 54, 0.4);
+}
+
+/* 亮色主题下的安卓连接页面 */
+body:not(.dark-theme) #android-connection .material-card {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+body:not(.dark-theme) #android-connection .card-header {
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) #android-connection .status-item {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) #android-connection .status-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+body:not(.dark-theme) #android-connection .file-list-container {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) #android-connection .file-list-table th {
+  background: rgba(240, 240, 240, 0.98);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+body:not(.dark-theme) #android-connection .file-list-table tbody tr:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+body:not(.dark-theme) #android-connection .file-list-table tbody tr.selected {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.1);
+}
+
+body:not(.dark-theme) #android-connection .current-path {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) #android-connection .file-manager-btn {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) #android-connection .file-manager-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) #android-connection .download-progress-container {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) #android-connection .download-error {
+  background: rgba(244, 67, 54, 0.1);
+  border-color: rgba(244, 67, 54, 0.2);
+}
+
+/* 设备管理弹窗样式 */
+.device-list {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: visible;
+}
+
+/* 当设备信息卡片显示时，限制设备列表的最大宽度并允许自动换行 */
+#device-modal-content:not(:has(.device-status-card.hidden)) .device-list {
+  max-width: 450px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.device-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.device-item:last-child {
+  border-bottom: none;
+}
+
+.device-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.device-item.selected {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.15);
+}
+
+.device-scanning {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.device-status-card {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.06) 0%, 
+    rgba(255, 255, 255, 0.02) 100%);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 20px;
+  min-width: 220px;
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.device-status-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.2), 
+    transparent);
+  pointer-events: none;
+}
+
+.device-status-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 0% 0%, rgba(var(--primary-rgb, 33, 150, 243), 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(76, 175, 80, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.device-status-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  position: relative;
+  z-index: 1;
+}
+
+.modal-device-loading {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.modal-device-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.modal-device-info-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.modal-device-info-content .status-item {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.08) 0%, 
+    rgba(255, 255, 255, 0.04) 100%);
+  border-radius: 12px;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.modal-device-info-content .status-item:hover {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.12) 0%, 
+    rgba(255, 255, 255, 0.06) 100%);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.add-device-input-container {
+  padding: 16px;
+}
+
+.add-device-result {
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.add-device-result.success {
+  background: rgba(76, 175, 80, 0.06);
+  border-color: rgba(76, 175, 80, 0.15);
+  color: #81C784;
+}
+
+.add-device-result.error {
+  background: rgba(244, 67, 54, 0.06);
+  border-color: rgba(244, 67, 54, 0.15);
+  color: #EF9A9A;
+}
+
+.add-device-result.info {
+  background: rgba(33, 150, 243, 0.06);
+  border-color: rgba(33, 150, 243, 0.15);
+  color: #64B5F6;
+}
+
+/* 亮色主题下的提示信息 */
+body:not(.dark-theme) .add-device-result {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+body:not(.dark-theme) .add-device-result.success {
+  background: rgba(76, 175, 80, 0.05);
+  border-color: rgba(76, 175, 80, 0.12);
+  color: #2E7D32;
+}
+
+body:not(.dark-theme) .add-device-result.error {
+  background: rgba(244, 67, 54, 0.05);
+  border-color: rgba(244, 67, 54, 0.12);
+  color: #C62828;
+}
+
+body:not(.dark-theme) .add-device-result.info {
+  background: rgba(33, 150, 243, 0.05);
+  border-color: rgba(33, 150, 243, 0.12);
+  color: #1565C0;
+}
+
+/* 深色主题下的设备管理弹窗 */
+body.dark-theme .device-list {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .device-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body.dark-theme .device-scanning {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .device-status-card {
+  background: rgba(30, 30, 46, 0.6);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme .device-status-card::before {
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.15), 
+    transparent);
+}
+
+body.dark-theme .device-status-card::after {
+  background: 
+    radial-gradient(circle at 0% 0%, rgba(var(--primary-rgb, 33, 150, 243), 0.2) 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(76, 175, 80, 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 50% 0%, rgba(156, 39, 176, 0.1) 0%, transparent 40%);
+}
+
+body.dark-theme .device-status-title {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .add-device-input-row {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 亮色主题下的设备管理弹窗 */
+body:not(.dark-theme) .device-list {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) .device-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+body:not(.dark-theme) .device-item.selected {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.1);
+}
+
+body:not(.dark-theme) .device-scanning {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) .device-status-card {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+body:not(.dark-theme) .device-status-card::before {
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(0, 0, 0, 0.08), 
+    transparent);
+}
+
+body:not(.dark-theme) .device-status-card::after {
+  background: 
+    radial-gradient(circle at 0% 0%, rgba(var(--primary-rgb, 33, 150, 243), 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(76, 175, 80, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 50% 0%, rgba(156, 39, 176, 0.04) 0%, transparent 40%);
+}
+
+body:not(.dark-theme) .device-status-title {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+  color: var(--text-primary);
+}
+
+body:not(.dark-theme) .modal-device-info-content .status-item {
+  background: linear-gradient(135deg, 
+    rgba(0, 0, 0, 0.02) 0%, 
+    rgba(0, 0, 0, 0.01) 100%);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+body:not(.dark-theme) .modal-device-info-content .status-item:hover {
+  background: linear-gradient(135deg, 
+    rgba(0, 0, 0, 0.04) 0%, 
+    rgba(0, 0, 0, 0.02) 100%);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+body:not(.dark-theme) .add-device-input-row {
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Glassmorphism 输入框样式 - 与 .form-group input 保持一致 */
+.glass-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.glass-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.glass-input:focus {
+  border-color: var(--primary);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb, 33, 150, 243), 0.1);
+}
+
+.glass-input:hover:not(:focus) {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 隐藏数字输入框的上下箭头 */
+.glass-input.no-spinner::-webkit-outer-spin-button,
+.glass-input.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.glass-input.no-spinner[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* 新增设备输入行 */
+.add-device-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.add-device-input-row .glass-input {
+  flex: 1;
+}
+
+/* 图标按钮样式 */
+.material-button.icon-btn {
+  min-width: 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.material-button.icon-btn .svg-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* 小尺寸图标按钮 */
+.material-button.small.icon-btn {
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+}
+
+.material-button.small.icon-btn .svg-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* 确保图标在主题色按钮上可见 */
+.material-button.primary .svg-icon {
+  color: white;
+}
+
+.material-button.primary.icon-btn .svg-icon {
+  color: white;
+}
+
+/* 深色主题下的 Glass 输入框 */
+body.dark-theme .glass-input {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-theme .glass-input:focus {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* 亮色主题下的 Glass 输入框 */
+body:not(.dark-theme) .glass-input {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+body:not(.dark-theme) .glass-input:focus {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  min-width: 500px;
+}
+
+/* Material Design 卡片 */
+.material-card {
+  background-color: var(--surface);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: auto;
+}
+
+.material-card.elevation-1 {
+  border: 1px solid var(--outline);
+}
+
+.material-card.elevation-2 {
+  border: 1px solid #D0D0D0;
+  box-shadow: var(--shadow-1);
+}
+
+.material-card.elevation-3 {
+  border: 1px solid #C0C0C0;
+  box-shadow: var(--shadow-2);
+}
+
+.card-header {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--outline);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background-color: var(--surface);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.card-header h3 {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.card-header .svg-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+}
+
+.card-header .svg-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.card-actions {
+  margin-left: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.card-content {
+  padding: var(--spacing-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* 设备管理控件 */
+.device-management-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: var(--spacing-xs) 0;
+}
+
+.selected-device-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  line-height: 40px;
+}
+
+.selected-device-info .svg-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  width: 18px;
+  height: 18px;
+}
+
+.selected-device-info .svg-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+#selected-device-name {
+  vertical-align: middle;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Material Design 按钮 */
+.material-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px;
+  height: 40px;
+  border: none;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  outline: none;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* 确保按钮内的图标和文字垂直居中对齐 */
+.material-button .svg-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  width: 18px;
+  height: 18px;
+}
+
+.material-button .svg-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.material-button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.3s, height 0.3s;
+}
+
+.material-button:hover::before {
+  width: 100px;
+  height: 100px;
+}
+
+.material-button.primary {
+  background-color: var(--primary);
+  color: white;
+}
+
+.material-button.primary:hover {
+  background-color: var(--primary-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-2);
+}
+
+.material-button.secondary {
+  background-color: var(--secondary);
+  color: white;
+}
+
+.material-button.secondary:hover {
+  background-color: var(--secondary-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-2);
+}
+
+.material-button.outlined {
+  background-color: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.material-button.outlined:hover {
+  background-color: var(--primary-light);
+  transform: translateY(-1px);
+}
+
+/* 错误按钮样式 */
+.material-button.error {
+  background-color: var(--error);
+  color: white;
+}
+
+.material-button.error:hover {
+  background-color: #D32F2F;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-2);
+}
+
+/* 警告按钮样式 */
+.material-button.warning {
+  background-color: #FF9800;
+  color: white;
+}
+
+.material-button.warning:hover {
+  background-color: #F57C00;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-2);
+}
+
+/* 禁用状态的按钮样式 */
+.material-button:disabled {
+  background-color: var(--text-disabled);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.material-button:disabled::before {
+  display: none;
+}
+
+/* 为停止测试和查看报告按钮添加背景颜色 */
+.material-button.secondary:not(:disabled) {
+  background-color: var(--secondary);
+  color: white;
+}
+
+.material-button.outlined:not(:disabled) {
+  background-color: transparent;
+  color: var(--primary);
+}
+
+/* 移除所有按钮的白色圆形动画 */
+.material-button::before {
+  display: none;
+}
+
+/* 修复禁用状态按钮的显示问题 */
+.material-button:disabled {
+  background-color: #BDBDBD !important;
+  color: #757575 !important;
+  border-color: #BDBDBD !important;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* 确保禁用状态下的按钮文字可见 */
+.material-button.secondary:disabled {
+  background-color: #BDBDBD !important;
+  color: #757575 !important;
+}
+
+.material-button.outlined:disabled {
+  background-color: transparent !important;
+  color: #757575 !important;
+  border-color: #BDBDBD !important;
+}
+
+.material-button.large {
+  height: 48px;
+  font-size: 16px;
+  padding: 0 24px;
+}
+
+.material-button:disabled {
+  background-color: #BDBDBD;
+  color: #757575;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.material-button:disabled::before {
+  display: none;
+}
+
+/* 黑暗模式下的禁用按钮样式 */
+body.dark-theme .material-button:disabled {
+  background-color: #424242 !important;
+  color: #9E9E9E !important;
+  border-color: #424242 !important;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+body.dark-theme .material-button.secondary:disabled {
+  background-color: #424242 !important;
+  color: #9E9E9E !important;
+}
+
+body.dark-theme .material-button.outlined:disabled {
+  background-color: transparent !important;
+  color: #9E9E9E !important;
+  border-color: #424242 !important;
+}
+
+/* 图标按钮 */
+.icon-button {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  padding: 0;
+  margin: 0;
+}
+
+.icon-button:hover {
+  background-color: var(--hover);
+  color: var(--text-primary);
+}
+
+/* 目录选择器 */
+.directory-selector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.selected-path {
+  background-color: var(--background);
+  border: 1px solid var(--outline);
+  border-radius: 4px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 14px;
+  color: var(--text-secondary);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+}
+
+/* 测试文件列表 */
+.test-files-list {
+  overflow-y: auto;
+  margin-top: var(--spacing-md);
+  flex: 1;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.test-files-list::-webkit-scrollbar {
+  display: none;
+}
+
+/* 测试用例文件项样式 - 支持选中 */
+.test-case-file-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    margin-bottom: 4px;
+}
+
+.test-case-file-item:hover {
+    background-color: var(--hover);
+}
+
+.test-case-file-item.selected {
+    background-color: rgba(var(--primary-rgb), 0.15);
+}
+
+.test-case-file-item .svg-icon {
+    color: var(--primary);
+}
+
+/* 测试用例编辑区域 - 空状态 */
+.tc-editor-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+}
+
+.tc-add-button {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 16px rgba(var(--primary-rgb), 0.3);
+}
+
+.tc-add-button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 24px rgba(var(--primary-rgb), 0.4);
+}
+
+.tc-add-button .svg-icon {
+    width: 40px;
+    height: 40px;
+    color: white;
+}
+
+.tc-editor-empty p {
+    margin-top: 16px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+

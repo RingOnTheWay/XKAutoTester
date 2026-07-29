@@ -1,60 +1,216 @@
-const { spawn } = require('child_process');
+// EnvironmentService — 环境检查深模块。
+//
+// 藏 5 类副作用 (构造期 new×2 + fs×8 + executeCommand×8 + pathHelper 状态读写 + app.isPackaged)
+// + 4 处 setPythonConfig 模板重复 + 100+ 行 inline pyproject 解析。
+// 6 factory-or-default (对称 I18nService 3-factory + PagePackageService 2-factory
+//                       + UpdateService 5-factory + TestCaseService 4-factory)。
+//
+// 生产: new EnvironmentService(i18nService, projectRoot)  # 2 参, opts 默认 {}
+// 测试: new EnvironmentService(i18nService, projectRoot, { fileSystemFactory: fake, ... })
+//
+// 内部组织:
+//   _ensureInitialized()                — 懒初始化 (首次 5 公共 API 触发 fs/cmd/pathHelper/
+//                                          isPackaged/driverChecker/serialPortEnumerator)
+//   configurePythonEnvironment()        — embedded/venv/system 三级回退, 用 buildPythonConfig 消重
+//   configureEmbeddedPythonPth()        — 用 fileSystem port 读写 ._pth
+//   findSystemPython() / findPythonHome() / findUvCommand()
+//                                       — 用 commandRunner port + pathHelper
+//   checkCP210xDriver() / isInstallerRunning() / getDriverInstallerPath() / getSerialPorts()
+//                                       — 委托 driverChecker / serialPortEnumerator (1-liner)
+//   getAapt2Path()                      — 委托 pathHelper
+//   checkCommandExists()                — 用 commandRunner port
+//   checkAndroidSDK()                   — 编排 pathHelper + checkCommandExists
+//   checkPythonEnvironment()            — 用 parsePyprojectDependencies + checkMissingPackages 纯函数
+//   checkNodeModules()                  — 用 isPackagedGetter + fileSystem port
+//   runEnvironmentChecks()              — 编排 4 checks + IPC 进度推送 + 300ms 节流
+
 const path = require('path');
 const fs = require('fs');
 const { app } = require('electron');
-const pathHelper = require('../utils/pathHelper');
+const { executeCommand } = require('./spawnHelper');
+const DriverChecker = require('./DriverChecker');
+const SerialPortEnumerator = require('./SerialPortEnumerator');
+const { IPC_CHANNELS } = require('../../shared/constants');
+
+// ── module-level 常量 (对称 UpdateService GITHUB_OWNER/REPO) ──────────
+
+const REQUIRED_PYTHON_VERSION = '3.12.4';
+const PYTHON_EMBEDDABLE_ZIP = 'python312.zip';
+const PTH_CONFIG_MARKER = '# XKAutoTester configured';
+const WINDOWSAPPS_MARKER = 'windowsapps';
+const PYPROJECT_FILE = 'pyproject.toml';
+const NODE_MODULES_DIR = 'node_modules';
+const PACKAGE_JSON_FILE = 'package.json';
+
+// ── module-level 纯函数 (对称 UpdateService compareVersions/normalizeUpdateError) ──
+
+/**
+ * 解析 pyproject.toml dependencies 数组
+ * @param {string} content - pyproject.toml 文件内容
+ * @returns {string[]} 依赖列表 (原始 spec, 如 'pytest>=8.0')
+ */
+function parsePyprojectDependencies(content) {
+  const match = content.match(/dependencies\s*=\s*\[([\s\S]*?)\]/);
+  if (!match) return [];
+  return match[1]
+    .split('\n')
+    .map(line => line.trim().replace(/['"]/g, '').replace(/,\s*$/, ''))
+    .filter(line => line && !line.startsWith('#'));
+}
+
+/**
+ * 从原始 spec 提取包名 (小写)
+ * @param {string} spec - 'pytest>=8.0' -> 'pytest'
+ * @returns {string}
+ */
+function extractPackageName(spec) {
+  return spec.split(/[<>=~!]/)[0].toLowerCase().trim();
+}
+
+/**
+ * 检查缺失包
+ * @param {Set<string>} installed - 已安装 (小写, 'name==version')
+ * @param {string[]} requirements - 依赖原始 spec
+ * @returns {string[]} 缺失包列表 (原始 spec)
+ */
+function checkMissingPackages(installed, requirements) {
+  const missing = [];
+  for (const req of requirements) {
+    const pkgName = extractPackageName(req);
+    const found = [...installed].some(p =>
+      p.startsWith(`${pkgName}==`) || p.startsWith(`${pkgName}>=`)
+    );
+    if (!found) missing.push(req);
+  }
+  return missing;
+}
+
+/**
+ * 构建 setPythonConfig 参数对象
+ * @param {string} pythonPath
+ * @param {{isEmbedded: boolean, isSystem: boolean}} flags
+ * @param {string|null} sitePackagesPath
+ * @param {string} sourceLabel
+ * @returns {{pythonPath: string, isEmbedded: boolean, isSystem: boolean, sitePackagesPath: string|null, sourceLabel: string}}
+ */
+function buildPythonConfig(pythonPath, flags, sitePackagesPath, sourceLabel) {
+  return {
+    pythonPath,
+    isEmbedded: flags.isEmbedded,
+    isSystem: flags.isSystem,
+    sitePackagesPath,
+    sourceLabel,
+  };
+}
+
+// ── 6 默认 factory (factory-or-default, 对称 UpdateService 5-factory) ──
+
+const defaultFileSystemFactory = () => ({
+  existsSync: (p) => fs.existsSync(p),
+  readFileSync: (p, enc) => fs.readFileSync(p, enc),
+  readdirSync: (d) => fs.readdirSync(d),
+  writeFileSync: (p, content, enc) => fs.writeFileSync(p, content, enc),
+});
+
+const defaultCommandRunnerFactory = () => executeCommand;
+
+const defaultDriverCheckerFactory = (i18nService, projectRoot, spawnHelper) =>
+  new DriverChecker(i18nService, projectRoot, spawnHelper);
+
+const defaultSerialPortEnumeratorFactory = (i18nService, spawnHelper) =>
+  new SerialPortEnumerator(i18nService, spawnHelper);
+
+const defaultPathHelperFactory = () => require('../utils/pathHelper');
+
+const defaultIsPackagedGetterFactory = () => () => app.isPackaged;
+
+// ── EnvironmentService 类 ──────────────────────────────────────────
 
 class EnvironmentService {
-  constructor(i18nService, projectRoot) {
+  /**
+   * @param {Object} i18nService
+   * @param {string} projectRoot
+   * @param {Object} [opts] - factory-or-default (全可选, 生产不传)
+   * @param {() => Object} [opts.fileSystemFactory]
+   * @param {() => Function} [opts.commandRunnerFactory]
+   * @param {(i18nService: Object, projectRoot: string, spawnHelper: Object) => Object} [opts.driverCheckerFactory]
+   * @param {(i18nService: Object, spawnHelper: Object) => Object} [opts.serialPortEnumeratorFactory]
+   * @param {() => Object} [opts.pathHelperFactory]
+   * @param {() => () => boolean} [opts.isPackagedGetterFactory]
+   */
+  constructor(i18nService, projectRoot, opts = {}) {
     this.i18nService = i18nService;
     this.projectRoot = projectRoot;
     this.pythonConfigured = false;
+    this._initialized = false;  // 懒初始化 flag (对称 UpdateService._initialized)
+
+    this._fileSystemFactory = opts.fileSystemFactory || defaultFileSystemFactory;
+    this._commandRunnerFactory = opts.commandRunnerFactory || defaultCommandRunnerFactory;
+    this._driverCheckerFactory = opts.driverCheckerFactory || defaultDriverCheckerFactory;
+    this._serialPortEnumeratorFactory = opts.serialPortEnumeratorFactory || defaultSerialPortEnumeratorFactory;
+    this._pathHelperFactory = opts.pathHelperFactory || defaultPathHelperFactory;
+    this._isPackagedGetterFactory = opts.isPackagedGetterFactory || defaultIsPackagedGetterFactory;
   }
 
+  // 懒初始化 (消除构造期 I/O, 对称 UpdateService._ensureInitialized / TestCaseService._ensureInitialized)
+  _ensureInitialized() {
+    if (this._initialized) return;
+
+    const spawnHelper = { executeCommand: this._commandRunnerFactory() };
+    this._fs = this._fileSystemFactory();
+    this._cmd = this._commandRunnerFactory();
+    this._pathHelper = this._pathHelperFactory();
+    this._isPackaged = this._isPackagedGetterFactory();
+    this._driverChecker = this._driverCheckerFactory(this.i18nService, this.projectRoot, spawnHelper);
+    this._serialPortEnumerator = this._serialPortEnumeratorFactory(this.i18nService, spawnHelper);
+
+    this._initialized = true;
+  }
+
+  // ── Python 环境配置 ────────────────────────────────────────────
+
   async configurePythonEnvironment() {
+    this._ensureInitialized();
     if (this.pythonConfigured) return;
 
-    const embeddedPython = pathHelper.getEmbeddedPythonPath(this.projectRoot);
+    const embeddedPython = this._pathHelper.getEmbeddedPythonPath(this.projectRoot);
     if (embeddedPython) {
       this.configureEmbeddedPythonPth(embeddedPython);
-      pathHelper.setPythonConfig({
-        pythonPath: embeddedPython,
-        isEmbedded: true,
-        isSystem: false,
-        sitePackagesPath: pathHelper.getVenvSitePackagesPath(this.projectRoot),
-        sourceLabel: `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
-      });
+      this._pathHelper.setPythonConfig(buildPythonConfig(
+        embeddedPython,
+        { isEmbedded: true, isSystem: false },
+        this._pathHelper.getVenvSitePackagesPath(this.projectRoot),
+        `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
+      ));
       this.pythonConfigured = true;
       return;
     }
 
-    const venvPython = pathHelper.getVenvPythonPath(this.projectRoot);
+    const venvPython = this._pathHelper.getVenvPythonPath(this.projectRoot);
     if (venvPython) {
-      const testResult = await this.executeCommand(venvPython, ['--version']);
+      const testResult = await this._cmd(venvPython, ['--version']);
       if (testResult.code === 0) {
-        pathHelper.setPythonConfig({
-          pythonPath: venvPython,
-          isEmbedded: false,
-          isSystem: false,
-          sitePackagesPath: null,
-          sourceLabel: `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
-        });
+        this._pathHelper.setPythonConfig(buildPythonConfig(
+          venvPython,
+          { isEmbedded: false, isSystem: false },
+          null,
+          `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
+        ));
         this.pythonConfigured = true;
         return;
       }
 
       const pythonHome = await this.findPythonHome();
       if (pythonHome) {
-        pathHelper.fixPyvenvCfg(this.projectRoot, pythonHome);
-        const retryResult = await this.executeCommand(venvPython, ['--version']);
+        this._pathHelper.fixPyvenvCfg(this.projectRoot, pythonHome);
+        const retryResult = await this._cmd(venvPython, ['--version']);
         if (retryResult.code === 0) {
-          pathHelper.setPythonConfig({
-            pythonPath: venvPython,
-            isEmbedded: false,
-            isSystem: false,
-            sitePackagesPath: null,
-            sourceLabel: `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
-          });
+          this._pathHelper.setPythonConfig(buildPythonConfig(
+            venvPython,
+            { isEmbedded: false, isSystem: false },
+            null,
+            `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
+          ));
           this.pythonConfigured = true;
           return;
         }
@@ -63,40 +219,39 @@ class EnvironmentService {
 
     const systemPython = await this.findSystemPython();
     if (systemPython) {
-      pathHelper.setPythonConfig({
-        pythonPath: systemPython,
-        isEmbedded: false,
-        isSystem: true,
-        sitePackagesPath: pathHelper.getVenvSitePackagesPath(this.projectRoot),
-        sourceLabel: `(${this.i18nService.t('splash.checks.sourceSystem')})`
-      });
+      this._pathHelper.setPythonConfig(buildPythonConfig(
+        systemPython,
+        { isEmbedded: false, isSystem: true },
+        this._pathHelper.getVenvSitePackagesPath(this.projectRoot),
+        `(${this.i18nService.t('splash.checks.sourceSystem')})`
+      ));
       this.pythonConfigured = true;
       return;
     }
 
-    pathHelper.setPythonConfig(null);
+    this._pathHelper.setPythonConfig(null);
     this.pythonConfigured = true;
   }
 
   configureEmbeddedPythonPth(embeddedPythonPath) {
+    this._ensureInitialized();
     const pythonDir = path.dirname(embeddedPythonPath);
-    const pthFiles = fs.readdirSync(pythonDir).filter(f => f.endsWith('._pth'));
+    const pthFiles = this._fs.readdirSync(pythonDir).filter(f => f.endsWith('._pth'));
 
     if (pthFiles.length === 0) return;
 
     const pthFilePath = path.join(pythonDir, pthFiles[0]);
-    const marker = '# XKAutoTester configured';
 
     try {
-      const existingContent = fs.readFileSync(pthFilePath, 'utf8');
-      if (existingContent.includes(marker)) return;
+      const existingContent = this._fs.readFileSync(pthFilePath, 'utf8');
+      if (existingContent.includes(PTH_CONFIG_MARKER)) return;
 
-      const sitePackagesPath = pathHelper.getVenvSitePackagesPath(this.projectRoot);
+      const sitePackagesPath = this._pathHelper.getVenvSitePackagesPath(this.projectRoot);
       const venvSitePackages = path.relative(pythonDir, sitePackagesPath).replace(/\\/g, '/');
       const srcPath = path.relative(pythonDir, path.join(this.projectRoot, 'src')).replace(/\\/g, '/');
 
       const newContent = [
-        'python312.zip',
+        PYTHON_EMBEDDABLE_ZIP,
         '.',
         venvSitePackages,
         srcPath,
@@ -104,23 +259,25 @@ class EnvironmentService {
         '# Uncomment to run site.main() (automatically done by site.py)',
         'import site',
         '',
-        marker
+        PTH_CONFIG_MARKER
       ].join('\n');
 
-      fs.writeFileSync(pthFilePath, newContent, 'utf8');
+      this._fs.writeFileSync(pthFilePath, newContent, 'utf8');
     } catch (error) {
+      // 吞错保留 (契约: ._pth 写入失败不应中断启动)
     }
   }
 
   async findSystemPython() {
+    this._ensureInitialized();
     try {
-      const result = await this.executeCommand('where', ['python']);
+      const result = await this._cmd('where', ['python']);
       if (result.code !== 0) return null;
 
       const paths = result.stdout.split('\n').map(p => p.trim()).filter(p => p && p.endsWith('.exe'));
       for (const p of paths) {
-        if (p.toLowerCase().includes('windowsapps')) continue;
-        const testResult = await this.executeCommand(p, ['--version']);
+        if (p.toLowerCase().includes(WINDOWSAPPS_MARKER)) continue;
+        const testResult = await this._cmd(p, ['--version']);
         if (testResult.code === 0) return p;
       }
       return null;
@@ -130,7 +287,8 @@ class EnvironmentService {
   }
 
   async findPythonHome() {
-    const embeddedPython = pathHelper.getEmbeddedPythonPath(this.projectRoot);
+    this._ensureInitialized();
+    const embeddedPython = this._pathHelper.getEmbeddedPythonPath(this.projectRoot);
     if (embeddedPython) {
       return path.dirname(embeddedPython);
     }
@@ -138,7 +296,7 @@ class EnvironmentService {
     try {
       const systemPython = await this.findSystemPython();
       if (systemPython) {
-        const result = await this.executeCommand(systemPython, ['-c', 'import sys; print(sys.base_prefix)']);
+        const result = await this._cmd(systemPython, ['-c', 'import sys; print(sys.base_prefix)']);
         if (result.code === 0) return result.stdout.trim();
       }
     } catch { }
@@ -147,8 +305,9 @@ class EnvironmentService {
   }
 
   async findUvCommand() {
+    this._ensureInitialized();
     try {
-      const result = await this.executeCommand('where', ['uv']);
+      const result = await this._cmd('where', ['uv']);
       if (result.code === 0) {
         const paths = result.stdout.split('\n').map(p => p.trim()).filter(p => p);
         return paths[0] || null;
@@ -157,166 +316,43 @@ class EnvironmentService {
     return null;
   }
 
-  async executeCommand(command, args = [], options = {}) {
-    return new Promise((resolve, reject) => {
-      const proc = spawn(command, args, {
-        ...options,
-        windowsHide: true,
-        env: { ...process.env, ...(options.env || {}) }
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      proc.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      proc.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (code) => {
-        resolve({
-          code,
-          stdout: stdout.trim(),
-          stderr: stderr.trim()
-        });
-      });
-
-      proc.on('error', (error) => {
-        reject(error);
-      });
-    });
-  }
-
-  getDriverInstallerPath() {
-    const possiblePaths = [
-      path.join(this.projectRoot, 'env', 'CP210x_Windows_Drivers', 'CP210xVCPInstaller_x64.exe'),
-      path.join(this.projectRoot, 'env', 'CP210x_Windows_Drivers', 'CP210xVCPInstaller_x86.exe')
-    ];
-
-    for (const installerPath of possiblePaths) {
-      if (fs.existsSync(installerPath)) {
-        return installerPath;
-      }
-    }
-
-    return null;
-  }
+  // ── 委托: DriverChecker (1-liner, IPC 兼容约束) ────────────────
 
   async checkCP210xDriver() {
-    try {
-      const driverSysPath = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'drivers', 'silabser.sys');
-      if (fs.existsSync(driverSysPath)) {
-        return {
-          status: 'success',
-          message: this.i18nService.t('splash.checks.cp210Found')
-        };
-      }
-
-      const regResult = await this.executeCommand('reg.exe', [
-        'query',
-        'HKLM\\SYSTEM\\CurrentControlSet\\Services\\silabser'
-      ]);
-      if (regResult.code === 0 && regResult.stdout.includes('silabser')) {
-        const hasDeleteFlag = regResult.stdout.match(/DriverDelete\s+REG_DWORD\s+0x1/i) ||
-                              regResult.stdout.match(/DeleteFlag\s+REG_DWORD\s+0x1/i);
-        const startMatch = regResult.stdout.match(/Start\s+REG_DWORD\s+0x(\d+)/i);
-        const isDisabled = startMatch && startMatch[1] === '4';
-
-        if (!hasDeleteFlag && !isDisabled) {
-          return {
-            status: 'success',
-            message: this.i18nService.t('splash.checks.cp210Found')
-          };
-        }
-      }
-
-      const driverStoreResult = await this.executeCommand('findstr.exe', [
-        '/i', '/m', 'silabser',
-        path.join(process.env.SystemRoot || 'C:\\Windows', 'INF', 'oem*.inf')
-      ]);
-      if (driverStoreResult.code === 0 && driverStoreResult.stdout.includes('.inf')) {
-        return {
-          status: 'success',
-          message: this.i18nService.t('splash.checks.cp210Found')
-        };
-      }
-
-      const installerPath = this.getDriverInstallerPath();
-      return {
-        status: 'warning',
-        message: this.i18nService.t('splash.checks.cp210NotFound'),
-        canInstall: !!installerPath,
-        installerPath: installerPath
-      };
-    } catch (error) {
-      const installerPath = this.getDriverInstallerPath();
-      return {
-        status: 'warning',
-        message: this.i18nService.t('splash.checks.cp210xCheckFailed', { error: error.message }),
-        canInstall: !!installerPath,
-        installerPath: installerPath
-      };
-    }
+    this._ensureInitialized();
+    return this._driverChecker.checkCP210xDriver();
   }
 
   async isInstallerRunning() {
-    try {
-      const result = await this.executeCommand('tasklist', ['/FI', 'IMAGENAME eq CP210xVCPInstaller_x64.exe', '/NH']);
-      if (result.stdout.includes('CP210xVCPInstaller')) {
-        return true;
-      }
-      const result86 = await this.executeCommand('tasklist', ['/FI', 'IMAGENAME eq CP210xVCPInstaller_x86.exe', '/NH']);
-      return result86.stdout.includes('CP210xVCPInstaller');
-    } catch {
-      return false;
-    }
+    this._ensureInitialized();
+    return this._driverChecker.isInstallerRunning();
   }
 
-  getAdbPath() {
-    return pathHelper.getAdbPath(this.projectRoot, true);
+  getDriverInstallerPath() {
+    this._ensureInitialized();
+    return this._driverChecker.getDriverInstallerPath();
   }
 
-  getAapt2Path() {
-    const possiblePaths = [
-      path.join(this.projectRoot, 'env', 'android-sdk', 'build-tools', 'aapt2.exe'),
-      path.join(this.projectRoot, 'env', 'android-tools', 'aapt2.exe')
-    ];
-
-    for (const aapt2Path of possiblePaths) {
-      if (fs.existsSync(aapt2Path)) {
-        return aapt2Path;
-      }
-    }
-
-    return 'aapt2';
-  }
+  // ── 委托: SerialPortEnumerator (1-liner) ───────────────────────
 
   async getSerialPorts() {
-    const pythonConfig = pathHelper.getPythonConfig();
-    if (!pythonConfig) {
-      return { success: false, error: this.i18nService.t('splash.checks.venvNotFound') };
-    }
-
-    const listScript = 'import serial.tools.list_ports; import json; ports = serial.tools.list_ports.comports(); print(json.dumps([{"deviceId": p.device, "name": p.description, "manufacturer": p.manufacturer or "", "serial_number": p.serial_number or "", "hwid": p.hwid or "", "vid": p.vid, "pid": p.pid} for p in ports]))';
-
-    try {
-      const result = await this.executeCommand(pythonConfig.pythonPath, ['-c', listScript]);
-      if (result.code !== 0) {
-        return { success: false, error: result.stderr || 'Failed to list serial ports' };
-      }
-      const ports = JSON.parse(result.stdout || '[]');
-      return { success: true, data: ports };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
+    this._ensureInitialized();
+    return this._serialPortEnumerator.getSerialPorts();
   }
 
+  // ── 委托: pathHelper (1-liner) ─────────────────────────────────
+
+  getAapt2Path() {
+    this._ensureInitialized();
+    return this._pathHelper.getAapt2Path(this.projectRoot, true);
+  }
+
+  // ── Android SDK 检查 ──────────────────────────────────────────
+
   async checkCommandExists(command) {
+    this._ensureInitialized();
     try {
-      const result = await this.executeCommand('where', [command]);
+      const result = await this._cmd('where', [command]);
       return result.code === 0 && result.stdout.trim().length > 0;
     } catch {
       return false;
@@ -324,8 +360,9 @@ class EnvironmentService {
   }
 
   async checkAndroidSDK() {
+    this._ensureInitialized();
     try {
-      const adbPath = this.getAdbPath();
+      const adbPath = this._pathHelper.getAdbPath(this.projectRoot, true);
       const aapt2Path = this.getAapt2Path();
 
       const adbLocalExists = adbPath !== 'adb';
@@ -384,9 +421,12 @@ class EnvironmentService {
     }
   }
 
+  // ── Python 环境检查 ───────────────────────────────────────────
+
   async checkPythonEnvironment(projectRoot) {
+    this._ensureInitialized();
     try {
-      const pythonConfig = pathHelper.getPythonConfig();
+      const pythonConfig = this._pathHelper.getPythonConfig();
       if (!pythonConfig) {
         return {
           status: 'error',
@@ -394,7 +434,7 @@ class EnvironmentService {
         };
       }
 
-      const result = await this.executeCommand(pythonConfig.pythonPath, ['--version']);
+      const result = await this._cmd(pythonConfig.pythonPath, ['--version']);
       const sourceLabel = pythonConfig.sourceLabel;
 
       if (result.code !== 0) {
@@ -416,23 +456,23 @@ class EnvironmentService {
       let versionStatus = 'success';
       let versionMessage;
 
-      if (version !== '3.12.4') {
+      if (version !== REQUIRED_PYTHON_VERSION) {
         if (pythonConfig.isSystem) {
           return {
             status: 'error',
-            message: this.i18nService.t('splash.checks.pythonVersionMismatch', { version: version, required: '3.12.4' })
+            message: this.i18nService.t('splash.checks.pythonVersionMismatch', { version: version, required: REQUIRED_PYTHON_VERSION })
           };
         }
         versionStatus = 'warning';
-        versionMessage = this.i18nService.t('splash.checks.pythonVersionRecommended', { version: version, recommended: '3.12.4' }) + ' ' + sourceLabel;
+        versionMessage = this.i18nService.t('splash.checks.pythonVersionRecommended', { version: version, recommended: REQUIRED_PYTHON_VERSION }) + ' ' + sourceLabel;
       } else {
         versionMessage = this.i18nService.t('splash.checks.pythonVersion', { version: version }) + ' ' + sourceLabel;
       }
 
-      const requirementsPath = path.join(projectRoot, 'pyproject.toml');
-      if (fs.existsSync(requirementsPath)) {
+      const requirementsPath = path.join(projectRoot, PYPROJECT_FILE);
+      if (this._fs.existsSync(requirementsPath)) {
         const listScript = "import importlib.metadata; dists = importlib.metadata.distributions(); [print(d.metadata['Name'] + '==' + d.version) for d in dists]";
-        const pipResult = await this.executeCommand(pythonConfig.pythonPath, ['-c', listScript]);
+        const pipResult = await this._cmd(pythonConfig.pythonPath, ['-c', listScript]);
 
         if (pipResult.code !== 0) {
           return {
@@ -442,30 +482,11 @@ class EnvironmentService {
         }
 
         const installedPackages = new Set(pipResult.stdout.split('\n').map(pkg => pkg.toLowerCase().trim()).filter(pkg => pkg));
+        const requirementsContent = this._fs.readFileSync(requirementsPath, 'utf8');
+        const requirements = parsePyprojectDependencies(requirementsContent);
 
-        const requirementsContent = fs.readFileSync(requirementsPath, 'utf8');
-        const depsMatch = requirementsContent.match(/dependencies\s*=\s*\[([\s\S]*?)\]/);
-        if (depsMatch) {
-          const requirements = depsMatch[1]
-            .split('\n')
-            .map(line => line.trim().replace(/['"]/g, ''))
-            .filter(line => line && !line.startsWith('#') && line !== '');
-
-          let missingPackages = [];
-          for (const req of requirements) {
-            const pkgName = req.split(/[<>=~!]/)[0].toLowerCase().trim();
-            let found = false;
-            for (const installedPkg of installedPackages) {
-              if (installedPkg.startsWith(`${pkgName}==`) || installedPkg.startsWith(`${pkgName}>=`)) {
-                found = true;
-                break;
-              }
-            }
-            if (!found) {
-              missingPackages.push(req);
-            }
-          }
-
+        if (requirements.length > 0) {
+          const missingPackages = checkMissingPackages(installedPackages, requirements);
           if (missingPackages.length > 0) {
             return {
               status: 'warning',
@@ -487,33 +508,36 @@ class EnvironmentService {
     }
   }
 
+  // ── Node Modules 检查 ─────────────────────────────────────────
+
   checkNodeModules() {
+    this._ensureInitialized();
     try {
-      if (app.isPackaged) {
+      if (this._isPackaged()) {
         return {
           status: 'success',
           message: this.i18nService.t('splash.checks.nodeModulesComplete')
         };
       }
 
-      const nodeModulesPath = path.join(__dirname, '..', '..', '..', 'node_modules');
-      const packageJsonPath = path.join(__dirname, '..', '..', '..', 'package.json');
+      const nodeModulesPath = path.join(__dirname, '..', '..', '..', NODE_MODULES_DIR);
+      const packageJsonPath = path.join(__dirname, '..', '..', '..', PACKAGE_JSON_FILE);
 
-      if (!fs.existsSync(nodeModulesPath)) {
+      if (!this._fs.existsSync(nodeModulesPath)) {
         return {
           status: 'error',
           message: this.i18nService.t('splash.checks.nodeModulesNotFound')
         };
       }
 
-      if (!fs.existsSync(packageJsonPath)) {
+      if (!this._fs.existsSync(packageJsonPath)) {
         return {
           status: 'warning',
           message: this.i18nService.t('splash.checks.packageJsonNotFound')
         };
       }
 
-      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      const packageJson = JSON.parse(this._fs.readFileSync(packageJsonPath, 'utf8'));
       const dependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
       const depNames = Object.keys(dependencies);
 
@@ -527,7 +551,7 @@ class EnvironmentService {
       const missingDeps = [];
       for (const depName of depNames) {
         const depPath = path.join(nodeModulesPath, depName);
-        if (!fs.existsSync(depPath)) {
+        if (!this._fs.existsSync(depPath)) {
           missingDeps.push(depName);
         }
       }
@@ -558,7 +582,10 @@ class EnvironmentService {
     }
   }
 
+  // ── 编排: 环境检查 ────────────────────────────────────────────
+
   async runEnvironmentChecks(projectRoot, splashWindow) {
+    this._ensureInitialized();
     const checks = [
       {
         name: this.i18nService.t('splash.checks.cp210DriverCheck'),
@@ -592,7 +619,7 @@ class EnvironmentService {
       const progress = Math.round(((i + 1) / (checks.length + 1)) * 100);
 
       if (splashWindow) {
-        splashWindow.webContents.send('check-progress', {
+        splashWindow.webContents.send(IPC_CHANNELS.CHECK_PROGRESS, {
           percentage: progress,
           message: this.i18nService.t('splash.checks.checking', { name: check.name })
         });
@@ -602,7 +629,7 @@ class EnvironmentService {
         const result = await check.check();
 
         if (splashWindow) {
-          splashWindow.webContents.send('check-result', {
+          splashWindow.webContents.send(IPC_CHANNELS.CHECK_RESULT, {
             name: check.name,
             status: result.status,
             message: result.message,
@@ -623,7 +650,7 @@ class EnvironmentService {
         }
       } catch (error) {
         if (splashWindow) {
-          splashWindow.webContents.send('check-result', {
+          splashWindow.webContents.send(IPC_CHANNELS.CHECK_RESULT, {
             name: check.name,
             status: 'error',
             message: this.i18nService.t('splash.checks.checkFailed', { error: error.message }),
@@ -645,4 +672,10 @@ class EnvironmentService {
   }
 }
 
-module.exports = EnvironmentService;
+module.exports = {
+  EnvironmentService,
+  parsePyprojectDependencies,
+  extractPackageName,
+  checkMissingPackages,
+  buildPythonConfig,
+};

@@ -123,18 +123,21 @@ export class PagePackageController {
     });
 
     this.#onModel(model, 'save-success', ({ type }) => {
-      if (typeof Toast !== 'undefined') Toast.success(window.i18n.t('pagePackage.saveSuccess'));
+      Toast.success(window.i18n.t('pagePackage.saveSuccess'));
       view.closeModal(type);
     });
 
     this.#onModel(model, 'delete-success', ({ type }) => {
-      if (typeof Toast !== 'undefined') Toast.success(window.i18n.t('pagePackage.deleteSuccess'));
+      Toast.success(window.i18n.t('pagePackage.deleteSuccess'));
+      // MVC: 删除后保留当前层级卡片展开, 显示"请选择 xxx" 占位
+      view.resetForDelete(type);
+      view.updateButtonStates(type, false);
     });
 
     this.#onModel(model, 'error', ({ source, message, error }) => {
-      if (message && typeof Toast !== 'undefined') {
+      if (message) {
         const i18nKey = `pagePackage.${message}`;
-        const text = window.i18n?.t(i18nKey) || message;
+        const text = window.i18n.t(i18nKey) || message;
         if (source === 'saveApp' || source === 'savePage' || source === 'saveElement') {
           Toast.error(text);
         } else if (source === 'deleteItem') {
@@ -150,7 +153,7 @@ export class PagePackageController {
   #bindCascadeSelects() {
     const types = ['app', 'page', 'element'];
     types.forEach(type => {
-      const wrapper = document.getElementById(`pp-${type}-select-wrapper`);
+      const wrapper = this.#view.getCascadeSelectWrapper(type);
       if (!wrapper) return;
 
       const select = wrapper.querySelector('.cascade-select');
@@ -166,16 +169,10 @@ export class PagePackageController {
       if (selected) {
         const handler = (e) => {
           if (select.classList.contains('disabled')) return;
-          const isOpen = select.classList.toggle('open');
-          if (card) card.classList.toggle('dropdown-open', isOpen);
+          // MVC: classList 通过 view.toggleCascadeSelectOpen
+          this.#view.toggleCascadeSelectOpen(select, card);
           // 关闭其他下拉
-          document.querySelectorAll('.cascade-select.open').forEach(s => {
-            if (s !== select) {
-              s.classList.remove('open');
-              const otherCard = s.closest('.pp-card');
-              if (otherCard) otherCard.classList.remove('dropdown-open');
-            }
-          });
+          this.#view.closeOtherCascadeSelects(select);
         };
         selected.addEventListener('click', handler);
         this.#unbinds.push(() => selected.removeEventListener('click', handler));
@@ -237,8 +234,8 @@ export class PagePackageController {
       // 外部点击关闭
       const outsideHandler = (e) => {
         if (!wrapper.contains(e.target)) {
-          select?.classList.remove('open');
-          if (card) card.classList.remove('dropdown-open');
+          // MVC: classList 通过 view.closeCascadeSelect
+          this.#view.closeCascadeSelect(select, card);
         }
       };
       document.addEventListener('click', outsideHandler);
@@ -247,7 +244,7 @@ export class PagePackageController {
   }
 
   #bindOptionClicks(type) {
-    const wrapper = document.getElementById(`pp-${type}-select-wrapper`);
+    const wrapper = this.#view.getCascadeSelectWrapper(type);
     if (!wrapper) return;
     const optionsContainer = wrapper.querySelector('.cascade-select__options');
     if (!optionsContainer) return;
@@ -268,11 +265,9 @@ export class PagePackageController {
     this.#view.els.ppTabs.forEach(tab => {
       const handler = () => {
         const targetTab = tab.dataset.tab;
-        this.#view.els.ppTabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        this.#view.els.ppContents.forEach(c => c.classList.remove('active'));
-        const targetContent = document.getElementById(`pp-${targetTab}-content`);
-        if (targetContent) targetContent.classList.add('active');
+        const targetContent = this.#view.getTabContent(targetTab);
+        // MVC: classList active 通过 view.setActiveSubTab
+        this.#view.setActiveSubTab(tab, targetContent);
       };
       tab.addEventListener('click', handler);
       this.#unbinds.push(() => tab.removeEventListener('click', handler));
@@ -358,9 +353,8 @@ export class PagePackageController {
     const handleApkFile = async (filePath) => {
       if (!filePath.toLowerCase().endsWith('.apk')) {
         this.#view.setApkDropZoneState('error');
-        if (this.#view.els.apkErrorMessage) {
-          this.#view.els.apkErrorMessage.textContent = window.i18n.t('pagePackage.apkInvalidFile');
-        }
+        // MVC: textContent 通过 view.setApkErrorMessage
+        this.#view.setApkErrorMessage(window.i18n.t('pagePackage.apkInvalidFile'));
         setTimeout(() => this.#view.resetApkDropZone(), 3000);
         return;
       }
@@ -368,15 +362,16 @@ export class PagePackageController {
       this.#view.setApkDropZoneState('loading');
       const result = await this.#model.parseApk(filePath);
 
-      if (result.success && result.data) {
+      // wrapper 已在 success=false 时抛错；model.parseApk 捕获后返回 {success:false,error}
+      // 此处只判断 data 字段，失败时 result.data 为 undefined 走 else 分支
+      if (result.data) {
         this.#view.fillApkData(result.data);
         this.#view.setApkDropZoneState('success');
         setTimeout(() => this.#view.resetApkDropZone(), 2000);
       } else {
         this.#view.setApkDropZoneState('error');
-        if (this.#view.els.apkErrorMessage) {
-          this.#view.els.apkErrorMessage.textContent = result.error || window.i18n.t('pagePackage.apkParseFailed');
-        }
+        // MVC: textContent 通过 view.setApkErrorMessage
+        this.#view.setApkErrorMessage(result.error || window.i18n.t('pagePackage.apkParseFailed'));
         setTimeout(() => this.#view.resetApkDropZone(), 3000);
       }
     };
@@ -385,12 +380,14 @@ export class PagePackageController {
     const dragoverHandler = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      dropZone.classList.add('drag-over');
+      // MVC: classList drag-over 通过 view
+      this.#view.setApkDropZoneDragOver(true);
     };
     const dragleaveHandler = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      dropZone.classList.remove('drag-over');
+      // MVC: classList drag-over 通过 view
+      this.#view.setApkDropZoneDragOver(false);
     };
     const dropHandler = async (e) => {
       e.preventDefault();
@@ -459,14 +456,14 @@ export class PagePackageController {
         break;
       case 'page':
         if (!this.#model.selectedApp) {
-          if (typeof Toast !== 'undefined') Toast.warning(window.i18n.t('pagePackage.selectAppFirst'));
+          Toast.warning(window.i18n.t('pagePackage.selectAppFirst'));
           return;
         }
         this.#view.openPageModal(window.i18n.t('pagePackage.newPage'));
         break;
       case 'element':
         if (!this.#model.selectedPage) {
-          if (typeof Toast !== 'undefined') Toast.warning(window.i18n.t('pagePackage.selectPageFirst'));
+          Toast.warning(window.i18n.t('pagePackage.selectPageFirst'));
           return;
         }
         this.#view.openElementModal(window.i18n.t('pagePackage.newElement'));
@@ -535,12 +532,12 @@ export class PagePackageController {
 
   async handleOpenInspector() {
     if (!this.#model.selectedApp) {
-      if (typeof Toast !== 'undefined') Toast.error(window.electronAPI.i18n.t('inspector.noAppSelected'));
+      Toast.error(window.i18n.t('inspector.noAppSelected'));
       return;
     }
     const app = this.#model.apps.find(a => a.id === this.#model.selectedApp.id);
     if (!app || !app.packageName || !app.activityName) {
-      if (typeof Toast !== 'undefined') Toast.error(window.electronAPI.i18n.t('inspector.noAppInfo'));
+      Toast.error(window.i18n.t('inspector.noAppInfo'));
       return;
     }
 
@@ -561,12 +558,10 @@ export class PagePackageController {
 
   /**
    * 请求设备选择（用于 Inspector）
-   * 使用独立组件 DeviceSelectionModal
+   * MVC: DeviceSelectionModal 实例化委托给 view.showDeviceSelection
    */
   async #requestDeviceForInspector() {
-    const { default: DeviceSelectionModal } = await import('../../components/device-selection-modal.js');
-    const modal = new DeviceSelectionModal();
-    return await modal.show({ mode: 'inspector' });
+    return await this.#view.showDeviceSelection({ mode: 'inspector' });
   }
 
   // ─── Tab Lifecycle Hooks ───────────────────────────────────────

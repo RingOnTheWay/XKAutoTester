@@ -1,38 +1,41 @@
 """
 日志管理模块
 提供统一的日志记录功能
+
+设计：
+- 消除自定义 Logger 包装类，统一用标准 logging.Logger
+- get_logger(name) 首次调用时配置 root logger 一次，子 logger 通过 propagate 继承
+- 配置依赖 ConfigManager，通过 get_config_manager() 懒加载避免导入副作用
 """
+
+import codecs
+import datetime
 import logging
 import logging.handlers
-import os
-from pathlib import Path
-import datetime
-from main.utils.config import config_manager
+import sys
 
+from main.utils.config import get_config_manager
+from main.utils.paths import get_logs_path
 
-def _get_data_root():
-    user_data = os.environ.get('XKAUTOTESTER_USER_DATA')
-    if user_data:
-        return Path(user_data)
-    return Path(__file__).parent.parent.parent.parent
-
-
+# 模块级缓存（首次配置后复用）
 _shared_file_handler = None
 _shared_log_dir = None
 _shared_formatter = None
+_root_configured = False
 
 
 def _get_shared_file_handler():
+    """获取共享文件 handler（首次调用时创建）"""
     global _shared_file_handler, _shared_log_dir, _shared_formatter
 
     if _shared_file_handler is not None:
         return _shared_file_handler
 
-    log_config = config_manager.get("LOG_CONFIG", {})
+    log_config = get_config_manager().get("LOG_CONFIG", {})
     log_format = log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     _shared_formatter = logging.Formatter(log_format)
 
-    _shared_log_dir = _get_data_root() / "logs" / "XKAT"
+    _shared_log_dir = get_logs_path("XKAT")
     _shared_log_dir.mkdir(parents=True, exist_ok=True)
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -42,75 +45,65 @@ def _get_shared_file_handler():
         log_file_path,
         maxBytes=log_config.get("max_bytes", 10485760),
         backupCount=log_config.get("backup_count", 5),
-        encoding='utf-8'
+        encoding="utf-8",
     )
     _shared_file_handler.setFormatter(_shared_formatter)
 
     return _shared_file_handler
 
 
-class Logger:
-    """日志管理类"""
+def _setup_root_logger():
+    """配置 root logger（仅执行一次）"""
+    global _root_configured
+    if _root_configured:
+        return
 
-    def __init__(self, name=None):
-        self.name = name or __name__
-        self.logger = logging.getLogger(self.name)
-        self._setup_logger()
+    log_config = get_config_manager().get("LOG_CONFIG", {})
+    log_level = log_config.get("level", "INFO")
+    log_format = log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-    def _setup_logger(self):
-        """配置日志记录器"""
-        log_config = config_manager.get("LOG_CONFIG", {})
-        log_level = log_config.get("level", "INFO")
-        self.logger.setLevel(getattr(logging, log_level))
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, log_level))
 
-        self.logger.handlers.clear()
+    # 清除已有 handler（避免重复）
+    root_logger.handlers.clear()
 
-        log_format = log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        formatter = logging.Formatter(log_format)
+    # 文件 handler
+    file_handler = _get_shared_file_handler()
+    root_logger.addHandler(file_handler)
 
-        file_handler = _get_shared_file_handler()
-        self.logger.addHandler(file_handler)
+    # 控制台 handler (写 sys.stderr, 实时输出。
+    # StreamHandler() 默认捕获 sys.stderr。cli.py _wrap_stdio 包装 stderr 为 utf-8 TextIOWrapper
+    # (line_buffering=True), 写入无延迟。PytestProcess 用 logger.info/error 实时转发 pytest 输出。)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(log_format))
+    root_logger.addHandler(console_handler)
 
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        self.logger.addHandler(console_handler)
+    # 确保 stdout 用 utf-8
+    try:
+        if sys.stdout.encoding != "utf-8":
+            sys.stdout = codecs.getwriter("utf-8")(sys.stdout.buffer)
+    except Exception:
+        pass
 
-        try:
-            import sys
-            if sys.stdout.encoding != 'utf-8':
-                import codecs
-                sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
-        except:
-            pass
-
-    def debug(self, msg, *args, **kwargs):
-        """记录调试信息"""
-        self.logger.debug(msg, *args, **kwargs)
-
-    def info(self, msg, *args, **kwargs):
-        """记录一般信息"""
-        self.logger.info(msg, *args, **kwargs)
-
-    def warning(self, msg, *args, **kwargs):
-        """记录警告信息"""
-        self.logger.warning(msg, *args, **kwargs)
-
-    def error(self, msg, *args, **kwargs):
-        """记录错误信息"""
-        self.logger.error(msg, *args, **kwargs)
-
-    def critical(self, msg, *args, **kwargs):
-        """记录严重错误信息"""
-        self.logger.critical(msg, *args, **kwargs)
-
-    def exception(self, msg, *args, **kwargs):
-        """记录异常信息（包含堆栈跟踪）"""
-        self.logger.exception(msg, *args, **kwargs)
+    _root_configured = True
 
 
 def get_logger(name=None):
-    """获取日志记录器实例"""
-    return Logger(name)
+    """
+    获取标准 logging.Logger 实例
+
+    首次调用时配置 root logger，后续调用直接返回 logging.getLogger(name)。
+    子 logger 通过 propagate 继承 root 的 handler。
+
+    Args:
+        name: logger 名称，通常传 __name__
+
+    Returns:
+        logging.Logger 实例
+    """
+    _setup_root_logger()
+    return logging.getLogger(name or __name__)
 
 
 if __name__ == "__main__":
