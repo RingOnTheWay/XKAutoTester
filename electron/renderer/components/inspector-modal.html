@@ -1,0 +1,61 @@
+<div id="inspector-modal-overlay" class="modal-overlay hidden">
+    <div class="modal-container inspector-modal-container">
+        <div class="modal-header">
+            <h3 data-i18n="inspector.title">元素识别</h3>
+            <button id="inspector-modal-close-btn" class="icon-button">
+                <span class="svg-icon" data-icon="close"></span>
+            </button>
+        </div>
+        <div class="inspector-body">
+            <div class="inspector-tree-panel">
+                <div class="inspector-tree-toolbar">
+                    <input type="text" id="inspector-tree-search" class="inspector-tree-search glass-input" data-i18n-placeholder="inspector.treeSearch" placeholder="搜索元素...">
+                    <div class="inspector-search-nav">
+                        <span id="inspector-search-count" class="inspector-search-count"></span>
+                        <button type="button" id="inspector-search-prev-btn" class="inspector-search-nav-btn" title="上一个">
+                            <span class="svg-icon" data-icon="expand_less"></span>
+                        </button>
+                        <button type="button" id="inspector-search-next-btn" class="inspector-search-nav-btn" title="下一个">
+                            <span class="svg-icon" data-icon="expand_more"></span>
+                        </button>
+                    </div>
+                    <button type="button" id="inspector-refresh-btn" class="inspector-toolbar-btn" data-i18n="inspector.refresh" title="刷新">
+                        <span class="svg-icon" data-icon="refresh"></span>
+                        <span data-i18n="inspector.refresh">刷新</span>
+                    </button>
+                </div>
+                <div id="inspector-search-hint" class="inspector-search-hint hidden"></div>
+                <div id="inspector-tree-container" class="inspector-tree-container"></div>
+            </div>
+            <div class="inspector-screenshot-panel">
+                <div id="inspector-canvas-container" class="inspector-canvas-container">
+                    <canvas id="inspector-canvas" class="inspector-canvas"></canvas>
+                    <div id="inspector-highlighter-container" class="inspector-highlighter-container"></div>
+                    <div id="inspector-loading" class="inspector-loading hidden">
+                        <div class="inspector-loading-spinner"></div>
+                        <div class="inspector-loading-steps">
+                            <span class="inspector-loading-step" data-i18n="inspector.stepStartingAppium">正在启动 Appium 服务器...</span>
+                            <span class="inspector-loading-step" data-i18n="inspector.stepConnectingDevice">正在连接设备...</span>
+                            <span class="inspector-loading-step" data-i18n="inspector.stepLaunchingApp">正在启动应用...</span>
+                            <span class="inspector-loading-step" data-i18n="inspector.stepLoadingElements">正在加载元素树...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="inspector-locator-panel">
+            <div id="inspector-locator-header" class="inspector-locator-header">
+                <span></span>
+                <span data-i18n="inspector.locatorType">定位方式</span>
+                <span data-i18n="inspector.locatorValue">定位值</span>
+            </div>
+            <div id="inspector-locator-list" class="inspector-locator-list">
+                <div class="inspector-locator-empty" data-i18n="inspector.noLocators">请选择一个元素查看定位方式</div>
+            </div>
+            <div class="inspector-locator-footer">
+                <button type="button" id="inspector-cancel-btn" class="material-button outlined" data-i18n="inspector.exit">退出</button>
+                <button type="button" id="inspector-confirm-btn" class="material-button primary" data-i18n="inspector.addElement">新增元素</button>
+            </div>
+        </div>
+    </div>
+</div>

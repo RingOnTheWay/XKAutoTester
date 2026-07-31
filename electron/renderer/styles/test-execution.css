@@ -1,0 +1,509 @@
+/* ========================================
+   Glassmorphism 测试执行页面样式
+   ======================================== */
+
+/* Glassmorphism 卡片样式 */
+#test-execution .glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-amount));
+  -webkit-backdrop-filter: blur(var(--blur-amount));
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: 
+    0 8px 32px var(--glass-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  position: relative;
+}
+
+#test-execution .right-panel > .glass-card:first-child {
+  flex: 1;
+  min-height: 0;
+}
+
+#test-execution .glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+}
+
+/* 卡片头部 Glass 风格 */
+#test-execution .glass-card .card-header {
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 14px 20px;
+}
+
+#test-execution .glass-card .card-header h3 {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* 卡片内容区域 */
+#test-execution .glass-card .card-content {
+  padding: 20px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 按钮容器 */
+#test-execution .glass-card .card-content .control-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 测试输出区域 Glass 风格 */
+#test-execution .test-output {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme #test-execution .test-output {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* 进度条 Glass 风格 */
+#test-execution .progress-bar-container {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+#test-execution .progress-bar {
+  background: transparent;
+}
+
+#test-execution .progress-fill {
+  background: linear-gradient(90deg, var(--primary), var(--primary-light));
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(var(--primary-rgb, 33, 150, 243), 0.4);
+  transition: width 0.3s ease;
+}
+
+/* 测试计划列表项 */
+#test-execution .test-plan-item {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+#test-execution .test-plan-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--primary);
+}
+
+#test-execution .test-plan-item.selected {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.15);
+  border-color: var(--primary);
+}
+
+/* 测试计划执行中状态 - 边框动画 */
+#test-execution .test-plan-item.running {
+  position: relative;
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.1);
+  border: none;
+  overflow: hidden;
+}
+
+#test-execution .test-plan-item.running::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  padding: 1px;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    var(--primary) 25%, 
+    rgba(var(--primary-rgb), 0.5) 50%, 
+    var(--primary) 75%, 
+    transparent 100%);
+  background-size: 200% 100%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: border-flow 2s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes border-flow {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 测试类型选择器 */
+#test-execution .test-type-item {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+#test-execution .test-type-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+#test-execution .test-type-item.selected {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.15);
+  border-color: var(--primary);
+}
+
+.checkbox-container.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 目录选择器 */
+#test-execution .selected-path {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+}
+
+/* 占位消息 */
+#test-execution .placeholder-message {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+/* 测试计划卡片布局重构 */
+#test-execution .test-plan-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#test-execution .test-plan-content {
+  flex: 1;
+  min-width: 0;
+}
+
+#test-execution .test-plan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.test-plan-header {
+  margin-left: 0.8px;
+}
+
+#test-execution .test-plan-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+#test-execution .meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* 测试计划卡片设备徽章 */
+.test-plan-device-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.test-plan-device-badge.android {
+  background: rgba(76, 175, 80, 0.15);
+  border-color: rgba(76, 175, 80, 0.3);
+  color: #4CAF50;
+}
+
+.test-plan-device-badge .svg-icon {
+  flex-shrink: 0;
+}
+
+.test-plan-device-badge span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 深色主题适配 */
+body.dark-theme .test-plan-device-badge {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+
+body.dark-theme .test-plan-device-badge.android {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.4);
+  color: #81C784;
+}
+
+/* 定时计划卡片样式 */
+.scheduled-plan-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.scheduled-plan-item .test-plan-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.scheduled-plan-item .test-plan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.scheduled-plan-item .test-plan-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.scheduled-plan-item .scheduled-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+/* 欢迎消息 */
+#test-execution .welcome-message {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+#test-execution .welcome-text-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+#test-execution .welcome-text {
+  font-size: 24px;
+  color: var(--text-secondary);
+}
+
+#test-execution .welcome-app-name {
+  font-size: 28px;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 深色主题下的 Glassmorphism 调整 */
+body.dark-theme #test-execution::before {
+  background: 
+    radial-gradient(circle at 10% 20%, rgba(var(--primary-rgb, 33, 150, 243), 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 90% 80%, rgba(76, 175, 80, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(156, 39, 176, 0.08) 0%, transparent 50%);
+}
+
+body.dark-theme #test-execution .glass-card {
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme #test-execution .glass-card .card-header {
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* 亮色主题下的导航栏 Glassmorphism 调整 */
+body:not(.dark-theme) .app-nav {
+  background: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+body:not(.dark-theme) .nav-tabs {
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+body:not(.dark-theme) .nav-tab:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+body:not(.dark-theme) .nav-tab.active {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  box-shadow: 0 2px 8px rgba(var(--primary-rgb, 33, 150, 243), 0.25);
+}
+
+body:not(.dark-theme) .app-version {
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* 亮色主题下的主页面边框 */
+body:not(.dark-theme) #app {
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 0 0 1px rgba(76, 175, 80, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* 窗口最大化时覆盖所有主题样式 */
+body.window-maximized #app,
+body.window-maximized.dark-theme #app,
+body.window-maximized:not(.dark-theme) #app {
+  height: 100vh;
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  transition: all 0.3s ease;
+}
+
+body.window-maximized .app-nav,
+body.window-maximized.dark-theme .app-nav,
+body.window-maximized:not(.dark-theme) .app-nav {
+  border-radius: 0 !important;
+}
+
+/* 亮色主题下的 Glassmorphism 调整 */
+body:not(.dark-theme) #test-execution .glass-card {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+body:not(.dark-theme) #test-execution .glass-card .card-header {
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) #test-execution .test-output {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.05);
+  color: #1a1a1a;
+}
+
+/* 亮色主题下的进度条容器 */
+body:not(.dark-theme) #test-execution .progress-bar-container {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+body:not(.dark-theme) #test-execution .test-plan-item,
+body:not(.dark-theme) #test-execution .test-type-item {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) #test-execution .test-plan-item:hover,
+body:not(.dark-theme) #test-execution .test-type-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body:not(.dark-theme) #test-execution .test-plan-item.selected,
+body:not(.dark-theme) #test-execution .test-type-item.selected {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.12);
+  border-color: var(--primary);
+}
+
+body:not(.dark-theme) #test-execution .selected-path {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body:not(.dark-theme) #test-execution .placeholder-message {
+  background: rgba(0, 0, 0, 0.01);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body:not(.dark-theme) #test-execution .scheduled-plan-item {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) #test-execution .scheduled-plan-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body:not(.dark-theme) #test-execution .scheduled-plan-item.selected {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.12);
+  border-color: var(--primary);
+}
+
+body:not(.dark-theme) #test-execution .scheduled-plan-item .scheduled-status.pending {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563EB;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+body:not(.dark-theme) #test-execution .scheduled-plan-item .scheduled-status.completed {
+  background: rgba(22, 163, 74, 0.12);
+  color: #16A34A;
+  border: 1px solid rgba(22, 163, 74, 0.25);
+}
+
+body:not(.dark-theme) #test-execution .scheduled-plan-item .scheduled-status.expired {
+  background: rgba(147, 51, 234, 0.12);
+  color: #9333EA;
+  border: 1px solid rgba(147, 51, 234, 0.25);
+}
+
+body:not(.dark-theme) #test-execution .scheduled-plan-item .scheduled-status.running {
+  background: rgba(245, 158, 11, 0.12);
+  color: #D97706;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+

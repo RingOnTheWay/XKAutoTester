@@ -1,0 +1,158 @@
+                <div class="content-splitter">
+                    <!-- 左侧面板 -->
+                    <div class="left-panel">
+                        <!-- 测试目录选择 -->
+                        <div class="material-card elevation-1 glass-card">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="folder_open"></span>
+                                <h3 data-i18n="testExecution.testDirectory">测试目录</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="directory-selector">
+                                    <button id="select-directory-btn" class="material-button primary">
+                                        <span class="svg-icon" data-icon="folder_open"></span>
+                                        <span data-i18n="testExecution.selectTestDirectory">选择测试目录</span>
+                                    </button>
+                                    <div id="selected-directory" class="selected-path" data-i18n="testExecution.noDirectorySelected">未选择目录</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 测试计划管理 -->
+                        <div id="test-plan-section" class="material-card elevation-1 glass-card hidden">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="assignment"></span>
+                                <h3 data-i18n="testExecution.testPlan">测试计划</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="test-plan-controls">
+                        <button id="new-plan-btn" class="material-button outlined">
+                            <span class="svg-icon" data-icon="add"></span>
+                            <span data-i18n="testExecution.newPlan">新建计划</span>
+                        </button>
+                        <button id="edit-plan-btn" class="material-button outlined">
+                            <span class="svg-icon" data-icon="edit"></span>
+                            <span data-i18n="testExecution.editPlan">编辑计划</span>
+                        </button>
+                        <button id="delete-plan-btn" class="material-button error">
+                            <span class="svg-icon" data-icon="delete"></span>
+                            <span data-i18n="testExecution.deletePlan">删除计划</span>
+                        </button>
+                    </div>
+                                <div id="test-plans-list" class="test-plans-list">
+                                    <div class="placeholder-message">
+                                        <span class="svg-icon" data-icon="info"></span>
+                                        <span data-i18n="testExecution.noTestPlans">测试计划为空</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 测试类型选择 -->
+                        <div class="material-card elevation-1 glass-card">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="category"></span>
+                                <h3 data-i18n="testExecution.testType">测试类型</h3>
+                            </div>
+                            <div class="card-content">
+                                <div id="test-type-selector" class="test-type-selector">
+                                    <div class="placeholder-message">
+                                        <span class="svg-icon" data-icon="info"></span>
+                                        <span data-i18n="testExecution.selectTestPlanFirstPlaceholder">请选择测试计划以显示测试类型</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 定时计划管理 -->
+                        <div id="scheduled-plan-section" class="material-card elevation-1 glass-card hidden">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="schedule"></span>
+                                <h3 data-i18n="testExecution.scheduledPlan">定时计划</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="scheduled-plan-controls">
+                        <button id="new-scheduled-plan-btn" class="material-button outlined">
+                            <span class="svg-icon" data-icon="add"></span>
+                            <span data-i18n="testExecution.newScheduledPlan">新建定时</span>
+                        </button>
+                        <button id="edit-scheduled-plan-btn" class="material-button outlined">
+                            <span class="svg-icon" data-icon="edit"></span>
+                            <span data-i18n="testExecution.editScheduledPlan">编辑定时</span>
+                        </button>
+                        <button id="delete-scheduled-plan-btn" class="material-button error">
+                            <span class="svg-icon" data-icon="delete"></span>
+                            <span data-i18n="testExecution.deleteScheduledPlan">删除定时</span>
+                        </button>
+                    </div>
+                                <div id="scheduled-plans-list" class="scheduled-plans-list">
+                                    <div class="placeholder-message">
+                                        <span class="svg-icon" data-icon="info"></span>
+                                        <span data-i18n="testExecution.noScheduledPlans">暂无定时计划</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧面板 -->
+                    <div class="right-panel">
+                        <!-- 测试输出 -->
+                        <div class="material-card elevation-2 glass-card">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="terminal"></span>
+                                <h3 data-i18n="testExecution.testOutput">测试输出</h3>
+                                <div class="card-actions">
+                                    <button id="open-xkat-folder-btn" class="icon-button" data-i18n-title="testExecution.openXkatFolder">
+                                        <span class="svg-icon" data-icon="folder_open"></span>
+                                    </button>
+                                    <button id="clear-output-btn" class="icon-button">
+                                        <span class="svg-icon" data-icon="delete"></span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-content">
+                                <div id="test-output" class="test-output">
+                                    <div class="welcome-message">
+                                        <div class="welcome-text-container">
+                                            <span class="welcome-text" data-i18n="testExecution.welcome">欢迎使用</span>
+                                            <span class="welcome-app-name">XKAutoTester</span>
+                                        </div>
+                                        <p data-i18n="testExecution.createTestPlan">创建你的测试计划，然后开始运行自动化测试。</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 进度条和控制按钮 -->
+                        <div class="material-card elevation-1 glass-card">
+                            <div class="card-content">
+                                <div class="progress-section">
+                                    <div class="progress-info">
+                                        <span id="progress-status" data-i18n="testExecution.ready">准备就绪</span>
+                                        <span id="progress-percentage">0%</span>
+                                    </div>
+                                    <div class="progress-bar-container">
+                                        <div id="progress-bar" class="progress-bar">
+                                            <div class="progress-fill"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="control-buttons">
+                                    <button id="run-tests-btn" class="material-button primary large">
+                                        <span class="svg-icon" data-icon="play_arrow"></span>
+                                        <span data-i18n="testExecution.runTests">运行测试</span>
+                                    </button>
+                                    <button id="stop-tests-btn" class="material-button secondary large" disabled>
+                                        <span class="svg-icon" data-icon="stop"></span>
+                                        <span data-i18n="testExecution.stopTests">停止测试</span>
+                                    </button>
+                                    <button id="view-report-btn" class="material-button outlined large" disabled>
+                                        <span class="svg-icon" data-icon="assessment"></span>
+                                        <span data-i18n="testExecution.viewReport">查看报告</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>

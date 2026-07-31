@@ -1,0 +1,220 @@
+                <div class="content-splitter">
+                    <!-- 左侧面板 -->
+                    <div class="left-panel">
+                        <!-- 测试目录选择 -->
+                        <div class="material-card elevation-1 glass-card">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="folder_open"></span>
+                                <h3 data-i18n="testCase.testDirectory">测试目录</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="directory-selector">
+                                    <button id="tc-select-directory-btn" class="material-button primary">
+                                        <span class="svg-icon" data-icon="folder_open"></span>
+                                        <span data-i18n="testCase.selectTestDirectory">选择测试目录</span>
+                                    </button>
+                                    <div id="tc-selected-directory" class="selected-path" data-i18n="testCase.noDirectorySelected">未选择目录</div>
+                                </div>
+                                <div class="tc-search-container">
+                                    <div class="tc-search-input-wrapper disabled">
+                                        <span class="svg-icon tc-search-icon" data-icon="search"></span>
+                                        <input type="text" id="tc-search-input" class="tc-search-input" data-i18n-placeholder="testCase.searchPlaceholder" placeholder="搜索测试文件..." autocomplete="off" disabled>
+                                        <div id="tc-search-spinner" class="tc-search-spinner hidden">
+                                            <div class="tc-spinner"></div>
+                                        </div>
+                                        <button id="tc-search-clear" class="tc-search-clear hidden">
+                                            <span class="svg-icon" data-icon="close"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="tc-test-files-list" class="test-files-list">
+                                    <!-- 测试文件列表将在这里动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧面板 -->
+                    <div class="right-panel">
+                        <!-- 未选中状态 - 显示"+"按钮 -->
+                        <div id="tc-editor-empty" class="material-card elevation-2 glass-card tc-editor-empty">
+                            <div class="tc-add-button disabled" id="tc-add-new-btn" disabled>
+                                <span class="svg-icon" data-icon="add"></span>
+                            </div>
+                            <p data-i18n="testCase.clickToAdd">点击添加测试用例</p>
+                        </div>
+                        
+                        <!-- 编辑状态 - 显示表单 -->
+                        <div id="tc-editor-form" class="material-card elevation-2 glass-card tc-editor-form hidden">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="edit"></span>
+                                <h3 data-i18n="testCase.editCase">编辑测试用例</h3>
+                            </div>
+                            <div class="card-content tc-editor-content">
+                                <form id="tc-case-form">
+                                    <!-- 基本信息 -->
+                                    <div class="tc-section">
+                                        <div class="tc-section-title">
+                                            <span class="svg-icon" data-icon="info"></span>
+                                            <span data-i18n="testCase.basicInfo">基本信息</span>
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label for="tc-file-name" data-i18n="testCase.fileName">文件名称</label>
+                                                <input type="text" id="tc-file-name" class="glass-input" pattern="[a-zA-Z0-9_]+" data-i18n-placeholder="placeholders.fileName" placeholder="只能输入英文、数字和下划线">
+                                                <div id="tc-file-name-error" class="input-error error-hidden">
+                                                    <span class="svg-icon" data-icon="error"></span>
+                                                    <span data-i18n="testCase.enterFileName">请输入文件名称</span>
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="tc-case-name" data-i18n="testCase.caseName">用例名称</label>
+                                                <input type="text" id="tc-case-name" class="glass-input">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tc-description" data-i18n="testCase.description">用例描述</label>
+                                            <textarea id="tc-description" class="glass-input" rows="2"></textarea>
+                                        </div>
+                                    </div>
+
+                                    <!-- 等待时间配置 -->
+                                    <div class="tc-section">
+                                        <div class="tc-section-title">
+                                            <span class="svg-icon" data-icon="schedule"></span>
+                                            <span data-i18n="testCase.waitTimeConfig">等待时间配置</span>
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label for="tc-app-load-wait-time" data-i18n="testCase.appLoadWaitTime">应用加载等待时间</label>
+                                                <input type="number" id="tc-app-load-wait-time" class="glass-input" value="10" min="1" step="1" data-i18n-placeholder="testCase.appLoadWaitTimeDesc" placeholder="应用启动后等待加载的时间（秒）">
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="tc-element-wait-timeout" data-i18n="testCase.elementWaitTimeout">元素等待超时</label>
+                                                <input type="number" id="tc-element-wait-timeout" class="glass-input" value="30" min="1" step="1" data-i18n-placeholder="testCase.elementWaitTimeoutDesc" placeholder="查找/对比元素的最大等待时间（秒）">
+                                            </div>
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label for="tc-step-interval" data-i18n="testCase.stepInterval">步骤执行间隔</label>
+                                                <input type="number" id="tc-step-interval" class="glass-input" value="2" min="0.5" step="0.5" data-i18n-placeholder="testCase.stepIntervalDesc" placeholder="查找/对比元素的步骤执行间隔（秒）">
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="tc-app-close-wait-time" data-i18n="testCase.appCloseWaitTime">应用关闭等待时间</label>
+                                                <input type="number" id="tc-app-close-wait-time" class="glass-input" value="2" min="0" step="1" data-i18n-placeholder="testCase.appCloseWaitTimeDesc" placeholder="关闭应用后等待的时间（秒）">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 应用平台 -->
+                                    <div class="tc-section">
+                                        <div class="tc-section-title">
+                                            <span class="svg-icon" data-icon="devices"></span>
+                                            <span data-i18n="testCase.appPlatform">应用平台</span>
+                                        </div>
+                                        <div class="tc-app-platform-grid">
+                                            <!-- 平台 -->
+                                            <div class="form-group">
+                                                <label data-i18n="testCase.platform">平台</label>
+                                                <div class="custom-select-wrapper" id="tc-platform-select-wrapper" data-options='[{"value":"android","label":"testCase.platforms.android","default":true}]'></div>
+                                            </div>
+                                            <!-- 应用 -->
+                                            <div class="form-group">
+                                                <label data-i18n="testCase.app">应用</label>
+                                                <div id="tc-app-select-wrapper" class="custom-select-wrapper">
+                                                    <div class="custom-select" id="tc-app-select">
+                                                        <div class="custom-select__selected" id="tc-app-selected">
+                                                            <span class="custom-select__text" data-i18n="testCase.selectApp">请选择目标应用</span>
+                                                        </div>
+                                                        <div class="custom-select__options" id="tc-app-options">
+                                                            <!-- 动态生成选项 -->
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 测试步骤 -->
+                                    <div id="tc-steps-section" class="tc-section disabled">
+                                        <div class="tc-section-title">
+                                            <span class="svg-icon" data-icon="list_alt"></span>
+                                            <span data-i18n="testCase.testSteps">测试步骤</span>
+                                            <button type="button" id="tc-add-step-btn" class="material-button primary small" style="margin-left: auto;" disabled>
+                                                <span class="svg-icon" data-icon="add"></span>
+                                                <span data-i18n="testCase.addStep">添加步骤</span>
+                                            </button>
+                                        </div>
+                                        <div id="tc-steps-disabled-hint" class="tc-steps-disabled-hint">
+                                            <span class="svg-icon" data-icon="info"></span>
+                                            <span data-i18n="testCase.selectAppToEnableSteps">请先选择目标应用以启用测试步骤</span>
+                                        </div>
+                                        <div id="tc-steps-container" class="tc-steps-container hidden">
+                                            <!-- 步骤为空时显示添加提示 -->
+                                            <div id="tc-steps-empty" class="tc-steps-empty">
+                                                <div class="tc-steps-empty-icon">
+                                                    <span class="svg-icon" data-icon="add_circle_outline"></span>
+                                                </div>
+                                                <p data-i18n="testCase.noSteps">暂无测试步骤</p>
+                                                <p class="tc-steps-empty-hint" data-i18n="testCase.clickAddStep">点击上方"添加步骤"按钮开始配置</p>
+                                            </div>
+                                            <!-- 步骤列表 -->
+                                            <div id="tc-steps-list" class="tc-steps-list hidden"></div>
+                                            <!-- 底部添加步骤按钮 -->
+                                            <button type="button" id="tc-add-step-bottom-btn" class="tc-add-step-bottom-btn hidden">
+                                                <span class="svg-icon" data-icon="add"></span>
+                                                <span data-i18n="testCase.addStep">添加步骤</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Allure 配置 -->
+                                    <div class="tc-section tc-section-collapsible collapsed">
+                                        <div class="tc-section-title tc-collapsible-header">
+                                            <span class="svg-icon" data-icon="assessment"></span>
+                                            <span data-i18n="testCase.allureConfig">Allure配置</span>
+                                            <span class="svg-icon tc-collapse-icon" data-icon="expand_more"></span>
+                                        </div>
+                                        <div class="tc-collapsible-content">
+                                            <div class="form-row">
+                                                <div class="form-group">
+                                                    <label for="tc-allure-epic">Epic</label>
+                                                    <input type="text" id="tc-allure-epic" class="glass-input" data-i18n-placeholder="placeholders.epic" placeholder="被测应用">
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="tc-allure-feature">Feature</label>
+                                                    <input type="text" id="tc-allure-feature" class="glass-input" data-i18n-placeholder="placeholders.feature" placeholder="被测模块">
+                                                </div>
+                                            </div>
+                                            <div class="form-row">
+                                                <div class="form-group">
+                                                    <label for="tc-allure-story">Story</label>
+                                                    <input type="text" id="tc-allure-story" class="glass-input" data-i18n-placeholder="placeholders.story" placeholder="被测功能">
+                                                </div>
+                                                <div class="form-group">
+                                                    <label>Markers</label>
+                                                    <div class="custom-select-wrapper">
+                                                        <div class="custom-select" id="tc-markers-select">
+                                                            <div class="custom-select__selected" id="tc-markers-selected">
+                                                                <span class="custom-select__text" data-i18n="placeholders.selectMarkers">请选择标记</span>
+                                                            </div>
+                                                            <div class="custom-select__options" id="tc-markers-options">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" id="tc-delete-btn" class="material-button danger hidden" data-i18n="testCase.deleteCase">删除</button>
+                                <div class="form-actions-right">
+                                    <button type="button" id="tc-cancel-btn" class="material-button outlined" data-i18n="testCase.cancelEdit">取消编辑</button>
+                                    <button type="button" id="tc-save-btn" class="material-button primary" data-i18n="testCase.confirm">保存</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>

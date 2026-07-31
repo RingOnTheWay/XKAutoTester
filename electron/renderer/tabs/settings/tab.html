@@ -1,0 +1,335 @@
+                <div class="settings-container">
+                    <!-- 目录设置 -->
+                    <div class="material-card elevation-2" data-card-type="directory">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="folder"></span>
+                            <h3 data-i18n="settings.directory">目录</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="folder_open"></span>
+                                    <span data-i18n="settings.defaultDownloadPath">默认下载路径</span>
+                                </div>
+                                <div class="setting-control">
+                                    <div class="directory-input-group">
+                                        <div class="directory-input-wrapper">
+                                            <input type="text" id="default-test-directory" class="directory-input" placeholder="请选择默认下载路径" data-i18n-placeholder="placeholders.defaultDownloadPath" readonly>
+                                            <div class="directory-tooltip" id="default-directory-tooltip"></div>
+                                        </div>
+                                        <button id="browse-default-directory" class="material-button primary small">
+                                            <span class="svg-icon" data-icon="folder_open"></span>
+                                        </button>
+                                        <button id="clear-default-directory" class="material-button error small">
+                                            <span class="svg-icon" data-icon="clear"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="folder_open"></span>
+                                    <span data-i18n="settings.configStoragePath">配置存放位置</span>
+                                </div>
+                                <div class="setting-control">
+                                    <div class="directory-input-group">
+                                        <div class="directory-input-wrapper">
+                                            <input type="text" id="config-storage-path" class="directory-input" placeholder="请选择配置存放位置" data-i18n-placeholder="placeholders.configStoragePath" readonly>
+                                            <div class="directory-tooltip" id="config-storage-tooltip"></div>
+                                        </div>
+                                        <button id="browse-config-storage" class="material-button primary small">
+                                            <span class="svg-icon" data-icon="folder_open"></span>
+                                        </button>
+                                        <button id="reset-config-storage" class="material-button warning small">
+                                            <span class="svg-icon" data-icon="restore"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 显示设置 -->
+                    <div class="material-card elevation-2" data-card-type="display">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="visibility"></span>
+                            <h3 data-i18n="settings.display">显示</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="dark_mode"></span>
+                                    <span data-i18n="settings.darkMode">黑暗模式</span>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="switch">
+                                        <input type="checkbox" id="dark-mode-toggle">
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="palette"></span>
+                                    <span data-i18n="settings.themeColor">主题色</span>
+                                </div>
+                                <div class="setting-control">
+                                    <div class="theme-color-picker">
+                                        <div class="theme-color-preview" id="theme-color-preview" style="background-color: #2196F3;"></div>
+                                        <div class="theme-color-options" id="theme-color-options">
+                                            <div class="theme-color-option" data-color="#2196F3"></div>
+                                            <div class="theme-color-option" data-color="#4CAF50"></div>
+                                            <div class="theme-color-option" data-color="#FF9800"></div>
+                                            <div class="theme-color-option" data-color="#9C27B0"></div>
+                                            <div class="theme-color-option" data-color="#F44336"></div>
+                                            <div class="theme-color-option" data-color="#795548"></div>
+                                            <div class="theme-color-input-container">
+                                                <input type="text" id="theme-color-hex" class="theme-color-hex" placeholder="输入HEX值" value="#2196F3">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="language"></span>
+                                    <span data-i18n="settings.language">语言</span>
+                                </div>
+                                <div class="setting-control">
+                                    <div class="custom-select-wrapper">
+                                        <div class="custom-select" id="custom-language-select">
+                                            <div class="custom-select__selected" id="custom-language-selected">
+                                                <span class="custom-select__text">简体中文</span>
+                                            </div>
+                                            <div class="custom-select__options" id="custom-language-options">
+                                                <div class="custom-select__option" data-value="zh-CN"><span>简体中文</span></div>
+                                                <div class="custom-select__option" data-value="en-US"><span>English</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 通知设置 -->
+                    <div class="material-card elevation-2" data-card-type="notification">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="notifications"></span>
+                            <h3 data-i18n="settings.notification">通知</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="platform"></span>
+                                    <span data-i18n="settings.notificationPlatform">notification_platform</span>
+                                </div>
+                                <div class="setting-control">
+                                    <div class="custom-select-wrapper">
+                                        <div class="custom-select" id="custom-notification-platform-select">
+                                            <div class="custom-select__selected" id="custom-notification-platform-selected">
+                                                <span class="custom-select__text">无</span>
+                                            </div>
+                                            <div class="custom-select__options" id="custom-notification-platform-options">
+                                                <div class="custom-select__option" data-value="none"><span data-i18n="settings.none">无</span></div>
+                                                <div class="custom-select__option" data-value="dingtalk"><span data-i18n="settings.dingtalk">钉钉</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="setting-item notification-config-item hidden" id="notification-access-token-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="access_token"></span>
+                                    <span data-i18n="settings.accessToken">access_token</span>
+                                </div>
+                                <div class="setting-control notification-input-control">
+                                    <div class="notification-input-group">
+                                        <input type="password" id="notification-access-token" class="glass-input notification-input" data-i18n-placeholder="settings.accessToken" placeholder="访问令牌" autocomplete="off">
+                                        <button type="button" id="notification-access-token-visibility-toggle" class="material-button outlined small notification-visibility-btn" data-target="notification-access-token" data-i18n-title="settings.toggleVisibility" title="显示/隐藏">
+                                            <span class="svg-icon" data-icon="visibility"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="setting-item notification-config-item hidden" id="notification-secret-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="secret"></span>
+                                    <span data-i18n="settings.secret">secret</span>
+                                </div>
+                                <div class="setting-control notification-input-control">
+                                    <div class="notification-input-group">
+                                        <input type="password" id="notification-secret" class="glass-input notification-input" data-i18n-placeholder="settings.secret" placeholder="加签密钥" autocomplete="off">
+                                        <button type="button" id="notification-secret-visibility-toggle" class="material-button outlined small notification-visibility-btn" data-target="notification-secret" data-i18n-title="settings.toggleVisibility" title="显示/隐藏">
+                                            <span class="svg-icon" data-icon="visibility"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 数据设置 -->
+                    <div class="material-card elevation-2" data-card-type="data">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="storage"></span>
+                            <h3 data-i18n="settings.data">数据</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="upload_file"></span>
+                                    <span data-i18n="settings.exportConfig">导出配置</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="export-config-btn" class="material-button outlined small">
+                                        <span data-i18n="settings.export">导出</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="description"></span>
+                                    <span data-i18n="settings.exportLogs">导出日志</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="export-logs-btn" class="material-button outlined small">
+                                        <span data-i18n="settings.export">导出</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="download"></span>
+                                    <span data-i18n="settings.importConfig">导入配置</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="import-config-btn" class="material-button primary small">
+                                        <span data-i18n="settings.import">导入</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="delete_sweep"></span>
+                                    <span data-i18n="settings.clearAllureReports">清空Allure报告数据</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="clear-allure-reports-btn" class="material-button error small">
+                                        <span data-i18n="settings.clear">清空</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="delete_sweep"></span>
+                                    <span data-i18n="settings.clearAllLogs">清除所有日志数据</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="clear-all-logs-btn" class="material-button error small">
+                                        <span data-i18n="settings.clear">清空</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 运行 -->
+                    <div class="material-card elevation-2" data-card-type="run">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="prevent_sleep"></span>
+                            <h3 data-i18n="settings.run">运行</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="prevent_sleep"></span>
+                                    <span data-i18n="settings.preventSleep">程序运行时禁用睡眠模式</span>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="switch">
+                                        <input type="checkbox" id="prevent-sleep-toggle">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 更新 -->
+                    <div class="material-card elevation-2" data-card-type="update">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="system_update"></span>
+                            <h3 data-i18n="settings.update">更新</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="refresh"></span>
+                                    <span data-i18n="settings.autoCheckUpdate">启动时自动检查更新</span>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="switch">
+                                        <input type="checkbox" id="auto-check-update-toggle">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="warning"></span>
+                                    <span data-i18n="settings.allowInsecureSSL">允许不安全连接(解决证书校验失败)</span>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="switch">
+                                        <input type="checkbox" id="allow-insecure-ssl-toggle">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <span class="svg-icon" data-icon="download"></span>
+                                    <span data-i18n="settings.checkUpdateNow">检查版本更新</span>
+                                </div>
+                                <div class="setting-control">
+                                    <button id="check-update-btn" class="material-button outlined" data-i18n="settings.checkNow">立即检查</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 版本信息 -->
+                    <div class="material-card elevation-2" data-card-type="version">
+                        <div class="card-header">
+                            <span class="svg-icon" data-icon="info"></span>
+                            <h3 data-i18n="settings.version">版本</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="version-info">
+                                <div class="version-item">
+                                    <span class="svg-icon" data-icon="code"></span>
+                                    <span class="version-label" data-i18n="labels.version">版本号</span>
+                                    <span id="app-version-info" class="version-value">v0.1.3-dev.1</span>
+                                </div>
+                                <div class="version-item">
+                                    <span class="svg-icon" data-icon="build"></span>
+                                    <span class="version-label" data-i18n="labels.buildDate">构建日期</span>
+                                    <span class="version-value">2026-04-15</span>
+                                </div>
+                                <div class="version-item">
+                                    <span class="svg-icon" data-icon="external_link"></span>
+                                    <span class="version-label" data-i18n="labels.githubRepo">Github仓库</span>
+                                    <a id="github-repo-link" class="version-link" href="javascript:void(0)" data-url="https://github.com/RingOnTheWay/XKAutoTester">XKAutoTester</a>
+                                </div>
+                                <div class="version-item">
+                                    <span class="svg-icon" data-icon="copyright"></span>
+                                    <span class="version-label" data-i18n="labels.copyright">版权信息</span>
+                                    <span class="version-value">XKAutoTester © RiNG 2025-2026 | MIT License</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+                </div>

@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InspectorProtocolFrame",
+  "description": "SSOT 文档。两端常量模块 (inspectorConstants.js / inspector_constants.py) 镜像此 schema,集成测试兜底。帧 = 单行 NDJSON。",
+  "oneOf": [
+    {
+      "type": "object",
+      "title": "Request",
+      "description": "JS → Python。有 id 等响应。",
+      "properties": {
+        "kind": { "const": "request" },
+        "id": { "type": "integer", "minimum": 1 },
+        "command": { "enum": ["start-session", "get-screenshot", "get-source", "find-locators", "refresh", "stop-session"] },
+        "params": { "type": "object" }
+      },
+      "required": ["kind", "id", "command", "params"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "title": "Response",
+      "description": "Python → JS。id 匹配 Request。success=false 时带 error。",
+      "properties": {
+        "kind": { "const": "response" },
+        "id": { "type": "integer", "minimum": 1 },
+        "success": { "type": "boolean" },
+        "error": { "type": "string" },
+        "warning": { "type": "string" }
+      },
+      "required": ["kind", "id", "success"],
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "title": "Notification",
+      "description": "Python → JS。无 id,fire-and-forget。type=ready 握手,type=progress 进度。",
+      "properties": {
+        "kind": { "const": "notification" },
+        "type": { "enum": ["ready", "progress"] },
+        "stage": { "type": "string" }
+      },
+      "required": ["kind", "type"],
+      "additionalProperties": true
+    }
+  ]
+}

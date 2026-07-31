@@ -1,0 +1,600 @@
+/* 引入HarmonyOS Sans SC Regular字体 */
+@font-face {
+  font-family: 'HarmonyOS Sans';
+  src: url('../../assets/fonts/HarmonyOS_Sans_SC_Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Material Design 颜色定义 */
+:root {
+  /* 主色调 */
+  --primary: #2196F3;
+  --primary-rgb: 33, 150, 243;
+  --primary-dark: #1976D2;
+  --primary-light: #BBDEFB;
+  
+  /* 辅助色 */
+  --secondary: #FF9800;
+  --secondary-dark: #F57C00;
+  
+  /* 背景色 */
+  --background: #FAFAFA;
+  --surface: #FFFFFF;
+  --on-surface: #000000;
+  
+  /* 文本色 */
+  --text-primary: #212121;
+  --text-secondary: #757575;
+  --text-disabled: #BDBDBD;
+  
+  /* 状态色 */
+  --success: #4CAF50;
+  --warning: #FFC107;
+  --error: #F44336;
+  
+  /* 边框和阴影 */
+  --outline: #E0E0E0;
+  /* 增强的定向光投射 + 环境光投射组合阴影 */
+  --shadow-1: 0 2px 4px rgba(128, 128, 128, 0.08), 0 4px 8px rgba(128, 128, 128, 0.06);
+  --shadow-2: 0 6px 12px rgba(128, 128, 128, 0.12), 0 3px 6px rgba(128, 128, 128, 0.08);
+  --shadow-3: 0 12px 24px rgba(128, 128, 128, 0.16), 0 6px 12px rgba(128, 128, 128, 0.12);
+  
+  /* Glassmorphism 变量 - 亮色模式 */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --glass-shadow: rgba(0, 0, 0, 0.1);
+  --blur-amount: 20px;
+  --grid-color: rgba(0, 0, 0, 0.03);
+  
+  /* 交互状态 */
+  --hover: #F5F5F5;
+  --focus: #E3F2FD;
+  
+  /* 间距 */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  
+  /* 字体 */
+  --font-family: 'HarmonyOS Sans', sans-serif;
+  --font-family-mono: 'HarmonyOS Sans', monospace;
+}
+
+.svg-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  vertical-align: middle;
+}
+
+.svg-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* 深色主题 */
+body.dark-theme {
+  /* 背景色 */
+  --background: #121212;
+  --surface: #1E1E1E;
+  --on-surface: #FFFFFF;
+  
+  /* 文本色 */
+  --text-primary: #FFFFFF;
+  --text-secondary: #B0B0B0;
+  --text-disabled: #757575;
+  
+  /* 边框和阴影 */
+  --outline: #333333;
+  /* 主题色阴影（透明度小于10%） */
+  --shadow-1: 0 2px 4px rgba(var(--primary-rgb), 0.08), 0 4px 8px rgba(var(--primary-rgb), 0.06);
+  --shadow-2: 0 6px 12px rgba(var(--primary-rgb), 0.09), 0 3px 6px rgba(var(--primary-rgb), 0.07);
+  --shadow-3: 0 12px 24px rgba(var(--primary-rgb), 0.1), 0 6px 12px rgba(var(--primary-rgb), 0.08);
+  
+  /* 交互状态 */
+  --hover: #2A2A2A;
+  --focus: #1976D2;
+  
+  /* Glassmorphism 变量 - 深色模式 */
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.15);
+  --glass-shadow: rgba(0, 0, 0, 0.3);
+  --blur-amount: 20px;
+  --grid-color: rgba(255, 255, 255, 0.02);
+  
+  background-color: var(--background);
+  color: var(--text-primary);
+}
+
+/* 深色主题下的特定元素样式 */
+body.dark-theme #app {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-theme .app-nav {
+  background: var(--glass-bg);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+body.dark-theme .nav-tabs {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .nav-tab:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-theme .nav-tab.active {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  box-shadow: 0 2px 8px rgba(var(--primary-rgb, 33, 150, 243), 0.4);
+}
+
+body.dark-theme .app-version {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .material-card {
+  background-color: var(--surface);
+  border-color: var(--outline);
+}
+
+body.dark-theme .test-output {
+  background-color: #1A1A1A;
+  color: #D4D4D4;
+}
+
+body.dark-theme .selected-path {
+  background-color: var(--background);
+  border-color: var(--outline);
+}
+
+body.dark-theme .current-path {
+  background-color: var(--background);
+  border-color: var(--outline);
+}
+
+body.dark-theme .file-list-container {
+  border-color: var(--outline);
+  background-color: var(--surface);
+}
+
+body.dark-theme .file-list-table th {
+  background-color: var(--background);
+}
+
+body.dark-theme .file-list-table tbody tr:hover {
+  background-color: var(--hover);
+}
+
+body.dark-theme .file-list-table tbody tr.selected {
+  background-color: rgba(33, 150, 243, 0.2);
+}
+
+body.dark-theme .form-group input,
+body.dark-theme .form-group textarea,
+body.dark-theme .directory-input,
+body.dark-theme .theme-color-select {
+  background-color: var(--background);
+  border-color: var(--outline);
+  color: var(--text-primary);
+}
+
+body.dark-theme .input-error {
+  background: rgba(244, 67, 54, 0.12);
+  border: 1px solid rgba(244, 67, 54, 0.25);
+  color: #EF9A9A;
+}
+
+body.dark-theme .warning-message {
+  background: rgba(255, 152, 0, 0.12);
+  border: 1px solid rgba(255, 152, 0, 0.25);
+  color: #FFB74D;
+}
+
+body.dark-theme .download-progress-container {
+  background-color: var(--background);
+  border-color: var(--outline);
+}
+
+body.dark-theme .download-error {
+  background-color: #C62828;
+  border-color: #B71C1C;
+}
+
+body.dark-theme .context-menu {
+  background-color: var(--surface);
+  border-color: var(--outline);
+}
+
+body.dark-theme .context-menu-item:hover {
+  background-color: var(--hover);
+}
+
+body.dark-theme ::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+body.dark-theme ::-webkit-scrollbar-thumb {
+  background: var(--outline);
+}
+
+body.dark-theme ::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* 基础样式重置 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  background-color: transparent !important;
+  background: transparent !important;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  user-select: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* 确保body始终保持透明 */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: transparent !important;
+  z-index: -1;
+}
+
+#app {
+  height: calc(100vh - 120px);
+  margin: 40px;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  border-radius: 12px;
+  position: relative;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  animation: appFadeIn 0.6s ease-out;
+}
+
+/* 导航栏样式 - Glassmorphism */
+.app-nav {
+  background: var(--glass-bg);
+  border-bottom: 1px solid var(--glass-border);
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacing-lg);
+  box-shadow: 0 4px 24px var(--glass-shadow);
+  z-index: 10;
+  width: 100%;
+  position: relative;
+  border-radius: 12px 12px 0 0;
+  transition: all 0.3s ease;
+}
+
+.app-nav::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  pointer-events: none;
+}
+
+.nav-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.app-icon {
+  width: 32px;
+  height: 32px;
+  vertical-align: middle;
+  margin-right: 8px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.app-title {
+  font-size: 20px;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 0.5px;
+}
+
+.app-version {
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* 导航右侧区域 */
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+/* 窗口控制按钮 - Glassmorphism风格 */
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.window-control-btn {
+  width: 36px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  background: transparent;
+}
+
+.window-control-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+}
+
+.window-control-btn.minimize:hover {
+  background: rgba(33, 150, 243, 0.15);
+}
+
+.window-control-btn.minimize:hover svg {
+  stroke: var(--primary);
+}
+
+.window-control-btn.maximize:hover {
+  background: rgba(76, 175, 80, 0.15);
+}
+
+.window-control-btn.maximize:hover svg {
+  stroke: var(--success);
+}
+
+.window-control-btn.close:hover {
+  background: rgba(244, 67, 54, 0.15);
+}
+
+.window-control-btn.close:hover svg {
+  stroke: var(--error);
+}
+
+/* 暗色模式下的窗口控制按钮 */
+body.dark-theme .window-controls {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .window-control-btn svg {
+  stroke: rgba(255, 255, 255, 0.7);
+}
+
+body.dark-theme .window-control-btn.minimize:hover {
+  background: rgba(33, 150, 243, 0.2);
+}
+
+body.dark-theme .window-control-btn.maximize:hover {
+  background: rgba(76, 175, 80, 0.2);
+}
+
+body.dark-theme .window-control-btn.close:hover {
+  background: rgba(244, 67, 54, 0.2);
+}
+
+/* 导航标签样式 - Glassmorphism */
+.nav-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  -webkit-app-region: no-drag;
+}
+
+.nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background-color: transparent;
+}
+
+.nav-tab:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+}
+
+.nav-tab.active {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  color: white;
+  box-shadow: 0 2px 8px rgba(var(--primary-rgb, 33, 150, 243), 0.3);
+}
+
+.nav-tab .svg-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.nav-tab.active .svg-icon {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+.nav-tab .svg-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 页面样式 */
+.page {
+  display: none;
+  width: 100%;
+  height: 100%;
+}
+
+.page.active {
+  display: block;
+}
+
+/* 主内容区域 */
+.main-content {
+  flex: 1;
+  padding: var(--spacing-lg);
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  position: relative;
+  z-index: 1;
+}
+
+/* 应用背景渐变 */
+#app::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 10% 20%, rgba(var(--primary-rgb, 33, 150, 243), 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 90% 80%, rgba(76, 175, 80, 0.06) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(156, 39, 176, 0.04) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 12px;
+}
+
+.main-content > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 确认框提升层级: confirm-modal-container 在 DOM 中位于其他 modal 之前,
+   导致其他 modal (如 report-modal) 覆盖确认框。提升 z-index 确保确认框始终在上。 */
+#confirm-modal-overlay.modal-overlay {
+  z-index: 2000;
+}
+
+.main-content::-webkit-scrollbar {
+  display: none;
+}
+
+.content-splitter {
+  display: flex;
+  gap: var(--spacing-lg);
+  height: 100%;
+}
+
+/* 面板样式 */
+.left-panel {
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  min-width: 300px;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+  margin: -8px;
+}
+
+/* 左侧面板卡片固定高度 */
+.left-panel .material-card {
+  flex: 0 1 auto;
+  height: auto;
+  min-height: 300px;
+  max-height: 800px; /* 加高文件管理器区域 */
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+/* 测试执行页面 - 左侧面板 */
+#test-execution .left-panel {
+  overflow-y: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* 隐藏测试执行页面左侧面板的滚动条 */
+#test-execution .left-panel::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
+/* 测试执行页面左侧面板卡片阴影 - 描边效果 */
+#test-execution .left-panel .glass-card {
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+body.dark-theme #test-execution .left-panel .glass-card {
+  box-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.4);
+}
+

@@ -1,0 +1,207 @@
+                <div class="content-splitter">
+                    <!-- 左侧面板 -->
+                    <div class="left-panel">
+                        <!-- 安卓连接 -->
+                        <div class="material-card elevation-1">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="devices"></span>
+                                <h3 data-i18n="android.deviceSelection">设备选择</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="device-management-controls">
+                                    <button id="device-management-btn" class="material-button primary">
+                                        <span class="svg-icon" data-icon="settings"></span>
+                                        <span data-i18n="android.deviceManagement">设备管理</span>
+                                    </button>
+                                    <div id="selected-device-info" class="selected-device-info">
+                                        <span class="svg-icon" data-icon="devices_other"></span>
+                                        <span id="selected-device-name" data-i18n="android.noDeviceSelected">未选择设备</span>
+                                    </div>
+                                </div>
+                                <div class="screen-control-controls" style="margin-top: 12px; display: flex; gap: 12px; width: 100%;">
+                    <button id="screen-control-btn" class="material-button primary" style="flex: 1; justify-content: center;">
+                        <span class="svg-icon" data-icon="smartphone"></span>
+                        <span data-i18n="android.screenControl">屏幕控制</span>
+                    </button>
+                    <button id="control-params-btn" class="material-button secondary" style="flex: 1; justify-content: center;">
+                        <span class="svg-icon" data-icon="tune"></span>
+                        <span data-i18n="android.controlParams">控制参数</span>
+                    </button>
+                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 设备信息卡片 -->
+                        <div id="device-info-card" class="material-card elevation-1 hidden">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="info"></span>
+                                <h3 data-i18n="android.deviceInfo">设备信息</h3>
+                            </div>
+                            <div class="card-content">
+                                <!-- 加载动画 -->
+                                <div id="device-loading" class="modal-device-loading">
+                                    <div class="modal-device-spinner"></div>
+                                </div>
+                                <!-- 设备信息内容 -->
+                                <div id="device-info-content" class="device-info-content-grid">
+                                    <div class="status-item">
+                                        <span class="status-item-label" data-i18n="android.manufacturer">制造商</span>
+                                        <div id="device-manufacturer" class="status-item-value">-</div>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-item-label" data-i18n="android.model">型号</span>
+                                        <div id="device-model" class="status-item-value">-</div>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-item-label" data-i18n="android.androidVersion">Android版本</span>
+                                        <div id="device-android-version" class="status-item-value">-</div>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-item-label" data-i18n="android.connectedWifi">连接WiFi</span>
+                                        <div id="device-wifi" class="status-item-value">-</div>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-item-label" data-i18n="android.batteryLevel">电池电量</span>
+                                        <div id="device-battery" class="status-item-value">-</div>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-item-label" data-i18n="android.storageUsage">存储使用</span>
+                                        <div id="device-storage" class="status-item-value">-</div>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-item-label" data-i18n="android.memoryUsage">内存使用</span>
+                                        <div id="device-memory" class="status-item-value">-</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧面板 -->
+                    <div class="right-panel">
+                        <!-- 文件管理器 -->
+                        <div class="material-card elevation-2">
+                            <div class="card-header">
+                                <span class="svg-icon" data-icon="folder"></span>
+                                <h3 data-i18n="fileManager.title">文件管理器</h3>
+                                <div class="card-actions file-manager-actions">
+                                    <button id="back-btn" class="file-manager-btn" title="返回上一级">
+                                        <div class="btn-content">
+                                            <span class="svg-icon" data-icon="arrow_back"></span>
+                                            <span class="btn-text" data-i18n="fileManager.back">返回</span>
+                                        </div>
+                                    </button>
+                                    <button id="refresh-btn" class="file-manager-btn" title="刷新">
+                                        <div class="btn-content">
+                                            <span class="svg-icon" data-icon="refresh"></span>
+                                            <span class="btn-text" data-i18n="fileManager.refresh">刷新</span>
+                                        </div>
+                                    </button>
+                                    <button id="delete-btn" class="file-manager-btn" title="删除">
+                                        <div class="btn-content">
+                                            <span class="svg-icon" data-icon="delete"></span>
+                                            <span class="btn-text" data-i18n="fileManager.delete">删除</span>
+                                        </div>
+                                    </button>
+                                    <button id="upload-btn" class="file-manager-btn" title="上传文件">
+                                        <div class="btn-content">
+                                            <span class="svg-icon" data-icon="upload_file"></span>
+                                            <span class="btn-text" data-i18n="fileManager.upload">上传</span>
+                                        </div>
+                                    </button>
+                                    <button id="download-btn" class="file-manager-btn" title="下载">
+                                        <div class="btn-content">
+                                            <span class="svg-icon" data-icon="download_file"></span>
+                                            <span class="btn-text" data-i18n="fileManager.download">下载</span>
+                                        </div>
+                                    </button>
+                                    <button id="install-apk-btn" class="file-manager-btn" title="安装APK">
+                                        <div class="btn-content">
+                                            <span class="svg-icon" data-icon="android"></span>
+                                            <span class="btn-text" data-i18n="fileManager.installApk">安装APK</span>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-content file-manager-content">
+                                <!-- 完全重写的路径显示，包含省略号和下拉菜单 -->
+                                <div id="current-path" class="current-path">
+                                    <span class="svg-icon" data-icon="location_on"></span>
+                                    <div class="path-display" id="path-display"></div>
+                                    <!-- 简化的下拉菜单结构 -->
+                                    <span id="ellipsis-button" class="path-ellipsis">...</span>
+                                    <div id="ellipsis-dropdown" class="ellipsis-dropdown"></div>
+                                </div>
+                                
+                                <div class="file-list-container">
+                                    <table class="file-list-table">
+                                        <thead>
+                                            <tr>
+                                                <th>
+                                                    <input type="checkbox" id="select-all" class="select-all-checkbox" data-i18n="fileManager.selectAll">
+                                                </th>
+                                                <th data-i18n="fileManager.name">名称</th>
+                                                <th data-i18n="fileManager.size">大小</th>
+                                                <th data-i18n="fileManager.modifyTime">修改时间</th>
+                                                <th data-i18n="fileManager.createTime">创建时间</th>
+                                                <th data-i18n="fileManager.actions">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="file-list">
+                                            <!-- 文件列表将在这里动态生成 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <!-- 下载进度条 -->
+                                <div id="download-progress-container" class="download-progress-container hidden">
+                                    <div class="progress-header">
+                                        <span class="svg-icon" data-icon="download"></span>
+                                        <span id="download-filename" data-i18n="fileManager.downloading">正在下载...</span>
+                                        <div class="countdown-container">
+                                            <span id="download-countdown" class="download-countdown" data-i18n="fileManager.autoCloseIn">5秒后自动关闭</span>
+                                        </div>
+                                        <button id="download-progress-close" class="progress-close-btn" title="关闭">
+                                            <span class="svg-icon" data-icon="close"></span>
+                                        </button>
+                                    </div>
+                                    <div class="progress-bar-wrapper">
+                                        <div id="download-progress-bar" class="download-progress-bar"></div>
+                                    </div>
+                                    <div class="progress-text">
+                                        <span id="download-percentage">0%</span>
+                                        <span id="download-file-count">文件: 0 / 0</span>
+                                    </div>
+                                    <!-- 报错信息显示 -->
+                                    <div id="download-error" class="download-error hidden">
+                                        <div class="error-content">
+                                            <span class="svg-icon" data-icon="error"></span>
+                                            <div class="error-text">
+                                                <span class="error-title" data-i18n="fileManager.downloadFailed">下载失败</span>
+                                                <span id="download-error-message" class="error-message"></span>
+                                                <!-- 完整错误信息悬浮窗 -->
+                                                <div id="download-error-tooltip" class="error-tooltip"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 上下文菜单 - 移到卡片外部避免被overflow:hidden裁剪 -->
+                    <div id="context-menu" class="context-menu hidden">
+                        <div class="context-menu-item" data-action="download">
+                            <span class="svg-icon" data-icon="download"></span>
+                            <span data-i18n="fileManager.download">下载</span>
+                        </div>
+                        <div class="context-menu-item" data-action="rename">
+                            <span class="svg-icon" data-icon="edit"></span>
+                            <span data-i18n="fileManager.rename">重命名</span>
+                        </div>
+                        <div class="context-menu-item" data-action="delete">
+                            <span class="svg-icon" data-icon="delete"></span>
+                            <span data-i18n="fileManager.delete">删除</span>
+                        </div>
+                    </div>
+                </div>

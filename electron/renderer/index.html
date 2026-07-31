@@ -3,157 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XKAutoTester - 自动化测试工具</title>
+    <title>XKAutoTester</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <style>
+        html, body {
+            background: transparent !important;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
     <div id="app">
-        <!-- 标题栏 -->
-        <header class="app-header">
-            <div class="header-content">
-                <div class="header-left">
-                    <span class="material-icons app-icon">bug_report</span>
+        <!-- 导航栏 -->
+        <nav class="app-nav">
+            <div class="nav-content">
+                <div class="nav-left">
+                    <img src="../assets/icon.png" alt="App Icon" class="app-icon">
                     <h1 class="app-title">XKAutoTester</h1>
                 </div>
-                <div class="header-right">
-                    <span class="app-version">v1.0.0</span>
+                <div class="nav-tabs">
+                    <div class="nav-tab active" data-tab="test-execution">
+                        <span class="svg-icon" data-icon="play_circle"></span>
+                        <span data-i18n="tabs.testExecution">测试执行</span>
+                    </div>
+                    <div class="nav-tab" data-tab="page-package">
+                        <span class="svg-icon" data-icon="widgets"></span>
+                        <span data-i18n="tabs.pagePackage">页面封装</span>
+                    </div>
+                    <div class="nav-tab" data-tab="test-case">
+                        <span class="svg-icon" data-icon="description"></span>
+                        <span data-i18n="tabs.testCase">测试用例</span>
+                    </div>
+                    <div class="nav-tab" data-tab="android-connection">
+                        <span class="svg-icon" data-icon="devices"></span>
+                        <span data-i18n="tabs.androidConnection">安卓连接</span>
+                    </div>
+                    <div class="nav-tab" data-tab="settings">
+                        <span class="svg-icon" data-icon="settings"></span>
+                        <span data-i18n="tabs.settings">设置</span>
+                    </div>
+                </div>
+                <div class="nav-right">
+                    <div class="window-controls">
+                        <button class="window-control-btn minimize" id="window-minimize" title="最小化">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M5 12h14"/>
+                            </svg>
+                        </button>
+                        <button class="window-control-btn maximize" id="window-maximize" title="最大化">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="4" y="4" width="16" height="16" rx="2"/>
+                            </svg>
+                        </button>
+                        <button class="window-control-btn close" id="window-close" title="关闭">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 6l12 12M6 18L18 6"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
-        </header>
+        </nav>
 
         <!-- 主内容区域 -->
         <main class="main-content">
-            <div class="content-splitter">
-                <!-- 左侧面板 -->
-                <div class="left-panel">
-                    <!-- 测试计划管理 -->
-                    <div id="test-plan-section" class="material-card elevation-1 hidden">
-                        <div class="card-header">
-                            <span class="material-icons">assignment</span>
-                            <h3>测试计划</h3>
-                        </div>
-                        <div class="card-content">
-                            <div class="test-plan-controls">
-                    <button id="new-plan-btn" class="material-button outlined">
-                        <span class="material-icons">add</span>
-                        新建计划
-                    </button>
-                    <button id="edit-plan-btn" class="material-button outlined">
-                        <span class="material-icons">edit</span>
-                        编辑计划
-                    </button>
-                    <button id="delete-plan-btn" class="material-button error">
-                        <span class="material-icons">delete</span>
-                        删除计划
-                    </button>
-                </div>
-                            <div id="test-plans-list" class="test-plans-list">
-                                <div class="placeholder-message">
-                                    <span class="material-icons">info</span>
-                                    <span>请先选择测试目录</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            <!-- 测试执行页面 -->
+            <div id="test-execution" class="page active">
+                <!-- tab content loaded by app.js #loadTabHtml() -->
+            </div>
 
-                    <!-- 测试目录选择 -->
-                    <div class="material-card elevation-1">
-                        <div class="card-header">
-                            <span class="material-icons">folder_open</span>
-                            <h3>测试目录</h3>
-                        </div>
-                        <div class="card-content">
-                            <div class="directory-selector">
-                                <button id="select-directory-btn" class="material-button primary">
-                                    <span class="material-icons">folder_open</span>
-                                    选择测试目录
-                                </button>
-                                <div id="selected-directory" class="selected-path">未选择目录</div>
-                            </div>
-                            <div id="test-files-list" class="test-files-list">
-                                <!-- 测试文件列表将在这里动态生成 -->
-                            </div>
-                        </div>
-                    </div>
+            <!-- 页面封装页面 -->
+            <div id="page-package" class="page">
+                <!-- tab content loaded by app.js #loadTabHtml() -->
+            </div>
 
-                    <!-- 测试类型选择 -->
-                    <div class="material-card elevation-1">
-                        <div class="card-header">
-                            <span class="material-icons">category</span>
-                            <h3>测试类型</h3>
-                        </div>
-                        <div class="card-content">
-                            <div id="test-type-selector" class="test-type-selector">
-                                <div class="placeholder-message">
-                                    <span class="material-icons">info</span>
-                                    <span>请先选择测试目录</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <!-- 测试用例页面 -->
+            <div id="test-case" class="page">
+                <!-- tab content loaded by app.js #loadTabHtml() -->
+            </div>
 
-                <!-- 右侧面板 -->
-                <div class="right-panel">
-                    <!-- 测试输出 -->
-                    <div class="material-card elevation-2">
-                        <div class="card-header">
-                            <span class="material-icons">terminal</span>
-                            <h3>测试输出</h3>
-                            <div class="card-actions">
-                                <button id="clear-output-btn" class="icon-button">
-                                    <span class="material-icons">clear_all</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="card-content">
-                            <div id="test-output" class="test-output">
-                                <div class="welcome-message">
-                                    <span class="material-icons">rocket_launch</span>
-                                    <h3>欢迎使用 XKAutoTester</h3>
-                                    <p>选择测试目录和类型，然后点击运行测试开始自动化测试。</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            <!-- 安卓连接页面 -->
+            <div id="android-connection" class="page">
+                <!-- tab content loaded by app.js #loadTabHtml() -->
+            </div>
 
-                    <!-- 进度条和控制按钮 -->
-                    <div class="material-card elevation-1">
-                        <div class="card-content">
-                            <div class="progress-section">
-                                <div class="progress-info">
-                                    <span id="progress-status">准备就绪</span>
-                                    <span id="progress-percentage">0%</span>
-                                </div>
-                                <div class="progress-bar-container">
-                                    <div id="progress-bar" class="progress-bar">
-                                        <div class="progress-fill"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="control-buttons">
-                                <button id="run-tests-btn" class="material-button primary large">
-                                    <span class="material-icons">play_arrow</span>
-                                    运行测试
-                                </button>
-                                <button id="stop-tests-btn" class="material-button secondary large" disabled>
-                                    <span class="material-icons">stop</span>
-                                    停止测试
-                                </button>
-                                <button id="view-report-btn" class="material-button outlined large" disabled>
-                                    <span class="material-icons">assessment</span>
-                                    查看报告
-                                </button>
-                                <button id="stop-allure-btn" class="material-button error large" disabled>
-                                    <span class="material-icons">power_settings_new</span>
-                                    停止服务器
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <!-- ===== END: android-connection ===== -->
+
+            <!-- ===== START: settings ===== -->
+            <!-- 设置页面 -->
+            <div id="settings" class="page">
+                <!-- tab content loaded by app.js #loadTabHtml() -->
             </div>
         </main>
 
@@ -161,49 +104,589 @@
         <div id="modal-overlay" class="modal-overlay hidden">
             <div class="modal-container">
                 <div class="modal-header">
-                    <h3 id="modal-title">新建测试计划</h3>
+                    <h3 id="modal-title" data-i18n="modal.newTestPlan">新建测试计划</h3>
                     <button id="modal-close-btn" class="icon-button">
-                        <span class="material-icons">close</span>
+                        <span class="svg-icon" data-icon="close"></span>
                     </button>
                 </div>
-                <div class="modal-content">
+                <div class="modal-content no-scrollbar">
                     <form id="test-plan-form">
-                        <div class="form-group">
-                            <label for="plan-name">计划名称</label>
-                            <input type="text" id="plan-name" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="plan-description">计划描述</label>
-                            <textarea id="plan-description" rows="3"></textarea>
-                        </div>
-                        
-                        <!-- 测试文件选择 -->
-                        <div class="form-group">
-                            <label>测试文件</label>
-                            <div id="modal-test-files" class="checkbox-list">
-                                <!-- 测试文件列表将在这里动态生成 -->
+                        <div class="modal-form-container">
+                            <div class="modal-left-panel">
+                                <div class="form-group">
+                                    <label for="plan-name" data-i18n="modal.planName">计划名称</label>
+                                    <div class="input-container">
+                                        <input type="text" id="plan-name" required>
+                                        <div id="plan-name-error" class="input-error error-hidden">
+                                        <span class="svg-icon" data-icon="error"></span>
+                                        <span data-i18n="modal.enterPlanName">请输入计划名称</span>
+                                    </div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="plan-description" data-i18n="modal.planDescription">计划描述</label>
+                                    <textarea id="plan-description" rows="3" class="no-scrollbar"></textarea>
+                                </div>
                             </div>
-                        </div>
-                        
-                        <!-- 测试类型选择 -->
-                        <div class="form-group">
-                            <label>测试类型</label>
-                            <div id="modal-test-types" class="checkbox-list">
-                                <!-- 测试类型将在这里动态生成 -->
+                            
+                            <div class="modal-middle-panel">
+                                <div class="form-group">
+                                    <label data-i18n="modal.testFiles">测试文件</label>
+                                    <div id="modal-test-files" class="checkbox-list">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="modal-right-panel">
+                                <div class="form-group modal-test-type-group">
+                                    <label data-i18n="testExecution.testType">测试类型</label>
+                                    <div id="modal-test-types" class="checkbox-list">
+                                    </div>
+                                    <div id="test-type-warning" class="warning-message warning-hidden">
+                                        <span class="svg-icon" data-icon="warning"></span>
+                                        <span data-i18n="testExecution.noTestTypeSelected">没有选择测试类型，将默认执行所有测试</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group loop-settings-group">
+                                    <label data-i18n="modal.loopSettings">循环执行设置</label>
+                                    <div class="loop-settings-container">
+                                        <div class="loop-setting-item">
+                                            <label for="loop-count" data-i18n="modal.loopCount">循环次数</label>
+                                            <input type="number" id="loop-count" class="glass-input no-spinner" 
+                                                   min="1" max="999" value="1" placeholder="1">
+                                        </div>
+                                        <div class="loop-setting-item checkbox-item">
+                                            <input type="checkbox" id="continue-on-failure" checked>
+                                            <label for="continue-on-failure" data-i18n="modal.continueOnFailure">测试失败后继续执行后续循环</label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
                         <div class="form-actions">
-                            <button type="button" id="modal-cancel-btn" class="material-button outlined">取消</button>
-                            <button type="submit" id="save-plan-btn" class="material-button primary">保存</button>
-                            <button type="button" id="update-plan-btn" class="material-button primary hidden">更新计划</button>
+                            <button type="button" id="modal-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                            <button type="submit" id="save-plan-btn" class="material-button primary" data-i18n="modal.save">保存</button>
+                            <button type="button" id="update-plan-btn" class="material-button primary hidden" data-i18n="modal.updatePlan">更新计划</button>
                         </div>
                     </form>
                 </div>
             </div>
         </div>
-    </div>
+        
+        <!-- 重命名模态框 -->
+        <div id="rename-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 id="rename-modal-title" data-i18n="modal.rename">重命名</h3>
+                    <button id="rename-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <form id="rename-modal-form">
+                        <div class="form-group">
+                            <label for="rename-input" data-i18n="modal.name">名称</label>
+                            <div class="input-container">
+                                <input type="text" id="rename-input" name="name" placeholder="请输入新名称" data-i18n-placeholder="modal.enterNewName" required>
+                                <div id="rename-input-error" class="input-error error-hidden">
+                                    <span class="svg-icon" data-icon="error"></span>
+                                    <span data-i18n="modal.enterNewName">请输入新名称</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" id="rename-modal-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                            <button type="submit" id="rename-modal-save-btn" class="material-button primary" data-i18n="modal.save">保存</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
 
-    <script src="script.js"></script>
+        <!-- 设备管理模态框 -->
+        <div id="device-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 id="device-modal-title" data-i18n="modal.deviceManagement">设备管理</h3>
+                    <button id="device-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <div id="device-modal-content" style="display: flex; gap: 16px;">
+                            <!-- 左侧：设备列表和扫描状态 -->
+                            <div style="flex: 1;">
+                                <div id="device-scanning" class="device-scanning" style="display: flex; align-items: center; gap: 8px; padding: 16px;">
+                                    <span class="svg-icon" data-icon="sync"></span>
+                                    <span style="vertical-align: middle;" data-i18n="modal.scanningDevices">正在扫描设备...</span>
+                                </div>
+                                <div id="device-list" class="device-list hidden">
+                                    <!-- 设备列表将在这里动态生成 -->
+                                    <!-- 新增设备按钮 -->
+                                    <div id="add-device-btn" class="device-item add-device-btn" style="padding: 8px 12px; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; display: flex; align-items: center; justify-content: space-between;">
+                                        <div style="display: flex; align-items: center;">
+                                            <span class="svg-icon" data-icon="add" style="vertical-align: middle; margin-right: 8px;"></span>
+                                            <span style="vertical-align: middle;" data-i18n="modal.addDeviceByIp">按IP新增设备</span>
+                                        </div>
+                                        <span class="svg-icon" data-icon="keyboard_arrow_right" style="vertical-align: middle;"></span>
+                                    </div>
+                                </div>
+                                <!-- 新增设备输入框 -->
+                                <div id="add-device-input-container" class="add-device-input-container hidden">
+                                    <div class="add-device-input-row">
+                                        <input type="text" id="add-device-input" class="glass-input" placeholder="输入IP地址或IP:端口" data-i18n-placeholder="modal.enterIpOrPort">
+                                        <button id="add-device-cancel-btn" class="material-button outlined small icon-btn">
+                                            <span class="svg-icon" data-icon="close"></span>
+                                        </button>
+                                        <button id="add-device-confirm-btn" class="material-button primary small icon-btn">
+                                            <span class="svg-icon" data-icon="check"></span>
+                                        </button>
+                                    </div>
+                                    <div id="add-device-result" class="add-device-result hidden"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- 右侧：设备信息卡片 -->
+                            <div id="modal-device-status-card" class="device-status-card hidden">
+                                <h4 class="device-status-title" data-i18n="modal.deviceInfo">设备信息</h4>
+                                <!-- 加载动画 -->
+                                <div id="modal-device-loading" class="modal-device-loading">
+                                    <div class="modal-device-spinner"></div>
+                                </div>
+                                <!-- 设备信息内容 -->
+                                <div id="modal-device-info-content" class="modal-device-info-content">
+                                    <div class="status-item">
+                                        <span class="status-item-label" data-i18n="modal.manufacturer">制造商</span>
+                                        <div id="modal-device-manufacturer" class="status-item-value">-</div>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-item-label" data-i18n="modal.model">型号</span>
+                                        <div id="modal-device-model" class="status-item-value">-</div>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-item-label" data-i18n="modal.androidVersion">Android版本</span>
+                                        <div id="modal-device-android-version" class="status-item-value">-</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                </div>
+                <div class="modal-footer">
+                    <div style="padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+                        <button id="open-port-btn" class="material-button outlined" disabled data-i18n="modal.openPort5555">开放5555端口</button>
+                        <div style="display: flex; gap: 16px;">
+                            <button id="device-modal-confirm-btn" class="material-button primary" disabled data-i18n="modal.confirmSelection">确认选择</button>
+                            <button id="device-modal-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 编辑设备连接标识弹窗 -->
+        <div id="edit-device-id-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container" style="max-width: 450px;">
+                <div class="modal-header">
+                    <h3 id="edit-device-id-modal-title" data-i18n="testExecution.deviceSelection.editDeviceId">编辑设备连接标识</h3>
+                    <button id="edit-device-id-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <div class="form-group">
+                        <label for="edit-device-id-input" data-i18n="testExecution.deviceSelection.deviceId">安卓ADB连接标识</label>
+                        <input type="text" id="edit-device-id-input" class="glass-input" data-i18n-placeholder="testExecution.deviceSelection.deviceIdPlaceholder" placeholder="输入设备IP或ID">
+                    </div>
+                    <div class="form-group" id="android-version-group">
+                        <label for="edit-android-version-input" data-i18n="testExecution.deviceSelection.androidVersion">安卓版本</label>
+                        <input type="text" id="edit-android-version-input" class="glass-input" data-i18n-placeholder="testExecution.deviceSelection.androidVersionPlaceholder" placeholder="输入安卓版本，如14">
+                    </div>
+                    <div class="form-group" id="ble-mock-port-group" style="display: none;">
+                        <label for="edit-ble-port-input" data-i18n="testExecution.deviceSelection.bleMockPort">蓝牙Mock端口</label>
+                        <input type="text" id="edit-ble-port-input" class="glass-input" pattern="^COM\d+$" data-i18n-placeholder="testExecution.deviceSelection.bleMockPortPlaceholder" placeholder="输入蓝牙Mock设备所在的端口号(如COM7)">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div style="padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" id="edit-device-id-manage-btn" class="material-button outlined">
+                                <span class="svg-icon" data-icon="devices"></span>
+                                <span data-i18n="testExecution.deviceSelection.deviceManagement">设备管理</span>
+                            </button>
+                            <button type="button" id="edit-port-manage-btn" class="material-button outlined" style="display: none;">
+                                <span class="svg-icon" data-icon="cable"></span>
+                                <span data-i18n="testExecution.deviceSelection.portManagement">端口管理</span>
+                            </button>
+                        </div>
+                        <div style="display: flex; gap: 12px;">
+                            <button type="button" id="edit-device-id-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                            <button type="button" id="edit-device-id-confirm-btn" class="material-button primary" data-i18n="modal.confirm">确定</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 端口管理模态框 -->
+        <div id="port-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container" style="max-width: 400px;">
+                <div class="modal-header">
+                    <h3 id="port-modal-title" data-i18n="testExecution.deviceSelection.portManagement">端口管理</h3>
+                    <button id="port-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <div id="port-modal-content">
+                        <div id="port-scanning" class="device-scanning" style="display: flex; align-items: center; gap: 8px; padding: 16px;">
+                            <span class="svg-icon" data-icon="sync"></span>
+                            <span style="vertical-align: middle;" data-i18n="testExecution.deviceSelection.scanningPorts">正在扫描端口...</span>
+                        </div>
+                        <div id="port-list" class="device-list hidden">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div style="padding: 16px; display: flex; justify-content: flex-end; align-items: center;">
+                        <div style="display: flex; gap: 16px;">
+                            <button id="port-modal-confirm-btn" class="material-button primary" disabled data-i18n="modal.confirmSelection">确认选择</button>
+                            <button id="port-modal-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 组件容器 - 确认弹窗 -->
+        <div id="confirm-modal-container"></div>
+
+        <!-- 保存确认弹窗 - 三按钮 -->
+        <div id="save-confirm-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container confirm-modal">
+                <div class="modal-header">
+                    <span class="svg-icon confirm-icon" data-icon="warning"></span>
+                    <h3 id="save-confirm-modal-title">未保存的更改</h3>
+                </div>
+                <div class="modal-content">
+                    <p id="save-confirm-modal-message" class="confirm-message">当前编辑有未保存的更改，是否保存？</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="save-confirm-cancel-btn" class="material-button outlined">取消</button>
+                    <button type="button" id="save-confirm-discard-btn" class="material-button error">不保存</button>
+                    <button type="button" id="save-confirm-save-btn" class="material-button primary">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 更新弹窗 -->
+        <div id="update-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container update-modal">
+                <div class="modal-header">
+                    <h3 data-i18n="settings.updateAvailable">版本更新</h3>
+                    <button id="update-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <div class="update-modal-body">
+                        <div class="update-icon">
+                            <span class="svg-icon" data-icon="download"></span>
+                        </div>
+                        <div class="update-title" data-i18n="settings.updateAvailableTitle">版本更新可用</div>
+                        <div class="update-version">
+                            <span id="update-current-version" class="update-old-version"></span>
+                            <span class="update-arrow">→</span>
+                            <span id="update-new-version" class="update-new-version"></span>
+                        </div>
+                        <div id="update-changelog" class="update-changelog"></div>
+                        <div id="update-progress-container" class="update-progress-container hidden">
+                            <div class="update-progress-bar">
+                                <div id="update-progress-fill" class="update-progress-fill"></div>
+                            </div>
+                            <div class="update-progress-info">
+                                <span id="update-progress-text" class="update-progress-text">0%</span>
+                                <span id="update-progress-speed" class="update-progress-speed"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="update-cancel-btn" class="material-button outlined" data-i18n="settings.cancelUpdate">取消</button>
+                    <button id="update-download-btn" class="material-button primary" data-i18n="settings.downloadUpdate">下载更新</button>
+                </div>
+            </div>
+        </div>
+
+            <!-- ===== END: settings ===== -->
+
+        <!-- ===== START: page-package-modals ===== -->
+        <!-- 页面封装 - 应用弹窗 -->
+        <div id="pp-app-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 id="pp-app-modal-title" data-i18n="pagePackage.newApp">新增应用</h3>
+                    <button class="icon-button pp-modal-close">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <form id="pp-app-form" novalidate>
+                        <div class="form-group">
+                            <label for="pp-app-input" data-i18n="pagePackage.appName">应用名称</label>
+                            <input type="text" id="pp-app-input" class="glass-input">
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="pagePackage.apkDropZone">APK识别区域</label>
+                            <div class="apk-drop-zone" id="apk-drop-zone">
+                                <div class="apk-drop-zone-content">
+                                    <div class="apk-drop-icon">
+                                        <span class="svg-icon" data-icon="apk_file"></span>
+                                    </div>
+                                    <div class="apk-drop-text" data-i18n="pagePackage.apkDropHint">拖放APK文件到此处</div>
+                                    <div class="apk-drop-subtext" data-i18n="pagePackage.apkDropSubtext">自动识别包名和Activity</div>
+                                </div>
+                                <div class="apk-drop-zone-loading hidden" id="apk-drop-loading">
+                                    <div class="apk-loading-spinner"></div>
+                                    <span data-i18n="pagePackage.apkParsing">正在解析...</span>
+                                </div>
+                                <div class="apk-drop-zone-success hidden" id="apk-drop-success">
+                                    <span class="svg-icon" data-icon="check_circle"></span>
+                                    <span data-i18n="pagePackage.apkParseSuccess">解析成功</span>
+                                </div>
+                                <div class="apk-drop-zone-error hidden" id="apk-drop-error">
+                                    <span class="svg-icon" data-icon="error"></span>
+                                    <span id="apk-error-message"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="pagePackage.platform">平台</label>
+                            <div class="custom-select-wrapper" id="pp-platform-wrapper" data-options='[{"value":"android","label":"pagePackage.platforms.android","default":true}]'></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pp-package-input" data-i18n="pagePackage.packageName">包名</label>
+                            <input type="text" id="pp-package-input" class="glass-input" placeholder="com.example.app">
+                        </div>
+                        <div class="form-group">
+                            <label for="pp-activity-input" data-i18n="pagePackage.activityName">Activity名称</label>
+                            <input type="text" id="pp-activity-input" class="glass-input" placeholder="com.example.app.MainActivity">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="material-button outlined pp-modal-cancel" data-i18n="modal.cancel">取消</button>
+                    <button type="button" class="material-button primary" id="pp-app-save-btn" data-i18n="modal.save">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页面封装 - 页面弹窗 -->
+        <div id="pp-page-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 id="pp-page-modal-title" data-i18n="pagePackage.newPage">新增页面</h3>
+                    <button class="icon-button pp-modal-close">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <form id="pp-page-form" novalidate>
+                        <div class="form-group">
+                            <label for="pp-page-input" data-i18n="pagePackage.pageName">页面名称</label>
+                            <input type="text" id="pp-page-input" class="glass-input">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="material-button outlined pp-modal-cancel" data-i18n="modal.cancel">取消</button>
+                    <button type="button" class="material-button primary" id="pp-page-save-btn" data-i18n="modal.save">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页面封装 - 元素弹窗 -->
+        <div id="pp-element-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 id="pp-element-modal-title" data-i18n="pagePackage.newElement">新增元素</h3>
+                    <button class="icon-button pp-modal-close">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <form id="pp-element-form" novalidate>
+                        <div class="form-group">
+                            <label for="pp-element-name-input" data-i18n="pagePackage.elementName">元素名称</label>
+                            <input type="text" id="pp-element-name-input" class="glass-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="pp-element-locator-select" data-i18n="pagePackage.locator">定位器</label>
+                            <div class="custom-select-wrapper" id="pp-element-locator-wrapper" data-options='[{"value":"id","label":"pagePackage.locators.id","default":true},{"value":"xpath","label":"pagePackage.locators.xpath"},{"value":"css","label":"pagePackage.locators.css"},{"value":"accessibility_id","label":"pagePackage.locators.accessibility_id"},{"value":"class_name","label":"pagePackage.locators.class_name"},{"value":"click","label":"pagePackage.locators.click"}]'></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pp-element-value-input" data-i18n="pagePackage.locatorValue">定位值</label>
+                            <input type="text" id="pp-element-value-input" class="glass-input">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="material-button outlined pp-modal-cancel" data-i18n="modal.cancel">取消</button>
+                    <button type="button" class="material-button primary" id="pp-element-save-btn" data-i18n="modal.save">保存</button>
+                </div>
+            </div>
+        </div>
+
+
+
+        <!-- 查看报告模态框 -->
+        <div id="report-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container report-modal">
+                <div class="modal-header">
+                    <h3 data-i18n="reportModal.title">查看报告</h3>
+                    <button id="report-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content">
+                    <div class="report-modal-body">
+                        <div class="report-plan-info">
+                            <span class="svg-icon" data-icon="assignment"></span>
+                            <span id="report-plan-name" class="report-plan-name"></span>
+                        </div>
+                        <div class="report-runs-section">
+                            <div class="report-runs-header">
+                                <span class="svg-icon" data-icon="history"></span>
+                                <span data-i18n="reportModal.runHistory">运行历史</span>
+                            </div>
+                            <div id="report-runs-list" class="report-runs-list">
+                                <div class="report-loading">
+                                    <div class="report-loading-spinner"></div>
+                                    <span data-i18n="reportModal.loading">正在加载报告...</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="report-no-runs" class="report-no-runs hidden">
+                            <span class="svg-icon" data-icon="info"></span>
+                            <span data-i18n="reportModal.noReports">该测试计划暂无运行记录</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="report-modal-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                    <button id="report-modal-open-btn" class="material-button primary" disabled data-i18n="reportModal.openReport">打开报告</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 控制参数模态框 -->
+        <div id="control-params-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 data-i18n="modal.controlParams">控制参数</h3>
+                    <button id="control-params-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content no-scrollbar">
+                    <form id="control-params-form">
+                        <div class="form-group">
+                            <label for="max-size" data-i18n="modal.maxResolution">最大分辨率</label>
+                            <input type="number" id="max-size" class="glass-input no-spinner" placeholder="例如: 1920" min="320" max="6000">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="video-bit-rate" data-i18n="modal.videoBitRate">视频比特率</label>
+                            <input type="number" id="video-bit-rate" class="glass-input no-spinner" placeholder="例如: 8" min="1" max="50">
+                            <small data-i18n="controlParams.mbps">单位: Mbps</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="max-fps" data-i18n="modal.maxFps">最大帧率</label>
+                            <input type="number" id="max-fps" class="glass-input no-spinner" placeholder="例如: 60" min="1" max="600">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label data-i18n="modal.videoCodec">视频编解码器</label>
+                            <div class="custom-select-wrapper" id="video-codec" data-options='[{"value":"h264","label":"controlParams.h264","default":true},{"value":"h265","label":"controlParams.h265"},{"value":"av1","label":"controlParams.av1"}]'>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="checkbox-container" style="align-items: center; padding: 8px 0;">
+                                <input type="checkbox" id="always-on-top" name="always-on-top" style="margin: 0; width: 18px; height: 18px; vertical-align: middle;">
+                                <label for="always-on-top" class="checkbox-label" style="margin: 0; vertical-align: middle; display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
+                                    <span class="checkmark"></span>
+                                    <span data-i18n="modal.alwaysOnTop">始终置顶</span>
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <div style="padding: 16px; display: flex; justify-content: flex-end; gap: 12px;">
+                        <button id="control-params-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                        <button id="control-params-save-btn" class="material-button primary" data-i18n="modal.saveParams">保存参数</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 定时计划模态框 -->
+        <div id="scheduled-plan-modal-overlay" class="modal-overlay hidden">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 id="scheduled-plan-modal-title" data-i18n="scheduledPlan.title">定时计划</h3>
+                    <button id="scheduled-plan-modal-close-btn" class="icon-button">
+                        <span class="svg-icon" data-icon="close"></span>
+                    </button>
+                </div>
+                <div class="modal-content no-scrollbar">
+                    <form id="scheduled-plan-form">
+                        <div class="modal-form-container">
+                            <!-- 左边容器：名称、执行时间 -->
+                            <div class="modal-left-panel">
+                                <div class="form-group">
+                                    <label for="scheduled-plan-name" data-i18n="modal.planName">计划名称</label>
+                                    <input type="text" id="scheduled-plan-name">
+                                </div>
+                                <div class="form-group">
+                                    <label for="scheduled-plan-time" data-i18n="testExecution.scheduledTime">执行时间</label>
+                                    <div class="datetime-picker-container">
+                                        <input type="text" id="scheduled-plan-time" class="glass-input" readonly placeholder="选择日期时间">
+                                        <span class="svg-icon datetime-picker-icon" data-icon="schedule"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 右边容器：测试计划选择 -->
+                            <div class="modal-right-panel">
+                                <div class="form-group">
+                                    <label data-i18n="scheduledPlan.selectPlans">选择测试计划</label>
+                                    <div id="scheduled-test-plans-list" class="checkbox-list scheduled-test-plans-list">
+                                        <!-- 测试计划列表将在这里动态生成 -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="button" id="scheduled-plan-cancel-btn" class="material-button outlined" data-i18n="modal.cancel">取消</button>
+                            <button type="submit" id="save-scheduled-plan-btn" class="material-button primary" data-i18n="modal.save">保存</button>
+                            <button type="button" id="update-scheduled-plan-btn" class="material-button primary hidden" data-i18n="modal.updatePlan">更新计划</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div id="inspector-modal-container"></div>
+    </div>
+    <!-- ===== END: page-package-modals ===== -->
+    
+    <script src="../node_modules/lucide/dist/umd/lucide.min.js"></script>
+    <!-- Phase 4: MVC 清理完成，所有功能由 app.js (ES Module) 管理 -->
+    <script type="module" src="app.js"></script>
 </body>
 </html>

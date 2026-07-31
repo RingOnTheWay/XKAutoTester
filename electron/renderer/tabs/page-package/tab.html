@@ -1,0 +1,134 @@
+                <div class="pp-container">
+                    <!-- 页面封装内容 -->
+                    <div class="pp-content pp-content--page active" id="pp-page-content">
+                    <div class="pp-layout">
+                        <!-- 左半区：应用选择 + 页面选择 -->
+                        <div class="pp-left-column">
+                            <!-- 应用选择卡片 -->
+                            <div class="pp-card pp-card--app" id="pp-app-card">
+                                <div class="pp-card-header">
+                                    <div class="pp-card-title">
+                                        <span class="svg-icon" data-icon="apps"></span>
+                                        <span data-i18n="pagePackage.appSelection">应用选择</span>
+                                    </div>
+                                    <div class="pp-card-badge" id="pp-app-badge" style="display: none;">
+                                        <span id="pp-app-count">0</span>
+                                    </div>
+                                </div>
+                                <div class="pp-card-body">
+                                    <div class="cascade-select-wrapper" id="pp-app-select-wrapper">
+                                        <div class="cascade-select">
+                                            <div class="cascade-select__header">
+                                                <input type="text" class="cascade-select__search" placeholder="搜索..." data-i18n-placeholder="pagePackage.searchPlaceholder">
+                                                <div class="cascade-select__actions">
+                                                    <button class="cascade-select__btn add" title="新增">
+                                                        <span class="svg-icon" data-icon="add"></span>
+                                                    </button>
+                                                    <button class="cascade-select__btn edit" title="编辑" disabled>
+                                                        <span class="svg-icon" data-icon="edit"></span>
+                                                    </button>
+                                                    <button class="cascade-select__btn delete" title="删除" disabled>
+                                                        <span class="svg-icon" data-icon="delete"></span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="cascade-select__selected">
+                                                <span class="cascade-select__text placeholder" data-i18n="pagePackage.selectApp">请选择应用</span>
+                                            </div>
+                                            <div class="cascade-select__dropdown">
+                                                <div class="cascade-select__options"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 页面选择卡片 -->
+                            <div class="pp-card pp-card--page" id="pp-page-card">
+                                <div class="pp-card-header">
+                                    <div class="pp-card-title">
+                                        <span class="svg-icon" data-icon="web"></span>
+                                        <span data-i18n="pagePackage.pageSelection">页面选择</span>
+                                    </div>
+                                    <div class="pp-card-badge" id="pp-page-badge" style="display: none;">
+                                        <span id="pp-page-count">0</span>
+                                    </div>
+                                </div>
+                                <div class="pp-card-body">
+                                    <div class="cascade-select-wrapper" id="pp-page-select-wrapper">
+                                        <div class="cascade-select disabled">
+                                            <div class="cascade-select__header">
+                                                <input type="text" class="cascade-select__search" placeholder="搜索..." data-i18n-placeholder="pagePackage.searchPlaceholder">
+                                                <div class="cascade-select__actions">
+                                                    <button class="cascade-select__btn add" title="新增">
+                                                        <span class="svg-icon" data-icon="add"></span>
+                                                    </button>
+                                                    <button class="cascade-select__btn edit" title="编辑" disabled>
+                                                        <span class="svg-icon" data-icon="edit"></span>
+                                                    </button>
+                                                    <button class="cascade-select__btn delete" title="删除" disabled>
+                                                        <span class="svg-icon" data-icon="delete"></span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="cascade-select__selected">
+                                                <span class="cascade-select__text placeholder" data-i18n="pagePackage.selectPage">请选择页面</span>
+                                            </div>
+                                            <div class="cascade-select__dropdown">
+                                                <div class="cascade-select__options"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 右半区：元素选择 -->
+                        <div class="pp-right-column">
+                            <!-- 元素选择卡片 -->
+                            <div class="pp-card pp-card--element" id="pp-element-card">
+                                <div class="pp-card-header">
+                                    <div class="pp-card-title">
+                                        <span class="svg-icon" data-icon="widgets"></span>
+                                        <span data-i18n="pagePackage.elementSelection">元素选择</span>
+                                    </div>
+                                    <div class="pp-card-badge" id="pp-element-badge" style="display: none;">
+                                        <span id="pp-element-count">0</span>
+                                    </div>
+                                </div>
+                                <div class="pp-card-body">
+                                    <div class="cascade-select-wrapper" id="pp-element-select-wrapper">
+                                        <div class="cascade-select disabled">
+                                            <div class="cascade-select__header">
+                                                <input type="text" class="cascade-select__search" placeholder="搜索..." data-i18n-placeholder="pagePackage.searchPlaceholder">
+                                                <div class="cascade-select__actions">
+                                                    <button class="cascade-select__btn identify" id="pp-inspector-btn" title="从设备识别">
+                                                        <span class="svg-icon" data-icon="scan"></span>
+                                                    </button>
+                                                    <button class="cascade-select__btn add" title="新增">
+                                                        <span class="svg-icon" data-icon="add"></span>
+                                                    </button>
+                                                    <button class="cascade-select__btn edit" title="编辑" disabled>
+                                                        <span class="svg-icon" data-icon="edit"></span>
+                                                    </button>
+                                                    <button class="cascade-select__btn delete" title="删除" disabled>
+                                                        <span class="svg-icon" data-icon="delete"></span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="cascade-select__selected">
+                                                <span class="cascade-select__text placeholder" data-i18n="pagePackage.selectElement">请选择元素</span>
+                                            </div>
+                                            <div class="cascade-select__dropdown">
+                                                <div class="cascade-select__options"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+
+
+                </div>

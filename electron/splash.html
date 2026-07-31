@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XKAutoTester</title>
+
+    <style>
+        @font-face {
+            font-family: 'HarmonyOS Sans';
+            src: url('assets/fonts/HarmonyOS_Sans_SC_Regular.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+        
+        :root {
+            --primary-color: #4CAF50;
+            --primary-light: #81C784;
+            --primary-dark: #388E3C;
+            --glass-bg: rgba(255, 255, 255, 0.08);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --glass-shadow: rgba(0, 0, 0, 0.1);
+            --text-primary: #FFFFFF;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --success-color: #4CAF50;
+            --warning-color: #FF9800;
+            --error-color: #F44336;
+            --blur-amount: 20px;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'HarmonyOS Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            -webkit-app-region: drag;
+            user-select: none;
+            background: transparent !important;
+        }
+        
+        body {
+            color: var(--text-primary);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        
+        .splash-container {
+            position: relative;
+            z-index: 10;
+            background: linear-gradient(135deg, #0F0F23 0%, #1A1A2E 25%, #16213E 50%, #0F0F23 100%);
+            border: none;
+            border-radius: 24px;
+            padding: 40px 40px 10px 40px;
+            width: 90%;
+            max-width: 520px;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            animation: containerFadeIn 0.6s ease-out;
+            -webkit-app-region: no-drag;
+            overflow: hidden;
+        }
+        
+        .splash-container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(76, 175, 80, 0.2) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(33, 150, 243, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(156, 39, 176, 0.1) 0%, transparent 40%);
+            animation: bgPulse 15s ease-in-out infinite;
+            pointer-events: none;
+        }
+        
+        body.light-mode .splash-container::before {
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(76, 175, 80, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(33, 150, 243, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(156, 39, 176, 0.08) 0%, transparent 40%);
+        }
+        
+        body.light-mode .logo-glow {
+            opacity: 0.2;
+        }
+        
+        body.light-mode .logo {
+            box-shadow:
+                0 8px 24px rgba(0, 0, 0, 0.1);
+        }
+        
+        @keyframes bgPulse {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(-2%, 2%) scale(1.02); }
+            66% { transform: translate(2%, -2%) scale(0.98); }
+        }
+        
+        .splash-container > * {
+            position: relative;
+            z-index: 1;
+        }
+        
+        @keyframes containerFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        
+        .logo-section {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        
+        .logo-wrapper {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        
+        .logo {
+            width: 88px;
+            height: 88px;
+            object-fit: cover;
+            border-radius: 20px;
+            box-shadow:
+                0 8px 24px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .logo:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow:
+                0 12px 32px rgba(0, 0, 0, 0.25);
+        }
+        
+        .logo-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 120px;
+            height: 120px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            filter: blur(30px);
+            opacity: 0.3;
+            z-index: -1;
+            animation: logoGlow 3s ease-in-out infinite;
+        }
+        
+        @keyframes logoGlow {
+            0%, 100% { opacity: 0.3; transform: translate(-50%, -50%) scale(1); }
+            50% { opacity: 0.5; transform: translate(-50%, -50%) scale(1.1); }
+        }
+        
+        .app-title {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            margin-bottom: 6px;
+            background: linear-gradient(135deg, #FFFFFF 0%, rgba(255, 255, 255, 0.8) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .app-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+        }
+        
+        .progress-section {
+            margin-bottom: 20px;
+        }
+        
+        .progress-bar-container {
+            position: relative;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+        
+        .progress-bar-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(255, 255, 255, 0.1) 50%, 
+                transparent 100%);
+            animation: shimmer 2s ease-in-out infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .progress-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+            width: 0%;
+            transition: width 0.4s ease;
+            position: relative;
+        }
+        
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(255, 255, 255, 0.3) 50%, 
+                transparent 100%);
+            animation: progressShine 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes progressShine {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .progress-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+        
+        .checks-section {
+            margin-bottom: 8px;
+        }
+        
+        .check-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.2s ease;
+        }
+        
+        .check-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .check-icon {
+            width: 22px;
+            height: 22px;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .check-icon svg {
+            width: 18px;
+            height: 18px;
+        }
+        
+        .check-icon.success svg {
+            color: var(--success-color);
+            filter: drop-shadow(0 0 6px rgba(76, 175, 80, 0.5));
+        }
+        
+        .check-icon.warning svg {
+            color: var(--warning-color);
+            filter: drop-shadow(0 0 6px rgba(255, 152, 0, 0.5));
+        }
+        
+        .check-icon.error svg {
+            color: var(--error-color);
+            filter: drop-shadow(0 0 6px rgba(244, 67, 54, 0.5));
+        }
+        
+        .check-text {
+            flex: 1;
+            font-size: 13px;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .check-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        
+        .check-status-wrapper {
+            position: static;
+            flex-shrink: 0;
+            max-width: 180px;
+        }
+        
+        .check-status {
+            font-size: 12px;
+            font-weight: 500;
+            padding: 4px 10px;
+            border-radius: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
+            max-width: 100%;
+            position: relative;
+        }
+        
+        .check-status.success {
+            color: var(--success-color);
+            background: rgba(76, 175, 80, 0.15);
+        }
+        
+        .check-status.warning {
+            color: var(--warning-color);
+            background: rgba(255, 152, 0, 0.15);
+        }
+        
+        .check-status.error {
+            color: var(--error-color);
+            background: rgba(244, 67, 54, 0.15);
+        }
+        
+        .install-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            background: rgba(33, 150, 243, 0.2);
+            color: #2196F3;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+        
+        .install-btn:hover {
+            background: rgba(33, 150, 243, 0.3);
+            transform: translateY(-1px);
+        }
+        
+        .install-btn:active {
+            transform: translateY(0);
+        }
+        
+        .install-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+        
+        .install-btn.installing {
+            background: rgba(255, 152, 0, 0.2);
+            color: #FF9800;
+            cursor: default;
+            pointer-events: none;
+        }
+        
+        .install-btn.installing:hover {
+            background: rgba(255, 152, 0, 0.2);
+            transform: none;
+        }
+        
+        .install-btn.checking {
+            background: rgba(33, 150, 243, 0.15);
+            color: #2196F3;
+            cursor: default;
+            pointer-events: none;
+        }
+        
+        .install-btn.checking:hover {
+            background: rgba(33, 150, 243, 0.15);
+            transform: none;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .install-btn .spinning-icon {
+            animation: spin 1s linear infinite;
+        }
+        
+        .info-icon-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        
+        .info-icon {
+            width: 16px;
+            height: 16px;
+            color: var(--warning-color);
+            cursor: help;
+            opacity: 0.8;
+            transition: opacity 0.2s ease;
+        }
+        
+        .info-icon:hover {
+            opacity: 1;
+        }
+        
+        .info-tooltip {
+            position: absolute;
+            right: 0;
+            top: 100%;
+            margin-top: 8px;
+            background: linear-gradient(135deg, rgba(26, 26, 46, 0.95) 0%, rgba(22, 33, 62, 0.95) 100%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            white-space: nowrap;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            z-index: 100;
+            pointer-events: none;
+        }
+        
+        .info-icon-wrapper:hover .info-tooltip {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .check-status-tooltip {
+            position: fixed;
+            background: linear-gradient(135deg, rgba(26, 26, 46, 0.95) 0%, rgba(22, 33, 62, 0.95) 100%);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: var(--text-primary);
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 12px;
+            z-index: 10000;
+            max-width: 300px;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            pointer-events: none;
+            word-wrap: break-word;
+            white-space: normal;
+            line-height: 1.5;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+        
+        .actions-section {
+            display: none;
+            margin-top: 20px;
+            gap: 10px;
+        }
+        
+        .action-btn {
+            flex: 1;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+        
+        .action-btn.primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            box-shadow: 0 4px 16px rgba(76, 175, 80, 0.3);
+        }
+        
+        .action-btn.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(76, 175, 80, 0.4);
+        }
+        
+        .action-btn.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        
+        .action-btn.secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+        
+        .action-btn:active {
+            transform: translateY(0);
+        }
+        
+        .version-info {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 11px;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+        }
+        
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="splash-container">
+        <div class="logo-section">
+            <div class="logo-wrapper">
+                <div class="logo-glow"></div>
+                <img src="assets/icon.png" alt="Logo" class="logo">
+            </div>
+            <h1 class="app-title">XKAutoTester</h1>
+            <p class="app-subtitle" data-i18n="splash.subtitle">自动化测试工具</p>
+        </div>
+        
+        <div class="progress-section">
+            <div class="progress-bar-container">
+                <div class="progress-bar-bg"></div>
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText" data-i18n="splash.preparing">准备中...</div>
+        </div>
+        
+        <div class="checks-section" id="checksContainer">
+        </div>
+        
+        <div class="actions-section" id="actionsContainer">
+            <button class="action-btn primary" id="enterButton" onclick="enterMainApp()" data-i18n="splash.enterApp">进入程序</button>
+            <button class="action-btn secondary" id="exitButton" onclick="exitApp()" data-i18n="splash.exitApp">退出程序</button>
+        </div>
+        
+        <div class="version-info" id="versionInfo"></div>
+    </div>
+    
+    <script>
+        const SVG_ICONS = {
+            success: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z" clip-rule="evenodd"/></svg>`,
+            warning: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.2 4.5-2.599 4.5H4.645c-2.4 0-3.753-2.5-2.599-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a1.125 1.125 0 1 0 0-2.25 1.125 1.125 0 0 0 0 2.25Z" clip-rule="evenodd"/></svg>`,
+            error: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-1.72 6.97a.75.75 0 1 0-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 1 0 1.06 1.06L12 13.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L13.06 12l1.72-1.72a.75.75 0 1 0-1.06-1.06L12 10.94l-1.72-1.72Z" clip-rule="evenodd"/></svg>`,
+            info: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm8.706-1.442c1.146-.573 2.437.463 2.126 1.706l-.709 2.836.042-.02a.75.75 0 0 1 .67 1.34l-.04.022c-1.147.573-2.438-.463-2.127-1.706l.71-2.836-.042.02a.75.75 0 1 1-.671-1.34l.041-.022ZM12 9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clip-rule="evenodd"/></svg>`,
+            download: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v11.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3a.75.75 0 0 1 .75-.75Zm-9 13.5a.75.75 0 0 1 .75.75v2.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V16.5a.75.75 0 0 1 1.5 0v2.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V16.5a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd"/></svg>`,
+            refresh: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M4.755 10.059a7.5 7.5 0 0 1 12.548-3.364l1.903 1.903h-3.183a.75.75 0 1 0 0 1.5h4.992a.75.75 0 0 0 .75-.75V4.356a.75.75 0 0 0-1.5 0v3.18l-1.9-1.9A9 9 0 0 0 3.306 9.67a.75.75 0 1 0 1.45.388Zm15.048 3.882a.75.75 0 0 0-.926.521 7.5 7.5 0 0 1-12.548 3.364l-1.902-1.903h3.183a.75.75 0 1 0 0-1.5H2.618a.75.75 0 0 0-.75.75v4.992a.75.75 0 0 0 1.5 0v-3.18l1.9 1.9a9 9 0 0 0 15.059-4.018.75.75 0 0 0-.524-.926Z" clip-rule="evenodd"/></svg>`
+        };
+        
+        let i18n;
+        
+        async function initI18n() {
+            try {
+                if (window.electronAPI && window.electronAPI.i18n) {
+                    i18n = window.electronAPI.i18n;
+                    updateTranslations();
+                }
+            } catch (error) {
+                console.error('初始化 i18n 失败:', error);
+            }
+        }
+        
+        function updateTranslations() {
+            if (!i18n) return;
+            const elements = document.querySelectorAll('[data-i18n]');
+            elements.forEach(element => {
+                const key = element.getAttribute('data-i18n');
+                if (key) {
+                    const translation = i18n.t(key);
+                    if (translation) {
+                        element.textContent = translation;
+                    }
+                }
+            });
+        }
+        
+        function t(key, defaultValue) {
+            if (i18n) {
+                return i18n.t(key) || defaultValue;
+            }
+            return defaultValue;
+        }
+
+        function getStatusLabel(status) {
+            return status === 'success'
+                ? t('splash.checks.statusPass', '通过')
+                : t('splash.checks.statusFail', '不通过');
+        }
+        
+        let checkResults = {
+            required: [],
+            warnings: []
+        };
+        
+        function updateProgress(percentage, text) {
+            document.getElementById('progressFill').style.width = `${percentage}%`;
+            document.getElementById('progressText').textContent = text;
+        }
+        
+        function addCheckItem(name, status, message, options = {}) {
+            const container = document.getElementById('checksContainer');
+            const checkItem = document.createElement('div');
+            checkItem.className = 'check-item';
+            checkItem.setAttribute('data-check-name', name);
+            
+            const iconSvg = SVG_ICONS[status] || SVG_ICONS.success;
+            
+            let actionsHtml = `
+                <div class="check-status-wrapper">
+                    <div class="check-status ${status}">${getStatusLabel(status)}</div>
+                </div>
+            `;
+            
+            if (options.canInstall && options.installerPath) {
+                actionsHtml = `
+                    <div class="check-actions">
+                        <div class="info-icon-wrapper">
+                            ${SVG_ICONS.info}
+                            <div class="info-tooltip">${t('splash.checks.driverTooltip', '此驱动用于蓝牙Mock功能')}</div>
+                        </div>
+                        <button class="install-btn" data-installer-path="${options.installerPath.replace(/\\/g, '\\\\')}" onclick="installDriver(this)">
+                            ${SVG_ICONS.download}
+                            <span>${t('splash.checks.install', '安装')}</span>
+                        </button>
+                    </div>
+                `;
+            }
+            
+            checkItem.innerHTML = `
+                <div class="check-icon ${status}">${iconSvg}</div>
+                <div class="check-text">${name}</div>
+                ${actionsHtml}
+            `;
+            
+            container.appendChild(checkItem);
+            
+            const wrapper = checkItem.querySelector('.check-status-wrapper');
+            if (wrapper) {
+                const statusEl = wrapper.querySelector('.check-status');
+                let tooltip = null;
+                
+                wrapper.addEventListener('mouseenter', () => {
+                    if (!tooltip) {
+                        tooltip = document.createElement('div');
+                        tooltip.className = 'check-status-tooltip';
+                        tooltip.textContent = message;
+                        document.body.appendChild(tooltip);
+                    }
+                    const rect = statusEl.getBoundingClientRect();
+                    tooltip.style.left = rect.left + 'px';
+                    tooltip.style.top = (rect.bottom + 8) + 'px';
+                    tooltip.style.maxWidth = Math.min(300, window.innerWidth - rect.left - 20) + 'px';
+                    tooltip.style.opacity = '1';
+                    tooltip.style.visibility = 'visible';
+                });
+                
+                wrapper.addEventListener('mouseleave', () => {
+                    if (tooltip) {
+                        tooltip.style.opacity = '0';
+                        tooltip.style.visibility = 'hidden';
+                    }
+                });
+            }
+        }
+        
+        let driverInstallPollTimer = null;
+
+        async function installDriver(btnElement) {
+            if (btnElement.classList.contains('installing') || btnElement.classList.contains('checking')) {
+                return;
+            }
+
+            const installerPath = btnElement.getAttribute('data-installer-path');
+            if (!installerPath) return;
+
+            try {
+                const result = await window.electronAPI.installDriver(installerPath);
+                if (result.success) {
+                    setInstallBtnInstalling(btnElement);
+                    startInstallerPolling(btnElement, installerPath);
+                }
+            } catch (error) {
+                console.error('启动安装程序失败:', error);
+            }
+        }
+
+        function setInstallBtnInstalling(btnElement) {
+            btnElement.className = 'install-btn installing';
+            btnElement.innerHTML = `${SVG_ICONS.refresh}<span>${t('splash.checks.installing', '安装中...')}</span>`;
+        }
+
+        function setInstallBtnChecking(btnElement) {
+            btnElement.className = 'install-btn checking';
+            btnElement.innerHTML = `<span class="spinning-icon">${SVG_ICONS.refresh}</span><span>${t('splash.checks.rechecking', '检查中...')}</span>`;
+        }
+
+        function setInstallBtnDefault(btnElement, installerPath) {
+            btnElement.className = 'install-btn';
+            btnElement.setAttribute('data-installer-path', installerPath);
+            btnElement.innerHTML = `${SVG_ICONS.download}<span>${t('splash.checks.install', '安装')}</span>`;
+        }
+
+        function startInstallerPolling(btnElement, installerPath) {
+            if (driverInstallPollTimer) {
+                clearInterval(driverInstallPollTimer);
+            }
+
+            driverInstallPollTimer = setInterval(async () => {
+                try {
+                    const result = await window.electronAPI.checkInstallerRunning();
+                    if (result.success && !result.isRunning) {
+                        clearInterval(driverInstallPollTimer);
+                        driverInstallPollTimer = null;
+                        await recheckDriver(btnElement, installerPath);
+                    }
+                } catch (error) {
+                    console.error('检查安装程序状态失败:', error);
+                }
+            }, 2000);
+        }
+
+        async function recheckDriver(btnElement, installerPath) {
+            setInstallBtnChecking(btnElement);
+
+            try {
+                const result = await window.electronAPI.recheckCP210xDriver();
+                if (result.success && result.result) {
+                    const checkResult = result.result;
+                    const checkItem = btnElement.closest('.check-item');
+                    if (checkItem) {
+                        updateCP210xCheckItem(checkItem, checkResult);
+                    }
+                } else {
+                    setInstallBtnDefault(btnElement, installerPath);
+                }
+            } catch (error) {
+                console.error('重新检查驱动失败:', error);
+                setInstallBtnDefault(btnElement, installerPath);
+            }
+        }
+
+        function updateCP210xCheckItem(checkItem, checkResult) {
+            const iconEl = checkItem.querySelector('.check-icon');
+            if (iconEl) {
+                iconEl.className = `check-icon ${checkResult.status}`;
+                iconEl.innerHTML = SVG_ICONS[checkResult.status] || SVG_ICONS.success;
+            }
+
+            const actionsContainer = checkItem.querySelector('.check-actions');
+            if (checkResult.status === 'success') {
+                if (actionsContainer) {
+                    actionsContainer.remove();
+                }
+                const statusWrapper = document.createElement('div');
+                statusWrapper.className = 'check-status-wrapper';
+                statusWrapper.innerHTML = `<div class="check-status ${checkResult.status}">${getStatusLabel(checkResult.status)}</div>`;
+                checkItem.appendChild(statusWrapper);
+                setupStatusTooltip(statusWrapper, checkResult.message);
+            } else if (checkResult.canInstall && checkResult.installerPath) {
+                if (actionsContainer) {
+                    const btnElement = actionsContainer.querySelector('.install-btn');
+                    if (btnElement) {
+                        setInstallBtnDefault(btnElement, checkResult.installerPath);
+                    }
+                }
+            }
+        }
+
+        function setupStatusTooltip(wrapper, message) {
+            const statusEl = wrapper.querySelector('.check-status');
+            let tooltip = null;
+
+            wrapper.addEventListener('mouseenter', () => {
+                if (!tooltip) {
+                    tooltip = document.createElement('div');
+                    tooltip.className = 'check-status-tooltip';
+                    tooltip.textContent = message;
+                    document.body.appendChild(tooltip);
+                }
+                const rect = statusEl.getBoundingClientRect();
+                tooltip.style.left = rect.left + 'px';
+                tooltip.style.top = (rect.bottom + 8) + 'px';
+                tooltip.style.maxWidth = Math.min(300, window.innerWidth - rect.left - 20) + 'px';
+                tooltip.style.opacity = '1';
+                tooltip.style.visibility = 'visible';
+            });
+
+            wrapper.addEventListener('mouseleave', () => {
+                if (tooltip) {
+                    tooltip.style.opacity = '0';
+                    tooltip.style.visibility = 'hidden';
+                }
+            });
+        }
+        
+        function enterMainApp() {
+            window.electronAPI.splashReady();
+        }
+        
+        function exitApp() {
+            window.close();
+        }
+        
+        function showActionButtons(canEnter) {
+            const actionsContainer = document.getElementById('actionsContainer');
+            const enterButton = document.getElementById('enterButton');
+            const exitButton = document.getElementById('exitButton');
+            
+            if (canEnter) {
+                enterButton.style.display = 'inline-block';
+                exitButton.style.display = 'inline-block';
+            } else {
+                enterButton.style.display = 'none';
+                exitButton.style.display = 'inline-block';
+            }
+            
+            actionsContainer.style.display = 'flex';
+        }
+        
+        function applyDarkMode(isDark) {
+            const container = document.querySelector('.splash-container');
+            const logoGlow = document.querySelector('.logo-glow');
+            const appTitle = document.querySelector('.app-title');
+            const tooltipStyle = document.querySelector('.tooltip-light-style');
+            
+            if (!isDark) {
+                document.body.classList.add('light-mode');
+                document.body.style.background = 'transparent';
+                document.documentElement.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.85)');
+                document.documentElement.style.setProperty('--glass-border', 'rgba(200, 200, 200, 0.3)');
+                document.documentElement.style.setProperty('--glass-shadow', 'rgba(0, 0, 0, 0.15)');
+                document.documentElement.style.setProperty('--text-primary', '#1A1A2E');
+                document.documentElement.style.setProperty('--text-secondary', 'rgba(26, 26, 46, 0.7)');
+                document.documentElement.style.setProperty('--text-muted', 'rgba(26, 26, 46, 0.5)');
+                
+                if (container) {
+                    const themeColor = getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() || '#4CAF50';
+                    container.style.background = `linear-gradient(135deg, 
+                        rgba(255, 255, 255, 1) 0%, 
+                        rgba(245, 250, 245, 1) 25%, 
+                        rgba(240, 248, 240, 1) 50%, 
+                        rgba(250, 255, 250, 1) 100%)`;
+                    container.style.borderColor = 'rgba(76, 175, 80, 0.2)';
+                    container.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(76, 175, 80, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9)';
+                }
+                
+                if (appTitle) {
+                    appTitle.style.background = 'linear-gradient(135deg, #1A1A2E 0%, #2A2A3E 100%)';
+                    appTitle.style.webkitBackgroundClip = 'text';
+                    appTitle.style.webkitTextFillColor = 'transparent';
+                    appTitle.style.backgroundClip = 'text';
+                }
+                
+                document.querySelectorAll('.check-item').forEach(item => {
+                    item.style.background = 'rgba(76, 175, 80, 0.05)';
+                    item.style.borderColor = 'rgba(76, 175, 80, 0.1)';
+                });
+                
+                document.querySelectorAll('.check-text').forEach(el => {
+                    el.style.color = '#1A1A2E';
+                });
+                
+                document.querySelectorAll('.progress-bar-container').forEach(el => {
+                    el.style.background = 'rgba(76, 175, 80, 0.1)';
+                });
+                
+                document.querySelectorAll('.progress-text').forEach(el => {
+                    el.style.color = 'rgba(26, 26, 46, 0.7)';
+                });
+                
+                document.querySelectorAll('.app-subtitle').forEach(el => {
+                    el.style.color = 'rgba(26, 26, 46, 0.7)';
+                });
+                
+                document.querySelectorAll('.version-info').forEach(el => {
+                    el.style.color = 'rgba(26, 26, 46, 0.5)';
+                });
+                
+                document.querySelectorAll('.action-btn.secondary').forEach(el => {
+                    el.style.background = 'rgba(76, 175, 80, 0.1)';
+                    el.style.color = '#1A1A2E';
+                    el.style.borderColor = 'rgba(76, 175, 80, 0.2)';
+                });
+                
+                if (!tooltipStyle) {
+                    const style = document.createElement('style');
+                    style.className = 'tooltip-light-style';
+                    style.textContent = `
+                        .check-status-tooltip {
+                            background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(245, 250, 245, 1) 100%) !important;
+                            border-color: rgba(76, 175, 80, 0.2) !important;
+                            color: #1A1A2E !important;
+                            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(76, 175, 80, 0.1) !important;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+            } else {
+                document.body.classList.remove('light-mode');
+                document.body.style.background = 'transparent';
+                
+                if (container) {
+                    container.style.background = 'linear-gradient(135deg, #0F0F23 0%, #1A1A2E 25%, #16213E 50%, #0F0F23 100%)';
+                    container.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                    container.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1)';
+                }
+                
+                if (appTitle) {
+                    appTitle.style.background = 'linear-gradient(135deg, #FFFFFF 0%, rgba(255, 255, 255, 0.8) 100%)';
+                    appTitle.style.webkitBackgroundClip = 'text';
+                    appTitle.style.webkitTextFillColor = 'transparent';
+                    appTitle.style.backgroundClip = 'text';
+                }
+                
+                if (tooltipStyle) {
+                    tooltipStyle.remove();
+                }
+            }
+        }
+        
+        async function loadConfigAndApplyTheme() {
+            try {
+                const config = await window.electronAPI.getConfig();
+                const isDark = config?.APP_SETTINGS?.dark_mode === true;
+                applyDarkMode(isDark);
+                const themeColor = config?.APP_SETTINGS?.theme_color || '#4CAF50';
+                applyThemeColor(themeColor);
+            } catch (error) {
+                console.error('加载配置失败:', error);
+                applyDarkMode(false);
+                applyThemeColor('#4CAF50');
+            }
+        }
+        
+        function applyThemeColor(color) {
+            document.documentElement.style.setProperty('--primary-color', color);
+            
+            const lightColor = lightenColor(color, 0.2);
+            const darkColor = darkenColor(color, 0.15);
+            document.documentElement.style.setProperty('--primary-light', lightColor);
+            document.documentElement.style.setProperty('--primary-dark', darkColor);
+            
+            const logoGlow = document.querySelector('.logo-glow');
+            if (logoGlow) {
+                logoGlow.style.background = color;
+            }
+        }
+        
+        function lightenColor(hex, percent) {
+            const num = parseInt(hex.replace('#', ''), 16);
+            const amt = Math.round(2.55 * percent * 100);
+            const R = Math.min(255, (num >> 16) + amt);
+            const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
+            const B = Math.min(255, (num & 0x0000FF) + amt);
+            return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
+        }
+        
+        function darkenColor(hex, percent) {
+            const num = parseInt(hex.replace('#', ''), 16);
+            const amt = Math.round(2.55 * percent * 100);
+            const R = Math.max(0, (num >> 16) - amt);
+            const G = Math.max(0, ((num >> 8) & 0x00FF) - amt);
+            const B = Math.max(0, (num & 0x0000FF) - amt);
+            return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
+        }
+        
+        function hexToRgb(hex) {
+            const num = parseInt(hex.replace('#', ''), 16);
+            return `${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}`;
+        }
+        
+        function setupTransparentAreaClickThrough() {
+            let isIgnoringMouseEvents = false;
+            
+            const checkAndUpdateMouseEvents = (e) => {
+                const container = document.querySelector('.splash-container');
+                if (!container) return;
+                
+                const rect = container.getBoundingClientRect();
+                const mouseX = e.clientX;
+                const mouseY = e.clientY;
+                
+                const isInTransparentArea = 
+                    mouseX < rect.left || 
+                    mouseX > rect.right || 
+                    mouseY < rect.top || 
+                    mouseY > rect.bottom;
+                
+                if (isInTransparentArea && !isIgnoringMouseEvents) {
+                    isIgnoringMouseEvents = true;
+                    window.electronAPI.setIgnoreMouseEvents(true, { forward: true }, 'splash');
+                } else if (!isInTransparentArea && isIgnoringMouseEvents) {
+                    isIgnoringMouseEvents = false;
+                    window.electronAPI.setIgnoreMouseEvents(false, null, 'splash');
+                }
+            };
+            
+            document.addEventListener('mousemove', checkAndUpdateMouseEvents);
+            
+            document.addEventListener('mouseleave', () => {
+                if (!isIgnoringMouseEvents) {
+                    isIgnoringMouseEvents = true;
+                    window.electronAPI.setIgnoreMouseEvents(true, { forward: true }, 'splash');
+                }
+            });
+            
+            document.addEventListener('mouseenter', (e) => {
+                if (isIgnoringMouseEvents) {
+                    const container = document.querySelector('.splash-container');
+                    if (container) {
+                        const rect = container.getBoundingClientRect();
+                        const isInTransparentArea = 
+                            e.clientX < rect.left || 
+                            e.clientX > rect.right || 
+                            e.clientY < rect.top || 
+                            e.clientY > rect.bottom;
+                        
+                        if (!isInTransparentArea) {
+                            isIgnoringMouseEvents = false;
+                            window.electronAPI.setIgnoreMouseEvents(false, null, 'splash');
+                        }
+                    }
+                }
+            });
+        }
+        
+        window.electronAPI.on('check-progress', (data) => {
+            updateProgress(data.percentage, data.message);
+        });
+        
+        window.electronAPI.on('check-result', (data) => {
+            addCheckItem(data.name, data.status, data.message, {
+                canInstall: data.canInstall,
+                installerPath: data.installerPath
+            });
+        });
+        
+        window.electronAPI.on('check-complete', (data) => {
+            updateProgress(100, window.electronAPI.i18n.t('splash.checkComplete'));
+            const canEnter = data.requiredErrors.length === 0;
+            showActionButtons(canEnter);
+        });
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            initI18n();
+            loadConfigAndApplyTheme();
+            setupTransparentAreaClickThrough();
+            setTimeout(() => {
+                window.electronAPI.startChecks();
+            }, 500);
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (driverInstallPollTimer) {
+                clearInterval(driverInstallPollTimer);
+                driverInstallPollTimer = null;
+            }
+        });
+    </script>
+</body>
+</html>

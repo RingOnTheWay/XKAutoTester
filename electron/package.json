@@ -1,14 +1,25 @@
 {
   "name": "xkautotester-electron",
-  "version": "1.0.0",
-  "description": "XKAutoTester - 基于Electron的自动化测试工具",
-  "main": "main.js",
+  "version": "0.1.4-dev.2",
+  "description": "XKAutoTester - 基于Electron+Python的自动化测试平台",
+  "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev",
+    "dev": "electron-vite dev",
+    "dev:legacy": "electron . --dev",
+    "test": "node --require ../tests/electron/_setup.js --test --test-force-exit ../tests/electron/test_*.js",
     "build": "electron-builder",
     "build-win": "electron-builder --win",
-    "pack": "electron-builder --dir"
+    "build-lite-win": "electron-builder --win --config electron-builder.lite.yml",
+    "build:vite": "electron-vite build",
+    "pack": "electron-builder --dir",
+    "version:bump": "python ../scripts/sync_version.py",
+    "version:verify": "python ../scripts/sync_version.py --verify",
+    "version:sync": "python ../scripts/sync_version.py --sync",
+    "postinstall": "node patch-nsis.js",
+    "prebuild": "node patch-nsis.js",
+    "prebuild-win": "node patch-nsis.js",
+    "prebuild-lite-win": "node patch-nsis.js"
   },
   "keywords": [
     "electron",
@@ -16,34 +27,104 @@
     "testing",
     "material-design"
   ],
-  "author": "XKMedical",
+  "author": "RiNG",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^38.4.0",
-    "electron-builder": "^24.0.0"
+    "electron": "^38.8.6",
+    "electron-builder": "^24.0.0",
+    "electron-vite": "^2.3.0",
+    "jsdom": "^25.0.0",
+    "vite": "^5.4.0",
+    "vite-plugin-html-include": "^1.0.0"
   },
   "dependencies": {
-    "axios": "^1.6.0"
+    "adm-zip": "^0.5.16",
+    "allure": "^3.9.0",
+    "axios": "^1.6.0",
+    "i18next": "^25.8.0",
+    "i18next-browser-languagedetector": "^8.2.0",
+    "lucide": "^1.8.0"
   },
   "build": {
-    "appId": "com.xkmedical.xkautotester",
+    "appId": "com.ring.xkautotester",
     "productName": "XKAutoTester",
+    "artifactName": "${productName} Setup v${version}.${ext}",
     "directories": {
       "output": "dist"
     },
     "files": [
-      "main.js",
+      "src/**/*",
+      "splash.html",
       "renderer/**/*",
       "assets/**/*",
+      "locales/**/*",
+      "templates/**/*",
       "node_modules/**/*"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "src/preload/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../src",
+        "to": "src",
+        "filter": [
+          "**/*.py",
+          "**/*.json"
+        ]
+      },
+      {
+        "from": "../config/pytest.ini",
+        "to": "config/pytest.ini"
+      },
+      {
+        "from": "../.venv",
+        "to": ".venv",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "../env",
+        "to": "env",
+        "filter": [
+          "**/*",
+          "!jdk/**/*",
+          "!allure/**/*"
+        ]
+      },
+      {
+        "from": "../pyproject.toml",
+        "to": "pyproject.toml"
+      },
+      {
+        "from": "../uv.lock",
+        "to": "uv.lock"
+      },
+      {
+        "from": "../version.json",
+        "to": "version.json"
+      }
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.png"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "include": "build/installer.nsh",
+      "multiLanguageInstaller": true,
+      "displayLanguageSelector": true,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
+      "installerSidebar": "assets/installerSidebar.bmp",
+      "uninstallerSidebar": "assets/installerSidebar.bmp"
     }
   }
 }

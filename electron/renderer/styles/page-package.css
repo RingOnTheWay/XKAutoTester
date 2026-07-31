@@ -1,0 +1,500 @@
+/* ========================================
+   页面封装页面样式
+   ======================================== */
+
+/* 页面容器 - 占满可视区域，禁止页面滚动 */
+.pp-container {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* 内容区域 */
+.pp-content {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.pp-content.active {
+    display: flex;
+}
+
+/* 左右分区布局 - 50:50 比例 */
+.pp-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+}
+
+/* 左半区：应用选择 + 页面选择 */
+.pp-left-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+}
+
+/* 右半区：元素选择 */
+.pp-right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+}
+
+/* 卡片在列内等高填充 */
+.pp-left-column .pp-card,
+.pp-right-column .pp-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.pp-left-column .pp-card-body,
+.pp-right-column .pp-card-body {
+    flex: 1;
+    min-height: 0;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+/* 卡片基础样式 */
+.pp-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    backdrop-filter: blur(var(--blur-amount));
+    -webkit-backdrop-filter: blur(var(--blur-amount));
+    overflow: visible;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-1);
+    position: relative;
+}
+
+.pp-card:hover {
+    box-shadow: var(--shadow-2);
+}
+
+.pp-card.dropdown-open {
+    z-index: 100;
+}
+
+/* 卡片展开/收起动画（保留兼容，卡片默认始终展开） */
+.pp-card.collapsed {
+    display: none;
+}
+
+.pp-card.expanded {
+    opacity: 1;
+}
+
+/* 卡片选中状态 */
+.pp-card.selected {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary), var(--shadow-2);
+}
+
+.pp-card.selected .pp-card-header {
+    background: rgba(var(--primary-rgb), 0.08);
+}
+
+/* 卡片头部 */
+.pp-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--glass-border);
+    transition: background-color 0.3s ease;
+    border-radius: 16px 16px 0 0;
+}
+
+.pp-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pp-card-title .svg-icon {
+    font-size: 16px;
+    color: var(--primary);
+}
+
+/* 卡片徽章 - 高度不超过标题，避免显示时撑高 header 导致内容下移 */
+.pp-card-badge {
+    background: rgba(var(--primary-rgb), 0.15);
+    color: var(--primary);
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.4;
+    min-width: 16px;
+    height: 16px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* 卡片主体 */
+.pp-card-body {
+    padding: 10px;
+}
+
+/* 级联选择下拉框 */
+.cascade-select-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.cascade-select {
+    position: relative;
+    background: rgba(var(--surface-rgb), 0.6);
+    border: 1px solid var(--outline);
+    border-radius: 12px;
+    transition: all 0.3s ease;
+}
+
+.cascade-select:hover {
+    border-color: var(--primary);
+}
+
+.cascade-select.open {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
+}
+
+.cascade-select__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--outline);
+}
+
+.cascade-select__search {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    min-width: 0;
+    line-height: 1.4;
+}
+
+.cascade-select__search::placeholder {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.cascade-select__actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.cascade-select__btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    color: var(--text-secondary);
+}
+
+.cascade-select__btn .svg-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.cascade-select__btn .svg-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.cascade-select__btn:hover:not(:disabled) {
+    background: rgba(var(--primary-rgb), 0.1);
+    color: var(--primary);
+}
+
+.cascade-select__btn.add:hover:not(:disabled) { 
+    background: rgba(76, 175, 80, 0.15); 
+    color: #4CAF50;
+}
+
+.cascade-select__btn.edit:hover:not(:disabled) { 
+    background: rgba(33, 150, 243, 0.15); 
+    color: #2196F3;
+}
+
+.cascade-select__btn.delete:hover:not(:disabled) { 
+    background: rgba(244, 67, 54, 0.15); 
+    color: #F44336;
+}
+
+.cascade-select__btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.cascade-select__btn.identify {
+    background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #2196F3));
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.35);
+}
+
+.cascade-select__btn.identify:hover:not(:disabled) {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 85%, #000), color-mix(in srgb, var(--primary) 60%, #2196F3));
+    box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.5);
+    transform: translateY(-1px);
+    color: #fff;
+}
+
+.cascade-select__btn.identify:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(var(--primary-rgb), 0.3);
+}
+
+.cascade-select__selected {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 34px;
+    transition: background-color 0.2s ease;
+}
+
+.cascade-select__selected:hover {
+    background: rgba(var(--primary-rgb), 0.04);
+}
+
+.cascade-select__text {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.cascade-select__text.placeholder {
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+.cascade-select__dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border: 1px solid var(--outline);
+    border-radius: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+    box-shadow: var(--shadow-3);
+    animation: dropdownFadeIn 0.2s ease;
+}
+
+/* 覆盖 device-cascade-select.css 的 position:fixed（page-package 用 absolute 锚定到 cascade-select） */
+.pp-card .cascade-select__dropdown {
+    position: absolute;
+    transform: none;
+}
+
+@keyframes dropdownFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.cascade-select.open .cascade-select__dropdown {
+    display: block;
+}
+
+.cascade-select__options {
+    padding: 6px;
+}
+
+.cascade-select__option {
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.cascade-select__option:hover {
+    background: rgba(var(--primary-rgb), 0.08);
+}
+
+.cascade-select__option.selected {
+    background: rgba(var(--primary-rgb), 0.12);
+    color: var(--primary);
+    font-weight: 500;
+}
+
+.cascade-select__option.empty {
+    color: var(--text-secondary);
+    cursor: default;
+    text-align: center;
+    padding: 6px 10px;
+}
+
+.cascade-select__option.empty:hover {
+    background: transparent;
+}
+
+/* 禁用状态 */
+.cascade-select.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.cascade-select.disabled .cascade-select__selected {
+    cursor: not-allowed;
+}
+
+/* 黑暗模式样式 */
+body.dark-theme .pp-card {
+    background-color: var(--surface);
+    border-color: var(--outline);
+}
+
+body.dark-theme .pp-card.selected {
+    border-color: var(--primary);
+}
+
+body.dark-theme .pp-tabs {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .pp-tab {
+    color: var(--text-secondary);
+}
+
+body.dark-theme .pp-tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+body.dark-theme .pp-tab.active {
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    box-shadow: 0 2px 8px rgba(var(--primary-rgb, 33, 150, 243), 0.4);
+    color: white;
+}
+
+body.dark-theme .cascade-select {
+    background-color: var(--surface);
+    border-color: var(--outline);
+}
+
+body.dark-theme .cascade-select__header {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .cascade-select__selected {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+body.dark-theme .cascade-select__selected:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme .cascade-select__dropdown {
+    background: var(--surface);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-theme .cascade-select__option:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .cascade-select__option.selected {
+    background: rgba(var(--primary-rgb), 0.2);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .pp-container {
+        padding: 12px;
+    }
+    
+    .pp-card-header {
+        padding: 12px 16px;
+    }
+    
+    .pp-card-body {
+        padding: 12px;
+    }
+    
+    .pp-card-title {
+        font-size: 14px;
+    }
+}
+
+/* 页面封装弹窗样式 */
+#pp-app-modal-overlay .modal-container,
+#pp-page-modal-overlay .modal-container,
+#pp-element-modal-overlay.modal-overlay {
+    z-index: 2100;
+}
+
+#pp-element-modal-overlay .modal-container {
+    width: 480px;
+    max-width: 90vw;
+}
+
+#pp-app-modal-overlay .modal-footer,
+#pp-page-modal-overlay .modal-footer,
+#pp-element-modal-overlay .modal-footer {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding: 16px 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+body.dark-theme #pp-app-modal-overlay .modal-footer,
+body.dark-theme #pp-page-modal-overlay .modal-footer,
+body.dark-theme #pp-element-modal-overlay .modal-footer {
+    border-top-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+body:not(.dark-theme) #pp-app-modal-overlay .modal-footer,
+body:not(.dark-theme) #pp-page-modal-overlay .modal-footer,
+body:not(.dark-theme) #pp-element-modal-overlay .modal-footer {
+    border-top-color: rgba(0, 0, 0, 0.05);
+    background: rgba(0, 0, 0, 0.01);
+}
+
