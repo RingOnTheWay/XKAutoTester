@@ -10,6 +10,7 @@
 const ElectronApp = require('../../ElectronApp');
 const {
   defaultVersionServiceFactory,
+  defaultI18nServiceFactory,
   defaultUserDataServiceFactory,
   defaultScheduledPlanServiceFactory,
   defaultTestPlanServiceFactory,
@@ -36,7 +37,6 @@ const {
   defaultSchedulerInitializer,
   defaultRegisterHandlers,
   defaultErrorHandler,
-  i18nService,
 } = require('./effects');
 
 class ApplicationService {
@@ -48,6 +48,7 @@ class ApplicationService {
 
     // 20 服务 factory-or-default
     this._versionServiceFactory = opts.versionServiceFactory || defaultVersionServiceFactory;
+    this._i18nServiceFactory = opts.i18nServiceFactory || defaultI18nServiceFactory;
     this._userDataServiceFactory = opts.userDataServiceFactory || defaultUserDataServiceFactory;
     this._scheduledPlanServiceFactory = opts.scheduledPlanServiceFactory || defaultScheduledPlanServiceFactory;
     this._testPlanServiceFactory = opts.testPlanServiceFactory || defaultTestPlanServiceFactory;
@@ -98,8 +99,9 @@ class ApplicationService {
     const isPackaged = electronApp.isPackaged;
     const projectRoot = electronApp.projectRoot;
 
-    // INIT phase: version + userData (派生 userConfigPath/userDataPath)
+    // INIT phase: version + i18n + userData (派生 userConfigPath/userDataPath)
     const versionService = this._versionServiceFactory(projectRoot);
+    const i18nService = this._i18nServiceFactory();
     const userDataService = this._userDataServiceFactory(projectRoot, versionService);
 
     const userConfigPath = userDataService.getUserConfigPath();
@@ -109,7 +111,7 @@ class ApplicationService {
     electronApp.userDataPath = userDataPath;
 
     // ENV phase: await #1 i18n.init (i18n 必先于其他服务)
-    await this._i18nInitializer(projectRoot, isPackaged, userConfigPath);
+    await this._i18nInitializer(i18nService, projectRoot, isPackaged, userConfigPath);
 
     // 构造依赖 i18n 的服务
     const scheduledPlanService = this._scheduledPlanServiceFactory(userConfigPath);

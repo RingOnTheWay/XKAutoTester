@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { VersionService } = require('../VersionService');
+const { I18nService } = require('../I18nService');
 const UserDataService = require('../UserDataService');
 const { ScheduledPlanService } = require('../ScheduledPlanService');
 const { TestPlanService } = require('../TestPlanService');
@@ -26,6 +27,7 @@ const { SchedulerService } = require('../SchedulerService');
 const EnvironmentStartupService = require('../EnvironmentStartupService');
 
 const defaultVersionServiceFactory = (projectRoot) => new VersionService(projectRoot);
+const defaultI18nServiceFactory = () => new I18nService();
 const defaultUserDataServiceFactory = (projectRoot, versionService) => new UserDataService(projectRoot, versionService);
 const defaultScheduledPlanServiceFactory = (userConfigPath) => new ScheduledPlanService(userConfigPath);
 const defaultTestPlanServiceFactory = (userConfigPath, projectRoot) => new TestPlanService(userConfigPath, projectRoot);
@@ -60,6 +62,7 @@ const defaultEnvironmentStartupServiceFactory = (opts) => new EnvironmentStartup
 
 module.exports = {
   defaultVersionServiceFactory,
+  defaultI18nServiceFactory,
   defaultUserDataServiceFactory,
   defaultScheduledPlanServiceFactory,
   defaultTestPlanServiceFactory,

@@ -3,11 +3,10 @@
 // 对称 smartScheduler.js effects.js (globalTimerProvider + defaultWatcherFactory + defaultNotifierFactory)。
 // 5 类副作用经 factory-or-default 注入 ApplicationService。
 
-const { I18nService } = require('../I18nService');
-const i18nService = new I18nService();
 const { registerAllHandlers } = require('../../handlers');
 
-const defaultI18nInitializer = async (projectRoot, isPackaged, userConfigPath) => {
+// i18nService 实例由 applicationService.js 通过 i18nServiceFactory 创建并注入 (构造注入, 删模块级单例)
+const defaultI18nInitializer = async (i18nService, projectRoot, isPackaged, userConfigPath) => {
   await i18nService.init(projectRoot, isPackaged, userConfigPath);
 };
 
@@ -39,6 +38,4 @@ module.exports = {
   defaultSchedulerInitializer,
   defaultRegisterHandlers,
   defaultErrorHandler,
-  // 暴露 i18n 单例供 applicationService.js 用 (factory 返回 require 实例)
-  i18nService,
 };

@@ -184,6 +184,41 @@ class TestPlanService extends JsonFileCrudService {
     }
   }
 
+  /**
+   * 单源化: 记录一次测试运行 (追加 run + 更新 last_run)。
+   * Python 端不再直写 test_plans.json, 改为通过 stdout 标记行通知 Electron 由本方法统一写。
+   * 不创建新 plan (用户必须先在 UI 创建 plan, 消除 Python 创建无 id plan 的死代码路径)。
+   * @param {string} testPlanName
+   * @param {{name:string, test_paths:string[], markers:string[]|null}} _runData - Python 标记行数据 (保留参数, 当前 timestamp 由本端生成)
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async recordRun(testPlanName, _runData) {
+    this._ensureInitialized();
+    try {
+      const plans = await this.getData();
+      const plan = plans.find(p => p.name === testPlanName);
+      if (!plan) {
+        this._logger.error(`recordRun: 测试计划 '${testPlanName}' 不存在, 跳过运行记录`);
+        return { success: false, error: '未找到测试计划' };
+      }
+      if (!Array.isArray(plan.runs)) plan.runs = [];
+      // 本地时间, 格式对齐 Python %Y-%m-%d %H:%M:%S
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} `
+        + `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      plan.runs.push({ report_path: null, timestamp });
+      // 截断至 100 条 (对称 Python Caps.max_runs_per_plan)
+      if (plan.runs.length > 100) plan.runs = plan.runs.slice(-100);
+      plan.last_run = timestamp;
+      await this.saveData(plans);
+      return { success: true };
+    } catch (error) {
+      this._logger.error('记录测试计划运行失败:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   async saveTestPlan(planData) {
     this._ensureInitialized();
     try {

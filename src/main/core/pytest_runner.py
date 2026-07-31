@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import sys
@@ -30,9 +31,8 @@ from main.core.pytest.pytest_process import PytestProcess
 from main.core.pytest.pytest_process_port import PytestProcessPort
 from main.core.pytest.stats_parser import parse_test_stats
 from main.core.pytest.summary_formatter import format_test_summary
-from main.core.test_plan_repository import TestPlanRepository
 from main.utils.i18n import t
-from main.utils.paths import get_config_root, get_logs_path, get_project_root
+from main.utils.paths import get_logs_path, get_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +59,6 @@ class PytestRunner:
         self.allure_base_dir = get_logs_path("Allure")
         self.allure_results_dir = self.allure_base_dir / "allure-results"
         self.allure_report_base_dir = self.allure_base_dir / "allure-reports"
-
-        # 硬绑 (用户约束: 不注入 TestPlanRepository)
-        test_plans_file = get_config_root() / "test_plans.json"
-        self.plan_repo = TestPlanRepository(test_plans_file)
 
         self._process: PytestProcessPort = process or PytestProcess()
         self._pytest_ini = self.project_root / "config" / "pytest.ini"
@@ -146,8 +142,16 @@ class PytestRunner:
             else:
                 logger.warning(t("python.pytestRunner.testFailedNoReport", exit_code=exit_code))
 
-        # 记录测试计划运行信息 (报告路径由 Electron 侧生成后更新)
-        self.plan_repo.record_run(test_plan_name, test_paths, markers, None)
+        # 通过 stdout 标记行通知 Electron 侧记录运行 (单源化: Electron 是 test_plans.json 唯一写者,
+        # 避免 Python/Electron 双端无锁并发写导致丢失更新)
+        print(
+            "XKAT_TEST_PLAN_RUN:"
+            + json.dumps(
+                {"name": test_plan_name, "test_paths": test_paths, "markers": markers},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
 
         return {
             "exit_code": exit_code,

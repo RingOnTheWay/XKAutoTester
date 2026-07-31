@@ -52,6 +52,22 @@ function findAllureResultsDirMarker(output) {
 }
 
 /**
+ * 从输出提取 XKAT_TEST_PLAN_RUN 标记 (单源化: Python 不再直写 test_plans.json,
+ * 改为通过 stdout 标记行通知 Electron 由 TestPlanService 统一写)
+ * @param {string} output
+ * @returns {{name:string, test_paths:string[], markers:string[]|null}|null}
+ */
+function findTestPlanRunMarker(output) {
+  const m = output.match(/XKAT_TEST_PLAN_RUN:(.+)/);
+  if (!m) return null;
+  try {
+    return JSON.parse(m[1].trim());
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 构建 PYTHONPATH env (从 buildPythonPathEnv 提取, 纯函数, srcPath 作参数)
  * @param {{isSystem:boolean, sitePackagesPath?:string}} pythonCmd
  * @param {string} srcPath
@@ -319,6 +335,8 @@ class PythonTestService {
    */
   async _buildRunResult(code, buffers, testPlanName) {
     const testStats = this._parseTestStats(buffers.output + '\n' + buffers.errorOutput);
+    // 单源化: 先记录运行 (追加 run, report_path=null), 再走 Allure pipeline (生成报告后补写 report_path)
+    await this._recordTestPlanRun(buffers.output, testPlanName);
     const { allureReportPath, sideEffectFailures } =
       await this._runAllurePipeline(buffers.output, testPlanName);
     // error 字段只用简短消息, 不含整段 errorOutput:
@@ -339,6 +357,23 @@ class PythonTestService {
       allureReportPath,
       sideEffectFailures
     };
+  }
+
+  /**
+   * 单源化: 解析 Python 标记行并委托 TestPlanService.recordRun 写入 test_plans.json
+   * (Python 不再直写文件, 避免双端无锁并发写丢失更新)
+   * @param {string} output
+   * @param {string} testPlanName
+   */
+  async _recordTestPlanRun(output, testPlanName) {
+    if (!this.testPlanService || !testPlanName) return;
+    const runData = findTestPlanRunMarker(output);
+    if (!runData) return;
+    try {
+      await this.testPlanService.recordRun(testPlanName, runData);
+    } catch (e) {
+      this.logger.error(`Pipeline recordRun failed: ${e.message}`);
+    }
   }
 
   /**
@@ -404,5 +439,6 @@ class PythonTestService {
 module.exports = Object.assign(PythonTestService, {
   parseTestStats,
   findAllureResultsDirMarker,
+  findTestPlanRunMarker,
   buildPythonPathEnv
 });

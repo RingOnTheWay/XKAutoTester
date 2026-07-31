@@ -124,19 +124,21 @@ class TestRunTests:
         assert "python" in cmd[0].lower()
         assert "tests/x.py" in cmd
 
-    def test_records_run_via_plan_repo(self, runner: PytestRunner) -> None:
-        """run_tests 调 plan_repo.record_run (positional args)。"""
-        from unittest.mock import MagicMock
+    def test_emits_test_plan_run_marker(self, runner: PytestRunner, capsys: pytest.CaptureFixture[str]) -> None:
+        """run_tests 输出 XKAT_TEST_PLAN_RUN 标记行 (单源化: Electron 解析后由 TestPlanService 统一写 test_plans.json)。"""
+        import json
 
-        runner.plan_repo = MagicMock()
-        runner.run_tests(test_paths=["tests/a.py"], markers=["smoke"], test_plan_name="p1", generate_allure=False)
+        runner.run_tests(
+            test_paths=["tests/a.py"], markers=["smoke"], test_plan_name="p1", generate_allure=False
+        )
 
-        runner.plan_repo.record_run.assert_called_once()
-        args, _ = runner.plan_repo.record_run.call_args
-        assert args[0] == "p1"
-        assert args[1] == ["tests/a.py"]
-        assert args[2] == ["smoke"]
-        assert args[3] is None
+        out = capsys.readouterr().out
+        marker_lines = [line for line in out.splitlines() if line.startswith("XKAT_TEST_PLAN_RUN:")]
+        assert len(marker_lines) == 1
+        payload = json.loads(marker_lines[0].removeprefix("XKAT_TEST_PLAN_RUN:"))
+        assert payload["name"] == "p1"
+        assert payload["test_paths"] == ["tests/a.py"]
+        assert payload["markers"] == ["smoke"]
 
 
 class TestConvenienceMethods:
