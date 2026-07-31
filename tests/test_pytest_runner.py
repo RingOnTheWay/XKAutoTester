@@ -55,7 +55,7 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """隔离 user data env, 返回 tmp_path 作为 user_data_root。
 
     - 设 XKAUTOTESTER_USER_DATA=tmp_path
-    - 创建 config/ 目录 (TestPlanRepository 需要)
+    - 创建 config/ 目录 (config.json / pytest.ini 读取需要)
     """
     monkeypatch.setenv("XKAUTOTESTER_USER_DATA", str(tmp_path))
     (tmp_path / "config").mkdir(parents=True, exist_ok=True)

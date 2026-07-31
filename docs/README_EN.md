@@ -390,8 +390,7 @@ XKAutoTester/
 │   │   ├── inspector_service.py     # Appium Inspector service
 │   │   ├── logcat_monitor.py        # Logcat monitor
 │   │   ├── pytest_runner.py         # Pytest runner
-│   │   ├── stdio_protocol.py        # stdio JSON protocol
-│   │   └── test_plan_repository.py
+│   │   └── stdio_protocol.py        # stdio JSON protocol
 │   ├── device/
 │   │   └── bioland/
 │   │       ├── E127B.json           # Thermometer data config (externalized)

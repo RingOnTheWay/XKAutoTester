@@ -390,8 +390,7 @@ XKAutoTester/
 │   │   ├── inspector_service.py     # Appium Inspector 服务
 │   │   ├── logcat_monitor.py        # Logcat 监控
 │   │   ├── pytest_runner.py         # Pytest 运行器
-│   │   ├── stdio_protocol.py        # stdio JSON 协议
-│   │   └── test_plan_repository.py
+│   │   └── stdio_protocol.py        # stdio JSON 协议
 │   ├── device/
 │   │   └── bioland/
 │   │       ├── E127B.json           # 体温计数据配置（外置）
