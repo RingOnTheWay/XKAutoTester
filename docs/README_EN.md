@@ -433,16 +433,6 @@ XKAutoTester/
 └── uv.lock                          # Python dependency lock
 ```
 
-### Refactor History
-
-| Phase | Date | Theme |
-|------|------|------|
-| Round 1 | 2026-06 ~ 2026-07 | Python backend architecture / Renderer MVC boundary / Python Test Service refactor |
-| Round 2 | 2026-07-17 ~ 2026-07-22 | All 13 candidates refactored (25 RFCs): MVC tightening, TestCaseCodeGenerator extraction, single source of config, UserDataService decomposition, AllureService split, Inspector private field unification, CSS/HTML split, etc. |
-| Round 3 | 2026-07-24 ~ 2026-07-28 | Vite + electron-vite introduction; deep-module refactor of Appium/ADB/BLE/APK/Inspector services; Scheduler modularization (smartScheduler + strategies); TestCase/TestPlan/PythonTest/DataTransfer split |
-
-> See [refactor-rfcs/](../refactor-rfcs/) for detailed RFCs.
-
 ## Resources
 
 - [Pytest Documentation](https://docs.pytest.org/)

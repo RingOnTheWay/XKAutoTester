@@ -433,16 +433,6 @@ XKAutoTester/
 └── uv.lock                          # Python 依赖锁定
 ```
 
-### 关键重构历程
-
-| 阶段 | 时间 | 主题 |
-|------|------|------|
-| 第一轮 | 2026-06 ~ 2026-07 | Python 后端架构 / 渲染层 MVC 边界 / Python Test Service 重构 |
-| 第二轮 | 2026-07-17 ~ 2026-07-22 | 13 候选项全部重构（25 RFC）：MVC 收紧、TestCaseCodeGenerator 抽取、配置单源、UserDataService 分解、AllureService 拆分、Inspector 私有字段统一、CSS/HTML 拆分等 |
-| 第三轮 | 2026-07-24 ~ 2026-07-28 | Vite + electron-vite 引入；Appium/ADB/BLE/APK/Inspector 等服务 deep-module 重构；Scheduler 模块化（smartScheduler + strategies）；TestCase/TestPlan/PythonTest/DataTransfer 拆分 |
-
-> 详细 RFC 请见 [refactor-rfcs/](refactor-rfcs/) 目录。
-
 ## 资源
 
 - [Pytest 官方文档](https://docs.pytest.org/)
