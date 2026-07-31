@@ -5,72 +5,39 @@
 # --- Python ---
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+
+# Python 工具缓存
 .ruff_cache/
-
-# Python installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Python test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
 .pytest_cache/
+
+# uv
+.uv-cache/
 
 # --- Node.js / Electron ---
 node_modules/
 *.tgz
-*.tar.gz
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-lerna-debug.log*
+
+# Vite / electron-vite
+.vite/
+dist-electron/
 
 # Electron-builder
-electron/dist/
-electron/build/
+/electron/dist/
+/electron/build/
 
 # --- Environments ---
-.venv
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# 内置工具环境
-/env/
-
-# 本地环境变量
+.venv/
 .env
 .env.local
 .env.*.local
+
+# 内置工具环境（Python/Android SDK/scrcpy/驱动）
+/env/
 
 # --- IDE ---
 .vscode/
@@ -83,26 +50,24 @@ venv.bak/
 
 # --- OS ---
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
+ehthumbs.db
+desktop.ini
 
 # --- Logs ---
-logs/
+/logs/
 *.log
 
 # --- Allure ---
 allure-results/
 allure-report/
 
-# --- Database ---
-*.db
-*.sqlite3
+# --- Playwright ---
+playwright-report/
+test-results/
+blob-report/
 
-# --- Temporary files ---
+# --- 临时文件 ---
 *.tmp
 *.temp
 
@@ -117,13 +82,13 @@ allure-report/
 *.pem
 *.key
 
-# --- 用户数据 ---
-config/config.json
-config/ble_device.json
-config/page_package.json
-config/test_plans.json
-config/scheduled_plans.json
-config/test_cases/
+# --- 用户数据（运行时生成，安装更新时必须保留） ---
+/config/config.json
+/config/ble_device.json
+/config/page_package.json
+/config/test_plans.json
+/config/scheduled_plans.json
+/config/test_cases/
 
 # --- AI Agent 上下文 ---
 AGENTS.md

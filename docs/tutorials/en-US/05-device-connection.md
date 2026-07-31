@@ -1,192 +1,203 @@
-# 05 - Device Connection & Screen Mirroring
+# 05 - Device Connection & Mirroring
 
-> **Applicable Version**: v0.1.3+ | **Target Audience**: Experienced test engineers
+> **Applicable Version**: v0.1.4+ | **Target Audience**: Experienced test engineers
 
 ---
 
 ## Overview
 
-The **Android Connection** tab provides full lifecycle management for Android devices:
+The **Android Connection** tab (`renderer/tabs/android-connection/`, with 10 Mixins) provides full lifecycle management for Android devices:
 
-- Device discovery & connection (USB / Wireless ADB)
-- Device info display (manufacturer, model, Android version, WiFi, battery, storage, memory)
-- Scrcpy screen mirroring & control
-- File manager (browse, upload, download, delete, rename)
+- ADB device connection (USB / wireless)
+- Scrcpy real-time mirroring control
+- Device file management (upload / download / browse)
 - One-click APK installation
-- BLE mock device serial port management
-
-![Android Connection Main Interface](../images/05-device-main.png)
+- BLE device discovery + serial port enumeration
+- Serial port driver detection
 
 ---
 
 ## Workflow
 
 ```
-Connect device → View device info → (Optional) Start screen mirroring → (Optional) File management / APK install
+Connect Android device (USB/WiFi) → Start Scrcpy mirroring → File management / APK install / BLE Mock configuration
 ```
 
 ---
 
-## Step 1: Connect a Device
+## Step 1: Connect an Android Device
 
-### 1.1 Device Management Modal
+### 1.1 USB Connection
 
-Click **Device Management** to open the device management modal.
+1. Enable **Developer Options** and **USB Debugging** on the Android device
+2. Connect to the computer via USB cable
+3. Click **Refresh Devices** in the **Android Connection** tab
+4. `ADBService` scans connected devices via the `adb/` submodule:
+   - `AdbCommandExecutor.js` executes `adb devices`
+   - Returns a device list (serial + status)
 
-The modal auto-scans connected devices (USB + ADB wireless):
+### 1.2 Wireless Connection
 
-![Device Management Modal](../images/05-device-management.png)
+1. Ensure the computer and Android device are on the same WiFi network
+2. With USB connected, run `adb tcpip 5555`
+3. Unplug the USB cable
+4. In **Android Connection**, enter the device IP and click **Connect**
+5. `device_connection.py` handles the wireless connection
 
-### 1.2 Select a Device
+### 1.3 Device Cascade Selection
 
-- Left list shows all available devices
-- Click a device entry to view detailed info on the right
-- Click **Confirm Selection** to set the active device
-
-### 1.3 Add Device by IP
-
-If a device is not in the list (e.g. for wireless connection):
-
-1. Click **Add Device by IP** in the device list
-2. Enter an IP address or `IP:Port` (default port 5555)
-3. Click ✓ to confirm connection
-
-![Add Device by IP](../images/05-add-device-ip.png)
-
-### 1.4 Open Port 5555
-
-For USB-connected devices, select one and click **Open Port 5555**; the system executes `adb tcpip 5555`, enabling wireless ADB.
-
-> [!NOTE]
-> After opening the port, disconnect USB and reconnect wirelessly via IP.
+Use the `device-cascade-select.js` component for cascade selection:
+- Device serial → device details (model / Android version / resolution, etc.)
 
 ---
 
-## Step 2: View Device Information
+## Step 2: Scrcpy Mirroring
 
-After successfully selecting a device, the **Device Info Card** unlocks, showing real-time status:
+### 2.1 Start Mirroring
 
-| Info Item | Source Command |
-|-----------|---------------|
-| **Manufacturer** | `adb shell getprop ro.product.manufacturer` |
-| **Model** | `adb shell getprop ro.product.model` |
-| **Android Version** | `adb shell getprop ro.build.version.release` |
-| **WiFi** | `adb shell dumpsys netstats | grep ...` |
-| **Battery Level** | `adb shell dumpsys battery` |
-| **Storage Usage** | `adb shell df` |
-| **Memory Usage** | `adb shell dumpsys meminfo` |
+Click **Scrcpy Mirroring**:
 
----
+1. `ScrcpyService` reads `SCRCPY_PARAMS` from `config.json`:
+   ```json
+   {
+     "max_size": "1920",
+     "video_bit_rate": "8",
+     "max_fps": "60",
+     "video_codec": "h264",
+     "always_on_top": true
+   }
+   ```
+2. Invokes `env/scrcpy/scrcpy.exe` (or scrcpy in PATH) to start mirroring
+3. The mirroring window displays independently, supporting real-time mouse / keyboard control
 
-## Step 3: Screen Control (Scrcpy)
+### 2.2 Mirroring Parameters
 
-### 3.1 Start Mirroring
+Adjust in **Settings → Mirroring**:
 
-After selecting a device, click **Screen Control** to start the scrcpy mirroring window:
-
-- Real-time device screen mirroring
-- Mouse-click to directly interact with the device UI
-- Clipboard sync support
-
-### 3.2 Configure Control Parameters
-
-Click **Control Params** to open the parameter configuration modal:
-
-| Parameter | Description | Default | Range |
-|-----------|-------------|---------|-------|
-| **Max Resolution** | Maximum video output width | 1920 | 320~6000 |
-| **Video Bit Rate** | Video quality | 8 Mbps | 1~50 |
-| **Max FPS** | Refresh rate | 60 FPS | 1~600 |
-| **Video Codec** | Encoding format | h264 | h264 / h265 / av1 |
-| **Always on Top** | Keep mirroring window on top | On | On/Off |
-
-These parameters inherit defaults from global settings in `config/config.json` → `SCRCPY_PARAMS`.
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| max_size | 1920 | Max resolution |
+| video_bit_rate | 8 | Video bitrate (Mbps) |
+| max_fps | 60 | Max frame rate |
+| video_codec | h264 | Video codec (h264/h265/av1) |
+| always_on_top | true | Window on top |
 
 ---
 
-## Step 4: File Management
+## Step 3: Device File Management
 
-The right panel provides a file manager for the Android device, similar to a desktop file explorer.
+### 3.1 Browse Device Files
 
-### 4.1 Navigation
+Via `DataTransferService` (aggregating `adb/FileTransferService.js` + `adb/RemoteStatService.js`):
 
-| Action | Method |
-|--------|--------|
-| **Enter directory** | Click a directory row |
-| **Go up** | **Back** button |
-| **Refresh** | **Refresh** button |
-| **Path jump** | Click the `...` button in the path display area for a path hierarchy menu |
-| **Select all** | Click the header checkbox |
+- Browse device directories (`ls` command)
+- View file size / permissions / modification time (`RemoteStatService`)
+- Enter subdirectories / go back up
 
-### 4.2 File Operations
+### 3.2 Upload Files
 
-| Operation | Button | Description |
-|-----------|--------|-------------|
-| **Upload** | **Upload** | Select local files to upload to the current device directory |
-| **Download** | **Download** | Download device files to local (shows progress bar) |
-| **Delete** | **Delete** | Delete selected files/directories |
-| **Rename** | Right-click → Rename | Modify file or directory name |
-| **Install APK** | **Install APK** | Select a local APK file for installation |
+Click **Upload** and select a local file:
 
-> [!TIP]
-> Right-click a file row to bring up the context menu (Download / Rename / Delete).
+1. `FileTransferService.push()` invokes `adb push`
+2. `AdbProgressMonitor.js` monitors transfer progress
+3. Refreshes the directory on completion
 
-### 4.3 Download Progress
+### 3.3 Download Files
 
-Downloads show a real-time progress bar:
+Select a device file and click **Download**:
 
-- Progress percentage + current file / total files
-- 5-second countdown auto-close for the progress panel
-- Error details shown on download failure
+1. `FileTransferService.pull()` invokes `adb pull`
+2. Choose a local save path
+3. `AdbProgressMonitor.js` monitors progress
+
+### 3.4 Remote stat
+
+`RemoteStatService.js` retrieves remote file metadata via `adb shell stat`, used to:
+- Display file size / modification time
+- Distinguish files / directories
 
 ---
 
-## Step 5: APK Installation
+## Step 4: APK Installation
 
-In the file manager:
+### 4.1 Select APK to Install
 
-1. Click **Install APK**
-2. Select a `.apk` file in the file dialog
-3. The system installs the APK to the currently selected device via `adb install`
+Click **Install APK**:
 
-Installation progress (including success/failure status) is pushed to the UI in real-time via IPC events.
+1. Select a local APK file
+2. `adb/ApkInstaller.js` invokes `adb install -r <path>`
+3. `AdbProgressMonitor.js` shows installation progress
+4. Installation result pushed via Toast notification
 
----
+### 4.2 Drag-and-Drop Install
 
-## BLE Mock Device Port Management
+Supports dragging APK files directly into the device file management area to auto-trigger installation.
 
-In the device management modal, you can manage serial ports for BLE mock devices:
+### 4.3 Split APK Installation
 
-### Port Scanning
-
-Click **Port Management** to auto-scan available system serial ports (COM ports).
-
-### Select a Port
-
-Choose the port occupied by the BLE mock device from the scanned list and confirm to associate it with the current test configuration.
-
-Full BLE device configuration (name, baud rate, data format, etc.) is in `config/ble_device.json`.
+Supports `.apks` / `.xapk` split APK packages:
+1. `TarExtractor.js` extracts the package
+2. Filter splits by architecture
+3. `adb install-multiple` installs
 
 ---
 
-## Command Reference
+## Step 5: BLE Device Discovery (New)
 
-Device management is essentially ADB commands wrapped in a graphical UI:
+### 5.1 Serial Port Enumeration
 
-| GUI Operation | Underlying Command |
-|---------------|-------------------|
-| Scan devices | `adb devices` |
-| Open port 5555 | `adb tcpip 5555` |
-| IP connect | `adb connect <ip>:5555` |
-| File listing | `adb shell ls -al <path>` |
-| Upload file | `adb push <local> <remote>` |
-| Download file | `adb pull <remote> <local>` |
-| Install APK | `adb install <apk>` |
-| Start mirroring | `scrcpy --max-size=1920 ...` |
+Click **Scan Serial Ports**:
+
+1. `SerialPortEnumerator.js` enumerates COM ports via Windows registry / `mode` command
+2. Returns a list of available serial ports (e.g. `COM3`, `COM7`)
+
+### 5.2 BLE Device Discovery
+
+Click **Scan BLE Devices**:
+
+1. `BleDeviceDiscoveryService` scans connected BLE devices
+2. Verifies device identity (MB026A module) via serial communication
+3. Returns a device list (name + serial port + signal)
+
+### 5.3 Driver Detection
+
+`DriverChecker.js` checks whether the CP210x serial driver is installed:
+- Queries Windows Device Manager / registry
+- If not installed, prompts the user to run `env/CP210x_Windows_Drivers/CP210xVCPInstaller_x64.exe`
+
+### 5.4 Add a BLE Device
+
+1. Click **Add BLE Device**
+2. Fill in:
+   - Device name (e.g. `Thermometer_Mock`)
+   - Serial port (select from scan results)
+   - Baud rate (default 9600)
+   - Device type (e.g. `bioland_thermometer`)
+3. Save to `config/ble_device.json`
+
+### 5.5 BLE Device Management
+
+- **Edit** — Modify device parameters
+- **Delete** — Remove device
+- **Test Connection** — Send a test command via serial port
+
+> BLE devices are used by `start_ble_mock` / `stop_ble_mock` steps in test cases. See [02 - Test Case Management](02-test-case.md).
+
+---
+
+## ADB Command Execution
+
+**Android Connection** provides an ADB command execution entry (`deviceHandlers.executeAdbCommand`):
+
+- Input an ADB command (e.g. `shell pm list packages`)
+- Execute via `AdbCommandExecutor.js`
+- Output displayed in the console
+
+> Note: Paths with spaces or special characters are auto-escaped by `AdbPathQuoter.js` to prevent shell injection.
 
 ---
 
 ## Next Steps
 
-- [04 - Test Execution & Reports](04-test-execution.md)
+- [02 - Test Case Management](02-test-case.md) (BLE Mock configuration)
 - [06 - Scheduled Plans & Loop Execution](06-scheduled-plan.md)

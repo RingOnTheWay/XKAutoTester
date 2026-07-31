@@ -200,8 +200,6 @@ export class PagePackageView {
       textSpan.classList.add('placeholder');
     }
     wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
-    this.collapseCard('page');
-    this.collapseCard('element');
     this.els.appCard?.classList.remove('selected');
     this.els.pageCard?.classList.remove('selected');
     this.els.elementCard?.classList.remove('selected');
@@ -217,8 +215,6 @@ export class PagePackageView {
     }
     wrapper.querySelector('.cascade-select')?.classList.add('disabled');
     wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
-    this.collapseCard('page');
-    this.collapseCard('element');
     this.els.pageCard?.classList.remove('selected');
     this.els.elementCard?.classList.remove('selected');
   }
@@ -233,7 +229,6 @@ export class PagePackageView {
     }
     wrapper.querySelector('.cascade-select')?.classList.add('disabled');
     wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
-    this.collapseCard('element');
     this.els.elementCard?.classList.remove('selected');
   }
 
@@ -305,7 +300,7 @@ export class PagePackageView {
     const countSpan = document.getElementById(`pp-${type}-count`);
     if (badge && countSpan) {
       if (count > 0) {
-        badge.style.display = 'block';
+        badge.style.display = '';
         countSpan.textContent = count;
       } else {
         badge.style.display = 'none';

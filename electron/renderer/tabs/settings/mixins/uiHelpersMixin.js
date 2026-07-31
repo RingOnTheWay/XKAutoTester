@@ -44,6 +44,11 @@ export const uiHelpersMixin = {
       this.els.autoCheckUpdateToggle.checked = settings.autoCheckUpdate !== false;
     }
 
+    // 允许不安全 SSL 连接
+    if (this.els.allowInsecureSSLToggle) {
+      this.els.allowInsecureSSLToggle.checked = !!settings.allowInsecureSSL;
+    }
+
     // 防止睡眠
     if (this.els.preventSleepToggle) {
       this.els.preventSleepToggle.checked = !!settings.preventSleep;

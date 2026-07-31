@@ -51,6 +51,12 @@
   border-color: var(--primary);
 }
 
+/* 黑暗模式选中态（覆盖 datetime-picker.css 中 body.dark-theme .scheduled-plan-item 默认值） */
+body.dark-theme #test-execution .scheduled-plan-item.selected {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.15);
+  border-color: var(--primary);
+}
+
 /* 定时计划执行中状态 - 边框动画 */
 #test-execution .scheduled-plan-item.running {
   position: relative;

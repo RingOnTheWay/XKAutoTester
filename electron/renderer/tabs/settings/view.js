@@ -58,6 +58,8 @@ export class SettingsView {
       notificationSecret: document.getElementById('notification-secret'),
       notificationAccessTokenItem: document.getElementById('notification-access-token-item'),
       notificationSecretItem: document.getElementById('notification-secret-item'),
+      notificationAccessTokenVisibilityToggle: document.getElementById('notification-access-token-visibility-toggle'),
+      notificationSecretVisibilityToggle: document.getElementById('notification-secret-visibility-toggle'),
 
       // 导出/导入
       exportConfigBtn: document.getElementById('export-config-btn'),
@@ -70,6 +72,7 @@ export class SettingsView {
 
       // 更新/睡眠
       autoCheckUpdateToggle: document.getElementById('auto-check-update-toggle'),
+      allowInsecureSSLToggle: document.getElementById('allow-insecure-ssl-toggle'),
       preventSleepToggle: document.getElementById('prevent-sleep-toggle'),
       checkUpdateBtn: document.getElementById('check-update-btn'),
 

@@ -79,12 +79,41 @@ export const modelReportsMixin = {
 
     // 重置选中状态
     this._state.selectedReportRun = null;
+    this._state.reportMode = 'testPlan';
     this.emit('show-report-modal', testPlan);
 
     try {
       // wrapper 已处理 IPC 失败,错误由外层 catch 接
       const result = await this._api.getTestPlanRuns(testPlan.name);
       this.emit('report-runs-loaded', result.runs || []);
+    } catch (error) {
+      this.emit('report-runs-error', error.message);
+    }
+  },
+
+  /**
+   * 显示定时计划整合报告弹窗 (聚合所有关联测试计划的运行记录, 分组展示)
+   * @param {Object} scheduledPlan - 定时计划对象 (含 id, name, testPlans)
+   */
+  async showScheduledReportModal(scheduledPlan) {
+    if (!scheduledPlan) {
+      this.appendOutput('>>> ' + window.i18n.t('testExecution.selectTestPlanFirst'));
+      return;
+    }
+
+    // 重置选中状态
+    this._state.selectedReportRun = null;
+    this._state.reportMode = 'scheduledPlan';
+    this._state.currentScheduledPlanForReport = scheduledPlan;
+    this.emit('show-scheduled-report-modal', scheduledPlan);
+
+    try {
+      const result = await this._api.getScheduledPlanRuns(scheduledPlan.id);
+      if (!result.success) {
+        this.emit('report-runs-error', result.error || window.i18n.t('reportModal.loadFailed'));
+        return;
+      }
+      this.emit('scheduled-report-runs-loaded', result.groups || []);
     } catch (error) {
       this.emit('report-runs-error', error.message);
     }
@@ -97,15 +126,23 @@ export const modelReportsMixin = {
 
   /**
    * 删除指定运行记录及其报告
-   * @param {Object} run - 运行记录对象 (含 timestamp, 可能含 reportPath)
+   * 支持两种模式:
+   *   - testPlan 模式: 从 currentTestPlan.name 删除
+   *   - scheduledPlan 模式: 从 run.sourcePlanName 删除 (后端按源计划名定位)
+   * @param {Object} run - 运行记录对象 (含 timestamp, 可能含 reportPath/sourcePlanName)
    */
   async deleteReportRun(run) {
     if (!run) {
       this.emit('error', { source: 'deleteReportRun', error: new Error(window.i18n.t('reportModal.invalidReport')) });
       return;
     }
-    const testPlan = this._state.currentTestPlan;
-    if (!testPlan) {
+
+    const isScheduledMode = this._state.reportMode === 'scheduledPlan';
+    const sourcePlanName = isScheduledMode
+      ? (run.sourcePlanName || (this._state.currentScheduledPlanForReport?.name))
+      : (this._state.currentTestPlan?.name);
+
+    if (!sourcePlanName) {
       this.emit('error', { source: 'deleteReportRun', error: new Error(window.i18n.t('testExecution.selectTestPlanFirst')) });
       return;
     }
@@ -114,7 +151,7 @@ export const modelReportsMixin = {
       // wrapper 已处理 IPC 失败,错误由外层 catch 接
       // reportPath 可能为 null (报告已删除的记录), 传 timestamp 作为匹配依据
       const identifier = run.reportPath || run.timestamp;
-      const result = await this._api.deleteReportRun(testPlan.name, identifier);
+      const result = await this._api.deleteReportRun(sourcePlanName, identifier);
       if (!result.success) {
         this.emit('error', { source: 'deleteReportRun', error: new Error(result.error || window.i18n.t('reportModal.deleteFailed')) });
         return;
@@ -125,9 +162,22 @@ export const modelReportsMixin = {
         this._state.selectedReportRun = null;
       }
       this.emit('report-run-deleted', run);
-      // 重新加载 runs 列表 (序号会重排)
-      const runsResult = await this._api.getTestPlanRuns(testPlan.name);
-      this.emit('report-runs-loaded', runsResult.runs || []);
+      // 重新加载列表 (按当前模式)
+      if (isScheduledMode) {
+        const scheduledPlan = this._state.currentScheduledPlanForReport;
+        if (scheduledPlan) {
+          const runsResult = await this._api.getScheduledPlanRuns(scheduledPlan.id);
+          if (runsResult.success) {
+            this.emit('scheduled-report-runs-loaded', runsResult.groups || []);
+          }
+        }
+      } else {
+        const testPlan = this._state.currentTestPlan;
+        if (testPlan) {
+          const runsResult = await this._api.getTestPlanRuns(testPlan.name);
+          this.emit('report-runs-loaded', runsResult.runs || []);
+        }
+      }
     } catch (error) {
       this.emit('error', { source: 'deleteReportRun', error });
     }

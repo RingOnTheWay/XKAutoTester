@@ -455,13 +455,25 @@ class TestInitializer:
         return False
 
     def _abort(self) -> None:
-        """cleanup 后按 severity 抛 BaseException（skip→Skipped, fail→Failed）"""
+        """cleanup 后统一以 skip 退出。
+
+        原设计：fail 路径用 pytest.fail → setup_class 抛 Failed(BaseException 子类)，
+        pytest xunit setup 不捕获非 Exception，导致 allure-pytest 不写 result.json → 不生成报告。
+        统一改 skip：所有初始化失败（含 BLE/appium fail 路径）都通过 pytest.skip 退出，
+        setup_class 抛 Skipped → setup phase skipped → allure-pytest 仍生成 result.json → HTML 报告正常。
+        """
         self.cleanup()
         oc = self._outcome or _InitOutcome("unknown init failure", "fail")
-        if oc.severity == "skip":
-            self.reporter.skip(oc.reason)
-        else:
-            self.reporter.fail(oc.reason)
+        # 附加失败原因到 Allure（severity 区分 fail/skip 语义，便于排障）
+        self.reporter.attach(
+            t(
+                "python.testInitializer.initFailedSummary",
+                severity=oc.severity,
+                reason=oc.reason,
+            ),
+            name=t("python.testInitializer.initFailedAttachName"),
+        )
+        self.reporter.skip(oc.reason)
 
     def cleanup(self) -> None:
         """清理资源（幂等：多次调用安全；per-resource _safe：单资源失败不阻塞后续）"""

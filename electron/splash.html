@@ -621,6 +621,12 @@
             }
             return defaultValue;
         }
+
+        function getStatusLabel(status) {
+            return status === 'success'
+                ? t('splash.checks.statusPass', '通过')
+                : t('splash.checks.statusFail', '不通过');
+        }
         
         let checkResults = {
             required: [],
@@ -642,7 +648,7 @@
             
             let actionsHtml = `
                 <div class="check-status-wrapper">
-                    <div class="check-status ${status}">${message}</div>
+                    <div class="check-status ${status}">${getStatusLabel(status)}</div>
                 </div>
             `;
             
@@ -788,7 +794,7 @@
                 }
                 const statusWrapper = document.createElement('div');
                 statusWrapper.className = 'check-status-wrapper';
-                statusWrapper.innerHTML = `<div class="check-status ${checkResult.status}">${checkResult.message}</div>`;
+                statusWrapper.innerHTML = `<div class="check-status ${checkResult.status}">${getStatusLabel(checkResult.status)}</div>`;
                 checkItem.appendChild(statusWrapper);
                 setupStatusTooltip(statusWrapper, checkResult.message);
             } else if (checkResult.canInstall && checkResult.installerPath) {

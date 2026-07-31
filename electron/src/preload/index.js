@@ -69,7 +69,10 @@ initializeI18next();
 async function invokeWithCheck(channel, ...args) {
   const result = await ipcRenderer.invoke(channel, ...args);
   if (result && result.success === false) {
-    throw new Error(result.error || result.message || 'Unknown IPC error');
+    const err = new Error(result.error || result.message || 'Unknown IPC error');
+    if (result.errorCode) err.code = result.errorCode;
+    if (result.statusCode != null) err.statusCode = result.statusCode;
+    throw err;
   }
   return result;
 }
@@ -110,6 +113,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateScheduledPlan: (planData) => invokeWithCheck(IPC_CHANNELS.UPDATE_SCHEDULED_PLAN, planData),
   deleteScheduledPlan: (planId) => invokeWithCheck(IPC_CHANNELS.DELETE_SCHEDULED_PLAN, planId),
   checkTimeConflict: (data) => invokeWithCheck(IPC_CHANNELS.CHECK_TIME_CONFLICT, data),
+  getScheduledPlanRuns: (planId) => invokeWithCheck(IPC_CHANNELS.GET_SCHEDULED_PLAN_RUNS, planId),
   onScheduledTestStart: (callback) => {
     const listener = (event, data) => callback(data);
     ipcRenderer.on(IPC_CHANNELS.SCHEDULED_TEST_START, listener);
@@ -200,6 +204,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 更新检查
   checkForUpdate: () => invokeWithCheck(IPC_CHANNELS.CHECK_FOR_UPDATE),
+  checkForUpdateRaw: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATE),
   downloadUpdate: (downloadUrl, fileName) => invokeWithCheck(IPC_CHANNELS.DOWNLOAD_UPDATE, downloadUrl, fileName),
   installUpdate: (filePath) => invokeWithCheck(IPC_CHANNELS.INSTALL_UPDATE, filePath),
   onUpdateDownloadProgress: (callback) => {

@@ -27,6 +27,8 @@ const {
   extractPackageName,
   checkMissingPackages,
   buildPythonConfig,
+  IGNORED_MISSING_PACKAGES,
+  REQUIRED_PYTHON_VERSION,
 } = require(ENV_SERVICE_PATH);
 
 const i18nMock = {
@@ -563,6 +565,68 @@ test('checkPythonEnvironment system Python 版本不匹配时返回 error', asyn
   const result = await svc.checkPythonEnvironment('/fake/root');
   assert.strictEqual(result.status, 'error');
   assert.ok(result.message.includes('pythonVersionMismatch'));
+});
+
+test('checkPythonEnvironment Python >= 3.12.4 通过且 message 含 recommended 版本', async () => {
+  const pyprojectPath = path.join('/fake/root', 'pyproject.toml');
+  const { svc } = makeFakeApp({
+    pathHelper: {
+      getPythonConfig: () => ({
+        pythonPath: '/fake/python.exe',
+        sourceLabel: '(内置)',
+        isSystem: false,
+      }),
+    },
+    fileSystem: {
+      files: {
+        [pyprojectPath]: `dependencies = [\n  "pytest>=8.0",\n]`,
+      },
+    },
+    commandResponses: [
+      // Python 3.13.0 (高于最低要求)
+      { code: 0, stdout: 'Python 3.13.0', stderr: '' },
+      { code: 0, stdout: 'pytest==8.4.2', stderr: '' },
+    ],
+  });
+
+  const result = await svc.checkPythonEnvironment('/fake/root');
+  assert.strictEqual(result.status, 'success', '3.13.0 >= 3.12.4 通过');
+  assert.ok(result.message.includes('pythonVersion'), 'message 含 pythonVersion key');
+  assert.ok(result.message.includes('recommended'), 'message 含 recommended 插值');
+  assert.ok(result.message.includes(REQUIRED_PYTHON_VERSION), `message 含 ${REQUIRED_PYTHON_VERSION}`);
+});
+
+test('checkPythonEnvironment ddddocr 缺失时不报 warning (IGNORED_MISSING_PACKAGES 过滤)', async () => {
+  const pyprojectPath = path.join('/fake/root', 'pyproject.toml');
+  const { svc } = makeFakeApp({
+    pathHelper: {
+      getPythonConfig: () => ({
+        pythonPath: '/fake/python.exe',
+        sourceLabel: '(内置)',
+        isSystem: false,
+      }),
+    },
+    fileSystem: {
+      files: {
+        // ddddocr 在 dependencies 但未安装
+        [pyprojectPath]: `dependencies = [\n  "pytest>=8.0",\n  "ddddocr>=1.5.6",\n]`,
+      },
+    },
+    commandResponses: [
+      { code: 0, stdout: 'Python 3.12.4', stderr: '' },
+      // pip list 只装了 pytest，没装 ddddocr
+      { code: 0, stdout: 'pytest==8.4.2', stderr: '' },
+    ],
+  });
+
+  const result = await svc.checkPythonEnvironment('/fake/root');
+  assert.strictEqual(result.status, 'success', 'ddddocr 缺失被过滤，不触发 warning');
+  assert.ok(!result.message.includes('missingPackages'), 'message 不含 missingPackages');
+});
+
+test('IGNORED_MISSING_PACKAGES 常量包含 ddddocr', () => {
+  assert.ok(Array.isArray(IGNORED_MISSING_PACKAGES), 'IGNORED_MISSING_PACKAGES 是数组');
+  assert.ok(IGNORED_MISSING_PACKAGES.includes('ddddocr'), '包含 ddddocr');
 });
 
 

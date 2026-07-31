@@ -128,6 +128,62 @@ def sync_to_package_lock_json(project_root, full_version):
     return False
 
 
+def sync_to_uv_lock(project_root, version):
+    """同步版本号到 uv.lock (项目自身 package xkauto-tester)"""
+    import re
+    lock_file = project_root / "uv.lock"
+    if not lock_file.exists():
+        return False
+
+    with open(lock_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # 匹配 [[package]] 块中 name = "xkauto-tester" 紧随的 version = "..."
+    pattern = r'(name\s*=\s*"xkauto-tester"\s*\nversion\s*=\s*)"[^"]+"'
+    if not re.search(pattern, content):
+        return False  # 未找到 xkauto-tester package
+
+    updated_content = re.sub(
+        pattern,
+        rf'\g<1>"{version}"',
+        content,
+        count=1
+    )
+
+    if updated_content != content:
+        with open(lock_file, 'w', encoding='utf-8') as f:
+            f.write(updated_content)
+    return True  # 文件存在且包含目标 package，视为已处理
+
+
+def sync_to_readme_badges(project_root, full_version):
+    """同步版本号到 README.md / docs/README_EN.md 中的 shields.io Version badge"""
+    import re
+    # shields.io URL 中字面 '-' 编码为 '--'
+    url_version = full_version.replace('-', '--')
+    target_badge = f"Version-{url_version}-9cf"
+    # 匹配 Version-<version>-9cf，版本部分允许数字/字母/点及 '--' 分隔
+    pattern = re.compile(r'Version-[0-9A-Za-z.]+(?:--[0-9A-Za-z.]+)*-9cf')
+
+    readme_paths = [
+        project_root / "README.md",
+        project_root / "docs" / "README_EN.md",
+    ]
+    any_updated = False
+    for readme_path in readme_paths:
+        if not readme_path.exists():
+            continue
+        content = readme_path.read_text(encoding='utf-8')
+        if not pattern.search(content):
+            continue
+        updated = pattern.sub(target_badge, content)
+        if updated != content:
+            readme_path.write_text(updated, encoding='utf-8')
+            print(f"✅ 已同步到 {readme_path.relative_to(project_root)}")
+            any_updated = True
+    return any_updated
+
+
 def update_build_date(version_data):
     """更新构建日期"""
     version_data['buildDate'] = datetime.now().strftime('%Y-%m-%d')
@@ -191,20 +247,39 @@ def verify_versions(project_root):
     if lock_data:
         lock_version = lock_data.get('version')
         print(f"  electron/package-lock.json: {lock_version}")
-    
+
+    # 检查 uv.lock 中 xkauto-tester package 版本
+    uv_lock_version = None
+    uv_lock_file = project_root / "uv.lock"
+    if uv_lock_file.exists():
+        import re
+        uv_lock_content = uv_lock_file.read_text(encoding='utf-8')
+        uv_match = re.search(
+            r'name\s*=\s*"xkauto-tester"\s*\nversion\s*=\s*"([^"]+)"',
+            uv_lock_content
+        )
+        if uv_match:
+            uv_lock_version = uv_match.group(1)
+            print(f"  uv.lock (xkauto-tester): {uv_lock_version}")
+
     all_match = True
     if package_json_version != full_version:
         print("⚠️  electron/package.json 版本号不一致!")
         all_match = False
-    
+
     if pyproject_content and match:
         if pyproject_version != version_json_version:
             print("⚠️  pyproject.toml 版本号不一致!")
             all_match = False
-    
+
     if lock_data:
         if lock_version != full_version:
             print("⚠️  electron/package-lock.json 版本号不一致!")
+            all_match = False
+
+    if uv_lock_version is not None:
+        if uv_lock_version != version_json_version:
+            print("⚠️  uv.lock (xkauto-tester) 版本号不一致!")
             all_match = False
     
     if all_match:
@@ -272,7 +347,14 @@ def main():
             if sync_to_package_lock_json(project_root, full_version):
                 print(f"✅ 已同步到 electron/package-lock.json")
                 success_count += 1
-            
+
+            if sync_to_uv_lock(project_root, version):
+                print(f"✅ 已同步到 uv.lock")
+                success_count += 1
+
+            if sync_to_readme_badges(project_root, full_version):
+                success_count += 1
+
             if success_count > 0:
                 print(f"✅ 版本号同步完成，共更新 {success_count} 个文件")
                 sys.exit(0)
@@ -313,7 +395,12 @@ def main():
         
         if sync_to_package_lock_json(project_root, full_version):
             print(f"✅ 已同步到 electron/package-lock.json")
-        
+
+        if sync_to_uv_lock(project_root, version):
+            print(f"✅ 已同步到 uv.lock")
+
+        sync_to_readme_badges(project_root, full_version)
+
         sys.exit(0)
     
     parser.print_help()

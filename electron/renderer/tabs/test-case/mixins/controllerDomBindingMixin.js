@@ -64,16 +64,28 @@ export const controllerDomBindingMixin = {
   },
 
   /**
-   * 从 DOM 顺序同步步骤 order 到 model
+   * 从 DOM 顺序同步到 model：重排 steps 数组顺序 + 更新 step.order 字段
+   * 拖拽仅改 DOM 顺序，必须同步数组顺序，否则 moveStep 按数组索引判断会失效
    */
   syncStepOrdersFromDOM() {
     const orderMap = this.view.renumberStepCards();
     if (!orderMap.length) return;
     const steps = this.model.get('steps');
+    // 按 DOM 顺序重建数组，同时更新 order 字段
+    const reordered = [];
     orderMap.forEach(({ stepId, order }) => {
       const step = steps.find((s) => s.id === stepId);
-      if (step) step.order = order;
+      if (step) {
+        step.order = order;
+        reordered.push(step);
+      }
     });
+    // 防御：若 DOM 缺失某些 step（异常情况），追加原数组中剩余的 step
+    steps.forEach((s) => {
+      if (!reordered.includes(s)) reordered.push(s);
+    });
+    // 原地替换数组内容（保持引用，避免 emit 触发 renderSteps 重渲染导致拖拽后界面闪烁）
+    steps.splice(0, steps.length, ...reordered);
     this.model.markDirty();
   },
 

@@ -195,20 +195,31 @@ describe('PythonTestService.run', () => {
     }
   });
 
-  test('stderr 应累积到 error 字段', async () => {
+  test('stderr 转发到 TEST_ERROR + error 字段为简短消息 (非整段 stderr)', async () => {
     const spawn = createMockSpawn();
     const pathHelper = require('../../electron/src/main/utils/pathHelper');
     const orig = pathHelper.getPythonConfig;
     pathHelper.getPythonConfig = () => ({ pythonPath: '/fake/python', isEmbedded: false, isSystem: false });
+    // spy mainWindow.webContents.send 验证 stderr 转发
+    const sentMessages = [];
+    const spyMainWindow = { webContents: { send: (channel, data) => sentMessages.push({ channel, data }) } };
     try {
-      const svc = new PythonTestService(createMockDeps(spawn));
+      const svc = new PythonTestService(createMockDeps(spawn, { mainWindow: spyMainWindow }));
       const runPromise = svc.run({ testPaths: ['tests/'] });
       process.nextTick(() => {
         spawn._lastProc.stderr.emit('data', Buffer.from('error line\n', 'utf8'));
         spawn._lastProc.emit('close', 1);
       });
       const result = await runPromise;
-      assert.ok(result.error.includes('error line'));
+      // error 字段为简短消息, 不含整段 stderr (避免渲染层重复显示)
+      assert.strictEqual(result.success, false);
+      assert.strictEqual(result.exitCode, 1);
+      assert.ok(result.error.includes('Tests failed'), 'error 字段含简短失败消息');
+      assert.ok(!result.error.includes('error line'), 'error 字段不含整段 stderr');
+      // stderr 已通过 TEST_ERROR channel 实时转发
+      const testErrorMessages = sentMessages.filter(m => m.channel === 'test-error');
+      assert.ok(testErrorMessages.length > 0, 'stderr 转发到 test-error channel');
+      assert.ok(testErrorMessages.some(m => String(m.data).includes('error line')), '转发内容含 error line');
     } finally {
       pathHelper.getPythonConfig = orig;
     }

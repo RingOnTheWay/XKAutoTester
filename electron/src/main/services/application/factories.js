@@ -3,6 +3,8 @@
 // 全藏 new XxxService(...) 构造, 对称 test_initializer.py default factories (L177-198) +
 // smartScheduler.js defaultQueueFactory。纯构造, 0 副作用。
 
+const fs = require('fs');
+const path = require('path');
 const { VersionService } = require('../VersionService');
 const UserDataService = require('../UserDataService');
 const { ScheduledPlanService } = require('../ScheduledPlanService');
@@ -37,7 +39,20 @@ const defaultPagePackageServiceFactory = (userConfigPath) => new PagePackageServ
 const defaultBleDeviceDiscoveryServiceFactory = (projectRoot) => new BleDeviceDiscoveryService(projectRoot);
 const defaultTestCaseServiceFactory = (userConfigPath, projectRoot) => new TestCaseService(userConfigPath, projectRoot);
 const defaultApkParserServiceFactory = (projectRoot, i18nService) => new ApkParserService(projectRoot, i18nService);
-const defaultUpdateServiceFactory = (versionService, userDataService) => new UpdateService(versionService, userDataService);
+const defaultUpdateServiceFactory = (versionService, userDataService) => {
+  // 启动期读 config.json 拿 allowInsecureSSL 初始值 (容错: 读失败默认 false)
+  let allowInsecureSSL = false;
+  try {
+    const configPath = path.join(userDataService.getUserConfigPath(), 'config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      allowInsecureSSL = !!(config && config.APP_SETTINGS && config.APP_SETTINGS.allowInsecureSSL);
+    }
+  } catch (e) {
+    // 忽略: 保持默认 false
+  }
+  return new UpdateService(versionService, userDataService, { allowInsecureSSL });
+};
 const defaultInspectorServiceFactory = (projectRoot, i18nService, userDataPath) => new InspectorService(projectRoot, i18nService, userDataPath);
 const defaultDataTransferServiceFactory = (userDataService, i18nService, versionService) => new DataTransferService(userDataService, i18nService, versionService);
 const defaultSchedulerServiceFactory = () => new SchedulerService();

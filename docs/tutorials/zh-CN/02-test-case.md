@@ -1,18 +1,18 @@
 # 02 - 测试用例管理
 
-> **适用版本**: v0.1.3+ | **目标读者**: 有自动化测试经验的测试工程师
+> **适用版本**: v0.1.4+ | **目标读者**: 有自动化测试经验的测试工程师
 
 ---
 
 ## 概述
 
-「测试用例」Tab 提供可视化的 Android 测试用例编辑器，支持：
+「测试用例」Tab（`renderer/tabs/test-case/`，含 25 个 Mixin）提供可视化的 Android 测试用例编辑器，支持：
 
 - 基本信息填写（文件名、名称、描述）
 - 目标应用与平台选择
 - 测试步骤可视化配置（引用页面封装中的元素定位器）
 - Allure 报告标签配置（Epic / Feature / Story / Markers）
-- Python 测试代码自动生成（Jinja 模板引擎）
+- Python 测试代码自动生成（`TestCaseCodeGenerator` + Jinja 模板，从 `TestCaseService` 拆出）
 - 蓝牙 Mock 设备配置（BLE 串口模拟）
 
 ---
@@ -107,7 +107,7 @@
 | **wait_for_element** | **超时时间(秒)** — 最大等待时长 |
 | **get_text** | **变量名** — 提取的文本存入该变量，后续步骤可通过 `${变量名}` 引用 |
 | **swipe** | **滑动方向** — up/down/left/right；**偏移量** — 0.0~1.0 屏幕比例 |
-| **assert_text** | **预期值** — 期望匹配的文本 |
+| **assert_text** | **预期值** — 期望匹配的文本（分两种失败语义：元素未找到重试 / 值不匹配立即 fail） |
 | **sleep** | **等待秒数** |
 | **start_ble_mock** | **蓝牙设备名称** — 从已配置的 BLE 设备中选择 |
 | **start_app_permission** | **应用包名** |
@@ -175,7 +175,7 @@
 
 ### BLE 设备管理
 
-在「安卓连接 → 设备管理」或通过 `config/ble_device.json` 管理蓝牙设备参数（名称、串口端口、波特率等）。详见 [05 - 设备连接与投屏](05-device-connection.md)。
+在「安卓连接 → 设备管理」中可通过 `BleDeviceDiscoveryService` + `SerialPortEnumerator` 扫描可用串口和已连接的蓝牙设备，配置参数（名称、串口端口、波特率等）持久化到 `config/ble_device.json`。详见 [05 - 设备连接与投屏](05-device-connection.md)。
 
 ---
 
@@ -192,6 +192,18 @@ test_cases/
     ├── test_login_test()    # 生成的测试方法
     └── 步骤映射代码         # JSON 步骤 → Python 代码的 1:1 映射
 ```
+
+### 代码生成机制（重构后）
+
+代码生成由 `TestCaseCodeGenerator`（`services/TestCaseCodeGenerator.js`）负责，该模块从原 `TestCaseService` 拆出，进一步通过 `services/mixins/` 下 5 个 Mixin 拆分逻辑：
+
+| Mixin | 职责 |
+|------|------|
+| `generatorCodeBuildersMixin.js` | 代码片段构建 |
+| `generatorHelpersMixin.js` | 辅助工具 |
+| `generatorStepsMixin.js` | 步骤代码生成 |
+| `generatorTemplateConfigMixin.js` | 模板配置 |
+| `generatorTestMethodsMixin.js` | 测试方法生成 |
 
 ---
 

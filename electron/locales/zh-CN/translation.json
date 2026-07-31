@@ -48,6 +48,8 @@
     "configStoragePath": "配置存放位置",
     "confirmChangeConfigPath": "确认更改配置路径",
     "changeConfigPathMessage": "更改配置存放位置后需要重启应用才能生效，是否继续？",
+    "configPathForbiddenTitle": "操作被禁止",
+    "configPathForbiddenMessage": "不能选择程序所在目录作为配置存放位置，否则软件更新时可能导致配置丢失，请选择其他目录",
     "changeConfigPathFailed": "更改配置路径失败",
     "confirmResetConfigPath": "确认重置配置路径",
     "resetConfigPathMessage": "重置为默认路径后需要重启应用才能生效，是否继续？",
@@ -97,8 +99,11 @@
     "dingtalk": "钉钉",
     "accessToken": "访问令牌",
     "secret": "加签密钥",
+    "toggleVisibility": "显示/隐藏",
     "update": "更新",
     "autoCheckUpdate": "启动时自动检查更新",
+    "allowInsecureSSL": "允许不安全连接(证书校验失败时启用)",
+    "allowInsecureSSLWarning": "已启用不安全连接，仅建议在证书校验异常时使用，存在安全风险",
     "checkUpdateNow": "检查版本更新",
     "checkNow": "立即检查",
     "updateAvailable": "版本更新",
@@ -115,7 +120,8 @@
       "connection_reset": "连接被重置，请检查网络稳定性",
       "dns_failed": "DNS 解析失败，请检查网络连接",
       "network_unreachable": "网络不可达，请检查网络连接",
-      "unknown": "未知错误"
+      "unknown": "未知错误",
+      "ssl_failed": "SSL 证书验证失败，请检查系统时间或网络代理"
     },
     "downloadUpdate": "下载更新",
     "downloading": "下载中",
@@ -592,6 +598,8 @@
   "reportModal": {
     "title": "查看报告",
     "runHistory": "运行历史",
+    "scheduledReportHistory": "报告历史",
+    "scheduledNoReports": "该定时计划暂无关联测试计划的运行记录",
     "loading": "正在加载报告...",
     "noReports": "该测试计划暂无运行记录",
     "openReport": "打开报告",
@@ -619,6 +627,8 @@
       "checkFailed": "检查失败: {{error}}",
       "checkFailedShort": "检查失败",
       "environmentCheckFailed": "环境检查失败: {{error}}",
+      "statusPass": "通过",
+      "statusFail": "不通过",
       "configPathInfo": "配置目录",
       "migratingConfig": "正在迁移配置文件...",
       "cp210Found": "已找到CP210x驱动",
@@ -633,7 +643,7 @@
       "checkAndroidSdkFailed": "检查Android SDK失败: {{error}}",
       "pythonNotFound": "未找到Python",
       "cannotGetPythonVersion": "无法获取Python版本",
-      "pythonVersion": "Python版本: {{version}}",
+      "pythonVersion": "Python版本: {{version}} (推荐: {{recommended}})",
       "pythonVersionRecommended": "Python版本: {{version}} (推荐: {{recommended}})",
       "venvNotFound": "虚拟环境不存在，请运行 \"uv sync\" 创建虚拟环境",
       "missingPackages": "{{versionMessage}}，缺少依赖包: {{packages}}",
@@ -1231,7 +1241,9 @@
       "fatalCrashDetected": "检测到致命闪退 [{type}]: {line}",
       "testFailedByCrash": "测试因应用致命闪退而终止: {type}",
       "appPidChanged": "应用PID已变更（旧: {old_pid}，新: {new_pid}），已更新 logcat 监控",
-      "initErrorWithCrash": "初始化失败且检测到应用崩溃日志"
+      "initErrorWithCrash": "初始化失败且检测到应用崩溃日志",
+      "initFailedAttachName": "初始化失败原因",
+      "initFailedSummary": "初始化失败（{severity}）: {reason}"
     },
     "logcatMonitor": {
       "alreadyRunning": "logcat 监控已在运行中",

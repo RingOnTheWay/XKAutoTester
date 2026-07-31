@@ -226,6 +226,16 @@ export const controllerModelEventsMixin = {
       view.showReportLoading();
     });
 
+    // 定时计划整合报告弹窗事件
+    this.onModel(model, 'show-scheduled-report-modal', (scheduledPlan) => {
+      view.openReportModal();
+      view.resetReportModalButtons();
+      // 标题: 定时计划名 + "报告历史" 后缀
+      const title = `${scheduledPlan?.name || ''} ${window.i18n.t('reportModal.scheduledReportHistory')}`;
+      view.setReportPlanName(title);
+      view.showReportLoading();
+    });
+
     this.onModel(model, 'report-runs-loaded', (runs) => {
       view.renderReportRuns(runs, null, (run) => {
         // 直接存储选中的 run 对象
@@ -239,6 +249,20 @@ export const controllerModelEventsMixin = {
         );
       });
       // 初始禁用"打开"按钮（选择运行记录后启用）
+      view.enableViewReportButton(false);
+    });
+
+    // 定时计划整合报告分组渲染
+    this.onModel(model, 'scheduled-report-runs-loaded', (groups) => {
+      view.renderScheduledReportGroups(groups, (run) => {
+        model.selectReportRun(run);
+      }, (run) => {
+        view.showConfirmModal(
+          window.i18n.t('reportModal.delete'),
+          window.i18n.t('reportModal.deleteConfirm'),
+          () => model.deleteReportRun(run)
+        );
+      });
       view.enableViewReportButton(false);
     });
 

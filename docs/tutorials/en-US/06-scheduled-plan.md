@@ -1,177 +1,213 @@
 # 06 - Scheduled Plans & Loop Execution
 
-> **Applicable Version**: v0.1.3+ | **Target Audience**: Experienced test engineers
+> **Applicable Version**: v0.1.4+ | **Target Audience**: Experienced test engineers
 
 ---
 
 ## Overview
 
-The scheduled plan feature lets you set tests to execute automatically at a future time, requiring no manual supervision. The platform uses a min-heap priority queue scheduler + node-cron for precise timed triggers.
+XKAutoTester provides scheduled execution via `SchedulerService` (aggregating the `scheduler/` submodule):
 
-**Core capabilities:**
-
-- Single scheduled execution: set a future time point
-- Linked to test plans: automatically runs the specified test plans
-- Loop execution: supports 1~999 cycles, configurable continue-on-failure
-- Prevent system sleep: can block system sleep during execution
-
----
-
-## Scheduling Architecture
-
-```
-ScheduledPlanService (JSON persistence)
-    ↓
-SchedulerService (Min-heap priority queue + node-cron)
-    ↓
-On time → Auto-run the linked test plan(s)
-    ↓
-IPC notification to renderer (scheduled-test-start / scheduled-plan-expired)
-```
+- Cron expression scheduled triggers
+- One-shot scheduled execution
+- Time conflict detection
+- Smart scheduling strategies
+- Integration with test plans / loop execution
+- Auto-start tests on due time
 
 ---
 
 ## Workflow
 
 ```
-Select test directory → Create test plan → Create scheduled plan → Wait for auto-execution → View report
-```
-
-> [!NOTE]
-> Scheduled plans and test plans are independent entities. You must first create a test plan, then link it to a scheduled plan.
-
----
-
-## Step 1: Prerequisites
-
-Before creating a scheduled plan, ensure:
-
-1. **Test directory selected** — in the Test Execution tab, choose a folder containing test scripts
-2. **Test plan created** — at least one test plan with test files, types, and loop settings
-
-See [04 - Test Execution & Reports](04-test-execution.md).
-
----
-
-## Step 2: Create a Scheduled Plan
-
-### 2.1 Open the Scheduled Plan Modal
-
-In the Test Execution tab, left panel, **Scheduled Plan** area, click **New Scheduled Plan**.
-
-### 2.2 Configure Parameters
-
-| Parameter | Description | Required |
-|-----------|-------------|----------|
-| **Plan Name** | Identifier for the scheduled plan | Yes |
-| **Execution Time** | Target date and time | Yes |
-| **Select Test Plans** | Check test plans to execute when due (multi-select supported) | At least one |
-
-### 2.3 Time Picker
-
-Click the execution time input to open the datetime picker:
-
-- Select date (calendar view)
-- Select time (hours:minutes)
-- Confirmed time displays formatted in the input
-
-### 2.4 Save the Scheduled Plan
-
-Click **Save** to write the plan to `config/scheduled_plans.json`; the SchedulerService auto-enqueues it.
-
----
-
-## Step 3: Managing Scheduled Plans
-
-### View All Scheduled Plans
-
-The **Scheduled Plans** list on the left shows all created plans and their execution times.
-
-### Edit a Scheduled Plan
-
-Select a plan → click **Edit Scheduled Plan** → modify parameters → click **Update Plan**.
-
-### Delete a Scheduled Plan
-
-Select a plan → click **Delete Scheduled Plan** → confirm deletion.
-
-> [!CAUTION]
-> Deleting a scheduled plan does not delete the linked test plans or test cases.
-
----
-
-## Step 4: Automatic Execution
-
-When the system time reaches the scheduled plan's execution time:
-
-1. SchedulerService triggers the plan
-2. Auto-calls `PythonTestService.runTests()` to start testing
-3. IPC event `scheduled-test-start` notifies the frontend to update UI state
-4. Test logs stream in real-time to the right panel
-5. Allure report generated after completion
-
----
-
-## Step 5: Loop Execution & Failure Handling
-
-When creating a test plan, loop execution parameters can be configured:
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| **Loop Count** | Number of execution cycles for the test plan | 1 (no loop) |
-| **Continue on Failure** | Whether to continue subsequent cycles after a failure | Yes |
-
-### Loop Execution Examples
-
-```
-Loop Count: 3, Continue on Failure: ✅
-───────────────────────────────────
-Round 1 → Execute → Pass ✓
-Round 2 → Execute → Fail ✗ → Continue
-Round 3 → Execute → Pass ✓
-Result: 2/3 passed
-```
-
-```
-Loop Count: 3, Continue on Failure: ❌
-───────────────────────────────────
-Round 1 → Execute → Pass ✓
-Round 2 → Execute → Fail ✗ → Stop
-Result: 1/2 passed (Round 3 not executed)
+Create scheduled plan → Configure cron/one-shot time → Link test plan → Scheduler monitors → Trigger on due → Auto-execute tests
 ```
 
 ---
 
-## Conflict Detection
+## Step 1: Create a Scheduled Plan
 
-When saving a scheduled plan, the system checks for time conflicts with existing plans:
+### 1.1 Open Scheduled Plan Management
 
-- If overlapping scheduled plans exist, a warning is shown
-- You can still save after confirmation (the platform supports parallel execution)
+In the **Test Execution** tab, click **Scheduled Plans** to open the management modal.
+
+### 1.2 Fill in Basic Info
+
+| Field | Description |
+|-------|-------------|
+| **Plan Name** | Unique identifier (e.g. `nightly_regression`) |
+| **Linked Test Plan** | Select from `config/test_plans.json` |
+| **Execution Type** | `cron` (periodic) / `once` (one-shot) |
+
+### 1.3 Configure Execution Time
+
+#### Cron Mode
+
+Supports standard 5-field cron expressions (based on `node-cron`):
+
+| Field | Range | Description |
+|-------|-------|-------------|
+| Minute | 0-59 | `*` / `0` / `*/15` |
+| Hour | 0-23 | `*` / `9` / `9-18` |
+| Day | 1-31 | `*` / `1` / `*/2` |
+| Month | 1-12 | `*` / `1` |
+| Weekday | 0-6 (0=Sun) | `*` / `1-5` |
+
+Examples:
+- `0 9 * * 1-5` — Weekdays at 9:00
+- `0 */2 * * *` — Every 2 hours
+- `30 18 * * *` — Every day at 18:30
+
+#### One-shot Mode
+
+Use the `datetime-picker` component to select a specific date and time (e.g. `2026-08-01 14:00`).
 
 ---
 
-## Prevent System Sleep
+## Step 2: Time Conflict Detection
 
-During scheduled execution, if **Settings → Run → Prevent system sleep during execution** is enabled, the system will block Windows from entering sleep/hibernation.
+`SchedulerService` performs conflict detection when saving a scheduled plan:
 
-See [07 - System Settings](07-settings.md).
+- Only one scheduled plan can trigger at any given moment
+- Conflicts return an error; time must be adjusted
 
 ---
 
-## Scheduled Plan Data Structure
+## Step 3: Scheduler Mechanism
 
-`config/scheduled_plans.json` example:
+### 3.1 Scheduler Architecture (Post-Refactor)
+
+The `scheduler/` submodule is split into:
+
+| Module | Responsibility |
+|--------|----------------|
+| `SchedulerService.js` | Scheduler service facade |
+| `planQueue.js` | Min-heap priority queue (sorted by next trigger time) |
+| `smartScheduler.js` | Smart scheduling strategies |
+| `strategies.js` | Scheduling strategy implementations |
+| `effects.js` | Side effects (IPC notifications, etc.) |
+| `index.js` | Module exports |
+
+### 3.2 Scheduling Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant R as Renderer
+    participant H as scheduledPlanHandlers
+    participant S as SchedulerService
+    participant Q as planQueue (min-heap)
+    participant T as TestExecutor
+    participant CR as Cron Trigger
+
+    U->>R: Create scheduled plan
+    R->>H: saveScheduledPlan(plan)
+    H->>S: addPlan(plan)
+    S->>Q: push(plan, nextRunAt)
+    Q-->>S: sorted
+    S-->>H: success
+    H-->>R: plan saved
+
+    loop Scheduling loop
+        CR->>S: tick()
+        S->>Q: peek()
+        Q-->>S: next plan (if due)
+        S->>T: trigger(plan)
+        T->>T: execute linked test plan
+        T-->>S: done
+        S->>R: on-scheduled-test-start (IPC)
+        alt cron mode
+            S->>Q: update(plan, nextRunAt)
+        else one-shot
+            S->>Q: remove(plan)
+            S->>R: on-scheduled-plan-expired (IPC)
+        end
+    end
+```
+
+### 3.3 Smart Scheduling Strategies
+
+`smartScheduler.js` + `strategies.js` provide multiple strategies:
+
+- **FIFO** — First-in-first-out (default)
+- **Priority** — By plan priority field
+- **Resource-aware** — Wait for current test to finish before triggering the next
+
+---
+
+## Step 4: Loop Execution Integration
+
+Tests triggered by scheduled plans can overlay loop execution parameters (see the loop execution section of [04 - Test Execution & Reports](04-test-execution.md)):
+
+- Check **Enable Loop Execution** in the scheduled plan
+- Configure loop count / continue on failure / loop interval
+- Triggered executions run multiple times per loop parameters
+
+---
+
+## Step 5: Scheduled Plan Management
+
+### 5.1 Edit
+
+Click **Edit** in the scheduled plan list, modify, and save.
+
+### 5.2 Delete
+
+Click **Delete**; after confirmation, removed from `planQueue` and the record in `config/scheduled_plans.json` is deleted.
+
+### 5.3 Enable / Disable
+
+Supports temporarily disabling a scheduled plan (not deleted, just paused).
+
+### 5.4 Status View
+
+The scheduled plan list shows:
+- Next trigger time
+- Last execution time + result
+- Status (pending / executing / expired / disabled)
+
+---
+
+## Step 6: Due Trigger Flow
+
+When a scheduled plan is due:
+
+1. `SchedulerService` pops the plan from `planQueue`
+2. Notifies the renderer via IPC event `on-scheduled-test-start`
+3. The renderer auto-switches to the **Test Execution** tab and links the test plan
+4. Triggers test execution (equivalent to manually clicking **Run**)
+5. On test completion, notifies via `on-scheduled-test-completed`
+6. If one-shot, triggers `on-scheduled-plan-expired` and removes it
+7. If cron, updates `nextRunAt` and re-enqueues
+
+> The scheduler auto-stops on app exit; on next launch, it restores the queue from `config/scheduled_plans.json`.
+
+---
+
+## Data Persistence
+
+Scheduled plan data persists to `config/scheduled_plans.json` (managed by `ScheduledPlanService`, inherits `JsonFileCrudService`).
+
+Example data structure:
 
 ```json
 {
   "plans": [
     {
-      "id": "sched_001",
-      "name": "Daily Smoke Test",
-      "executeTime": "2026-05-08T08:00:00",
-      "testPlanIds": ["plan_001"],
-      "createdAt": "2026-05-07T16:00:00"
+      "id": "plan_xxx",
+      "name": "nightly_regression",
+      "testPlanId": "tp_yyy",
+      "type": "cron",
+      "cron": "0 9 * * 1-5",
+      "enabled": true,
+      "loopConfig": {
+        "enabled": false,
+        "count": 0,
+        "continueOnFailure": true,
+        "interval": 0
+      },
+      "lastRunAt": "2026-07-28T09:00:00",
+      "nextRunAt": "2026-07-29T09:00:00"
     }
   ]
 }
@@ -179,15 +215,7 @@ See [07 - System Settings](07-settings.md).
 
 ---
 
-## Limitations
-
-- Scheduled plans support **single execution only**, not cron-based recurrence. For daily execution, create plans daily or start them manually
-- Execution time is based on **local system time**
-- The computer must remain powered on at the execution time
-
----
-
 ## Next Steps
 
-- [04 - Test Execution & Reports](04-test-execution.md)
+- [04 - Test Execution & Reports](04-test-execution.md) (loop execution details)
 - [07 - System Settings](07-settings.md)

@@ -29,6 +29,7 @@ export class TestExecutionModel extends EventEmitter {
     updateScheduledPlan: 'updateScheduledPlan',
     deleteScheduledPlan: 'deleteScheduledPlan',
     checkTimeConflict: 'checkTimeConflict',
+    getScheduledPlanRuns: 'getScheduledPlanRuns',
     runPythonTests: 'runPythonTests',
     stopPythonTests: 'stopPythonTests',
     scanTestFiles: 'scanTestFiles',
@@ -65,6 +66,8 @@ export class TestExecutionModel extends EventEmitter {
     runningScheduledPlanId: null,      // 正在执行的定时计划 ID
     currentMarkers: [],                // 当前提取的 pytest 标记
     selectedReportRun: null,           // 选中的报告运行记录
+    reportMode: 'testPlan',            // 报告弹窗模式: 'testPlan' | 'scheduledPlan'
+    currentScheduledPlanForReport: null, // 整合报告弹窗当前定时计划 (scheduledPlan 模式)
     outputBuffer: [],                  // 输出缓冲区
     outputRafId: null,                 // 输出刷新的 RAF ID
     extractingMarkers: null,           // 标记提取的 Promise 守卫

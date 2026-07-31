@@ -17,6 +17,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 const { app } = require('electron');
 const { spawn } = require('child_process');
 const { ensureDirectoryExists } = require('../utils/pathHelper');
@@ -95,6 +96,15 @@ function normalizeUpdateError(error) {
         errorCode = 'network_unreachable';
         errorMessage = 'Network unreachable';
         break;
+      case 'UNABLE_TO_VERIFY_LEAF_SIGNATURE':
+      case 'CERT_HAS_EXPIRED':
+      case 'DEPTH_ZERO_SELF_SIGNED_CERT':
+      case 'SELF_SIGNED_CERT_IN_CHAIN':
+      case 'ERR_TLS_CERT_ALTNAME_INVALID':
+      case 'ERR_TLS_PROTOCOL_VERSION':
+        errorCode = 'ssl_failed';
+        errorMessage = 'SSL certificate verification failed';
+        break;
       default:
         errorCode = `network_${error.code}`;
         errorMessage = `Network error: ${error.code}`;
@@ -119,7 +129,7 @@ const defaultFileSystemFactory = () => ({
   createWriteStream: (p) => fs.createWriteStream(p),
 });
 
-const defaultUpdateSourceFactory = () => ({
+const defaultUpdateSourceFactory = (httpsAgent) => ({
   async fetchLatestRelease() {
     try {
       const response = await axios.get(GITHUB_API_URL, {
@@ -127,7 +137,8 @@ const defaultUpdateSourceFactory = () => ({
           'Accept': 'application/vnd.github.v3+json',
           'User-Agent': 'XKAutoTester-Update-Checker'
         },
-        timeout: 15000
+        timeout: 15000,
+        ...(httpsAgent ? { httpsAgent } : {})
       });
       const releases = response.data;
       return releases.find(r => !r.prerelease && !r.draft) || null;
@@ -137,7 +148,7 @@ const defaultUpdateSourceFactory = () => ({
   }
 });
 
-const defaultDownloadStrategyFactory = () => ({
+const defaultDownloadStrategyFactory = (httpsAgent) => ({
   async download(downloadUrl, filePath, eventSender) {
     const headers = {
       'Accept': 'application/octet-stream',
@@ -154,7 +165,8 @@ const defaultDownloadStrategyFactory = () => ({
       url: downloadUrl,
       headers,
       responseType: 'stream',
-      timeout: 300000
+      timeout: 300000,
+      ...(httpsAgent ? { httpsAgent } : {})
     });
 
     const totalLength = parseInt(response.headers['content-length'], 10);
@@ -256,10 +268,29 @@ class UpdateService {
     this._installStrategyFactory = opts.installStrategyFactory || defaultInstallStrategyFactory;
     this._fileSystemFactory = opts.fileSystemFactory || defaultFileSystemFactory;
     this._versionComparator = opts.versionComparator || compareVersions;
-    this._updateSource = this._updateSourceFactory();
-    this._downloadStrategy = this._downloadStrategyFactory();
+    this._allowInsecureSSL = !!opts.allowInsecureSSL;
+    // 预构建 httpsAgent: allowInsecureSSL=true 时跳过证书校验 (用于代理/加速等导致证书异常的场景)
+    this._httpsAgent = this._allowInsecureSSL
+      ? new https.Agent({ rejectUnauthorized: false })
+      : undefined;
+    this._updateSource = this._updateSourceFactory(this._httpsAgent);
+    this._downloadStrategy = this._downloadStrategyFactory(this._httpsAgent);
     this._installStrategy = this._installStrategyFactory();
     this._fileSystem = this._fileSystemFactory();
+  }
+
+  /**
+   * 运行时切换 allowInsecureSSL (设置页 toggle 触发, 立即生效).
+   * 重新构建 httpsAgent + updateSource + downloadStrategy; install/fileSystem 不受影响.
+   * @param {boolean} enable
+   */
+  setAllowInsecureSSL(enable) {
+    const next = !!enable;
+    if (next === this._allowInsecureSSL) return;
+    this._allowInsecureSSL = next;
+    this._httpsAgent = next ? new https.Agent({ rejectUnauthorized: false }) : undefined;
+    this._updateSource = this._updateSourceFactory(this._httpsAgent);
+    this._downloadStrategy = this._downloadStrategyFactory(this._httpsAgent);
   }
 
   // 懒初始化 (消除构造期 I/O, 对称 I18nService.init 幂等模式)
@@ -382,4 +413,4 @@ class UpdateService {
   }
 }
 
-module.exports = { UpdateService };
+module.exports = { UpdateService, normalizeUpdateError };

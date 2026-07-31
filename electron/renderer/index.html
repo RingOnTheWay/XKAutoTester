@@ -616,8 +616,10 @@
                         <div class="form-group">
                             <div class="checkbox-container" style="align-items: center; padding: 8px 0;">
                                 <input type="checkbox" id="always-on-top" name="always-on-top" style="margin: 0; width: 18px; height: 18px; vertical-align: middle;">
-                                <div class="checkmark"></div>
-                                <label for="always-on-top" style="margin: 0; vertical-align: middle;" data-i18n="modal.alwaysOnTop">始终置顶</label>
+                                <label for="always-on-top" class="checkbox-label" style="margin: 0; vertical-align: middle; display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
+                                    <span class="checkmark"></span>
+                                    <span data-i18n="modal.alwaysOnTop">始终置顶</span>
+                                </label>
                             </div>
                         </div>
                     </form>

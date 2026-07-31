@@ -1,18 +1,18 @@
 # 02 - Test Case Management
 
-> **Applicable Version**: v0.1.3+ | **Target Audience**: Experienced test engineers
+> **Applicable Version**: v0.1.4+ | **Target Audience**: Experienced test engineers
 
 ---
 
 ## Overview
 
-The **Test Case** tab provides a visual editor for Android test cases, supporting:
+The **Test Case** tab (`renderer/tabs/test-case/`, with 25 Mixins) provides a visual Android test case editor supporting:
 
 - Basic info entry (filename, name, description)
 - Target app & platform selection
 - Visual test step configuration (referencing element locators from page packages)
 - Allure report tag configuration (Epic / Feature / Story / Markers)
-- Automatic Python code generation (Jinja template engine)
+- Automatic Python code generation (`TestCaseCodeGenerator` + Jinja template, extracted from `TestCaseService`)
 - BLE Mock device configuration (serial port simulation)
 
 ---
@@ -107,7 +107,7 @@ Each step displays different property fields based on its action type:
 | **wait_for_element** | **Timeout (seconds)** — maximum wait duration |
 | **get_text** | **Variable Name** — extracted text stored for later use via `${variableName}` |
 | **swipe** | **Direction** — up/down/left/right; **Offset** — 0.0~1.0 screen ratio |
-| **assert_text** | **Expected Value** — text to match |
+| **assert_text** | **Expected Value** — text to match (two failure semantics: retry on element-not-found / immediate fail on value mismatch) |
 | **sleep** | **Wait Seconds** |
 | **start_ble_mock** | **BLE Device Name** — select from configured BLE devices |
 | **start_app_permission** | **App Package Name** |
@@ -118,8 +118,6 @@ Each step card supports:
 - **Drag to reorder** — grab the left handle to rearrange execution order
 - **Duplicate** — copy the current step to the next position
 - **Delete** — remove the current step
-
-![Step Actions](../images/02-step-actions.png)
 
 ---
 
@@ -177,7 +175,7 @@ When test steps include `start_ble_mock` / `stop_ble_mock` actions, BLE device c
 
 ### BLE Device Management
 
-Manage BLE device parameters (name, serial port, baud rate, etc.) via Android Connection → Device Management or through `config/ble_device.json`. See [05 - Device Connection & Mirroring](05-device-connection.md).
+In **Android Connection → Device Management**, use `BleDeviceDiscoveryService` + `SerialPortEnumerator` to scan available serial ports and connected BLE devices; configuration parameters (name, serial port, baud rate, etc.) persist to `config/ble_device.json`. See [05 - Device Connection & Mirroring](05-device-connection.md).
 
 ---
 
@@ -194,6 +192,18 @@ test_cases/
     ├── test_login_test()    # Generated test method
     └── Step-mapped code     # 1:1 mapping from JSON steps to Python
 ```
+
+### Code Generation Mechanism (Post-Refactor)
+
+Code generation is handled by `TestCaseCodeGenerator` (`services/TestCaseCodeGenerator.js`), extracted from the original `TestCaseService`, with further logic split across 5 Mixins under `services/mixins/`:
+
+| Mixin | Responsibility |
+|------|----------------|
+| `generatorCodeBuildersMixin.js` | Code snippet building |
+| `generatorHelpersMixin.js` | Helper utilities |
+| `generatorStepsMixin.js` | Step code generation |
+| `generatorTemplateConfigMixin.js` | Template configuration |
+| `generatorTestMethodsMixin.js` | Test method generation |
 
 ---
 

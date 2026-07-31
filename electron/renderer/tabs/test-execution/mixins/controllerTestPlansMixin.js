@@ -23,6 +23,12 @@ export const controllerTestPlansMixin = {
   },
 
   handleViewReport() {
+    // 优先走定时计划整合报告分支 (选中定时计划时整合显示所有关联测试计划的历史记录)
+    const scheduledPlan = this.model.currentScheduledPlan;
+    if (scheduledPlan) {
+      this.model.showScheduledReportModal(scheduledPlan);
+      return;
+    }
     this.model.showReportModal(this.model.currentTestPlan);
   },
 

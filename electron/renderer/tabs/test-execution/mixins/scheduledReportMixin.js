@@ -163,52 +163,141 @@ export const scheduledReportMixin = {
     reportRunsList.classList.remove('hidden');
 
     runs.forEach(run => {
-      const item = document.createElement('div');
-      item.className = `report-run-item${run.available ? '' : ' unavailable'}${run.index === selectedRunId ? ' selected' : ''}`;
-      item.setAttribute('data-index', run.index);
-      item.setAttribute('data-path', run.reportPath || '');
-      item.setAttribute('data-available', run.available);
-      const timeStr = run.timestamp || '-';
-      const statusIcon = run.available
-        ? this.getIconHtml('check_circle', 'vertical-align:middle;color:var(--success);margin-right:4px;')
-        : this.getIconHtml('cancel', 'vertical-align:middle;color:var(--error);margin-right:4px;');
-      const latestBadge = run.isLatest ? `<span class="report-latest-badge">${window.i18n.t('reportModal.latest')}</span>` : '';
-      const statusText = run.available
-        ? window.i18n.t('reportModal.reportAvailable')
-        : window.i18n.t('reportModal.reportUnavailable');
-      const deleteIcon = this.getIconHtml('delete', 'vertical-align:middle;');
-      item.innerHTML = `
-        <div class="report-run-left">
-          <div class="report-run-index">${run.index}</div>
-          <div class="report-run-info">
-            <div class="report-run-time">${timeStr}${latestBadge}</div>
-          </div>
-        </div>
-        <div class="report-run-right">
-          <div class="report-run-status ${run.available ? 'available' : 'unavailable'}">
-            ${statusIcon}
-            <span>${statusText}</span>
-          </div>
-          <button class="report-run-delete-btn" title="${window.i18n.t('reportModal.delete')}">${deleteIcon}</button>
-        </div>
-      `;
-      item.addEventListener('click', () => {
-        if (!run.available) return;
-        // 取消其他选中
-        reportRunsList.querySelectorAll('.report-run-item').forEach(i => i.classList.remove('selected'));
-        item.classList.add('selected');
-        onSelectRun?.(run);
+      const item = this._buildRunItemElement(run, {
+        selectedRunId,
+        onSelectRun: (r) => {
+          // 取消其他选中 (扁平列表场景), 当前 item 由 _buildRunItemElement 统一 add
+          reportRunsList.querySelectorAll('.report-run-item').forEach(i => i.classList.remove('selected'));
+          onSelectRun?.(r);
+        },
+        onDeleteRun,
       });
-      // 删除按钮: 阻止冒泡避免触发选中, 调用 onDeleteRun
-      const deleteBtn = item.querySelector('.report-run-delete-btn');
-      if (deleteBtn) {
-        deleteBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          onDeleteRun?.(run);
-        });
-      }
-      reportRunsList.appendChild(item);
+      if (item) reportRunsList.appendChild(item);
     });
+  },
+
+  /**
+   * 构造单条运行记录 DOM 元素 (renderReportRuns / renderScheduledReportGroups 共用)
+   * @param {Object} run - 运行记录
+   * @param {Object} callbacks - { selectedRunId, onSelectRun, onDeleteRun }
+   * @returns {HTMLElement|null}
+   * @private
+   */
+  _buildRunItemElement(run, { selectedRunId, onSelectRun, onDeleteRun } = {}) {
+    if (!run) return null;
+    const item = document.createElement('div');
+    item.className = `report-run-item${run.available ? '' : ' unavailable'}${run.index === selectedRunId ? ' selected' : ''}`;
+    item.setAttribute('data-index', run.index);
+    item.setAttribute('data-path', run.reportPath || '');
+    item.setAttribute('data-available', run.available);
+    if (run.sourcePlanName) item.setAttribute('data-source-plan', run.sourcePlanName);
+    const timeStr = run.timestamp || '-';
+    const statusIcon = run.available
+      ? this.getIconHtml('check_circle', 'vertical-align:middle;color:var(--success);margin-right:4px;')
+      : this.getIconHtml('cancel', 'vertical-align:middle;color:var(--error);margin-right:4px;');
+    const latestBadge = run.isLatest ? `<span class="report-latest-badge">${window.i18n.t('reportModal.latest')}</span>` : '';
+    const statusText = run.available
+      ? window.i18n.t('reportModal.reportAvailable')
+      : window.i18n.t('reportModal.reportUnavailable');
+    const deleteIcon = this.getIconHtml('delete', 'vertical-align:middle;');
+    item.innerHTML = `
+      <div class="report-run-left">
+        <div class="report-run-index">${run.index}</div>
+        <div class="report-run-info">
+          <div class="report-run-time">${timeStr}${latestBadge}</div>
+        </div>
+      </div>
+      <div class="report-run-right">
+        <div class="report-run-status ${run.available ? 'available' : 'unavailable'}">
+          ${statusIcon}
+          <span>${statusText}</span>
+        </div>
+        <button class="report-run-delete-btn" title="${window.i18n.t('reportModal.delete')}">${deleteIcon}</button>
+      </div>
+    `;
+    item.addEventListener('click', () => {
+      if (!run.available) return;
+      // 先回调 (回调内 remove 其他 selected), 再 add 当前 (避免被 remove 掉)
+      onSelectRun?.(run);
+      item.classList.add('selected');
+    });
+    const deleteBtn = item.querySelector('.report-run-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onDeleteRun?.(run);
+      });
+    }
+    return item;
+  },
+
+  /**
+   * 渲染定时计划整合报告 (分组展示, 默认收起, 点击分组头展开)
+   * 分组排序已由后端完成 (按分组内最新 run 时间倒序)
+   * 分组内 runs 排序已由后端完成 (时间倒序, 分组内各自标 isLatest)
+   * @param {Array<{sourcePlanName: string, runs: Array}>} groups
+   * @param {Function} onSelectRun - 选中某条 run
+   * @param {Function} onDeleteRun - 删除某条 run
+   */
+  renderScheduledReportGroups(groups, onSelectRun, onDeleteRun) {
+    const { reportRunsList } = this.els;
+    if (!reportRunsList) return;
+    reportRunsList.innerHTML = '';
+
+    const noRunsEl = document.getElementById('report-no-runs');
+    const validGroups = (groups || []).filter(g => g && g.runs && g.runs.length > 0);
+
+    if (validGroups.length === 0) {
+      if (noRunsEl) noRunsEl.classList.remove('hidden');
+      reportRunsList.classList.add('hidden');
+      return;
+    }
+
+    if (noRunsEl) noRunsEl.classList.add('hidden');
+    reportRunsList.classList.remove('hidden');
+
+    const fragment = document.createDocumentFragment();
+    validGroups.forEach(group => {
+      const groupEl = document.createElement('div');
+      groupEl.className = 'report-group collapsed';  // 默认收起
+      groupEl.setAttribute('data-source-plan', group.sourcePlanName);
+
+      const count = group.runs.length;
+      const arrowIcon = this.getIconHtml('keyboard_arrow_right', 'vertical-align:middle;font-size:16px;transition:transform 0.2s ease;');
+      const folderIcon = this.getIconHtml('folder', 'vertical-align:middle;color:var(--primary);margin-right:6px;font-size:16px;');
+
+      const header = document.createElement('div');
+      header.className = 'report-group-header';
+      header.innerHTML = `
+        <span class="report-group-arrow">${arrowIcon}</span>
+        <span class="report-group-icon">${folderIcon}</span>
+        <span class="report-group-name">${this.escapeHtml(group.sourcePlanName)}</span>
+        <span class="report-group-count">${count}</span>
+      `;
+      header.addEventListener('click', () => {
+        groupEl.classList.toggle('collapsed');
+        groupEl.classList.toggle('expanded');
+      });
+      groupEl.appendChild(header);
+
+      const body = document.createElement('div');
+      body.className = 'report-group-body';
+      group.runs.forEach(run => {
+        const item = this._buildRunItemElement(run, {
+          onSelectRun: (r) => {
+            // 跨分组取消选中, 当前 item 由 _buildRunItemElement 统一 add
+            reportRunsList.querySelectorAll('.report-run-item').forEach(i => i.classList.remove('selected'));
+            onSelectRun?.(r);
+          },
+          onDeleteRun,
+        });
+        if (item) body.appendChild(item);
+      });
+      groupEl.appendChild(body);
+
+      fragment.appendChild(groupEl);
+    });
+    reportRunsList.appendChild(fragment);
   },
 
   resetReportModalButtons() {

@@ -2,69 +2,70 @@
    页面封装页面样式
    ======================================== */
 
-/* 页面容器 */
+/* 页面容器 - 占满可视区域，禁止页面滚动 */
 .pp-container {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding: 20px;
-    min-width: 900px;
-    margin: 0 auto;
-}
-
-/* Tab切换样式 */
-.pp-tabs {
-    display: flex;
-    gap: 8px;
-    padding: 4px;
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: 12px;
-    backdrop-filter: blur(var(--blur-amount));
-    -webkit-backdrop-filter: blur(var(--blur-amount));
-}
-
-.pp-tab {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 12px 20px;
-    border: none;
-    border-radius: 8px;
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.pp-tab:hover {
-    color: var(--text-primary);
-    background: var(--hover-bg);
-}
-
-.pp-tab.active {
-    background: var(--primary);
-    color: white;
-}
-
-.pp-tab .svg-icon {
-    width: 18px;
-    height: 18px;
+    padding: 0;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
 }
 
 /* 内容区域 */
 .pp-content {
     display: none;
     flex-direction: column;
-    gap: 16px;
+    flex: 1;
+    min-height: 0;
 }
 
 .pp-content.active {
     display: flex;
+}
+
+/* 左右分区布局 - 50:50 比例 */
+.pp-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+}
+
+/* 左半区：应用选择 + 页面选择 */
+.pp-left-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+}
+
+/* 右半区：元素选择 */
+.pp-right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+}
+
+/* 卡片在列内等高填充 */
+.pp-left-column .pp-card,
+.pp-right-column .pp-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.pp-left-column .pp-card-body,
+.pp-right-column .pp-card-body {
+    flex: 1;
+    min-height: 0;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
 }
 
 /* 卡片基础样式 */
@@ -88,21 +89,13 @@
     z-index: 100;
 }
 
-/* 卡片展开/收起动画 */
+/* 卡片展开/收起动画（保留兼容，卡片默认始终展开） */
 .pp-card.collapsed {
-    opacity: 0;
-    max-height: 0;
-    margin-bottom: 0;
-    padding: 0;
-    border: none;
-    transform: translateY(-20px);
-    pointer-events: none;
+    display: none;
 }
 
 .pp-card.expanded {
     opacity: 1;
-    max-height: 500px;
-    transform: translateY(0);
 }
 
 /* 卡片选中状态 */
@@ -120,7 +113,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
+    padding: 10px 14px;
     border-bottom: 1px solid var(--glass-border);
     transition: background-color 0.3s ease;
     border-radius: 16px 16px 0 0;
@@ -129,32 +122,38 @@
 .pp-card-title {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 15px;
+    gap: 8px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .pp-card-title .svg-icon {
-    font-size: 20px;
+    font-size: 16px;
     color: var(--primary);
 }
 
-/* 卡片徽章 */
+/* 卡片徽章 - 高度不超过标题，避免显示时撑高 header 导致内容下移 */
 .pp-card-badge {
     background: rgba(var(--primary-rgb), 0.15);
     color: var(--primary);
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 12px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 10px;
     font-weight: 500;
-    min-width: 24px;
+    line-height: 1.4;
+    min-width: 16px;
+    height: 16px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
 }
 
 /* 卡片主体 */
 .pp-card-body {
-    padding: 16px;
+    padding: 10px;
 }
 
 /* 级联选择下拉框 */
@@ -183,8 +182,8 @@
 .cascade-select__header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
+    gap: 6px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--outline);
 }
 
@@ -193,28 +192,28 @@
     border: none;
     background: transparent;
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 13px;
     outline: none;
     min-width: 0;
-    line-height: 1.5;
+    line-height: 1.4;
 }
 
 .cascade-select__search::placeholder {
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: 13px;
 }
 
 .cascade-select__actions {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     flex-shrink: 0;
 }
 
 .cascade-select__btn {
-    width: 36px;
-    height: 36px;
+    width: 28px;
+    height: 28px;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     background: transparent;
     cursor: pointer;
     display: flex;
@@ -225,13 +224,13 @@
 }
 
 .cascade-select__btn .svg-icon {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
 }
 
 .cascade-select__btn .svg-icon svg {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
 }
 
 .cascade-select__btn:hover:not(:disabled) {
@@ -278,12 +277,12 @@
 }
 
 .cascade-select__selected {
-    padding: 12px 16px;
+    padding: 8px 12px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    min-height: 44px;
+    min-height: 34px;
     transition: background-color 0.2s ease;
 }
 
@@ -292,7 +291,7 @@
 }
 
 .cascade-select__text {
-    font-size: 14px;
+    font-size: 13px;
     color: var(--text-primary);
     font-weight: 500;
 }
@@ -309,13 +308,19 @@
     right: 0;
     background: var(--surface);
     border: 1px solid var(--outline);
-    border-radius: 12px;
-    max-height: 240px;
+    border-radius: 10px;
+    max-height: 200px;
     overflow-y: auto;
     z-index: 100;
     display: none;
     box-shadow: var(--shadow-3);
     animation: dropdownFadeIn 0.2s ease;
+}
+
+/* 覆盖 device-cascade-select.css 的 position:fixed（page-package 用 absolute 锚定到 cascade-select） */
+.pp-card .cascade-select__dropdown {
+    position: absolute;
+    transform: none;
 }
 
 @keyframes dropdownFadeIn {
@@ -334,15 +339,15 @@
 }
 
 .cascade-select__options {
-    padding: 8px;
+    padding: 6px;
 }
 
 .cascade-select__option {
-    padding: 10px 12px;
+    padding: 6px 10px;
     cursor: pointer;
     transition: all 0.2s ease;
-    border-radius: 8px;
-    font-size: 14px;
+    border-radius: 6px;
+    font-size: 13px;
     color: var(--text-primary);
 }
 
@@ -360,7 +365,7 @@
     color: var(--text-secondary);
     cursor: default;
     text-align: center;
-    padding: 10px 12px;
+    padding: 6px 10px;
 }
 
 .cascade-select__option.empty:hover {

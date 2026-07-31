@@ -1,176 +1,199 @@
 # 07 - System Settings
 
-> **Applicable Version**: v0.1.3+ | **Target Audience**: Experienced test engineers
+> **Applicable Version**: v0.1.4+ | **Target Audience**: Experienced test engineers
 
 ---
 
 ## Overview
 
-The **Settings** tab centrally manages all configurable options across 6 categories:
+The **Settings** tab (`renderer/tabs/settings/`, with 5 Mixins) provides global app configuration:
 
-| Category | Covered Items |
-|----------|--------------|
-| **Directory** | Default download path, config data storage location |
-| **Display** | Dark mode, theme color, UI language |
-| **Notification** | DingTalk bot push configuration |
-| **Data** | Allure report cleanup, log cleanup |
-| **Run** | Prevent system sleep toggle |
-| **Updates** | Auto-update toggle, manual update check |
-
-All settings persisted in `config/config.json`.
+- Language switching (Chinese / English)
+- Theme (light / dark / theme color)
+- DingTalk notification configuration
+- Data storage path management
+- Version info & auto-update
+- Anti-system-sleep
+- Driver detection
 
 ---
 
-## Directory Settings
+## Workflow
 
-### Default Download Path
-
-Set the default save directory when downloading files from a device:
-
-1. Click **Browse** to choose a directory
-2. The path appears in the input field
-3. Click **Clear** to reset (manual selection required on download)
-
-### Config Storage Location
-
-Customize the storage path for user data (test cases, plans, page packages, BLE devices, etc.):
-
-| Action | Button | Description |
-|--------|--------|-------------|
-| **Custom path** | **Browse** | Choose target folder |
-| **Restore default** | **Restore** | Reset to system AppData directory |
-
-**On first setup**, the system copies default configurations from the installation directory to the new path and completes data migration.
-
-> Changing the config storage location triggers an app restart. Ensure no tests are currently executing.
+```
+Enter Settings tab → Select config item → Modify → Auto-save to config.json
+```
 
 ---
 
-## Display Settings
+## Step 1: Language Switching
 
-### Dark Mode
+### 1.1 Switch Language
 
-| State | Effect |
-|-------|--------|
-| **On** | Global dark theme, reduced brightness, suitable for nighttime |
-| **Off** | Material Design light theme |
+In the **Language** dropdown, choose **Simplified Chinese** or **English**:
 
-Changes take effect immediately — no restart needed.
+1. `I18nService` (inheriting i18next) switches the language
+2. Translation files are in `electron/locales/{zh-CN,en-US}/translation.json`
+3. UI refreshes instantly — no restart needed
 
-### Theme Color
+### 1.2 Backend i18n
 
-5 preset theme colors plus custom HEX input:
-
-| Preset | HEX |
-|--------|-----|
-| Blue | `#2196F3` |
-| Green | `#4CAF50` |
-| Orange | `#FF9800` |
-| Purple | `#9C27B0` |
-| Red | `#F44336` |
-| Brown | `#795548` |
-| **Custom** | Enter any HEX value (e.g. `#00BCD4`) |
-
-Theme color applies to navigation, buttons, progress bars, and other UI elements.
-
-### Language
-
-| Option | Value |
-|--------|-------|
-| Simplified Chinese | `zh-CN` |
-| English | `en-US` |
-
-UI text updates instantly on switch (via i18next) — no refresh needed.
+The Python backend provides internationalization via `utils/i18n.py` (singleton + `_initialized` guard):
+- Used for localizing error messages and logs
+- Stays in sync with the frontend language
 
 ---
 
-## Notification Settings
+## Step 2: Theme Settings
 
-XKAutoTester can push test report summaries via DingTalk bot after test completion.
+### 2.1 Light / Dark Mode
 
-### Select Notification Platform
+Toggle the **Dark Mode** switch:
 
-| Option | Description |
-|--------|-------------|
-| **None** | No notifications sent |
-| **DingTalk** | Push via DingTalk bot Webhook |
+- `APP_SETTINGS.dark_mode` written to `config.json`
+- `styles.css` imports 15 CSS modules via `@import`, auto-applying the `[data-theme="dark"]` selector
 
-Selecting DingTalk reveals Access Token and Secret input fields below.
+### 2.2 Theme Color
 
-### Configure DingTalk Bot
+Pick a theme color in the palette (default `#4CAF50`):
 
-| Parameter | Description | How to Obtain |
-|-----------|-------------|---------------|
-| **Access Token** | The `access_token` parameter from the bot's Webhook URL | DingTalk group → Group Settings → Smart Assistant → Add Bot → Webhook URL |
-| **Secret** | HMAC-SHA256 signing secret | Bot Security Settings → Signing → Copy Secret |
-
-#### Configuration Steps
-
-1. Create a custom bot in a DingTalk group, choose "Signing" security mode
-2. Copy the `access_token` value from the Webhook URL into the Token field
-3. Copy the signing Secret into the Secret field
-4. Save the configuration
-
-After test completion, the system POSTs a test summary to the Webhook using HMAC-SHA256 signing:
-
-- Test plan name
-- Passed/failed/skipped counts
-- Execution duration
-- Report link (if available)
+- `APP_SETTINGS.theme_color` written to `config.json`
+- Applied globally via the CSS variable `--theme-color`
 
 ---
 
-## Data Management
+## Step 3: DingTalk Notifications
 
-### Clear Allure Reports
+### 3.1 Configure DingTalk Bot
 
-Click **Clear** to delete all historical Allure report result files and free disk space.
+| Field | Description |
+|-------|-------------|
+| **Access Token** | The access_token from the DingTalk bot's Webhook URL |
+| **Secret** | The signing secret from the bot's security settings |
 
-> [!CAUTION]
-> This action is irreversible; historical report data will be permanently deleted.
+### 3.2 Test Notification
 
-### Clear All Logs
+Click **Test Notification**:
 
-Click **Clear** to delete application runtime log files.
+1. `NotificationService` constructs a test message
+2. Signs with HMAC-SHA256 (timestamp + secret)
+3. Sends to the DingTalk Webhook via `axios`
+4. Result displayed via Toast
 
----
+### 3.3 Notification Triggers
 
-## Run Settings
-
-### Prevent System Sleep
-
-| State | Effect |
-|-------|--------|
-| **On** | During test execution, the `powerSaveBlocker` API prevents Windows from entering sleep/hibernation |
-| **Off** | System sleep policy unaffected |
-
-> Recommended for long-running test plans, especially scheduled plans.
+- Test execution complete (automatic)
+- Test report generation complete (automatic)
+- Manual trigger (test notification button)
 
 ---
 
-## Update Settings
+## Step 4: Data Storage Path
 
-### Auto-check for Updates
+### 4.1 Default Path
 
-| State | Effect |
-|-------|--------|
-| **On** | Automatically checks GitHub Releases for new versions on app startup |
-| **Off** | Manual check only |
+Defaults to the Windows AppData directory:
+- `%APPDATA%\Xkautotester\config\` — Config directory
+- `%APPDATA%\Xkautotester\` — Data directory
 
-### Check Updates Manually
+### 4.2 Custom Path
 
-Click **Check Now**:
+Click **Change Path** and select a new directory:
 
-1. System queries the GitHub Releases API
-2. If a newer version exists, a **Version Update** modal appears, showing the new version and changelog
-3. Click **Download Update** to download the new installer (with progress bar)
-4. After download, click install; the app restarts automatically to complete the update
+1. `UserDataService.changeDataPath(newPath)` triggers:
+   - `UserDataMigrator` copies existing data to the new path
+   - `WindowsRegistryBridge` persists the new path to the Windows registry
+2. Prompts to restart the app
+3. After restart, loads data from the new path
+
+### 4.3 Reset Path
+
+Click **Reset to Default** to restore the AppData default path.
+
+### 4.4 Data Migration Mechanism
+
+On version upgrades, `UserDataMigrator` auto-syncs new config items:
+- Records the last migration version via `data-version.json`
+- Compares with the current version and applies necessary migration rules
+- Preserves existing user config; only adds new fields
+
+---
+
+## Step 5: Version & Auto-Update
+
+### 5.1 View Version Info
+
+`VersionService` reads from `version.json`:
+
+| Field | Example | Description |
+|-------|---------|-------------|
+| version | `0.1.4` | Main version |
+| buildDate | `2026-05-21` | Build date |
+| prerelease | `dev.2` | Pre-release identifier |
+| fullVersion | `0.1.4-dev.2` | Full version |
+
+### 5.2 Check for Updates
+
+Click **Check for Updates**:
+
+1. `UpdateService` calls the GitHub Releases API
+2. Compares the current version with the latest release
+3. Returns update info (version / release date / release notes)
+
+### 5.3 Download & Install
+
+If a new version is available:
+
+1. Click **Download Update**
+2. `UpdateService` downloads the installer to a temp directory
+3. Real-time download progress shown via IPC event `on-download-progress`
+4. After download, click **Install Update**
+5. The app exits and launches the NSIS installer
+6. After installation, the app restarts
+
+### 5.4 Auto-Check
+
+Enable the **Auto-check Updates** switch (`APP_SETTINGS.autoCheckUpdate`):
+- Checks automatically on app startup
+- Toast notification on new versions
+
+---
+
+## Step 6: Anti-System-Sleep
+
+### 6.1 Enable Anti-Sleep
+
+Toggle the **Anti-System-Sleep** switch:
+
+- When enabled, `powerHandlers.setPreventSleep(true)` calls Electron `powerSaveBlocker.start('prevent-display-sleep')`
+- The system won't sleep during test execution
+- Auto-stops on app exit
+
+### 6.2 Persistence
+
+Settings saved to `config.json`; restored on app startup via `restorePreventSleepSetting()`.
+
+---
+
+## Step 7: Driver Detection
+
+### 7.1 Serial Driver Detection
+
+`DriverChecker` detects the CP210x serial driver:
+- Checks the Windows Device Manager
+- If not installed, prompts to run `env/CP210x_Windows_Drivers/CP210xVCPInstaller_x64.exe`
+
+### 7.2 ADB Driver Detection
+
+`EnvironmentService` checks ADB availability:
+- Calls `adb version`
+- On failure, prompts to install Android SDK platform-tools or use the full installer
 
 ---
 
 ## Configuration File Structure
 
-All settings stored in `config/config.json`:
+All settings persist to `config/config.json`:
 
 ```json
 {
@@ -205,17 +228,11 @@ All settings stored in `config/config.json`:
 }
 ```
 
----
-
-## Configuration Sync & Migration
-
-- On app upgrades, `UserDataService` automatically merges new config items from the installer into user configs
-- User-customized configs (under the AppData directory) are unaffected by installer upgrades
-- Use **Config Storage Location** to migrate user data to a custom path
+> `config.json` is the **single source of truth** (single-source config); both JS and Python read from it — no hardcoded copies.
 
 ---
 
 ## Next Steps
 
-- [01 - Installation & Environment Setup](01-installation.md)
+- [01 - Installation & Environment Setup](01-installation.md) (troubleshooting)
 - [04 - Test Execution & Reports](04-test-execution.md)

@@ -42,6 +42,9 @@ const PYPROJECT_FILE = 'pyproject.toml';
 const NODE_MODULES_DIR = 'node_modules';
 const PACKAGE_JSON_FILE = 'package.json';
 
+// 忽略缺失检查的依赖包 (项目暂未使用, 单独处理避免误报)
+const IGNORED_MISSING_PACKAGES = ['ddddocr'];
+
 // ── module-level 纯函数 (对称 UpdateService compareVersions/normalizeUpdateError) ──
 
 /**
@@ -83,6 +86,25 @@ function checkMissingPackages(installed, requirements) {
     if (!found) missing.push(req);
   }
   return missing;
+}
+
+/**
+ * 比较语义化版本号 (仅数字段, 如 '3.12.4')
+ * @param {string} a
+ * @param {string} b
+ * @returns {number} -1 (a<b) / 0 (a==b) / 1 (a>b)
+ */
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map(n => parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const na = pa[i] || 0;
+    const nb = pb[i] || 0;
+    if (na < nb) return -1;
+    if (na > nb) return 1;
+  }
+  return 0;
 }
 
 /**
@@ -456,17 +478,16 @@ class EnvironmentService {
       let versionStatus = 'success';
       let versionMessage;
 
-      if (version !== REQUIRED_PYTHON_VERSION) {
-        if (pythonConfig.isSystem) {
-          return {
-            status: 'error',
-            message: this.i18nService.t('splash.checks.pythonVersionMismatch', { version: version, required: REQUIRED_PYTHON_VERSION })
-          };
-        }
-        versionStatus = 'warning';
-        versionMessage = this.i18nService.t('splash.checks.pythonVersionRecommended', { version: version, recommended: REQUIRED_PYTHON_VERSION }) + ' ' + sourceLabel;
+      if (compareVersions(version, REQUIRED_PYTHON_VERSION) >= 0) {
+        versionMessage = this.i18nService.t('splash.checks.pythonVersion', {
+          version: version,
+          recommended: REQUIRED_PYTHON_VERSION
+        }) + ' ' + sourceLabel;
       } else {
-        versionMessage = this.i18nService.t('splash.checks.pythonVersion', { version: version }) + ' ' + sourceLabel;
+        return {
+          status: 'error',
+          message: this.i18nService.t('splash.checks.pythonVersionMismatch', { version: version, required: REQUIRED_PYTHON_VERSION })
+        };
       }
 
       const requirementsPath = path.join(projectRoot, PYPROJECT_FILE);
@@ -483,7 +504,8 @@ class EnvironmentService {
 
         const installedPackages = new Set(pipResult.stdout.split('\n').map(pkg => pkg.toLowerCase().trim()).filter(pkg => pkg));
         const requirementsContent = this._fs.readFileSync(requirementsPath, 'utf8');
-        const requirements = parsePyprojectDependencies(requirementsContent);
+        const requirements = parsePyprojectDependencies(requirementsContent)
+          .filter(spec => !IGNORED_MISSING_PACKAGES.includes(extractPackageName(spec)));
 
         if (requirements.length > 0) {
           const missingPackages = checkMissingPackages(installedPackages, requirements);
@@ -677,5 +699,8 @@ module.exports = {
   parsePyprojectDependencies,
   extractPackageName,
   checkMissingPackages,
+  compareVersions,
   buildPythonConfig,
+  IGNORED_MISSING_PACKAGES,
+  REQUIRED_PYTHON_VERSION,
 };

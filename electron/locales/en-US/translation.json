@@ -48,6 +48,8 @@
     "configStoragePath": "Config Storage Path",
     "confirmChangeConfigPath": "Confirm Change Config Path",
     "changeConfigPathMessage": "Changing the config storage path requires a restart to take effect. Continue?",
+    "configPathForbiddenTitle": "Operation Forbidden",
+    "configPathForbiddenMessage": "Cannot select the program directory as the config storage path, otherwise the config may be lost during software updates. Please choose another directory",
     "changeConfigPathFailed": "Failed to change config path",
     "confirmResetConfigPath": "Confirm Reset Config Path",
     "resetConfigPathMessage": "Resetting to default path requires a restart to take effect. Continue?",
@@ -97,8 +99,11 @@
     "dingtalk": "DingTalk",
     "accessToken": "Access Token",
     "secret": "Secret",
+    "toggleVisibility": "Show/Hide",
     "update": "Update",
     "autoCheckUpdate": "Auto-check for updates on startup",
+    "allowInsecureSSL": "Allow insecure connection (enable when cert verification fails)",
+    "allowInsecureSSLWarning": "Insecure connection enabled. Only use when certificate verification fails. Security risk.",
     "checkUpdateNow": "Check for updates",
     "checkNow": "Check Now",
     "updateAvailable": "Update Available",
@@ -115,7 +120,8 @@
       "connection_reset": "Connection reset, please check your network stability",
       "dns_failed": "DNS resolution failed, please check your network connection",
       "network_unreachable": "Network unreachable, please check your network connection",
-      "unknown": "Unknown error"
+      "unknown": "Unknown error",
+      "ssl_failed": "SSL certificate verification failed, please check system time or network proxy"
     },
     "downloadUpdate": "Download Update",
     "downloading": "Downloading",
@@ -592,6 +598,8 @@
   "reportModal": {
     "title": "View Report",
     "runHistory": "Run History",
+    "scheduledReportHistory": "Report History",
+    "scheduledNoReports": "No run records from associated test plans for this scheduled plan",
     "loading": "Loading reports...",
     "noReports": "No run records for this test plan",
     "openReport": "Open Report",
@@ -619,6 +627,8 @@
       "checkFailed": "Check failed: {{error}}",
       "checkFailedShort": "Check failed",
       "environmentCheckFailed": "Environment check failed: {{error}}",
+      "statusPass": "Passed",
+      "statusFail": "Failed",
       "configPathInfo": "Config Directory",
       "migratingConfig": "Migrating configuration files...",
       "cp210Found": "CP210x driver found",
@@ -633,7 +643,7 @@
       "checkAndroidSdkFailed": "Failed to check Android SDK: {{error}}",
       "pythonNotFound": "Python not found",
       "cannotGetPythonVersion": "Cannot get Python version",
-      "pythonVersion": "Python version: {{version}}",
+      "pythonVersion": "Python version: {{version}} (Recommended: {{recommended}})",
       "pythonVersionRecommended": "Python version: {{version}} (Recommended: {{recommended}})",
       "venvNotFound": "Virtual environment not found, please run \"uv sync\" to create it",
       "missingPackages": "{{versionMessage}}, missing packages: {{packages}}",
@@ -1231,7 +1241,9 @@
       "fatalCrashDetected": "Fatal crash detected [{type}]: {line}",
       "testFailedByCrash": "Test terminated due to fatal app crash: {type}",
       "appPidChanged": "App PID changed (old: {old_pid}, new: {new_pid}), logcat monitor updated",
-      "initErrorWithCrash": "Initialization failed and app crash logs detected"
+      "initErrorWithCrash": "Initialization failed and app crash logs detected",
+      "initFailedAttachName": "Initialization Failure Reason",
+      "initFailedSummary": "Initialization failed ({severity}): {reason}"
     },
     "logcatMonitor": {
       "alreadyRunning": "Logcat monitor is already running",

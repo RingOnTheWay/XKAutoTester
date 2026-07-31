@@ -120,6 +120,8 @@ export const controllerHandlerMixin = {
   },
 
   handleAddStep() {
+    // 先同步 DOM 数据到 model，避免新增步骤触发重渲染时丢失用户在 input 中未提交的值（如随机数 min/max）
+    this.model.syncStepsFromDOM(this.view.collectStepCardsData(this.model.get('steps')));
     this.model.addStep();
   },
 

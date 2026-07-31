@@ -32,6 +32,7 @@ export const ICON_MAPPING = {
   copyright: 'Copyright',
   language: 'Languages',
   visibility: 'Eye',
+  visibility_off: 'EyeOff',
   close: 'X',
   check: 'Check',
   error: 'CircleAlert',

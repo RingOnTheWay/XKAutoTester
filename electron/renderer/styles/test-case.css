@@ -680,7 +680,6 @@ body:not(.dark-theme) #test-case .tc-no-search-results {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  cursor: pointer;
   padding: var(--spacing-sm) 0;
 }
 
@@ -697,12 +696,19 @@ body:not(.dark-theme) #test-case .tc-no-search-results {
   transition: all 0.2s ease;
 }
 
-.checkbox-container input[type="checkbox"]:checked + .checkmark {
+/* input 隐藏, checkmark 选中态
+ * 兼容两种 DOM 结构：
+ *   1. input + label > .checkmark（如 index.html 始终置顶）
+ *   2. input ~ .checkmark 同为 label.checkbox-container 子元素（如 testPlansMixin.displayTestTypes）
+ */
+.checkbox-container input[type="checkbox"]:checked + label .checkmark,
+.checkbox-container input[type="checkbox"]:checked ~ .checkmark {
   background-color: var(--primary);
   border-color: var(--primary);
 }
 
-.checkbox-container input[type="checkbox"]:checked + .checkmark::after {
+.checkbox-container input[type="checkbox"]:checked + label .checkmark::after,
+.checkbox-container input[type="checkbox"]:checked ~ .checkmark::after {
   content: '';
   position: absolute;
   left: 4px;

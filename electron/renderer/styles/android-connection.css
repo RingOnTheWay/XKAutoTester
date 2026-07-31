@@ -152,6 +152,98 @@
   background: rgba(128, 128, 128, 0.5);
 }
 
+/* ─── 定时计划整合报告分组 ─────────────────────────────────── */
+
+.report-group {
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.03);
+  transition: border-color 0.2s ease;
+}
+
+.report-group + .report-group {
+  margin-top: 8px;
+}
+
+.report-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--glass-bg);
+  transition: background 0.2s ease;
+  font-size: 13px;
+}
+
+.report-group-header:hover {
+  background: rgba(var(--primary-rgb), 0.08);
+}
+
+.report-group-arrow {
+  display: inline-flex;
+  align-items: center;
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.report-group.expanded .report-group-arrow {
+  transform: rotate(90deg);
+}
+
+.report-group-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.report-group-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-group-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.12);
+  border-radius: 9px;
+}
+
+.report-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+}
+
+.report-group.collapsed .report-group-body {
+  display: none;
+}
+
+.report-group.expanded .report-group-body {
+  display: flex;
+}
+
+/* 分组内 run-item 缩进 + 左侧来源色条 */
+.report-group .report-run-item {
+  margin-left: 4px;
+  border-left: 2px solid rgba(var(--primary-rgb), 0.3);
+}
+
 .report-run-item {
   display: flex;
   align-items: center;

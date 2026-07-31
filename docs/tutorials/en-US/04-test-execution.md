@@ -1,207 +1,180 @@
 # 04 - Test Execution & Reports
 
-> **Applicable Version**: v0.1.3+ | **Target Audience**: Experienced test engineers
+> **Applicable Version**: v0.1.4+ | **Target Audience**: Experienced test engineers
 
 ---
 
 ## Overview
 
-The **Test Execution** tab is the central scheduling interface, responsible for:
+The **Test Execution** tab (`renderer/tabs/test-execution/`, with 16 Mixins) is the core entry point for test execution, supporting:
 
-- Test directory selection & file management
-- Test plan creation, editing, and deletion
-- Test type filtering (based on Pytest markers)
-- Test execution (real-time log output + progress tracking)
-- Allure report viewing with run history
-- Test server management
-
-![Test Execution Main Interface](../images/04-test-execution-main.png)
-
----
-
-## Interface Layout
-
-| Area | Position | Content |
-|------|----------|---------|
-| **Left Panel** | Top | Test directory + file list |
-| | Middle | Test plan management (unlocks after directory selected) |
-| | Bottom | Test type filter + scheduled plan management |
-| **Right Panel** | Top | Real-time test output log |
-| | Bottom | Progress bar + control buttons (Run/Stop/View Report/Stop Server) |
+- Test plan management (create / edit / delete)
+- Test file selection and test type filtering
+- Test runs (one-shot / loop execution)
+- Real-time console output
+- Allure report viewing / cleanup
+- DingTalk notification push
 
 ---
 
 ## Workflow
 
 ```
-Select test directory → Create test plan → Select test types → Run tests → View report
+Select device → Create/Select test plan → Configure execution params → Run tests → View report
 ```
 
 ---
 
-## Step 1: Select Test Directory
+## Step 1: Select a Device
 
-Click **Select Test Directory** and choose the folder containing Python test scripts.
+At the top of the **Test Execution** tab, select a connected Android device (cascade-select via the `device-cascade-select` component).
 
-After directory selection:
-- The **Test File List** shows all `.py` test files in the directory (with checkboxes)
-- **Test Plan** card unlocks
-- **Test Type** card loads Pytest markers
-- **Scheduled Plan** card unlocks
-
-![Select Test Directory](../images/04-select-directory.png)
+> The device must first be connected via ADB in the **Android Connection** tab. See [05 - Device Connection & Mirroring](05-device-connection.md).
 
 ---
 
-## Step 2: Create a Test Plan
+## Step 2: Manage Test Plans
 
-### 2.1 Open the New Plan Modal
+### 2.1 Create a Test Plan
 
-Click **New Plan** (unlocked after directory selection) to open the plan editor modal.
+Click **New Plan** and fill in:
 
-### 2.2 Configure Plan Parameters
+| Field | Description |
+|-------|-------------|
+| **Plan Name** | Unique identifier (e.g. `regression_v1.0`) |
+| **Test Files** | Select multiple `.py` files from `config/test_cases/` |
+| **Test Type** | All / Android / Bluetooth (auto-detected based on case markers) |
+| **Markers** | Pytest marker filter (e.g. `smoke`) |
+| **Device** | Associated Android device |
+| **BLE Mock Port** | Serial port number if BLE cases are included |
 
-| Parameter | Description | Required |
-|-----------|-------------|----------|
-| **Plan Name** | Identifier for the plan | Yes |
-| **Plan Description** | Description text | No |
-| **Test Files** | Check `.py` test files to execute (loaded from directory) | At least one |
-| **Test Types** | Check Pytest markers to execute (e.g. smoke, regression) | Optional (all if none checked) |
-| **Loop Count** | Number of execution cycles (default 1, range 1~999) | Yes |
-| **Continue on Failure** | If checked, continue subsequent cycles after a failure | No |
+### 2.2 Test Type Auto-detection
 
-> If no test type is selected, the system executes all tests in the directory without marker filtering.
+`TestPlanService` auto-detects the type based on test case steps:
+- Contains `start_ble_mock` / `stop_ble_mock` → Bluetooth case
+- Other Android operations → Android case
 
-### 2.3 Save the Plan
+### 2.3 Test Plan Operations
 
-Click **Save** to write the plan to `config/test_plans.json`; the plan list refreshes.
+- **Edit** — Modify plan info
+- **Delete** — Delete the plan (does not delete case files)
+- **Duplicate** — Copy plan configuration
+
+Test plans persist to `config/test_plans.json` (inherits `JsonFileCrudService`).
 
 ---
 
-## Step 3: Select Test Types
+## Step 3: Configure Execution Parameters
 
-In the **Test Type** card, check the markers to execute:
+### 3.1 One-shot Execution
 
-- All available markers come from `config/pytest.ini`
-- Check states pass as Pytest parameters (`-m "marker1 or marker2"`)
+The simplest execution mode: select a plan → click **Run**.
+
+### 3.2 Loop Execution (New)
+
+Loop execution allows a test plan to run multiple times, configurable:
+
+| Parameter | Description |
+|-----------|-------------|
+| **Loop Count** | Total execution count (0 = infinite loop) |
+| **Continue on Failure** | `true` (continue) / `false` (stop) |
+| **Loop Interval** | Wait time between loops (seconds) |
+
+Execution flow:
+
+```mermaid
+flowchart TD
+    Start([Start Loop Execution]) --> Check{i < max_loops<br/>or infinite?}
+    Check -- No --> End([End])
+    Check -- Yes --> Run[Execute test plan]
+    Run --> Result{Execution Result}
+    Result -- Pass --> Inc[i++] --> Wait[Wait interval] --> Check
+    Result -- Fail --> CheckFail{Continue on failure?}
+    CheckFail -- Yes --> Inc
+    CheckFail -- No --> End
+```
+
+### 3.3 Scheduled Execution
+
+Scheduled execution is managed via **Scheduled Plans**. See [06 - Scheduled Plans & Loop Execution](06-scheduled-plan.md).
 
 ---
 
 ## Step 4: Run Tests
 
-### 4.1 Start Tests
+After clicking **Run**:
 
-Click **Run Tests**; the system will:
+1. `PythonTestService` invokes the Python backend via subprocess:
+   ```bash
+   python -m main --test-paths <paths> --markers <markers> --test-plan <name>
+   # Env var XKAUTOTESTER_USER_DATA specifies the user data directory
+   ```
+2. Python side: `__main__.py` → `cli.py` → `pytest_runner.py` executes Pytest
+3. The `pytest/` submodule collaborates:
+   - `args_builder.py` builds pytest args
+   - `path_resolver.py` resolves paths
+   - `pytest_process.py` manages the pytest process
+   - `stats_parser.py` parses statistics
+   - `summary_formatter.py` formats the summary
+4. Real-time output streams to the frontend console via IPC
 
-1. Spawn a Python subprocess executing `python -m main`
-2. Stream stdout/stderr in real-time to the right-side log panel
-3. Update the progress bar dynamically (based on test file count)
+### 4.1 Console Output
 
-### 4.2 During Execution
+The console displays:
+- Test start / end time
+- Pass / fail / skip status for each case
+- Failure stack traces
+- Summary statistics (total / passed / failed / skipped / duration)
 
-| Action | Button | Effect |
-|--------|--------|--------|
-| Stop tests | **Stop Tests** | Terminate the subprocess, halt current execution |
-| View logs | Scroll right panel | Real-time pytest output and assertion results |
+> Console output is displayed vertically without horizontal scrollbars. The **Clear Console** button removes existing output and restores the welcome message.
 
-![Test Running](../images/04-test-running.png)
+### 4.2 Stop Tests
 
-### 4.3 Test Completion
-
-After execution finishes (normal completion or termination):
-
-- Progress bar resets
-- **View Report** button unlocks
-- **Stop Server** button unlocks
-
----
-
-## Step 5: View Reports
-
-### 5.1 Open the Report Selector
-
-Click **View Report** to open the report selection modal.
-
-The modal lists **all historical run records** for the currently selected test plan.
-
-### 5.2 Select a Run Record
-
-- Each record shows the execution timestamp
-- Selecting a record unlocks the **Open Report** button
-- Click **Open Report** to launch the Allure report in your default browser
-
-The Allure report includes:
-- Test overview (passed/failed/skipped counts)
-- Categorized by Suite/Epic/Feature/Story
-- Detailed steps and screenshots per test case
-- Error stack traces for failed cases
-
-### 5.3 Stop the Allure Server
-
-After viewing reports, click **Stop Server** to shut down the Allure local service and free the port.
+Click **Stop** — `PythonTestService` terminates the subprocess.
 
 ---
 
-## Managing Test Plans
+## Step 5: View Allure Report
 
-### Edit a Plan
+### 5.1 Generate Report
 
-Select a plan → click **Edit Plan** → modify in the modal → click **Update Plan**.
+After tests finish, `AllureService` (aggregating the `allure/` submodule) auto-generates the report:
+- `AllureCliInvoker.js` invokes the Allure CLI (npm package `allure ^3.9.0`) to generate static reports
+- `AllureHttpServer.js` starts an HTTP service to host the report
 
-### Delete a Plan
+### 5.2 View the Report
 
-Select a plan → click **Delete Plan** → confirm deletion.
+Click **View Report** — the Allure report opens in the default browser.
 
-> [!CAUTION]
-> Deleting a plan does **not** delete the corresponding test case files or scripts — only plan metadata is removed.
+Report contents:
+- Overview (pass rate / trend chart)
+- Categories (failures / exceptions)
+- Suites (grouped by test file)
+- Timeline (execution duration)
+- Behaviors (grouped by Epic / Feature / Story)
 
----
+### 5.3 Report Management
 
-## Log Output Panel
-
-### Quick Actions
-
-| Action | How |
-|--------|-----|
-| **Clear logs** | Click the 🗑 button in the top-right of the log panel |
-| **Copy logs** | Select and copy text directly from the panel |
-
-### Log Content
-
-Logs contain the full output of Python test execution:
-
-```
-========================== test session starts ==========================
-platform win32 -- Python 3.12.4, pytest-8.4.2, pluggy-1.5.0
-rootdir: D:\test_cases
-configfile: pytest.ini
-...
-collected 5 items / 3 deselected / 2 selected
-test_login.py::TestLogin::test_password_login PASSED  [ 50%]
-test_login.py::TestLogin::test_sms_login PASSED          [100%]
-========================== 2 passed in 45.23s ===========================
-```
+- **Clear Reports** — Delete historical reports (`clearAllureReports`)
+- **Stop Service** — Stop the Allure HTTP service (`stopAllureServer`)
 
 ---
 
-## Test Types & Pytest Integration
+## Step 6: DingTalk Notification (Optional)
 
-Custom markers defined in `config/pytest.ini`:
+After test execution, `NotificationService` auto-pushes DingTalk notifications (requires pre-configuration in **Settings → Notifications**).
 
-```ini
-[pytest]
-markers =
-    smoke: Smoke tests
-    regression: Regression tests
-    login: Login-related tests
-    payment: Payment-related tests
-```
+Notification contents:
+- Plan name
+- Execution result (pass / fail)
+- Summary statistics (total / passed / failed / skipped / duration)
+- Report link (if Allure HTTP service is running)
 
-Types checked on the platform map to `pytest -m "smoke or regression"` arguments.
+Signing mechanism: HMAC-SHA256 (timestamp + secret) → Authorization header.
 
 ---
 
 ## Next Steps
 
+- [05 - Device Connection & Mirroring](05-device-connection.md)
 - [06 - Scheduled Plans & Loop Execution](06-scheduled-plan.md)
-- [07 - System Settings](07-settings.md)

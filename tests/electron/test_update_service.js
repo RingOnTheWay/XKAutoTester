@@ -9,7 +9,7 @@ const path = require('path');
 const UPDATE_SERVICE_PATH = path.join(
   __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'UpdateService.js'
 );
-const { UpdateService } = require(UPDATE_SERVICE_PATH);
+const { UpdateService, normalizeUpdateError } = require(UPDATE_SERVICE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
 
@@ -340,4 +340,241 @@ test('installUpdate 文件不存在抛 Failed to install update: Update file not
   );
   // installStrategy 不应被调
   assert.strictEqual(installStrategy.calls.install.length, 0, '文件不存在不调 installStrategy');
+});
+
+// ── normalizeUpdateError 错误分类 ───────────────────────
+
+test('normalizeUpdateError SSL 证书错误分类为 ssl_failed', () => {
+  const sslCodes = [
+    'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+    'CERT_HAS_EXPIRED',
+    'DEPTH_ZERO_SELF_SIGNED_CERT',
+    'SELF_SIGNED_CERT_IN_CHAIN',
+    'ERR_TLS_CERT_ALTNAME_INVALID',
+    'ERR_TLS_PROTOCOL_VERSION',
+  ];
+  for (const code of sslCodes) {
+    const raw = new Error(`SSL error: ${code}`);
+    raw.code = code;
+    const result = normalizeUpdateError(raw);
+    assert.strictEqual(result.code, 'ssl_failed', `${code} → ssl_failed`);
+    assert.strictEqual(result.message, 'SSL certificate verification failed', `${code} message`);
+    assert.strictEqual(result.statusCode, null, `${code} statusCode=null`);
+  }
+});
+
+test('normalizeUpdateError 保留已知网络错误分类', () => {
+  const cases = [
+    { code: 'ECONNREFUSED', expected: 'connection_refused' },
+    { code: 'ECONNRESET', expected: 'connection_reset' },
+    { code: 'ETIMEDOUT', expected: 'timeout' },
+    { code: 'ECONNABORTED', expected: 'timeout' },
+    { code: 'ENOTFOUND', expected: 'dns_failed' },
+    { code: 'ENETUNREACH', expected: 'network_unreachable' },
+  ];
+  for (const { code, expected } of cases) {
+    const raw = new Error(`Network error: ${code}`);
+    raw.code = code;
+    const result = normalizeUpdateError(raw);
+    assert.strictEqual(result.code, expected, `${code} → ${expected}`);
+    assert.strictEqual(result.statusCode, null, `${code} statusCode=null`);
+  }
+});
+
+test('normalizeUpdateError 未知 error.code 走 default 分支生成 network_<code>', () => {
+  const raw = new Error('Something weird');
+  raw.code = 'EWEIRDSIGNAL';
+  const result = normalizeUpdateError(raw);
+  assert.strictEqual(result.code, 'network_EWEIRDSIGNAL', '未知 code 走 default');
+  assert.strictEqual(result.message, 'Network error: EWEIRDSIGNAL');
+  assert.strictEqual(result.statusCode, null);
+});
+
+test('normalizeUpdateError HTTP 响应错误分类', () => {
+  // 403 非限流 → forbidden
+  const forbidden = new Error('Forbidden');
+  forbidden.response = { status: 403, headers: {} };
+  const r1 = normalizeUpdateError(forbidden);
+  assert.strictEqual(r1.code, 'forbidden');
+  assert.strictEqual(r1.statusCode, 403);
+
+  // 403 限流 → rate_limited
+  const rateLimited = new Error('Rate limited');
+  rateLimited.response = { status: 403, headers: { 'x-ratelimit-remaining': '0' } };
+  const r2 = normalizeUpdateError(rateLimited);
+  assert.strictEqual(r2.code, 'rate_limited');
+
+  // 429 → rate_limited
+  const tooMany = new Error('Too many');
+  tooMany.response = { status: 429, headers: {} };
+  const r3 = normalizeUpdateError(tooMany);
+  assert.strictEqual(r3.code, 'rate_limited');
+  assert.strictEqual(r3.statusCode, 429);
+
+  // 404 → repo_not_found
+  const notFound = new Error('Not found');
+  notFound.response = { status: 404, headers: {} };
+  const r4 = normalizeUpdateError(notFound);
+  assert.strictEqual(r4.code, 'repo_not_found');
+
+  // 其他 HTTP → http_<status>
+  const serverErr = new Error('Server error');
+  serverErr.response = { status: 500, headers: {} };
+  const r5 = normalizeUpdateError(serverErr);
+  assert.strictEqual(r5.code, 'http_500');
+  assert.strictEqual(r5.statusCode, 500);
+});
+
+// ── allowInsecureSSL option + setAllowInsecureSSL setter ──
+
+const https = require('https');
+
+/** spy factory: 记录每次调用收到的 httpsAgent 参数 */
+function makeSpyUpdateSourceFactory() {
+  const calls = [];
+  const factory = (httpsAgent) => {
+    calls.push(httpsAgent);
+    return { async fetchLatestRelease() { return null; } };
+  };
+  factory.calls = calls;
+  return factory;
+}
+
+test('constructor allowInsecureSSL 默认 false: _httpsAgent=undefined, factory 收 undefined', () => {
+  const spy = makeSpyUpdateSourceFactory();
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService(), {
+    updateSourceFactory: spy,
+  });
+  assert.strictEqual(svc._allowInsecureSSL, false, '默认 false');
+  assert.strictEqual(svc._httpsAgent, undefined, '_httpsAgent undefined');
+  assert.strictEqual(spy.calls.length, 1, 'factory 调 1 次');
+  assert.strictEqual(spy.calls[0], undefined, 'factory 收 undefined');
+});
+
+test('constructor allowInsecureSSL=true: _httpsAgent 非 undefined + rejectUnauthorized=false, factory 收 agent', () => {
+  const spy = makeSpyUpdateSourceFactory();
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService(), {
+    updateSourceFactory: spy,
+    allowInsecureSSL: true,
+  });
+  assert.strictEqual(svc._allowInsecureSSL, true, 'option 接受');
+  assert.ok(svc._httpsAgent instanceof https.Agent, '_httpsAgent 是 https.Agent 实例');
+  assert.strictEqual(svc._httpsAgent.options.rejectUnauthorized, false, 'rejectUnauthorized=false');
+  assert.strictEqual(spy.calls.length, 1, 'factory 调 1 次');
+  assert.strictEqual(spy.calls[0], svc._httpsAgent, 'factory 收同一 agent');
+});
+
+test('setAllowInsecureSSL(true): 从 false 切到 true, 重建 httpsAgent + 重新调 factory', () => {
+  const spy = makeSpyUpdateSourceFactory();
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService(), {
+    updateSourceFactory: spy,
+  });
+  assert.strictEqual(svc._httpsAgent, undefined, '初始 undefined');
+  const initialAgent = svc._httpsAgent;
+
+  svc.setAllowInsecureSSL(true);
+
+  assert.strictEqual(svc._allowInsecureSSL, true, '切换后 true');
+  assert.ok(svc._httpsAgent instanceof https.Agent, '重建为 https.Agent');
+  assert.strictEqual(svc._httpsAgent.options.rejectUnauthorized, false, 'rejectUnauthorized=false');
+  assert.notStrictEqual(svc._httpsAgent, initialAgent, 'agent 已变化');
+  assert.strictEqual(spy.calls.length, 2, 'factory 重新调 1 次 (总 2 次)');
+  assert.strictEqual(spy.calls[1], svc._httpsAgent, 'factory 收新 agent');
+});
+
+test('setAllowInsecureSSL(false): 从 true 切到 false, _httpsAgent=undefined, factory 收 undefined', () => {
+  const spy = makeSpyUpdateSourceFactory();
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService(), {
+    updateSourceFactory: spy,
+    allowInsecureSSL: true,
+  });
+  assert.ok(svc._httpsAgent instanceof https.Agent, '初始有 agent');
+
+  svc.setAllowInsecureSSL(false);
+
+  assert.strictEqual(svc._allowInsecureSSL, false, '切换后 false');
+  assert.strictEqual(svc._httpsAgent, undefined, '_httpsAgent 重置 undefined');
+  assert.strictEqual(spy.calls.length, 2, 'factory 重新调');
+  assert.strictEqual(spy.calls[1], undefined, 'factory 收 undefined');
+});
+
+test('setAllowInsecureSSL 同值幂等: 不重复构建 factory', () => {
+  const spy = makeSpyUpdateSourceFactory();
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService(), {
+    updateSourceFactory: spy,
+    allowInsecureSSL: true,
+  });
+  const agentBefore = svc._httpsAgent;
+  assert.strictEqual(spy.calls.length, 1, '初始 1 次');
+
+  svc.setAllowInsecureSSL(true); // 同值
+
+  assert.strictEqual(svc._httpsAgent, agentBefore, 'agent 不变');
+  assert.strictEqual(spy.calls.length, 1, 'factory 不重新调');
+});
+
+test('setAllowInsecureSSL 同步重建 downloadStrategy factory', () => {
+  const sourceSpy = makeSpyUpdateSourceFactory();
+  const downloadCalls = [];
+  const downloadSpy = (httpsAgent) => {
+    downloadCalls.push(httpsAgent);
+    return { async download() { return { success: true }; } };
+  };
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService(), {
+    updateSourceFactory: sourceSpy,
+    downloadStrategyFactory: downloadSpy,
+  });
+  assert.strictEqual(downloadCalls.length, 1, 'download factory 初始 1 次');
+
+  svc.setAllowInsecureSSL(true);
+
+  assert.strictEqual(downloadCalls.length, 2, 'download factory 重新调');
+  assert.strictEqual(downloadCalls[1], svc._httpsAgent, 'download factory 收新 agent');
+});
+
+// ── defaultUpdateServiceFactory 启动期读 config.json ──
+
+const os = require('os');
+const fsReal = require('fs');
+const { defaultUpdateServiceFactory } = require('../../electron/src/main/services/application/factories');
+
+test('defaultUpdateServiceFactory 读 config.json allowInsecureSSL=true 传入构造', () => {
+  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-factory-'));
+  try {
+    fsReal.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
+      APP_SETTINGS: { allowInsecureSSL: true }
+    }));
+    const userDataService = { getUserConfigPath: () => tmpDir };
+    const svc = defaultUpdateServiceFactory({ __tag: 'version' }, userDataService);
+    assert.strictEqual(svc._allowInsecureSSL, true, '从 config 读 true');
+    assert.ok(svc._httpsAgent instanceof https.Agent, '构建 agent');
+  } finally {
+    fsReal.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('defaultUpdateServiceFactory 无 config.json 时默认 false', () => {
+  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-factory-'));
+  try {
+    const userDataService = { getUserConfigPath: () => tmpDir };
+    const svc = defaultUpdateServiceFactory({ __tag: 'version' }, userDataService);
+    assert.strictEqual(svc._allowInsecureSSL, false, '无 config 默认 false');
+    assert.strictEqual(svc._httpsAgent, undefined, '无 agent');
+  } finally {
+    fsReal.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('defaultUpdateServiceFactory config 无 allowInsecureSSL key 时默认 false', () => {
+  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-factory-'));
+  try {
+    fsReal.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
+      APP_SETTINGS: { autoCheckUpdate: true }
+    }));
+    const userDataService = { getUserConfigPath: () => tmpDir };
+    const svc = defaultUpdateServiceFactory({ __tag: 'version' }, userDataService);
+    assert.strictEqual(svc._allowInsecureSSL, false, '无 key 默认 false');
+  } finally {
+    fsReal.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });

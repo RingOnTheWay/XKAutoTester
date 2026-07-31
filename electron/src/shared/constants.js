@@ -40,6 +40,7 @@ const IPC_CHANNELS = {
     SCHEDULED_TEST_COMPLETE: 'scheduled-test-complete',
     SCHEDULED_TEST_START: 'scheduled-test-start',
     SCHEDULED_PLAN_EXPIRED: 'scheduled-plan-expired',
+    GET_SCHEDULED_PLAN_RUNS: 'get-scheduled-plan-runs',
 
     // 报告相关
     VIEW_REPORT: 'view-report',

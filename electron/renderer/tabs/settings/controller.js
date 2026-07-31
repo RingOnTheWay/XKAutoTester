@@ -33,6 +33,10 @@ export class SettingsController {
     // 初始化时翻译所有 data-i18n 元素
     const app = window.__XKAT_APP__;
     if (app?.updateUIText) app.updateUIText();
+    // 启动时自动检查更新 (如启用)
+    if (this.#model.autoCheckUpdate !== false) {
+      setTimeout(() => { this.#model.checkForUpdate(); }, 2000);
+    }
   }
 
   destroy() {
@@ -110,9 +114,21 @@ export class SettingsController {
       const source = err.source || '';
       const failedKey = `settings.${source}Failed`;
       const translated = source ? window.i18n.t(failedKey) : '';
-      const msg = (translated && translated !== failedKey)
-        ? translated
-        : (err.error?.message || err.message || err.source || String(err));
+      let msg;
+      if (translated && translated !== failedKey) {
+        // checkUpdate 优先用 updateErrorCodes 映射具体原因
+        if (source === 'checkUpdate' && err.code) {
+          const codeKey = `settings.updateErrorCodes.${err.code}`;
+          const codeMsg = window.i18n.t(codeKey);
+          const codeTranslated = codeMsg && codeMsg !== codeKey;
+          const reason = codeTranslated ? codeMsg : (err.error?.message || '');
+          msg = reason ? `${translated}: ${reason}` : translated;
+        } else {
+          msg = translated;
+        }
+      } else {
+        msg = (err.error?.message || err.message || err.source || String(err));
+      }
       Toast?.error(msg);
     });
   }
@@ -165,6 +181,15 @@ export class SettingsController {
       const result = await this.#model.selectDirectory();
       if (result && !result.canceled && result.filePaths.length > 0) {
         const newPath = result.filePaths[0];
+        // 禁止选择程序安装目录 (及子目录) 作配置存放路径, 防止更新时配置丢失
+        if (await this.#isInsideProgramDir(newPath)) {
+          this.#view.showConfirmModal(
+            window.i18n.t('settings.configPathForbiddenTitle'),
+            window.i18n.t('settings.configPathForbiddenMessage'),
+            () => {}
+          );
+          return;
+        }
         this.#view.showConfirmModal(
           window.i18n.t('settings.confirmChangeConfigPath'),
           window.i18n.t('settings.changeConfigPathMessage'),
@@ -230,11 +255,14 @@ export class SettingsController {
       if (result && !result.canceled && result.filePath) {
         this.#view.setButtonLoading('export-config-btn', true);
         try {
-          // wrapper 已处理 IPC 失败,错误由外层 catch 接
-          await this.#model.exportConfig(result.filePath);
-          Toast?.success(window.i18n.t('settings.exportConfigSuccess'));
-        } catch {
-          Toast?.error(window.i18n.t('settings.exportConfigFailed'));
+          const res = await this.#model.exportConfig(result.filePath);
+          if (res && res.success) {
+            Toast?.success(window.i18n.t('settings.exportConfigSuccess'));
+          } else {
+            Toast?.error(res?.error || window.i18n.t('settings.exportConfigFailed'));
+          }
+        } catch (error) {
+          Toast?.error(error?.message || window.i18n.t('settings.exportConfigFailed'));
         } finally {
           this.#view.setButtonLoading('export-config-btn', false);
         }
@@ -247,11 +275,14 @@ export class SettingsController {
       if (result && !result.canceled && result.filePath) {
         this.#view.setButtonLoading('export-logs-btn', true);
         try {
-          // wrapper 已处理 IPC 失败,错误由外层 catch 接
-          await this.#model.exportLogs(result.filePath);
-          Toast?.success(window.i18n.t('settings.exportLogsSuccess'));
-        } catch {
-          Toast?.error(window.i18n.t('settings.exportLogsFailed'));
+          const res = await this.#model.exportLogs(result.filePath);
+          if (res && res.success) {
+            Toast?.success(window.i18n.t('settings.exportLogsSuccess'));
+          } else {
+            Toast?.error(res?.error || window.i18n.t('settings.exportLogsFailed'));
+          }
+        } catch (error) {
+          Toast?.error(error?.message || window.i18n.t('settings.exportLogsFailed'));
         } finally {
           this.#view.setButtonLoading('export-logs-btn', false);
         }
@@ -314,11 +345,27 @@ export class SettingsController {
       this.#model.saveConfig({ autoCheckUpdate: checked });
     });
 
+    // 允许不安全 SSL 连接 (解决代理/加速导致的证书校验失败)
+    this.#bindToggle('allow-insecure-ssl-toggle', async (checked) => {
+      await this.#model.saveConfig({ allowInsecureSSL: checked });
+      if (checked) {
+        Toast?.warning(window.i18n.t('settings.allowInsecureSSLWarning'));
+      }
+    });
+
     // 防止睡眠
     this.#bindToggle('prevent-sleep-toggle', async (checked) => {
       // wrapper 已处理 IPC 失败,错误由 model 层 catch emit
       await this.#model.setPreventSleep(checked);
       this.#model.saveConfig({ preventSleep: checked });
+    });
+
+    // 通知 access_token / secret 显隐切换 (默认 password 隐藏)
+    this.#bindClick('notification-access-token-visibility-toggle', () => {
+      this.#toggleSecretVisibility('notification-access-token', 'notification-access-token-visibility-toggle');
+    });
+    this.#bindClick('notification-secret-visibility-toggle', () => {
+      this.#toggleSecretVisibility('notification-secret', 'notification-secret-visibility-toggle');
     });
 
     // 检查更新
@@ -354,7 +401,7 @@ export class SettingsController {
 
     // GitHub 链接
     this.#bindClick('github-repo-link', () => {
-      this.#model.openExternal('https://github.com/RiNG-XK/XKAutoTester');
+      this.#model.openExternal('https://github.com/RingOnTheWay/XKAutoTester');
     });
 
     // 全局点击：处理下拉框开关 + 关闭（捕获阶段，确保在 app.js 的冒泡阶段 handler 之前执行）
@@ -433,5 +480,45 @@ export class SettingsController {
 
   #bindToggle(elementId, handler) {
     this.#unbinds.push(this.#view.bindToggleById(elementId, handler));
+  }
+
+  /**
+   * 判断目标路径是否等于程序安装目录或其子目录
+   * 用 app.getPath('exe') 父目录作安装目录, 通过 ApiBridge.api.getProjectInfo().exeDir 拿
+   * @param {string} targetPath - 用户选择的路径
+   * @returns {Promise<boolean>} - 需 await, 但此处用同步缓存: 调 getProjectInfo 拿 exeDir 后比较
+   */
+  async #isInsideProgramDir(targetPath) {
+    try {
+      const info = await ApiBridge.api.getProjectInfo();
+      const exeDir = info?.exeDir;
+      if (!exeDir || !targetPath) return false;
+      const normalize = (p) => p.replace(/[\\/]+/g, '\\').replace(/\\$/, '').toLowerCase();
+      const a = normalize(targetPath);
+      const b = normalize(exeDir);
+      return a === b || a.startsWith(b + '\\');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * 切换通知密钥输入框的显隐: password ↔ text, 同步切换按钮图标 (visibility/visibility_off)
+   * @param {string} inputId - input 元素 id
+   * @param {string} buttonId - 触发切换的按钮元素 id
+   */
+  #toggleSecretVisibility(inputId, buttonId) {
+    const input = document.getElementById(inputId);
+    const button = document.getElementById(buttonId);
+    if (!input || !button) return;
+    const isHidden = input.type === 'password';
+    input.type = isHidden ? 'text' : 'password';
+    const nextIcon = isHidden ? 'visibility_off' : 'visibility';
+    const iconSpan = button.querySelector('.svg-icon');
+    if (iconSpan) {
+      iconSpan.setAttribute('data-icon', nextIcon);
+      const html = window.__XKAT_APP__?.getIconHtml?.(nextIcon);
+      if (html) iconSpan.innerHTML = html;
+    }
   }
 }

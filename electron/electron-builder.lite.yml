@@ -1,4 +1,23 @@
+appId: com.ring.xkautotester
+productName: XKAutoTester
 artifactName: ${productName} Lite Setup v${version}.${ext}
+
+directories:
+  output: dist
+
+files:
+  - src/**/*
+  - splash.html
+  - renderer/**/*
+  - assets/**/*
+  - locales/**/*
+  - templates/**/*
+  - node_modules/**/*
+
+asar: true
+
+asarUnpack:
+  - src/preload/**/*
 
 extraResources:
   - from: ../src
@@ -14,3 +33,19 @@ extraResources:
     to: uv.lock
   - from: ../version.json
     to: version.json
+
+win:
+  target: nsis
+  icon: assets/icon.png
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  include: build/installer.nsh
+  multiLanguageInstaller: true
+  displayLanguageSelector: true
+  installerLanguages:
+    - zh_CN
+    - en_US
+  installerSidebar: assets/installerSidebar.bmp
+  uninstallerSidebar: assets/installerSidebar.bmp

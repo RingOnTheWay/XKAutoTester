@@ -1,10 +1,11 @@
 const { registerHandler } = require('./base/handlerUtils');
 const path = require('path');
+const { app } = require('electron');
 const asyncFs = require('../utils/asyncFs');
 const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
-  const { electronApp, i18nService, versionService, userDataService } = services;
+  const { electronApp, i18nService, versionService, userDataService, updateService } = services;
 
   registerHandler(ipcMain, IPC_CHANNELS.GET_CONFIG, async () => {
     const configPath = path.join(electronApp.userConfigPath, 'config.json');
@@ -31,14 +32,29 @@ function register(ipcMain, services) {
       i18nService.changeLanguage(newConfig.APP_SETTINGS.language);
     }
 
+    // 同步 UpdateService 的 allowInsecureSSL (运行时切换, 立即生效)
+    if (Object.prototype.hasOwnProperty.call(newConfig.APP_SETTINGS || {}, 'allowInsecureSSL') && updateService) {
+      updateService.setAllowInsecureSSL(!!newConfig.APP_SETTINGS.allowInsecureSSL);
+    }
+
     return { success: true };
   });
 
-  registerHandler(ipcMain, IPC_CHANNELS.GET_PROJECT_INFO, () => ({
-    root: electronApp.projectRoot,
-    version: versionService ? versionService.getDisplayVersion() : 'v0.1.3-dev.1',
-    name: 'XKAutoTester'
-  }));
+  registerHandler(ipcMain, IPC_CHANNELS.GET_PROJECT_INFO, () => {
+    // exeDir = 程序安装目录 (app.getPath('exe') 父目录), 用于前端禁止选择该目录作配置存放路径
+    let exeDir = '';
+    try {
+      exeDir = path.dirname(app.getPath('exe'));
+    } catch (e) {
+      exeDir = '';
+    }
+    return {
+      root: electronApp.projectRoot,
+      version: versionService ? versionService.getDisplayVersion() : 'v0.1.3-dev.1',
+      name: 'XKAutoTester',
+      exeDir,
+    };
+  });
 
   registerHandler(ipcMain, IPC_CHANNELS.SHOW_DIALOG, async (options) => {
     const { dialog } = require('electron');

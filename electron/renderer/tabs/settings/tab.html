@@ -144,7 +144,12 @@
                                     <span data-i18n="settings.accessToken">access_token</span>
                                 </div>
                                 <div class="setting-control notification-input-control">
-                                    <input type="text" id="notification-access-token" class="glass-input notification-input" data-i18n-placeholder="settings.accessToken" placeholder="访问令牌">
+                                    <div class="notification-input-group">
+                                        <input type="password" id="notification-access-token" class="glass-input notification-input" data-i18n-placeholder="settings.accessToken" placeholder="访问令牌" autocomplete="off">
+                                        <button type="button" id="notification-access-token-visibility-toggle" class="material-button outlined small notification-visibility-btn" data-target="notification-access-token" data-i18n-title="settings.toggleVisibility" title="显示/隐藏">
+                                            <span class="svg-icon" data-icon="visibility"></span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div class="setting-item notification-config-item hidden" id="notification-secret-item">
@@ -153,7 +158,12 @@
                                     <span data-i18n="settings.secret">secret</span>
                                 </div>
                                 <div class="setting-control notification-input-control">
-                                    <input type="text" id="notification-secret" class="glass-input notification-input" data-i18n-placeholder="settings.secret" placeholder="加签密钥">
+                                    <div class="notification-input-group">
+                                        <input type="password" id="notification-secret" class="glass-input notification-input" data-i18n-placeholder="settings.secret" placeholder="加签密钥" autocomplete="off">
+                                        <button type="button" id="notification-secret-visibility-toggle" class="material-button outlined small notification-visibility-btn" data-target="notification-secret" data-i18n-title="settings.toggleVisibility" title="显示/隐藏">
+                                            <span class="svg-icon" data-icon="visibility"></span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -267,6 +277,18 @@
                             </div>
                             <div class="setting-item">
                                 <div class="setting-label">
+                                    <span class="svg-icon" data-icon="warning"></span>
+                                    <span data-i18n="settings.allowInsecureSSL">允许不安全连接(解决证书校验失败)</span>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="switch">
+                                        <input type="checkbox" id="allow-insecure-ssl-toggle">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
                                     <span class="svg-icon" data-icon="download"></span>
                                     <span data-i18n="settings.checkUpdateNow">检查版本更新</span>
                                 </div>
@@ -298,12 +320,12 @@
                                 <div class="version-item">
                                     <span class="svg-icon" data-icon="external_link"></span>
                                     <span class="version-label" data-i18n="labels.githubRepo">Github仓库</span>
-                                    <a id="github-repo-link" class="version-link" href="javascript:void(0)" data-url="https://github.com/bilibiliyf/XKAutoTester">XKAutoTester</a>
+                                    <a id="github-repo-link" class="version-link" href="javascript:void(0)" data-url="https://github.com/RingOnTheWay/XKAutoTester">XKAutoTester</a>
                                 </div>
                                 <div class="version-item">
                                     <span class="svg-icon" data-icon="copyright"></span>
                                     <span class="version-label" data-i18n="labels.copyright">版权信息</span>
-                                    <span class="version-value">XKAutoTester © RiNG 2025 | MIT License</span>
+                                    <span class="version-value">XKAutoTester © RiNG 2025-2026 | MIT License</span>
                                 </div>
                             </div>
                         </div>

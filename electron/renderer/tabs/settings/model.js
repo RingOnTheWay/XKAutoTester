@@ -23,6 +23,7 @@ export class SettingsModel extends EventEmitter {
     getVersionInfo: 'getVersionInfo',
     openExternal: 'openExternal',
     checkForUpdate: 'checkForUpdate',
+    checkForUpdateRaw: 'checkForUpdateRaw',
     downloadUpdate: 'downloadUpdate',
     installUpdate: 'installUpdate',
     clearAllureReports: 'clearAllureReports',
@@ -43,6 +44,7 @@ export class SettingsModel extends EventEmitter {
     removeUpdateProgressListener: null,
     autoCheckUpdate: true,
     preventSleep: false,
+    allowInsecureSSL: false,
   };
 
   // ── State Getters ──────────────────────────────────────────────
@@ -58,6 +60,7 @@ export class SettingsModel extends EventEmitter {
   get updatePendingFilePath() { return this.#state.updatePendingFilePath; }
   get autoCheckUpdate() { return this.#state.autoCheckUpdate; }
   get preventSleep() { return this.#state.preventSleep; }
+  get allowInsecureSSL() { return this.#state.allowInsecureSSL; }
 
   get(key) { return this.#state[key]; }
 
@@ -91,6 +94,7 @@ export class SettingsModel extends EventEmitter {
       this.#set('notification', settings.notification || { platform: 'none', dingtalk: { access_token: '', secret: '' } });
       this.#set('autoCheckUpdate', settings.autoCheckUpdate !== false);
       this.#set('preventSleep', !!settings.preventSleep);
+      this.#set('allowInsecureSSL', !!settings.allowInsecureSSL);
       this.emit('config-changed', config);
     } catch (error) {
       this.emit('error', { source: 'loadConfig', error });
@@ -209,7 +213,7 @@ export class SettingsModel extends EventEmitter {
       const result = await this.#api.exportConfig(outputPath);
       return result;
     } catch (error) {
-      this.emit('error', { source: 'exportConfig', error });
+      // 不 emit('error'): 失败由 controller 检查 result.success 统一显示原因, 避免双 toast
       return { success: false, error: error.message };
     }
   }
@@ -219,7 +223,7 @@ export class SettingsModel extends EventEmitter {
       const result = await this.#api.exportLogs(outputPath);
       return result;
     } catch (error) {
-      this.emit('error', { source: 'exportLogs', error });
+      // 不 emit('error'): 失败由 controller 检查 result.success 统一显示原因, 避免双 toast
       return { success: false, error: error.message };
     }
   }
@@ -240,15 +244,35 @@ export class SettingsModel extends EventEmitter {
 
   async checkForUpdate() {
     try {
-      const result = await this.#api.checkForUpdate();
-      if (result && result.updateAvailable) {
-        this.#set('updateData', result, 'update-available');
-      } else if (result && !result.updateAvailable) {
-        this.emit('update-not-available', result);
+      const result = await this.#api.checkForUpdateRaw();
+      if (result && result.success === false) {
+        const err = new Error(result.error || 'Unknown IPC error');
+        err.code = result.errorCode;
+        err.statusCode = result.statusCode;
+        throw err;
       }
-      return result;
+      const data = result?.data || {};
+      if (data.hasUpdate) {
+        this.#set('updateData', {
+          version: data.latestVersion,
+          releaseNotes: data.releaseNotes,
+          releaseName: data.releaseName,
+          downloadUrl: data.downloadUrl,
+          fileName: data.fileName,
+          fileSize: data.fileSize,
+          htmlUrl: data.htmlUrl,
+        }, 'update-available');
+      } else {
+        this.emit('update-not-available', data);
+      }
+      return data;
     } catch (error) {
-      this.emit('error', { source: 'checkUpdate', error });
+      this.emit('error', {
+        source: 'checkUpdate',
+        error,
+        code: error.code,
+        statusCode: error.statusCode,
+      });
       return { success: false, error: error.message };
     }
   }
