@@ -367,10 +367,9 @@ class PythonTestService {
    */
   async _recordTestPlanRun(output, testPlanName) {
     if (!this.testPlanService || !testPlanName) return;
-    const runData = findTestPlanRunMarker(output);
-    if (!runData) return;
+    if (!findTestPlanRunMarker(output)) return;  // 仅校验 marker 存在 + payload 合法 (payload 作 stdout 运行上下文, recordRun 不消费)
     try {
-      await this.testPlanService.recordRun(testPlanName, runData);
+      await this.testPlanService.recordRun(testPlanName);
     } catch (e) {
       this.logger.error(`Pipeline recordRun failed: ${e.message}`);
     }

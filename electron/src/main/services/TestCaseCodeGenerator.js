@@ -125,6 +125,26 @@ class TestCaseCodeGenerator {
     }
 
     /**
+     * 解析元素定位信息 (优先从最新页面封装数据刷新, 回退 config.locator/locatorValue)。
+     * 消除 generateElementStepCode/generatePageStepCode/generatePageStepCode.compare 3 处重复。
+     * @param {{locator?:string, locatorValue?:string, elementId?:string}} config - 步骤配置 (含 elementId + fallback 定位)
+     * @param {Object} pagePackageData - 页面封装数据
+     * @returns {{locatorType: string, locatorValue: string}}
+     */
+    _resolveLocator(config, pagePackageData) {
+        let locatorType = config.locator || 'id';
+        let locatorValue = config.locatorValue || '';
+        if (config.elementId && pagePackageData) {
+            const latestElement = this.findElementByIdFromPackage(config.elementId, pagePackageData);
+            if (latestElement) {
+                locatorType = latestElement.locator || locatorType;
+                locatorValue = latestElement.value || locatorValue;
+            }
+        }
+        return { locatorType, locatorValue };
+    }
+
+    /**
      * 从 targetApp 中查找元素信息 (兼容旧数据)
      */
     findElementById(elementId, targetApp) {
@@ -433,16 +453,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         }
 
         // 优先从最新的页面封装数据中获取元素定位信息
-        let locatorType = config.locator || 'id';
-        let locatorValue = config.locatorValue || '';
-
-        if (config.elementId && pagePackageData) {
-            const latestElement = this.findElementByIdFromPackage(config.elementId, pagePackageData);
-            if (latestElement) {
-                locatorType = latestElement.locator || locatorType;
-                locatorValue = latestElement.value || locatorValue;
-            }
-        }
+        const { locatorType, locatorValue } = this._resolveLocator(config, pagePackageData);
 
         const operation = config.operation || 'click';
 
@@ -816,16 +827,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
             const searchConfig = config.searchConfig || {};
             const searchType = searchConfig.searchType || 'element';
 
-            let searchLocator = searchConfig.locator || 'id';
-            let searchLocatorValue = searchConfig.locatorValue || '';
-
-            if (searchConfig.elementId && pagePackageData) {
-                const latestElement = this.findElementByIdFromPackage(searchConfig.elementId, pagePackageData);
-                if (latestElement) {
-                    searchLocator = latestElement.locator || searchLocator;
-                    searchLocatorValue = latestElement.value || searchLocatorValue;
-                }
-            }
+            const { locatorType: searchLocator, locatorValue: searchLocatorValue } = this._resolveLocator(searchConfig, pagePackageData);
 
             if (searchType === 'text') {
                 const textValue = searchConfig.textValue || '';
@@ -887,16 +889,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
             const isRandomRangeTarget = targetValueType === 'ble';
 
             // 优先从最新的页面封装数据中获取元素定位信息
-            let compareLocator = compareConfig.locator || 'id';
-            let compareLocatorValue = compareConfig.locatorValue || '';
-
-            if (compareConfig.elementId && pagePackageData) {
-                const latestElement = this.findElementByIdFromPackage(compareConfig.elementId, pagePackageData);
-                if (latestElement) {
-                    compareLocator = latestElement.locator || compareLocator;
-                    compareLocatorValue = latestElement.value || compareLocatorValue;
-                }
-            }
+            const { locatorType: compareLocator, locatorValue: compareLocatorValue } = this._resolveLocator(compareConfig, pagePackageData);
 
             // 先设置期望值
             if (isRandomRangeTarget) {

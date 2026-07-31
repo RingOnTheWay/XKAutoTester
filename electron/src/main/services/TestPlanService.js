@@ -189,10 +189,9 @@ class TestPlanService extends JsonFileCrudService {
    * Python 端不再直写 test_plans.json, 改为通过 stdout 标记行通知 Electron 由本方法统一写。
    * 不创建新 plan (用户必须先在 UI 创建 plan, 消除 Python 创建无 id plan 的死代码路径)。
    * @param {string} testPlanName
-   * @param {{name:string, test_paths:string[], markers:string[]|null}} _runData - Python 标记行数据 (保留参数, 当前 timestamp 由本端生成)
    * @returns {Promise<{success: boolean, error?: string}>}
    */
-  async recordRun(testPlanName, _runData) {
+  async recordRun(testPlanName) {
     this._ensureInitialized();
     try {
       const plans = await this.getData();
