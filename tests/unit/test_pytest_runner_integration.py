@@ -1,10 +1,10 @@
-"""PytestRunner 集成测试 - 字段改造 + XKAT_TEST_PLAN_RUN 标记行验证。
+"""PytestRunner 集成测试 - 字段改造 + result dict 运行数据验证。
 
-单源化后 PytestRunner 不再持有 plan_repo, 改为通过 stdout 标记行通知 Electron 侧
-由 TestPlanService 统一写 test_plans.json (避免双端无锁并发写丢失更新)。
+单源化后 PytestRunner 不再持有 plan_repo, 也不再直写 stdout 标记行 (副作用移至 Cli 层)。
+PytestRunner 为纯函数: 输入参数 → 输出 result dict, 供 Cli._write_electron_markers 写标记行。
+Electron 侧 TestPlanService 统一写 test_plans.json (避免双端无锁并发写丢失更新)。
 """
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -45,12 +45,12 @@ class TestPytestRunnerFields:
 
 
 @pytest.mark.unit
-class TestPytestRunnerMarkerEmission:
-    """PytestRunner XKAT_TEST_PLAN_RUN 标记行验证 (替代旧 plan_repo 集成)"""
+class TestPytestRunnerResultData:
+    """PytestRunner result dict 运行数据验证 (标记行副作用已移至 Cli 层, PytestRunner 为纯函数)"""
 
     @patch("subprocess.Popen")
-    def test_run_tests_emits_marker(self, mock_popen, runner, capsys):
-        """run_tests 应输出 XKAT_TEST_PLAN_RUN 标记行"""
+    def test_run_tests_returns_run_data(self, mock_popen, runner, capsys):
+        """run_tests 应返回含运行数据的 result dict (供 Cli._write_electron_markers 写标记行)"""
         mock_process = MagicMock()
         mock_process.stdout.readline.return_value = ""  # 立即结束读取循环
         mock_process.stderr.readline.return_value = ""
@@ -58,21 +58,20 @@ class TestPytestRunnerMarkerEmission:
         mock_process.wait.return_value = 0
         mock_popen.return_value = mock_process
 
-        runner.run_tests(
+        result = runner.run_tests(
             test_paths=["tests/test_fake.py"], markers=None, generate_allure=False, test_plan_name="mocked_test"
         )
 
+        assert result["test_plan_name"] == "mocked_test"
+        assert result["test_paths"] == ["tests/test_fake.py"]
+        assert result["markers"] is None
+        # PytestRunner 不再输出 stdout 标记行 (副作用移至 Cli)
         out = capsys.readouterr().out
-        marker_lines = [line for line in out.splitlines() if line.startswith("XKAT_TEST_PLAN_RUN:")]
-        assert len(marker_lines) == 1
-        payload = json.loads(marker_lines[0].removeprefix("XKAT_TEST_PLAN_RUN:"))
-        assert payload["name"] == "mocked_test"
-        assert payload["test_paths"] == ["tests/test_fake.py"]
-        assert payload["markers"] is None
+        assert "XKAT_TEST_PLAN_RUN:" not in out
 
     @patch("subprocess.Popen")
-    def test_marker_includes_markers_when_provided(self, mock_popen, runner, capsys):
-        """标记行 payload 应包含 markers 字段"""
+    def test_result_includes_markers_when_provided(self, mock_popen, runner, capsys):
+        """result dict 应包含 markers 字段"""
         mock_process = MagicMock()
         mock_process.stdout.readline.return_value = ""
         mock_process.stderr.readline.return_value = ""
@@ -80,12 +79,8 @@ class TestPytestRunnerMarkerEmission:
         mock_process.wait.return_value = 0
         mock_popen.return_value = mock_process
 
-        runner.run_tests(
+        result = runner.run_tests(
             test_paths=["tests/"], markers=["smoke"], generate_allure=False, test_plan_name="mk"
         )
 
-        out = capsys.readouterr().out
-        marker_lines = [line for line in out.splitlines() if line.startswith("XKAT_TEST_PLAN_RUN:")]
-        assert len(marker_lines) == 1
-        payload = json.loads(marker_lines[0].removeprefix("XKAT_TEST_PLAN_RUN:"))
-        assert payload["markers"] == ["smoke"]
+        assert result["markers"] == ["smoke"]

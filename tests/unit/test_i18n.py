@@ -1,13 +1,14 @@
 """I18n 国际化模块单元测试
 
 测试覆盖:
-1. 单例守护 (_initialized 防止 __init__ 重复执行)
+1. 实例化 (普通类可多实例, language 参数注入)
 2. env 路径解析 (XKAUTOTESTER_LOCALES_PATH 打包模式注入)
 3. 开发模式 fallback 路径
 4. t() 行为 (key 找不到 / 嵌套 / kwargs 模板 / 非 str value)
 5. reload() 重新加载
 6. language 属性
 7. 加载失败容错 (logger.warning,不抛异常)
+8. 模块级函数 (t/get_language/reload_i18n) 懒加载 + set_i18n_instance 注入
 """
 
 import json
@@ -20,15 +21,15 @@ from main.utils.i18n import I18n
 
 @pytest.fixture
 def reset_i18n_singleton(monkeypatch, tmp_path):
-    """重置 I18n 单例 + 临时 user data 目录
+    """重置模块级 I18n 实例 + 临时 user data 目录
 
-    每个测试都得到干净的单例状态:
-    - 清除 I18n._instance 类属性
+    每个测试都得到干净的模块级实例状态:
+    - 清除 i18n_module._i18n_instance (懒加载缓存)
     - 设 XKAUTOTESTER_USER_DATA 到临时目录 (避免污染项目 logs)
     - 清除 XKAUTOTESTER_LANG / XKAUTOTESTER_LOCALES_PATH env
     """
-    # 清除单例
-    I18n._instance = None
+    # 清除模块级懒加载实例
+    i18n_module._i18n_instance = None
 
     # 临时 user data (避免 logger 创建项目 logs 目录)
     monkeypatch.setenv("XKAUTOTESTER_USER_DATA", str(tmp_path))
@@ -40,7 +41,7 @@ def reset_i18n_singleton(monkeypatch, tmp_path):
     yield
 
     # 测试后重置 (防止跨测试污染)
-    I18n._instance = None
+    i18n_module._i18n_instance = None
 
 
 @pytest.fixture
@@ -62,26 +63,26 @@ def make_locale_file(tmp_path):
 
 
 @pytest.mark.unit
-class TestI18nSingleton:
-    """单例守护测试"""
+class TestI18nInstantiation:
+    """实例化测试 (普通类, 可多实例)"""
 
-    def test_singleton_returns_same_instance(self, reset_i18n_singleton):
-        """两次构造返回同一实例"""
+    def test_two_instances_are_distinct(self, reset_i18n_singleton):
+        """两次构造返回不同实例 (消除 __new__ 单例)"""
         a = I18n()
         b = I18n()
-        assert a is b
-        assert a._initialized is True
+        assert a is not b
 
-    def test_init_guard_prevents_repeated_init(self, reset_i18n_singleton, monkeypatch):
-        """已初始化实例 __init__ 不重置 _language"""
-        inst = I18n()
-        original_lang = inst._language
-
-        # 改 env 后再构造,单例应保持原 _language
+    def test_language_param_overrides_env(self, reset_i18n_singleton, monkeypatch):
+        """language 参数优先于 XKAUTOTESTER_LANG env"""
         monkeypatch.setenv("XKAUTOTESTER_LANG", "en-US")
-        inst2 = I18n()
-        assert inst2 is inst
-        assert inst._language == original_lang
+        inst = I18n(language="zh-CN")
+        assert inst.language == "zh-CN"
+
+    def test_language_defaults_to_env(self, reset_i18n_singleton, monkeypatch):
+        """无 language 参数时读 XKAUTOTESTER_LANG env"""
+        monkeypatch.setenv("XKAUTOTESTER_LANG", "en-US")
+        inst = I18n()
+        assert inst.language == "en-US"
 
 
 @pytest.mark.unit
@@ -258,25 +259,25 @@ class TestI18nLanguageProperty:
 class TestI18nModuleFunctions:
     """模块级函数 (t / get_language / reload_i18n) 测试"""
 
-    def test_module_t_uses_singleton(self, reset_i18n_singleton, monkeypatch, tmp_path, make_locale_file):
-        """模块级 t() 委托到 _i18n 单例"""
+    def test_module_t_uses_lazy_instance(self, reset_i18n_singleton, monkeypatch, tmp_path, make_locale_file):
+        """模块级 t() 委托到懒加载 _i18n_instance"""
         make_locale_file("zh-CN", {"hello": "你好"})
         monkeypatch.setenv("XKAUTOTESTER_LOCALES_PATH", str(tmp_path / "locales"))
 
-        # 触发模块级 _i18n 重新构造 (清单例后访问模块属性)
-        i18n_module._i18n = I18n()
+        # 注入实例 (替代旧 i18n_module._i18n = I18n() 赋值)
+        i18n_module.set_i18n_instance(I18n())
 
         assert i18n_module.t("hello") == "你好"
         assert i18n_module.get_language() == "zh-CN"
 
-    def test_module_reload_i18n_refreshes_singleton(
+    def test_module_reload_i18n_refreshes_instance(
         self, reset_i18n_singleton, monkeypatch, tmp_path, make_locale_file
     ):
-        """reload_i18n() 刷新模块单例"""
+        """reload_i18n() 刷新模块实例"""
         make_locale_file("zh-CN", {"hello": "你好"})
         monkeypatch.setenv("XKAUTOTESTER_LOCALES_PATH", str(tmp_path / "locales"))
 
-        i18n_module._i18n = I18n()
+        i18n_module.set_i18n_instance(I18n())
         assert i18n_module.t("hello") == "你好"
 
         # 切换语言后 reload

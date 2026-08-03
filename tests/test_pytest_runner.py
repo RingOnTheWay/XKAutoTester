@@ -124,21 +124,24 @@ class TestRunTests:
         assert "python" in cmd[0].lower()
         assert "tests/x.py" in cmd
 
-    def test_emits_test_plan_run_marker(self, runner: PytestRunner, capsys: pytest.CaptureFixture[str]) -> None:
-        """run_tests 输出 XKAT_TEST_PLAN_RUN 标记行 (单源化: Electron 解析后由 TestPlanService 统一写 test_plans.json)。"""
-        import json
+    def test_returns_run_data_in_result(self, runner: PytestRunner, capsys: pytest.CaptureFixture[str]) -> None:
+        """run_tests 返回 result dict 含运行数据 (纯函数: 标记行副作用已移至 Cli 层)。
 
-        runner.run_tests(
+        单源化: Electron 解析 Cli 写的 XKAT_TEST_PLAN_RUN 标记行后由 TestPlanService 统一写 test_plans.json。
+        PytestRunner 不再直写 stdout 标记行, 仅返回 dict 供 Cli 写入。
+        """
+        result = runner.run_tests(
             test_paths=["tests/a.py"], markers=["smoke"], test_plan_name="p1", generate_allure=False
         )
 
+        # result dict 含运行数据 (供 Cli._write_electron_markers 写标记行)
+        assert result["test_plan_name"] == "p1"
+        assert result["test_paths"] == ["tests/a.py"]
+        assert result["markers"] == ["smoke"]
+        # PytestRunner 不再输出 stdout 标记行 (副作用移至 Cli)
         out = capsys.readouterr().out
-        marker_lines = [line for line in out.splitlines() if line.startswith("XKAT_TEST_PLAN_RUN:")]
-        assert len(marker_lines) == 1
-        payload = json.loads(marker_lines[0].removeprefix("XKAT_TEST_PLAN_RUN:"))
-        assert payload["name"] == "p1"
-        assert payload["test_paths"] == ["tests/a.py"]
-        assert payload["markers"] == ["smoke"]
+        assert "XKAT_TEST_PLAN_RUN:" not in out
+        assert "XKAT_ALLURE_RESULTS_DIR:" not in out
 
 
 class TestConvenienceMethods:

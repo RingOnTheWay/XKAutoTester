@@ -22,6 +22,7 @@ from main.core.adb.app_lifecycle import AppLifecycleService
 from main.core.adb.bluetooth_control import BluetoothService
 from main.core.adb.device_connection import DeviceConnectionService
 from main.core.adb.subprocess_adb_adapter import ADB_CMD, SubprocessAdbAdapter
+from main.core.logcat.crash_detector import is_crash_line
 from main.utils.i18n import t
 
 logger = logging.getLogger(__name__)
@@ -147,11 +148,13 @@ class ADBManager:
                 for line in result.stdout.strip().split("\n"):
                     if not line.strip():
                         continue
-                    if pid and f"{pid}" in line and "E" in line and "AndroidRuntime" in line:
+                    # 崩溃判定 SSOT: is_crash_line 覆盖 FATAL EXCEPTION/PROCESS_DIED/NATIVE_SIGNAL/ANR
+                    if is_crash_line(line):
+                        crash_logs.append(line.strip())
+                    # 补充上下文捕获: pid/package 过滤的 AndroidRuntime 相关行 (非崩溃模式但有调试价值)
+                    elif pid and f"{pid}" in line and "E" in line and "AndroidRuntime" in line:
                         crash_logs.append(line.strip())
                     elif not pid and self.app_package in line and "AndroidRuntime" in line:
-                        crash_logs.append(line.strip())
-                    elif "FATAL EXCEPTION" in line:
                         crash_logs.append(line.strip())
             logger.info(t("python.adbManager.crashLogsFound", count=len(crash_logs)))
             return crash_logs

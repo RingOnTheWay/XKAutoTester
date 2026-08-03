@@ -17,7 +17,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import shutil
 import sys
@@ -126,8 +125,6 @@ class PytestRunner:
                 logger.warning(t("python.pytestRunner.noAllureResults", exit_code=exit_code))
             else:
                 allure_results_dir = str(self.allure_results_dir)
-                # 输出特殊标记行, 供 Electron 侧解析 allure-results 路径
-                print(f"XKAT_ALLURE_RESULTS_DIR:{allure_results_dir}", flush=True)
 
         if allure_skipped_reason == "no_results":
             logger.warning(t("python.pytestRunner.noTestResults", exit_code=exit_code))
@@ -142,16 +139,8 @@ class PytestRunner:
             else:
                 logger.warning(t("python.pytestRunner.testFailedNoReport", exit_code=exit_code))
 
-        # 通过 stdout 标记行通知 Electron 侧记录运行 (单源化: Electron 是 test_plans.json 唯一写者,
-        # 避免 Python/Electron 双端无锁并发写导致丢失更新)
-        print(
-            "XKAT_TEST_PLAN_RUN:"
-            + json.dumps(
-                {"name": test_plan_name, "test_paths": test_paths, "markers": markers},
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
+        # 标记行 (XKAT_ALLURE_RESULTS_DIR / XKAT_TEST_PLAN_RUN) 由 Cli 层基于 result dict 写入 stdout,
+        # PytestRunner 保持纯函数 (输入参数 → 输出 dict, 无 stdout 副作用)
 
         return {
             "exit_code": exit_code,
