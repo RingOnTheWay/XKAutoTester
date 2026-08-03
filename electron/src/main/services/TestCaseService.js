@@ -185,15 +185,11 @@ class TestCaseService {
   /**
    * 保存测试用例 (仅写 JSON, 不生成 .py)
    * 内化条件生成在 saveTestCase 中触发: 若 caseData.pyOutputDir 存在则调 generatePythonFile (失败吞错)
+   * H3: 由 service 自己 set caseData.pyFilePath (原由 generator mutation, 现 generator 不再 mutation)
    * (吸收 testCaseHandlers L11-27 双委托)
    */
   async saveTestCase(caseData) {
     try {
-      const saveResult = await this._saveOnly(caseData);
-      if (!saveResult.success) {
-        return saveResult;
-      }
-
       // 内化条件生成 (吸收 testCaseHandlers L11-27 双委托)
       let pyPath = null;
       if (caseData.pyOutputDir) {
@@ -201,10 +197,18 @@ class TestCaseService {
           const genResult = await this._codeGenerator.generatePythonFile(caseData, caseData.pyOutputDir);
           if (genResult.success) {
             pyPath = genResult.path || null;
+            // H3: 由 service 负责 set pyFilePath (原由 generator mutation, 现 generator 不 mutation)
+            caseData.pyFilePath = pyPath;
           }
         } catch (e) {
           console.error('同步更新Python文件失败:', e);
         }
+      }
+
+      // H3: 生成后再保存 JSON (单源写入, 含 pyFilePath)
+      const saveResult = await this._saveOnly(caseData);
+      if (!saveResult.success) {
+        return saveResult;
       }
 
       return { success: true, data: caseData, path: saveResult.path, pyPath };
@@ -246,21 +250,25 @@ class TestCaseService {
 
   /**
    * 保存 + 强制生成 (吸收 testCaseHandlers L45-62 双委托)
+   * H3: 生成在前, 保存 JSON 在后 (单源写入, 含 pyFilePath)
    * @param {Object} caseData
    * @param {string} outputDir
    * @returns {Promise<{success, data?, jsonPath?, pyPath?, error?}>}
    */
   async saveAndGenerate(caseData, outputDir) {
     try {
-      // 设 pyOutputDir 让 JSON 记录生成路径, 但用 _saveOnly 避免触发条件生成 (本方法自己调 generate)
-      const saveResult = await this._saveOnly({ ...caseData, pyOutputDir: outputDir });
-      if (!saveResult.success) {
-        return saveResult;
-      }
-
-      const genResult = await this._codeGenerator.generatePythonFile(saveResult.data, outputDir);
+      // H3: 先生成 (generator 不 mutation, 由 service set pyOutputDir/pyFilePath)
+      caseData.pyOutputDir = outputDir;
+      const genResult = await this._codeGenerator.generatePythonFile(caseData, outputDir);
       if (!genResult.success) {
         return genResult;
+      }
+      caseData.pyFilePath = genResult.path;
+
+      // H3: 后保存 JSON (单源写入, 含 pyOutputDir + pyFilePath)
+      const saveResult = await this._saveOnly(caseData);
+      if (!saveResult.success) {
+        return saveResult;
       }
 
       return {

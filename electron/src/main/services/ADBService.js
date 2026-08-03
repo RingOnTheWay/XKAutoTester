@@ -3,7 +3,9 @@
  *
  * 设计:
  * - 深模块架构: facade 持有 4 collaborator (AdbCommandExecutor + RemoteStatService + FileTransferService + ApkInstaller)
- * - 后向兼容 5 公共方法: getConnectedDevices / executeAdbCommand / uploadFile / downloadFile / installApk
+ * - 公共 API 2 方法: getConnectedDevices / executeAdbCommand (其余通过属性暴露 collaborator)
+ * - M4: 删 3 pass-through wrapper (uploadFile/downloadFile/installApk), 调用方直接持 .fileTransfer / .apkInstaller / .remoteStat
+ * - M4: TarExtractor 改 factory-or-default 注入 (原硬编码 new TarExtractor())
  * - 消除 shell=True: 全改 spawn(adbPath, args, {}) 形式
  * - 路径解析委托 pathHelper.getAdbPath
  * - 调试 console.log 全删
@@ -28,6 +30,7 @@ class ADBService {
    * @param {object} [collaborators.fileTransferService]
    * @param {object} [collaborators.apkInstaller]
    * @param {object} [collaborators.remoteStatService]
+   * @param {object} [collaborators.tarExtractor] - M4: TarExtractor 注入 (默认 new TarExtractor())
    * @param {Function} [collaborators.spawnFn] - spawn 函数 (测试用)
    */
   constructor(projectRoot, i18nService, collaborators = {}) {
@@ -46,7 +49,8 @@ class ADBService {
       i18nService,
     });
 
-    this._tarExtractor = new TarExtractor();
+    // M4: TarExtractor factory-or-default (原硬编码 new TarExtractor())
+    this._tarExtractor = collaborators.tarExtractor || new TarExtractor();
 
     this._fileTransfer = collaborators.fileTransferService || new FileTransferService({
       commandExecutor: this._executor,
@@ -61,6 +65,31 @@ class ADBService {
       i18nService,
       spawnFn: this._spawn,
     });
+  }
+
+  /** M4: collaborator 属性暴露 (调用方直接持属性, 消除 pass-through wrapper) */
+  get fileTransfer() {
+    return this._fileTransfer;
+  }
+
+  /** M4: collaborator 属性暴露 */
+  get apkInstaller() {
+    return this._apkInstaller;
+  }
+
+  /** M4: collaborator 属性暴露 */
+  get remoteStat() {
+    return this._remoteStat;
+  }
+
+  /** M4: collaborator 属性暴露 (供测试/扩展访问) */
+  get tarExtractor() {
+    return this._tarExtractor;
+  }
+
+  /** M4: collaborator 属性暴露 (供测试/扩展访问) */
+  get commandExecutor() {
+    return this._executor;
   }
 
   /**
@@ -183,27 +212,6 @@ class ADBService {
     } catch (error) {
       return { success: false, error: error.message };
     }
-  }
-
-  /**
-   * 上传文件
-   */
-  async uploadFile(localPath, remotePath, deviceId, eventSender) {
-    return this._fileTransfer.upload(localPath, remotePath, deviceId, eventSender);
-  }
-
-  /**
-   * 下载文件/目录
-   */
-  async downloadFile(remotePath, localPath, deviceId, eventSender) {
-    return this._fileTransfer.download(remotePath, localPath, deviceId, eventSender);
-  }
-
-  /**
-   * 安装 APK
-   */
-  async installApk(apkPath, deviceId, eventSender) {
-    return this._apkInstaller.install(apkPath, deviceId, eventSender);
   }
 }
 

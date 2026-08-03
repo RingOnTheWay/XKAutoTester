@@ -1,6 +1,7 @@
-// ApplicationService 单测 — 27 factory 注入 + 20 服务依赖图 + 3 await 顺序 + run + catch + shape + mutation。
+// ApplicationService 单测 — 26 factory 注入 + 20 服务依赖图 + 3 await 顺序 + run + catch + shape + mutation。
 // 验证: factory 收到正确 deps + 3 await 顺序固定 + run 调 setServices+initialize + catch 调 errorHandler +
-//      initializeServices 返 20 字段 shape + electronApp.userConfigPath/userDataPath mutation + schedulerInitializer 调用。
+//      initializeServices 返 20 字段 shape + electronApp.userConfigPath/userDataPath mutation。
+// M1: 删 schedulerInitializer (factory 直接 2 参构造 SmartScheduler)。
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
@@ -36,7 +37,6 @@ function makeFakeApp(opts = {}) {
   const calls = {
     factories: {},
     awaitOrder: [],
-    schedulerInit: null,
     errorHandler: null,
   };
 
@@ -50,9 +50,6 @@ function makeFakeApp(opts = {}) {
     },
     apkParserInitializer: async () => {
       calls.awaitOrder.push('apkInit');
-    },
-    schedulerInitializer: (sched, i18n, plan) => {
-      calls.schedulerInit = { sched: sched.__tag, i18n: typeof i18n, plan: plan.__tag };
     },
     registerHandlers: () => {},
     errorHandler: {
@@ -133,8 +130,9 @@ function makeFakeApp(opts = {}) {
       calls.factories.dataTransfer = { userData: u.__tag, i18n: typeof i18n, version: v.__tag };
       return { __tag: 'dataTransfer' };
     },
-    schedulerServiceFactory: () => {
-      calls.factories.scheduler = {};
+    schedulerServiceFactory: (i18n, plan) => {
+      // M1: factory 收 (i18nService, scheduledPlanService) 2 参, 直接 new SmartScheduler
+      calls.factories.scheduler = { i18n: typeof i18n, plan: plan.__tag };
       return { __tag: 'scheduler' };
     },
     environmentStartupServiceFactory: (opts) => {
@@ -238,13 +236,13 @@ test('electronApp.userConfigPath/userDataPath 被 mutation', async () => {
   assert.strictEqual(electronApp.userDataPath, '/fake/data');
 });
 
-test('schedulerInitializer 收 scheduler + i18n + scheduledPlan', async () => {
+test('schedulerServiceFactory 收 i18n + scheduledPlan (M1: 删 schedulerInitializer)', async () => {
   const { app, calls } = makeFakeApp();
 
   await app.initializeServices();
 
-  assert.deepStrictEqual(calls.schedulerInit, {
-    sched: 'scheduler',
+  // M1: factory 直接收 (i18nService, scheduledPlanService), 不再有 init 2-step
+  assert.deepStrictEqual(calls.factories.scheduler, {
     i18n: 'object',
     plan: 'scheduledPlan',
   });

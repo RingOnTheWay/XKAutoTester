@@ -125,6 +125,11 @@ class ElectronApp {
       this.services.pythonTestService.mainWindow = this.mainWindow;
     }
 
+    // H2: ScrcpyService 下沉 crash 检测后需 mainWindow 引用 (notifierFactory lazy 获取)
+    if (this.services.scrcpyService) {
+      this.services.scrcpyService.setMainWindow(this.mainWindow);
+    }
+
     this.mainWindow.on('maximize', () => {
       this.mainWindow.webContents.send('window-maximized', true);
     });
@@ -292,7 +297,8 @@ class ElectronApp {
       }
 
       if (this.services.schedulerService) {
-        this.services.schedulerService.start();
+        // M1: SchedulerService facade 删除, 直接调 SmartScheduler.initialize()
+        this.services.schedulerService.initialize();
       }
 
       this.restorePreventSleepSetting();
@@ -308,7 +314,8 @@ class ElectronApp {
 
     app.on('before-quit', () => {
       if (this.services.schedulerService) {
-        this.services.schedulerService.stop();
+        // M1: SchedulerService facade 删除, 直接调 SmartScheduler.destroy()
+        this.services.schedulerService.destroy();
       }
     });
 

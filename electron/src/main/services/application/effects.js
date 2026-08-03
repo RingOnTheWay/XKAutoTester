@@ -1,7 +1,8 @@
-// effects — 默认副作用包装 (3 await injector + schedulerInitializer + registerHandlers + errorHandler)。
+// effects — 默认副作用包装 (3 await injector + registerHandlers + errorHandler)。
 //
 // 对称 smartScheduler.js effects.js (globalTimerProvider + defaultWatcherFactory + defaultNotifierFactory)。
-// 5 类副作用经 factory-or-default 注入 ApplicationService。
+// 4 类副作用经 factory-or-default 注入 ApplicationService。
+// M1: 删 defaultSchedulerInitializer (SmartScheduler 直接由 factory 2 参构造, 无需 2-step init)
 
 const { registerAllHandlers } = require('../../handlers');
 
@@ -18,10 +19,6 @@ const defaultApkParserInitializer = async (apkParserService) => {
   await apkParserService.initialize();
 };
 
-const defaultSchedulerInitializer = (schedulerService, i18nSvc, scheduledPlanService) => {
-  schedulerService.init(i18nSvc, scheduledPlanService);
-};
-
 const defaultRegisterHandlers = registerAllHandlers;
 
 const defaultErrorHandler = {
@@ -35,7 +32,6 @@ module.exports = {
   defaultI18nInitializer,
   defaultPythonEnvConfigurer,
   defaultApkParserInitializer,
-  defaultSchedulerInitializer,
   defaultRegisterHandlers,
   defaultErrorHandler,
 };

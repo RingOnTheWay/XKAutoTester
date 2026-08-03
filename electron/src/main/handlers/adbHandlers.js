@@ -7,7 +7,8 @@ function register(ipcMain, services) {
     if (!adbService) {
       return { success: false, error: 'ADB service not initialized' };
     }
-    return adbService.installApk(apkPath, deviceId, event.sender);
+    // M4: ADBService 删 installApk wrapper, 调用方直接持 .apkInstaller
+    return adbService.apkInstaller.install(apkPath, deviceId, event.sender);
   });
 }
 

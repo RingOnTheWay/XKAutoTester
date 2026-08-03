@@ -23,7 +23,7 @@ const ApkParserService = require('../ApkParserService');
 const { UpdateService } = require('../UpdateService');
 const InspectorService = require('../InspectorService');
 const { DataTransferService } = require('../DataTransferService');
-const { SchedulerService } = require('../SchedulerService');
+const { SmartScheduler } = require('../scheduler/smartScheduler');
 const EnvironmentStartupService = require('../EnvironmentStartupService');
 
 const defaultVersionServiceFactory = (projectRoot) => new VersionService(projectRoot);
@@ -57,7 +57,9 @@ const defaultUpdateServiceFactory = (versionService, userDataService) => {
 };
 const defaultInspectorServiceFactory = (projectRoot, i18nService, userDataPath) => new InspectorService(projectRoot, i18nService, userDataPath);
 const defaultDataTransferServiceFactory = (userDataService, i18nService, versionService) => new DataTransferService(userDataService, i18nService, versionService);
-const defaultSchedulerServiceFactory = () => new SchedulerService();
+// M1: 删 SchedulerService facade, 直接 new SmartScheduler (2 参: scheduledPlan + i18n)
+const defaultSchedulerServiceFactory = (i18nService, scheduledPlanService) =>
+  new SmartScheduler(scheduledPlanService, i18nService);
 const defaultEnvironmentStartupServiceFactory = (opts) => new EnvironmentStartupService(opts);
 
 module.exports = {

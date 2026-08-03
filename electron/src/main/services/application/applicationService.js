@@ -1,8 +1,8 @@
 // ApplicationService — 应用入口深模块。
 //
 // 藏 20 服务依赖图编排 + 3 await 顺序 + electronApp 副作用 + 错误兜底。
-// 27 factory-or-default (对称 test_initializer.py L146-198 7-factory + cli.py L46-71 7-factory +
-// smartScheduler.js L46-71 7-factory options bag)。
+// 26 factory-or-default (20 服务 factory + 3 await injector + registerHandlers + errorHandler)。
+// M1: 删 schedulerInitializer (SmartScheduler 直接 factory 2 参构造, 总数 27→26)。
 //
 // 生产: new ApplicationService().run()  # 一行
 // 测试: new ApplicationService({ electronApp: mock, versionServiceFactory: fake, ... }).run()
@@ -34,7 +34,6 @@ const {
   defaultI18nInitializer,
   defaultPythonEnvConfigurer,
   defaultApkParserInitializer,
-  defaultSchedulerInitializer,
   defaultRegisterHandlers,
   defaultErrorHandler,
 } = require('./effects');
@@ -68,11 +67,11 @@ class ApplicationService {
     this._schedulerServiceFactory = opts.schedulerServiceFactory || defaultSchedulerServiceFactory;
     this._environmentStartupServiceFactory = opts.environmentStartupServiceFactory || defaultEnvironmentStartupServiceFactory;
 
-    // 3 await injector + schedulerInitializer + registerHandlers + errorHandler
+    // 3 await injector + registerHandlers + errorHandler
+    // M1: 删 schedulerInitializer (SmartScheduler 直接 factory 2 参构造, 无需 2-step init)
     this._i18nInitializer = opts.i18nInitializer || defaultI18nInitializer;
     this._pythonEnvConfigurer = opts.pythonEnvConfigurer || defaultPythonEnvConfigurer;
     this._apkParserInitializer = opts.apkParserInitializer || defaultApkParserInitializer;
-    this._schedulerInitializer = opts.schedulerInitializer || defaultSchedulerInitializer;
     this._registerHandlers = opts.registerHandlers || defaultRegisterHandlers;
     this._errorHandler = opts.errorHandler || defaultErrorHandler;
   }
@@ -145,9 +144,8 @@ class ApplicationService {
     // CONFIGURE phase: await #3 apkParser.initialize (二段构造)
     await this._apkParserInitializer(apkParserService);
 
-    // scheduler 2-step (factory + init)
-    const schedulerService = this._schedulerServiceFactory();
-    this._schedulerInitializer(schedulerService, i18nService, scheduledPlanService);
+    // M1: scheduler 1-step (factory 直接构造 SmartScheduler, 无需 init)
+    const schedulerService = this._schedulerServiceFactory(i18nService, scheduledPlanService);
 
     // EnvironmentStartupService: 启动期编排 (3 服务 + driver install + app lifecycle)
     // 依赖 environmentService + testCaseService + userDataService + i18nService + electronApp
