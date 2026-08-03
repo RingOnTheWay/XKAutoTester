@@ -4,7 +4,7 @@ Appium服务器启动器
 
 深模块重构 (2026-07-24):
 - 接口收窄: start() + stop() 两方法, stop() 统一优雅终止 + 端口清理
-- 实现藏深: _LogPump (日志文件+线程) + _PortProcessKiller (策略模式) 私有类
+- 实现藏深: _LogPump (日志文件+线程) 私有类 + 模块级端口清理函数 (平台 if/else)
 - 消除 shell=True: 两步法 (netstat + Python 过滤)
 - 可测: subprocess_module 模块级注入
 """
@@ -88,106 +88,91 @@ class _LogPump:
             logger.error(f"关闭日志文件时出错: {e}")
 
 
-class _PortProcessKiller:
-    """端口进程清理基类. 策略模式: 按 platform.system() 选具体子类."""
+def _kill_port_windows(port: int, subprocess_module=subprocess) -> None:
+    """Windows: netstat -ano (无 shell) + Python 过滤 + taskkill /F /PID。幂等。"""
+    try:
+        logger.info(f"开始查找占用端口{port}的进程...")
+        result = subprocess_module.run(
+            ["netstat", "-ano"], capture_output=True, text=True, encoding="gbk", errors="replace", timeout=10
+        )
+        logger.info(f"netstat命令执行结果 - 返回码: {result.returncode}")
+        if result.stdout:
+            logger.info(f"netstat输出内容长度: {len(result.stdout)}字符")
+        if result.stderr:
+            logger.warning(f"netstat错误输出: {result.stderr}")
 
-    def __init__(self, port: int, subprocess_module=subprocess):
-        self.port = port
-        self._subprocess = subprocess_module
-
-    def kill(self) -> None:
-        """查找并终止占用 self.port 的进程. 幂等."""
-        raise NotImplementedError
-
-    @staticmethod
-    def factory(port: int, subprocess_module=subprocess) -> "_PortProcessKiller":
-        """按 platform.system() 选具体子类."""
-        if platform.system() == "Windows":
-            return _WindowsPortKiller(port, subprocess_module)
-        return _UnixPortKiller(port, subprocess_module)
-
-
-class _WindowsPortKiller(_PortProcessKiller):
-    """Windows: netstat -ano (无 shell) + Python 过滤 + taskkill /F /PID."""
-
-    def kill(self) -> None:
-        """两步法: netstat 取全量 -> Python 过滤 LISTENING+端口 -> taskkill."""
-        try:
-            logger.info(f"开始查找占用端口{self.port}的进程...")
-            result = self._subprocess.run(
-                ["netstat", "-ano"], capture_output=True, text=True, encoding="gbk", errors="replace", timeout=10
-            )
-            logger.info(f"netstat命令执行结果 - 返回码: {result.returncode}")
-            if result.stdout:
-                logger.info(f"netstat输出内容长度: {len(result.stdout)}字符")
-            if result.stderr:
-                logger.warning(f"netstat错误输出: {result.stderr}")
-
-            pids = self._extract_pids(result.stdout or "")
-            if pids:
-                logger.info(f"发现{len(pids)}个需要终止的进程: {pids}")
-                for pid in pids:
-                    self._kill_pid(pid)
-            else:
-                logger.info(f"未发现占用端口{self.port}的进程")
-        except Exception as e:
-            logger.error(f"端口清理时出错: {e}")
-
-    def _extract_pids(self, netstat_output: str) -> list[str]:
-        """从 netstat -ano 输出中提取占用 self.port 的 LISTENING PID.
-
-        匹配规则: local_addr 列 endswith :{port} + state == LISTENING + pid isdigit.
-        精确匹配, 避免子串误匹配 (如 :4723 vs :47230).
-        """
-        pids = []
-        port_suffix = f":{self.port}"
-        for line in netstat_output.split("\n"):
-            parts = line.split()
-            if len(parts) < 5:
-                continue
-            local_addr = parts[1]
-            state = parts[3]
-            pid = parts[4]
-            if local_addr.endswith(port_suffix) and state == "LISTENING" and pid.isdigit():
-                logger.info(f"找到占用端口{self.port}的进程ID: {pid}")
-                pids.append(pid)
-        return pids
-
-    def _kill_pid(self, pid: str) -> None:
-        """taskkill /F /PID {pid}."""
-        try:
-            logger.info(f"开始终止进程ID {pid}")
-            kill_result = self._subprocess.run(
-                ["taskkill", "/F", "/PID", pid],
-                capture_output=True,
-                text=True,
-                encoding="gbk",
-                errors="replace",
-                timeout=10,
-            )
-            logger.info(f"taskkill命令执行结果 - 返回码: {kill_result.returncode}")
-            if kill_result.stdout:
-                logger.info(f"taskkill输出: {kill_result.stdout}")
-            if kill_result.stderr:
-                logger.warning(f"taskkill错误: {kill_result.stderr}")
-            logger.info(f"已终止进程ID {pid}")
-        except Exception as e:
-            logger.error(f"终止进程ID {pid}时出错: {e}")
+        pids = _extract_listening_pids(result.stdout or "", port)
+        if pids:
+            logger.info(f"发现{len(pids)}个需要终止的进程: {pids}")
+            for pid in pids:
+                _taskkill_pid(pid, subprocess_module)
+        else:
+            logger.info(f"未发现占用端口{port}的进程")
+    except Exception as e:
+        logger.error(f"端口清理时出错: {e}")
 
 
-class _UnixPortKiller(_PortProcessKiller):
-    """Unix/Linux: fuser -k {port}/tcp."""
+def _extract_listening_pids(netstat_output: str, port: int) -> list[str]:
+    """从 netstat -ano 输出提取占用 port 的 LISTENING PID。
 
-    def kill(self) -> None:
-        """fuser -k {port}/tcp."""
-        try:
-            logger.info(f"Unix/Linux系统端口{self.port}清理...")
-            result = self._subprocess.run(
-                ["fuser", "-k", f"{self.port}/tcp"], capture_output=True, text=True, timeout=10
-            )
-            logger.info(f"Unix/Linux系统端口{self.port}清理完成 - 返回码: {result.returncode}")
-        except Exception as e:
-            logger.error(f"Unix端口清理时出错: {e}")
+    精确匹配 local_addr endswith :{port} + state == LISTENING + pid isdigit,
+    避免子串误匹配 (如 :4723 vs :47230)。
+    """
+    pids = []
+    port_suffix = f":{port}"
+    for line in netstat_output.split("\n"):
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+        local_addr = parts[1]
+        state = parts[3]
+        pid = parts[4]
+        if local_addr.endswith(port_suffix) and state == "LISTENING" and pid.isdigit():
+            logger.info(f"找到占用端口{port}的进程ID: {pid}")
+            pids.append(pid)
+    return pids
+
+
+def _taskkill_pid(pid: str, subprocess_module=subprocess) -> None:
+    """taskkill /F /PID {pid}。"""
+    try:
+        logger.info(f"开始终止进程ID {pid}")
+        kill_result = subprocess_module.run(
+            ["taskkill", "/F", "/PID", pid],
+            capture_output=True,
+            text=True,
+            encoding="gbk",
+            errors="replace",
+            timeout=10,
+        )
+        logger.info(f"taskkill命令执行结果 - 返回码: {kill_result.returncode}")
+        if kill_result.stdout:
+            logger.info(f"taskkill输出: {kill_result.stdout}")
+        if kill_result.stderr:
+            logger.warning(f"taskkill错误: {kill_result.stderr}")
+        logger.info(f"已终止进程ID {pid}")
+    except Exception as e:
+        logger.error(f"终止进程ID {pid}时出错: {e}")
+
+
+def _kill_port_unix(port: int, subprocess_module=subprocess) -> None:
+    """Unix/Linux: fuser -k {port}/tcp。幂等。"""
+    try:
+        logger.info(f"Unix/Linux系统端口{port}清理...")
+        result = subprocess_module.run(
+            ["fuser", "-k", f"{port}/tcp"], capture_output=True, text=True, timeout=10
+        )
+        logger.info(f"Unix/Linux系统端口{port}清理完成 - 返回码: {result.returncode}")
+    except Exception as e:
+        logger.error(f"Unix端口清理时出错: {e}")
+
+
+def _kill_port_process(port: int, subprocess_module=subprocess) -> None:
+    """按 platform.system() 选平台端口清理函数。幂等。"""
+    if platform.system() == "Windows":
+        _kill_port_windows(port, subprocess_module)
+    else:
+        _kill_port_unix(port, subprocess_module)
 
 
 class AppiumServer:
@@ -201,7 +186,7 @@ class AppiumServer:
 
     内部实现藏深:
     - _LogPump: 日志文件 + 读取线程 (全权拥有)
-    - _PortProcessKiller: 跨平台端口清理 (策略模式)
+    - 模块级端口清理函数 (_kill_port_process 平台分发): 跨平台端口清理
     """
 
     DEFAULT_HOST = "127.0.0.1"
@@ -360,7 +345,7 @@ class AppiumServer:
         顺序:
         1. _LogPump.stop() (join 线程 + 关日志文件)
         2. self.process.terminate() + wait(timeout=10), 超时 kill()
-        3. _PortProcessKiller.kill(port) 兜底 (杀端口上残留进程)
+        3. _kill_port_process(port) 兜底 (杀端口上残留进程)
         4. self.process = None
         """
         # 1. 停止日志泵
@@ -387,8 +372,7 @@ class AppiumServer:
 
         # 3. 端口清理兜底 (不管是否有 process, 都扫一遍端口)
         try:
-            killer = _PortProcessKiller.factory(self.port, self._subprocess)
-            killer.kill()
+            _kill_port_process(self.port, self._subprocess)
             logger.info("Appium服务器端口清理完成")
         except Exception as e:
             logger.error(f"端口清理时出错: {e}")

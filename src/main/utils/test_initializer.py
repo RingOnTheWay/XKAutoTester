@@ -224,11 +224,11 @@ class TestInitializer:
                 self.config.adb.device_name, self.config.adb.app_package
             )
 
-            if not self.adb_manager.check_adb_service():
+            if not self.adb_manager.connection.check_adb_service():
                 self.logger.warning(t("python.testInitializer.adbServiceError"))
                 return self._skip(t("python.testInitializer.adbServiceErrorShort"))
 
-            connect_success, connect_status = self.adb_manager.connect_device()
+            connect_success, connect_status = self.adb_manager.connection.connect()
             if not connect_success:
                 self.logger.warning(
                     t(
@@ -242,7 +242,7 @@ class TestInitializer:
                 )
 
             if self.config.ble is not None:
-                if not self.adb_manager.ensure_bluetooth_enabled():
+                if not self.adb_manager.bluetooth.ensure_enabled():
                     self.logger.warning(t("python.testInitializer.bluetoothEnableFailed"))
                     return self._skip(t("python.testInitializer.bluetoothEnableFailedShort"))
             else:
@@ -328,7 +328,7 @@ class TestInitializer:
         self.logger.info(t("python.testInitializer.creatingAppiumSession"))
         start_time = self._time.time()
         _set_appium_session_timeout(AppiumServer.DEFAULT_SESSION_TIMEOUT)
-        self.adb_manager.force_stop_app_silent()
+        self.adb_manager.app.force_stop(silent=True)
         self._time.sleep(2)
 
         self.driver = self._driver_factory(self.appium_server.server_url, options=self.options)
@@ -354,7 +354,7 @@ class TestInitializer:
         从原 appium_init L235-246 提取。
         """
         self.logger.info(t("python.testInitializer.gettingAppPid"))
-        self.app_pid = self.adb_manager.get_app_pid()
+        self.app_pid = self.adb_manager.app.get_pid()
         if self.app_pid:
             self.logger.info(t("python.testInitializer.gotAppPid", pid=self.app_pid))
             self.reporter.attach(
@@ -375,7 +375,7 @@ class TestInitializer:
         self._time.sleep(self.config.appium.app_load_wait_time)
 
         # 等待后重新获取 PID（app 可能在加载期间崩溃重启，PID 已变化）
-        new_pid = self.adb_manager.get_app_pid()
+        new_pid = self.adb_manager.app.get_pid()
         if new_pid and new_pid != self.app_pid:
             self.logger.info(t("python.testInitializer.appPidChanged", old_pid=self.app_pid, new_pid=new_pid))
             self.app_pid = new_pid
@@ -418,7 +418,7 @@ class TestInitializer:
         )
 
         try:
-            window_state = self.adb_manager.get_dumpsys_window()
+            window_state = self.adb_manager.app.get_dumpsys_window()
             self.logger.info(t("python.testInitializer.deviceWindowState", state=window_state[:500]))
         except Exception as adb_error:
             self.logger.error(t("python.testInitializer.deviceStateCheckFailed", error=adb_error))

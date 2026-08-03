@@ -5,11 +5,14 @@ stdin 读 loop + 帧路由 + stdout 写。业务层用 @command 注册,用 notif
 """
 
 import json
+import logging
 import sys
 from collections.abc import Callable
 from typing import Any, TextIO
 
 from main.core.inspector_constants import STOP_SESSION
+
+logger = logging.getLogger(__name__)
 
 
 class StdioProtocol:
@@ -105,5 +108,6 @@ class StdioProtocol:
         try:
             self._stdout.write(json.dumps(frame, ensure_ascii=False) + "\n")
             self._stdout.flush()
-        except Exception:
-            pass  # stdout 写失败 (如 pipe 断) 不崩
+        except Exception as e:
+            # stdout 写失败 (如 pipe 断) 不崩, 但加可观测性 (调试时可知 frame 未送达)
+            logger.warning(f"Failed to write stdio frame: {e}")

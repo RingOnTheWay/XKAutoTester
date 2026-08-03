@@ -188,6 +188,25 @@ def _find_element_by_path(tree: dict, path: str) -> dict | None:
     return current.get("attributes")
 
 
+def _with_session(fn: Callable) -> Callable:
+    """装饰 InspectorService 方法: 统一 driver None 检查 + Exception 兜底 → _map_appium_error。
+
+    消除 get_screenshot/find_locators/refresh 3 处重复的 try/except + error map 模板。
+    start_session/stop_session (driver None 语义不同) / get_page_source (ET.ParseError 特殊处理) 不装饰。
+    """
+
+    def wrapper(self, *args, **kwargs):
+        if self.driver is None:
+            return {"success": False, "error": t("inspector.errorNoSession")}
+        try:
+            return fn(self, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Failed in {fn.__name__}: {e}")
+            return {"success": False, "error": _map_appium_error(str(e))}
+
+    return wrapper
+
+
 class InspectorService:
     def __init__(
         self,
@@ -281,18 +300,11 @@ class InspectorService:
                 self.appium_server = None
             return {"success": False, "error": _map_appium_error(str(e))}
 
+    @_with_session
     def get_screenshot(self) -> dict:
-        try:
-            if self.driver is None:
-                return {"success": False, "error": t("inspector.errorNoSession")}
-
-            screenshot_b64 = self.driver.get_screenshot_as_base64()
-            data_uri = f"data:image/png;base64,{screenshot_b64}"
-            return {"success": True, "screenshot": data_uri}
-
-        except Exception as e:
-            logger.error(f"Failed to get screenshot: {e}")
-            return {"success": False, "error": _map_appium_error(str(e))}
+        screenshot_b64 = self.driver.get_screenshot_as_base64()
+        data_uri = f"data:image/png;base64,{screenshot_b64}"
+        return {"success": True, "screenshot": data_uri}
 
     def get_page_source(self) -> dict:
         try:
@@ -317,54 +329,40 @@ class InspectorService:
             logger.error(f"Failed to get page source: {e}")
             return {"success": False, "error": _map_appium_error(str(e))}
 
+    @_with_session
     def find_locators(self, element_path: str) -> dict:
-        try:
-            if self.driver is None:
-                return {"success": False, "error": t("inspector.errorNoSession")}
+        if self._cached_tree is None:
+            result = self.get_page_source()
+            if not result.get("success"):
+                return result
 
-            if self._cached_tree is None:
-                result = self.get_page_source()
-                if not result.get("success"):
-                    return result
+        element_attrs = _find_element_by_path(self._cached_tree, element_path)
+        if element_attrs is None:
+            return {"success": False, "error": t("inspector.errorElementNotFound")}
 
-            element_attrs = _find_element_by_path(self._cached_tree, element_path)
-            if element_attrs is None:
-                return {"success": False, "error": t("inspector.errorElementNotFound")}
+        locators = _generate_locators(element_attrs)
 
-            locators = _generate_locators(element_attrs)
+        return {"success": True, "locators": locators}
 
-            return {"success": True, "locators": locators}
-
-        except Exception as e:
-            logger.error(f"Failed to find locators: {e}")
-            return {"success": False, "error": _map_appium_error(str(e))}
-
+    @_with_session
     def refresh(self) -> dict:
-        try:
-            if self.driver is None:
-                return {"success": False, "error": t("inspector.errorNoSession")}
+        # 先唤醒设备屏幕，防止息屏后无法截图
+        self._wake_device()
 
-            # 先唤醒设备屏幕，防止息屏后无法截图
-            self._wake_device()
+        screenshot_result = self.get_screenshot()
+        if not screenshot_result.get("success"):
+            return screenshot_result
 
-            screenshot_result = self.get_screenshot()
-            if not screenshot_result.get("success"):
-                return screenshot_result
+        source_result = self.get_page_source()
+        if not source_result.get("success"):
+            return source_result
 
-            source_result = self.get_page_source()
-            if not source_result.get("success"):
-                return source_result
-
-            return {
-                "success": True,
-                "screenshot": screenshot_result["screenshot"],
-                "source": source_result["source"],
-                "elements": source_result["elements"],
-            }
-
-        except Exception as e:
-            logger.error(f"Failed to refresh: {e}")
-            return {"success": False, "error": _map_appium_error(str(e))}
+        return {
+            "success": True,
+            "screenshot": screenshot_result["screenshot"],
+            "source": source_result["source"],
+            "elements": source_result["elements"],
+        }
 
     def stop_session(self) -> dict:
         try:
