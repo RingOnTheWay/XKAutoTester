@@ -37,7 +37,9 @@ export const controllerTestPlansMixin = {
       const result = await window.electronAPI?.getDataPath?.();
       const dataPath = result?.currentPath || (typeof result === 'string' ? result : '');
       if (dataPath) {
-        window.electronAPI?.openExternal?.(`file:///${dataPath.replace(/\\/g, '/')}`);
+        // 打开 logs 子目录 (userDataPath/logs, 约定路径, 见 FileBasedDialogMonitor/DataTransferService)
+        const normalized = dataPath.replace(/\\/g, '/').replace(/\/$/, '');
+        window.electronAPI?.openExternal?.(`file:///${normalized}/logs`);
         Toast.success(window.i18n.t('testExecution.openFolderSuccess'));
       } else {
         Toast.error(window.i18n.t('testExecution.openFolderFailed'));
