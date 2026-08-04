@@ -166,11 +166,12 @@ test('factory 失败时吞错 + initialized 保持 false', async () => {
 });
 
 test('默认 factory 读真 fs (集成, 临时 locales 目录 + config.json)', async () => {
+  // S5: I18nService.init 走 pathHelper.getLocalesPath(projectRoot) = projectRoot/electron/locales
   // 用真实 I18nService (不传 opts) + 临时目录
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xkat-i18n-test-'));
   try {
-    // 临时 locales/zh-CN/translation.json
-    const localesDir = path.join(tmpDir, 'locales');
+    // 临时 electron/locales/zh-CN/translation.json (S5: 路径对齐 pathHelper.getLocalesPath)
+    const localesDir = path.join(tmpDir, 'electron', 'locales');
     const zhCNDir = path.join(localesDir, 'zh-CN');
     fs.mkdirSync(zhCNDir, { recursive: true });
     fs.writeFileSync(

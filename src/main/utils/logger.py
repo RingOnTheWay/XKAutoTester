@@ -16,6 +16,7 @@ import sys
 
 from main.utils.config import get_config_manager
 from main.utils.paths import get_logs_path
+from main.utils.text import DATETIME_FORMAT
 
 # 模块级缓存（首次配置后复用）
 _shared_file_handler = None
@@ -38,7 +39,7 @@ def _get_shared_file_handler():
     _shared_log_dir = get_logs_path("XKAT")
     _shared_log_dir.mkdir(parents=True, exist_ok=True)
 
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    current_time = datetime.datetime.now().strftime(DATETIME_FORMAT)
     log_file_path = _shared_log_dir / f"XKAT-{current_time}.log"
 
     _shared_file_handler = logging.handlers.RotatingFileHandler(

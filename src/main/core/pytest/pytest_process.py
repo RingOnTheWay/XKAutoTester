@@ -52,6 +52,31 @@ class PytestProcess:
             popen_factory: Popen 工厂 (默认 subprocess.Popen, 测试用 FakePopen)
         """
         self._popen_factory = popen_factory or _default_popen
+        # M6: 持有 process 引用供 stop() 终止 (mirror LogcatProcess.stop 幂等模式)
+        self._process: subprocess.Popen | None = None
+
+    def stop(self) -> None:
+        """M6: 终止 pytest 子进程 (幂等, mirror LogcatProcess.stop).
+
+        由 cli KeyboardInterrupt 处理或外部中断调用.
+        terminate→wait(2s)→kill 兜底, 不抛异常.
+        """
+        process = self._process
+        if process is None:
+            return
+        try:
+            process.terminate()
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            try:
+                process.kill()
+                process.wait(timeout=2)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"PytestProcess stop kill failed: {e}")
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"PytestProcess stop terminate failed: {e}")
+        finally:
+            self._process = None
 
     def run(self, command: list[str]) -> PytestRunResult:
         """执行 pytest 命令, 阻塞至结束, 返回 PytestRunResult。
@@ -71,7 +96,9 @@ class PytestProcess:
         """
         logger.info(f"Execute: {' '.join(command)}")
 
-        process = self._popen_factory(command)
+        # M6: 存 self._process 供 stop() 终止
+        self._process = self._popen_factory(command)
+        process = self._process
 
         # 后台线程并行读取 stderr, 避免 stderr 缓冲区填满导致死锁
         stderr_lines: list[str] = []
@@ -109,8 +136,15 @@ class PytestProcess:
                     sys.stdout.flush()
 
         # 获取退出码 + 等 stderr 线程结束 (管道关闭后线程自然退出, 加 5s 超时保险)
-        exit_code = process.wait()
-        stderr_thread.join(timeout=5)
+        # M6: KeyboardInterrupt 显式 stop() 终止子进程, 避免孤儿
+        try:
+            exit_code = process.wait()
+        except KeyboardInterrupt:
+            self.stop()
+            raise
+        finally:
+            stderr_thread.join(timeout=5)
+            self._process = None
 
         return PytestRunResult(
             exit_code=exit_code,

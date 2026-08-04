@@ -7,7 +7,6 @@
 - run_custom_tests 路径解析
 - get_test_summary 委托 format_test_summary
 - discover_test_directories 行为
-- get_pytest_runner 单例
 - L82 破口回归: pytest_runner.py 不含 import subprocess / threading.Thread / re
 
 通过 monkeypatch XKAUTOTESTER_USER_DATA 隔离 fs, FakePytestProcess 隔离子进程。
@@ -19,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from main.core.pytest.pytest_process_port import PytestRunResult
-from main.core.pytest_runner import PytestRunner, get_pytest_runner
+from main.core.pytest_runner import PytestRunner
 
 
 class FakePytestProcess:
@@ -255,25 +254,6 @@ class TestDiscoverTestDirectories:
 
         assert "tests/" in dirs
         assert "spec_tests/" in dirs
-
-
-class TestGetPytestRunner:
-    """get_pytest_runner 模块级单例。"""
-
-    def test_singleton_returns_same_instance(self, isolated_env: Path) -> None:
-        """get_pytest_runner 两次调用返回同一实例。"""
-        # 重置模块级单例
-        import main.core.pytest_runner as pr_module
-
-        pr_module._pytest_runner_instance = None
-
-        r1 = get_pytest_runner()
-        r2 = get_pytest_runner()
-
-        assert r1 is r2
-
-        # 清理, 避免污染其他测试
-        pr_module._pytest_runner_instance = None
 
 
 class TestNoSubprocessLeak:

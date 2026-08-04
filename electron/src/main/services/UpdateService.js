@@ -293,6 +293,16 @@ class UpdateService {
     this._downloadStrategy = this._downloadStrategyFactory(this._httpsAgent);
   }
 
+  /**
+   * 启动期二段构造: 接收 config 对象应用初始配置 (对称 ApkParserService.initialize).
+   * 当前仅应用 allowInsecureSSL; 懒初始化 (_ensureInitialized) 不受影响.
+   * @param {object} config - config.json 解析后的对象
+   */
+  initialize(config) {
+    const allowInsecureSSL = !!(config && config.APP_SETTINGS && config.APP_SETTINGS.allowInsecureSSL);
+    this.setAllowInsecureSSL(allowInsecureSSL);
+  }
+
   // 懒初始化 (消除构造期 I/O, 对称 I18nService.init 幂等模式)
   _ensureInitialized() {
     if (this._initialized) return;

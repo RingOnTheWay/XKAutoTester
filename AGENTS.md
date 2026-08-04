@@ -4,7 +4,7 @@
 
 XKAutoTester 是一个基于 Electron + Python 的自动化测试平台，用于移动端应用的自动化测试，支持 Appium 驱动、Appium Inspector 元素检查、蓝牙设备模拟、定时任务调度、scrcpy 投屏、APK 解析、钉钉通知、自动更新等功能。
 
-- **版本**: 0.1.4-dev.1
+- **版本**: 0.1.4-dev.2
 - **技术栈**: Electron 38 + Node.js + Python 3.10+（内置 3.12）+ Vite 5 / electron-vite + Appium + Pytest + Allure
 - **打包工具**: electron-builder (NSIS 安装程序，含 lite 版本)
 - **Python 包管理**: uv
@@ -101,7 +101,7 @@ XKAutoTester/
 │   │   │   │   ├── SerialPortEnumerator.js # 串口枚举
 │   │   │   │   ├── TarExtractor.js      # tar 解压（APK/资源处理）
 │   │   │   │   ├── TestCaseCodeGenerator.js # 测试用例 Python 代码生成（单文件, 原 5 mixin 合回）
-│   │   │   │   ├── TestCaseService.js   # 测试用例 CRUD（自管理 JSON I/O, 未继承 JsonFileCrudService）
+│   │   │   │   ├── TestCaseService.js   # 测试用例 CRUD（自管理 JSON I/O, 未继承 JsonFileCrudService; 内部依赖 TestCaseCodeGenerator）
 │   │   │   │   ├── TestPlanService.js   # 测试计划管理（继承 JsonFileCrudService）
 │   │   │   │   ├── UpdateService.js     # 自动更新（GitHub Releases API 下载/安装）
 │   │   │   │   ├── UserDataMigrator.js  # 用户数据迁移（从 UserDataService 拆出）
@@ -116,7 +116,9 @@ XKAutoTester/
 │   │   ├── preload/
 │   │   │   └── index.js                 # Preload 桥接脚本（contextBridge 暴露 electronAPI）
 │   │   └── shared/
-│   │       └── constants.js             # IPC 通道常量定义（主进程/渲染进程共享）
+│   │       ├── constants.js             # IPC 通道常量定义（主进程/渲染进程共享）
+│   │       ├── inspectorConstants.js    # Inspector 通道/事件常量
+│   │       └── inspector-protocol.json  # Inspector stdio 协议消息定义
 │   ├── renderer/                        # 渲染进程（MVC 架构）
 │   │   ├── core/                        # 核心基类
 │   │   │   ├── Action.js                # Action 抽象
@@ -127,7 +129,7 @@ XKAutoTester/
 │   │   │   ├── test-execution/          # 测试执行（含 16 个 mixin）
 │   │   │   ├── page-package/            # 页面封装
 │   │   │   ├── test-case/               # 测试用例（含 25 个 mixin）
-│   │   │   ├── android-connection/      # 安卓连接（含 10 个 mixin）
+│   │   │   ├── android-connection/      # 安卓连接（含 11 个 mixin）
 │   │   │   └── settings/                # 设置（含 5 个 mixin）
 │   │   ├── components/                  # UI 组件
 │   │   │   ├── mixins/                  # 组件 Mixin（11 个：Canvas/Highlighter/Loading/Locator/SessionLifecycle/Tree/deviceModal*）
@@ -241,14 +243,25 @@ XKAutoTester/
 ### 1. 应用启动流程
 
 ```
-index.js → initializeServices() → ElectronApp.initialize()
-                                    ├── app.whenReady()
-                                    │   ├── createSplashWindow()           # 启动画面
-                                    │   ├── EnvironmentStartupService.run() # 环境启动编排
-                                    │   ├── registerAllHandlers()          # 注册 IPC
-                                    │   ├── schedulerService.start()       # 启动定时调度
-                                    │   └── restorePreventSleepSetting()
-                                    └── splashWindow → mainWindow          # 启动完成后切换
+index.js → ApplicationService.run()
+            ├── _buildServices()              # 20 服务依赖图编排 + 3 await 固定顺序
+            │                                 #   (i18n.init / configurePythonEnvironment / apkParser.initialize)
+            ├── electronApp.setServices(services)
+            └── ElectronApp.initialize()
+                ├── app.whenReady().then(() => {
+                │     ├── createSplashWindow()           # 启动画面
+                │     ├── services.registerHandlers(ipcMain, {...})  # 注册 IPC
+                │     │                                 # (effects.js defaultRegisterHandlers = handlers/index.js registerAllHandlers)
+                │     ├── schedulerService.initialize()  # 启动定时调度 (SmartScheduler, 非 .start())
+                │     └── restorePreventSleepSetting()
+                │   })
+                ├── app.on('before-quit')  # 关 allureWindow + 同步释放子进程服务 (S1):
+                │     schedulerService.destroy() / scrcpyService.stopScrcpy()
+                │     / pythonTestService.stop() / inspectorService.dispose()  # 避免孤儿进程
+                ├── app.on('will-quit')    # allureService.cleanupSync()
+                └── EnvironmentStartupService 不在 whenReady 直接调用; 经 IPC 触发:
+                      splash 发 startChecks → handleStartChecks() (env 检查 + cleanup + migration)
+                      splash 发 splashReady → handleSplashReady() (closeSplash + createMainWindow)
 ```
 
 ### 2. IPC 通信架构
@@ -286,52 +299,58 @@ Python 后端 (__main__.py → cli.py → core/*.py + core/{子模块}/)
 
 | API 分组 | 主要方法 | 对应 Handler |
 |---------|---------|-------------|
-| 窗口控制 | minimizeWindow, maximizeWindow, closeWindow, startWindowDrag | windowHandlers |
-| 文件操作 | selectDirectory, selectFile, selectApkFile, getFilePath | fileHandlers |
-| 测试执行 | runPythonTests, stopPythonTests, onTestOutput, onTestError | testPlanHandlers |
-| 测试计划 | getTestPlans, saveTestPlan, updateTestPlan, deleteTestPlan | testPlanHandlers |
-| 定时计划 | getScheduledPlans, saveScheduledPlan, checkTimeConflict, onScheduledTestStart | scheduledPlanHandlers |
-| 页面封装 | pagePackage.getApps/Pages/Elements (CRUD+搜索+统计) | pagePackageHandlers |
-| 蓝牙设备 | bleDevice.getDevices/addDevice/updateDevice/deleteDevice | bleDeviceDiscoveryHandlers |
-| 蓝牙发现 | bleDeviceDiscovery.scanPorts/listPorts/checkDriver | bleDeviceDiscoveryHandlers |
-| 测试用例 | testCase.list/get/save/delete/generatePython/saveAndGenerate | testCaseHandlers |
+| 窗口控制 | minimizeWindow, maximizeWindow, closeWindow, isWindowMaximized, onWindowMaximized, setIgnoreMouseEvents, startWindowDrag/moveWindowDrag/endWindowDrag | windowHandlers |
+| 文件操作 | selectDirectory, selectFile, selectApkFile, getFilePath, selectFiles, selectExportPath, selectImportPath | fileHandlers |
+| 测试执行 | runPythonTests, stopPythonTests | testPlanHandlers |
+| 事件订阅 | onTestOutput, onTestError, onUploadProgress, onDownloadProgress, onInstallProgress, onScrcpyError, onScheduledTestStart, onScheduledPlanExpired, onUpdateDownloadProgress, onExportProgress, onImportProgress | 多个 handler (PythonTestService/Scheduler/Update 等 send) |
+| 测试计划 | getTestPlans, saveTestPlan, updateTestPlan, deleteTestPlan, getTestPlanRuns | testPlanHandlers |
+| 定时计划 | getScheduledPlans, saveScheduledPlan, updateScheduledPlan, deleteScheduledPlan, checkTimeConflict, getScheduledPlanRuns, getSchedulerStatus, scheduledTestComplete, onScheduledTestStart, onScheduledPlanExpired | scheduledPlanHandlers |
+| 页面封装 | pagePackage.getApps/Pages/Elements (CRUD+搜索) + getAppStats/getPageStats | pagePackageHandlers |
+| 蓝牙设备发现 | bleDeviceDiscovery.getDevices/getDeviceDetail | bleDeviceDiscoveryHandlers |
+| 串口/驱动 | getSerialPorts, installDriver, checkInstallerRunning, recheckCP210xDriver | bleDeviceDiscoveryHandlers / environmentHandlers |
+| 测试用例 | testCase.list/get/save/delete/checkJsonExists/batchCheckJsonExists/generatePython/saveAndGenerate | testCaseHandlers |
 | APK 解析 | apk.parse | apkHandlers |
-| 报告管理 | viewReport, checkReportExists, stopAllureServer, clearAllureReports | reportHandlers |
+| 报告管理 | viewReport, checkReportExists, getTestPlanRuns, openReportByPath, getAllureServerStatus, clearAllureReports, deleteReportRun, clearAllLogs | reportHandlers |
 | 设备连接 | getConnectedDevices, executeAdbCommand, startScrcpy | deviceHandlers |
-| 文件传输 | dataTransfer.upload/download/stat | dataTransferHandlers |
-| 元素检查器 | inspector.start/stop/click/findElement/screenshot/sources | inspectorHandlers |
-| 配置管理 | getConfig, saveConfig, getDataPath, changeDataPath, resetDataPath | configHandlers |
-| 版本/更新 | getVersionInfo, checkForUpdate, downloadUpdate, installUpdate | versionHandlers / updateHandlers |
-| 系统 | openExternal, showDialog, setPreventSleep, installDriver | 多个 handler |
+| 文件传输 | uploadFile, downloadFile, onUploadProgress, onDownloadProgress（顶层, 无 dataTransfer 命名空间） | dataTransferHandlers |
+| 元素检查器 | inspector.startSession/getScreenshot/getPageSource/findElementLocators/refreshSession/stopSession/onProgress | inspectorHandlers |
+| 配置管理 | getConfig, saveConfig, getDataPath, changeDataPath, resetDataPath, relaunchApp | configHandlers |
+| 版本/更新 | getVersionInfo, checkForUpdate, checkForUpdateRaw, downloadUpdate, installUpdate, onUpdateDownloadProgress | versionHandlers / updateHandlers |
+| 系统 | openExternal, openPath, showDialog, setPreventSleep, getProjectInfo, getPytestMarkers | 多个 handler |
 | 钉钉通知 | sendDingTalkNotification | reportHandlers |
-| i18n | i18n.changeLanguage, i18n.t, i18n.getLanguage | I18nService (preload 侧) |
+| i18n | i18n.changeLanguage, i18n.t, i18n.getLanguage | preload 自行 i18next.init（不调主进程 I18nService） |
 
 ### 4. 服务初始化与依赖关系
 
 ```javascript
-// index.js 中的服务初始化顺序
-UserDataService(projectRoot)                    // 1. 用户数据路径（最先初始化）
+// ApplicationService._buildServices() 中的服务初始化顺序 (20 服务 + 3 await)
+// 实际入口: index.js → new ApplicationService().run() → _buildServices() → setServices() → ElectronApp.initialize()
+VersionService(projectRoot)                                  // 1. 版本信息（最先初始化）
+I18nService()                                                // 2. 国际化（构造, 随后 await i18n.init）
+UserDataService(projectRoot, versionService)                 // 3. 用户数据路径（依赖 versionService）
   → userConfigPath, userDataPath
-I18nService.init(projectRoot, isPackaged, userConfigPath)  // 2. 国际化
-ScheduledPlanService(userConfigPath)             // 3. 定时计划
-TestPlanService(userConfigPath, projectRoot)     // 4. 测试计划
-PythonTestService(projectRoot, i18nService, userDataPath)  // 5. Python 测试
-EnvironmentService(i18nService, projectRoot)     // 6. 环境检查
-EnvironmentStartupService(...)                   // 7. 启动期环境编排
-AllureService(projectRoot, i18nService)          // 8. Allure 报告
-ADBService(projectRoot, i18nService)             // 9. ADB 管理
-NotificationService(i18nService)                 // 10. 通知
-ScrcpyService(projectRoot, i18nService)          // 11. 投屏
-PagePackageService(userConfigPath)               // 12. 页面封装
-BleDeviceDiscoveryService(...)                   // 13. 蓝牙设备发现 + 串口枚举
-DataTransferService(...)                         // 14. 文件传输
-InspectorService(...)                            // 15. Appium Inspector
-TestCaseService(userConfigPath, projectRoot)     // 16. 测试用例
-TestCaseCodeGenerator(...)                       // 17. 用例代码生成（TestCaseService 内部依赖）
-ApkParserService(projectRoot)                    // 18. APK 解析（需 initialize()）
-VersionService(projectRoot)                      // 19. 版本信息
-UpdateService(versionService, userDataService)   // 20. 自动更新
-SmartScheduler(scheduledPlanService, i18nService)  // 21. 智能调度器 (factory 直接构造, ElectronApp.initialize 调 .initialize()/.destroy())
+  await i18nService.init(projectRoot, isPackaged, userConfigPath)  // await #1
+ScheduledPlanService(userConfigPath)                         // 4. 定时计划
+TestPlanService(userConfigPath, projectRoot)                 // 5. 测试计划
+AllureService(projectRoot, i18nService, userDataPath)        // 6. Allure 报告（3 参, 含 userDataPath）
+PythonTestService({projectRoot, i18nService, userDataPath,   // 7. Python 测试（opts 对象, 含 allureService/testPlanService）
+                   mainWindow, allureService, testPlanService})
+EnvironmentService(i18nService, projectRoot)                 // 8. 环境检查
+  await environmentService.configurePythonEnvironment()      // await #2
+ADBService(projectRoot, i18nService)                         // 9. ADB 管理
+NotificationService(i18nService)                             // 10. 通知
+ScrcpyService(projectRoot, i18nService)                      // 11. 投屏
+PagePackageService(userConfigPath)                           // 12. 页面封装
+BleDeviceDiscoveryService(projectRoot)                       // 13. 蓝牙设备发现 + 串口枚举
+TestCaseService(userConfigPath, projectRoot)                 // 14. 测试用例（内部依赖 TestCaseCodeGenerator）
+ApkParserService(projectRoot, i18nService)                   // 15. APK 解析（2 参, 含 i18nService; 随后 await initialize）
+UpdateService(versionService, userDataService, {allowInsecureSSL})  // 16. 自动更新（3 参, 含 {allowInsecureSSL}）
+InspectorService(projectRoot, i18nService, userDataPath)     // 17. Appium Inspector
+DataTransferService(userDataService, i18nService, versionService)  // 18. 文件传输
+  await apkParserService.initialize()                        // await #3
+SmartScheduler(scheduledPlanService, i18nService)            // 19. 智能调度器（factory 直接构造, ElectronApp.initialize 调 .initialize()/.destroy()）
+EnvironmentStartupService({environmentService, testCaseService,  // 20. 启动期环境编排（最后, opts 对象）
+                           userDataService, i18nService, electronApp})
 ```
 
 ### 5. 用户数据路径管理
@@ -383,8 +402,8 @@ SmartScheduler(scheduledPlanService, i18nService)  // 21. 智能调度器 (facto
 | assets | `mainDir/../../assets/` | `resourcesPath/app/assets/` |
 | renderer | `mainDir/../../renderer/` | `resourcesPath/app/renderer/` |
 | splash | `mainDir/../../splash.html` | `resourcesPath/app/splash.html` |
-| adb | `env/android-sdk/platform-tools/adb.exe` 或 PATH | `resourcesPath/env/android-sdk/platform-tools/adb.exe` |
-| aapt2 | `env/android-sdk/build-tools/29.0.3/aapt2.exe` 或 PATH | `resourcesPath/env/android-sdk/build-tools/29.0.3/aapt2.exe` |
+| adb | `env/android-sdk/platform-tools/adb.exe` → 回退 `env/scrcpy/adb.exe` → PATH `adb` | `resourcesPath/env/android-sdk/platform-tools/adb.exe`（同回退链） |
+| aapt2 | `env/android-sdk/build-tools/aapt2.exe` → 回退 `env/android-tools/aapt2.exe` → PATH `aapt2` | `resourcesPath/env/android-sdk/build-tools/aapt2.exe`（同回退链） |
 
 > aapt2/adb 路径解析统一到 `pathHelper.getAdbPath`/`getAapt2Path`，支持缓存机制。
 
@@ -402,6 +421,8 @@ SmartScheduler(scheduledPlanService, i18nService)  // 21. 智能调度器 (facto
 # Electron 通过子进程调用 Python
 python -m main --test-paths <paths> --markers <markers> --test-plan <name>
 # 环境变量 XKAUTOTESTER_USER_DATA 指定用户数据目录
+# PythonTestService._buildSpawnEnv 另注入 XKAUTOTESTER_ADB_PATH (pathHelper.getAdbPath 解析结果),
+# 供 Python 端 subprocess_adb_adapter 复用同一 adb 路径, 避免二次解析
 ```
 
 ***
@@ -554,7 +575,7 @@ python -m main --test-paths <paths> --markers <markers> --test-plan <name>
 | 测试执行 | test-execution | tabs/test-execution/ | 16 |
 | 页面封装 | page-package | tabs/page-package/ | 0 |
 | 测试用例 | test-case | tabs/test-case/ | 25 |
-| 安卓连接 | android-connection | tabs/android-connection/ | 10 |
+| 安卓连接 | android-connection | tabs/android-connection/ | 11 |
 | 设置 | settings | tabs/settings/ | 5 |
 
 ### 前端技术特点
@@ -680,8 +701,9 @@ npm run version:sync      # 强制同步
 ### 4. IPC 通道命名规范
 
 - 简单操作：`动词-名词` 格式（如 `get-config`, `save-config`）
-- 命名空间操作：`命名空间:操作` 格式（如 `page-package:get-apps`, `ble-device:add-device`, `test-case:save`, `inspector:start`）
-- 事件监听：`on-事件名` 格式（如 `on-download-progress`, `on-install-progress`, `on-scheduled-test-start`）
+- 命名空间操作：`命名空间:操作` 格式（如 `page-package:get-apps`, `ble-device-discovery:get-devices`, `test-case:save`, `inspector:start-session`）
+- 事件监听：`on-事件名` 格式（如 `on-download-progress`, `on-install-progress`, `on-export-progress`）；注意部分历史事件通道无 on- 前缀（如 `test-output`, `upload-progress`, `scheduled-test-start`）
+- ⚠ 存量通道有 camelCase 历史遗留（如 `getConnectedDevices`, `executeAdbCommand`, `uploadFile`, `downloadFile`, `selectFiles`, `checkPathExists`, `createDirectory`, `getSerialPorts`），新通道必须用 kebab-case
 
 ### 5. Vite / electron-vite 相关
 

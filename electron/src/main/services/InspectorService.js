@@ -135,6 +135,20 @@ class InspectorService {
         }
         this.activeSessionId = null;
     }
+
+    /**
+     * S1: 同步释放资源 (供 ElectronApp before-quit 调用).
+     * 与 ScrcpyService.stopScrcpy / PythonTestService.stop 对称, 无需 await.
+     * 不发送 stop-session 命令到 Python (进程将随 stdin EOF 自然退出),
+     * 仅本地 dispose transport + 清空会话状态.
+     */
+    dispose() {
+        try {
+            this._cleanup();
+        } catch {
+            /* 退出时吞错, 避免阻塞应用关闭 */
+        }
+    }
 }
 
 module.exports = InspectorService;

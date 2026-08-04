@@ -21,7 +21,7 @@ from pathlib import Path
 import requests
 
 from main.utils.paths import get_logs_path
-from main.utils.text import clean_ansi_escape
+from main.utils.text import DATETIME_FORMAT, clean_ansi_escape
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +233,7 @@ class AppiumServer:
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
         # 生成与XKAT日志格式一致的日志文件名
-        current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        current_time = datetime.datetime.now().strftime(DATETIME_FORMAT)
         self.log_file = self.log_dir / f"Appium-{current_time}.log"
 
     @property

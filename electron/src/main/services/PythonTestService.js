@@ -285,6 +285,9 @@ class PythonTestService {
       PYTHONUTF8: '1',
       XKAUTOTESTER_LANG: this.i18nService.getLanguage(),
       XKAUTOTESTER_LOCALES_PATH: pathHelper.getLocalesPath(this.projectRoot),
+      // S2: 注入 adb 路径供 Python subprocess_adb_adapter 使用 (打包模式 PATH 无 adb 时必需,
+      // inspector_service._wake_device 等依赖此 env 找到 adb.exe)
+      XKAUTOTESTER_ADB_PATH: pathHelper.getAdbPath(this.projectRoot),
       ...(pythonCmd.isEmbedded ? {} : this.buildPythonPathEnv(pythonCmd)),
       XKAUTOTESTER_USER_DATA: this.userDataPath
     };

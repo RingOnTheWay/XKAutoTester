@@ -68,7 +68,7 @@ class DeviceConnectionService:
         """
         try:
             logger.info(t("python.adbManager.gettingConnectedDevices"))
-            result = self._executor.execute(["devices"], timeout=10)
+            result = self._executor.execute(["devices"])
             logger.info(t("python.adbManager.adbDeviceListStdout", output=result.stdout))
             if result.stderr:
                 logger.info(t("python.adbManager.adbDeviceListStderr", output=result.stderr))
@@ -172,7 +172,7 @@ class DeviceConnectionService:
         device_address = self._device_name if ":" in self._device_name else f"{self._device_name}:5555"
 
         connect_result = self._executor.execute(
-            ["connect", device_address], timeout=10
+            ["connect", device_address]
         )
         stdout = connect_result.stdout
         stderr = connect_result.stderr
@@ -197,7 +197,7 @@ class DeviceConnectionService:
 
             logger.info(t("python.adbManager.reconnectForAuth"))
             reconnect_result = self._executor.execute(
-                ["connect", device_address], timeout=10
+                ["connect", device_address]
             )
             logger.info(t("python.adbManager.reconnectResult", output=reconnect_result.stdout))
 

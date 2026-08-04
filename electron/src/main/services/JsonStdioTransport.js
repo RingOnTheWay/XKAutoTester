@@ -15,7 +15,13 @@ const { spawn } = require('child_process');
 /**
  * @typedef {Object} InspectorResponse
  * @property {boolean} success
- * @property {string} [error]
+ * @property {string} [error] - success=false 时附带, i18n key 或原始错误信息
+ * @property {string} [session_id] - start-session 成功返回, Appium driver.session_id
+ * @property {string} [screenshot] - get-screenshot/refresh 返回, data URI (data:image/png;base64,...)
+ * @property {string} [source] - get-source/refresh 返回, XML page source 字符串
+ * @property {Object} [elements] - get-source/refresh 返回, 解析后的根节点树对象
+ * @property {Array<Object>} [locators] - find-locators 返回, locator dict 数组 (type/value/description)
+ * @property {string} [warning] - start-session 端口冲突等非致命附带信息
  */
 /**
  * @typedef {{type:string, payload?:Object, stage?:string}} InspectorNotification

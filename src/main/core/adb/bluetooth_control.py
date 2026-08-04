@@ -46,7 +46,6 @@ class BluetoothService:
         try:
             result = self._executor.execute(
                 ["-s", self._device_name, "shell", "settings", "get", "global", "bluetooth_on"],
-                timeout=10,
             )
             if result.success:
                 if result.stdout.strip() == "1":
@@ -69,7 +68,6 @@ class BluetoothService:
         try:
             result = self._executor.execute(
                 ["-s", self._device_name, "shell", "svc", "bluetooth", "enable"],
-                timeout=10,
             )
             if result.success:
                 logger.info(t("python.adbManager.bluetoothEnableCommandSuccess"))

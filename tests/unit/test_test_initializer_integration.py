@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from main.utils.test_initializer import TestInitializer
+from main.core.test_initializer import TestInitializer
 from main.utils.test_reporter import TestReporter
 
 
@@ -44,7 +44,7 @@ class TestTestInitializerFields:
         # 通过检查模块源码确认
         import inspect
 
-        import main.utils.test_initializer as mod
+        import main.core.test_initializer as mod
 
         source = inspect.getsource(mod)
         # import 行不应有 allure 或 pytest

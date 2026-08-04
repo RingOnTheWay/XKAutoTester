@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 DriverFactory = Callable[[str, UiAutomator2Options], webdriver.Remote]
 ServerFactory = Callable[[str, int], AppiumServer]
 
-# Inspector 专用端口（当 AppiumServer.DEFAULT_PORT 被占用时回退到此端口）
+# Inspector 专用端口 (与 AppiumServer.DEFAULT_PORT=4723 不同, 避免与主 Appium 实例端口冲突)
 INSPECTOR_PORT = 4725
 
 _APPIUM_ERROR_PATTERNS = [
@@ -54,7 +54,7 @@ def _check_port_in_use(port: int) -> bool:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(2)
-            return s.connect_ex(("127.0.0.1", port)) == 0
+            return s.connect_ex((AppiumServer.DEFAULT_HOST, port)) == 0
     except Exception:
         return False
 
@@ -274,8 +274,9 @@ class InspectorService:
             # 设置HTTP请求超时，防止息屏后请求挂起
             try:
                 self.driver.command_executor.set_timeout(15)
-            except Exception:
-                pass
+            except Exception as e:
+                # M8: 加可观测性 (与 stdio_protocol._write_frame 的 logger.warning 模式一致)
+                logger.warning(f"set HTTP timeout 15s failed (non-fatal, will use default): {e}")
 
             self._notify_progress("session-created")
 
@@ -294,8 +295,9 @@ class InspectorService:
             if self.driver:
                 try:
                     self.driver.quit()
-                except Exception:
-                    pass
+                except Exception as quit_err:
+                    # M8: 加可观测性 (driver.quit 失败已知, 但记录原因便于排查 session 泄漏)
+                    logger.warning(f"driver.quit on start_session failure failed: {quit_err}")
                 self.driver = None
             if self.appium_server:
                 self.appium_server.stop()

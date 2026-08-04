@@ -12,7 +12,7 @@
 调用方契约 (__main__.py ElectronTestRunner) 零改动:
 - 7 公共方法签名保持
 - 返回 dict 字段形状保持
-- get_pytest_runner() 单例保留
+- 实例由 Cli factory 注入 (无模块级单例)
 """
 
 from __future__ import annotations
@@ -266,15 +266,3 @@ class PytestRunner:
             generate_allure=generate_allure,
             test_plan_name=test_plan_name,
         )
-
-
-# 模块级懒加载实例 (避免导入时触发文件 I/O, 构造时仅读 pytest.ini)
-_pytest_runner_instance: PytestRunner | None = None
-
-
-def get_pytest_runner() -> PytestRunner:
-    """获取 PytestRunner 单例 (首次调用构造, 零配置)。"""
-    global _pytest_runner_instance
-    if _pytest_runner_instance is None:
-        _pytest_runner_instance = PytestRunner()
-    return _pytest_runner_instance

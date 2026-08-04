@@ -2,6 +2,8 @@
 
 stdin 读 loop + 帧路由 + stdout 写。业务层用 @command 注册,用 notify() 推通知。
 替代 __main__.py InspectorRunner 的 _dispatch if/elif + _notify_progress 直写 stdout。
+
+S6: exit_command 由构造方注入 (解耦 inspector_constants),通用协议层不再硬编码业务命令。
 """
 
 import json
@@ -9,8 +11,6 @@ import logging
 import sys
 from collections.abc import Callable
 from typing import Any, TextIO
-
-from main.core.inspector_constants import STOP_SESSION
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,19 @@ class StdioProtocol:
     业务层用 @command 注册命令处理函数,用 notify() 推通知。
     """
 
-    def __init__(self, stdin: TextIO | None = None, stdout: TextIO | None = None) -> None:
-        """默认 sys.stdin/sys.stdout。测试传 io.StringIO。"""
+    def __init__(
+        self,
+        exit_command: str,
+        *,
+        stdin: TextIO | None = None,
+        stdout: TextIO | None = None,
+    ) -> None:
+        """Args:
+            exit_command: 收到此命令后退出 run() 循环 (S6: 解耦 inspector_constants,
+                由调用方从 inspector_constants.STOP_SESSION 注入).
+            stdin/stdout: 默认 sys.stdin/sys.stdout. 测试传 io.StringIO.
+        """
+        self._exit_command = exit_command
         self._stdin = stdin if stdin is not None else sys.stdin
         self._stdout = stdout if stdout is not None else sys.stdout
         self._handlers: dict[str, Callable[..., dict]] = {}
@@ -86,7 +97,7 @@ class StdioProtocol:
             response["kind"] = "response"
             self._write_frame(response)
 
-            if command == STOP_SESSION:
+            if command == self._exit_command:
                 break
 
     def stop(self) -> None:

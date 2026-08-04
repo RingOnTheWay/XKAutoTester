@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from main.utils.test_initializer import (
+from main.core.test_initializer import (
     ADBConfig,
     AppiumConfig,
     TestConfig,

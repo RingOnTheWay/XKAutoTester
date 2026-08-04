@@ -13,14 +13,16 @@ Python 国际化模块
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
-from main.utils.logger import get_logger
 from main.utils.paths import get_locales_root
 
-logger = get_logger(__name__)
+# S4: 改用 logging.getLogger (与 adb_manager/appium_server 等一致), 不在 import 时触发 root logger 配置.
+# root 配置由 Cli 入口 (logger_factory=get_logger) 首次创建 logger 时显式触发, 消除"导入即 IO"副作用.
+logger = logging.getLogger(__name__)
 
 
 class I18n:

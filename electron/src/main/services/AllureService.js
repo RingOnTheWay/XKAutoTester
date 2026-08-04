@@ -1,4 +1,4 @@
-// AllureService — Allure 报告服务 facade 深模块。
+// AllureService — Allure 报告服务聚合根。
 //
 // 藏 HTTP 服务器托管 + CLI 调用 + 路径查找/清理 + 报告生成/打开。
 // 4 factory-or-default (logger + httpServer + cliInvoker + asyncFs) (对称 8 参照)。
@@ -21,7 +21,7 @@ const AllureCliInvoker = require('./allure/AllureCliInvoker');
  */
 
 /**
- * Allure 报告服务（Facade）
+ * Allure 报告服务（聚合根）
  * 协调 AllureHttpServer（HTTP 托管）+ AllureCliInvoker（CLI 调用）
  * 保留路径查找/清理/生成入口/打开入口职责
  */
@@ -232,7 +232,7 @@ class AllureService {
     }
   }
 
-  async cleanup() {
+  cleanup() {
     this.httpServer.cleanupSync();
   }
 

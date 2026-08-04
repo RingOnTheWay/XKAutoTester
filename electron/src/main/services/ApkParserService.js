@@ -1,6 +1,6 @@
-// ApkParserService: APK 解析 facade
+// ApkParserService: APK 解析聚合根
 // 职责: 输入校验 + 编排 Aapt2Invoker / Aapt2OutputParser / LocaleLabelResolver 三个 collaborator
-// 设计: 保持原 constructor/initialize/parseApk 签名,handler 零改动
+// 设计: collaborators 可选注入 (对称 ADBService collaborators 模式), handler 零改动
 const path = require('path');
 const asyncFs = require('../utils/asyncFs');
 const Aapt2Invoker = require('./apk/Aapt2Invoker');
@@ -8,13 +8,21 @@ const Aapt2OutputParser = require('./apk/Aapt2OutputParser');
 const LocaleLabelResolver = require('./apk/LocaleLabelResolver');
 
 class ApkParserService {
-    constructor(projectRoot, i18nService = null) {
+    /**
+     * @param {string} projectRoot
+     * @param {object} [i18nService]
+     * @param {object} [collaborators] - 可选注入 (测试用, 对称 ADBService collaborators)
+     * @param {object} [collaborators.invoker]
+     * @param {object} [collaborators.parser]
+     * @param {object} [collaborators.labelResolver]
+     */
+    constructor(projectRoot, i18nService = null, collaborators = {}) {
         this.projectRoot = projectRoot;
         this.i18nService = i18nService;
         this.aapt2Path = null;
-        this._invoker = new Aapt2Invoker({ projectRoot, i18nService });
-        this._parser = new Aapt2OutputParser();
-        this._labelResolver = new LocaleLabelResolver({ i18nService });
+        this._invoker = collaborators.invoker || new Aapt2Invoker({ projectRoot, i18nService });
+        this._parser = collaborators.parser || new Aapt2OutputParser();
+        this._labelResolver = collaborators.labelResolver || new LocaleLabelResolver({ i18nService });
     }
 
     async initialize() {

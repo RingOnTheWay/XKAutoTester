@@ -14,9 +14,12 @@
 """
 from __future__ import annotations
 
+import logging
 import subprocess
 
 from main.core.adb.adb_port import AdbCommandPort, AdbResult
+
+logger = logging.getLogger(__name__)
 
 
 class LogcatProcess:
@@ -43,7 +46,6 @@ class LogcatProcess:
         """
         return self._adapter.execute(
             ["-s", self._device_name, "logcat", "-c"],
-            timeout=10,
         )
 
     def start_stream(self) -> None:
@@ -95,6 +97,7 @@ class LogcatProcess:
             except subprocess.TimeoutExpired:
                 self._process.kill()
                 self._process.wait(timeout=2)
-        except Exception:
-            pass
+        except Exception as e:
+            # M8: 加可观测性 (terminate/wait/kill 失败已知, 记录原因便于排查孤儿进程)
+            logger.warning(f"LogcatProcess stop failed (non-fatal, process may be orphaned): {e}")
         self._process = None

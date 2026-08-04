@@ -532,48 +532,107 @@ test('setAllowInsecureSSL 同步重建 downloadStrategy factory', () => {
   assert.strictEqual(downloadCalls[1], svc._httpsAgent, 'download factory 收新 agent');
 });
 
-// ── defaultUpdateServiceFactory 启动期读 config.json ──
+// ── defaultUpdateServiceFactory 纯构造 (M4: 副作用外移至 updateServiceInitializer) ──
 
 const os = require('os');
 const fsReal = require('fs');
 const { defaultUpdateServiceFactory } = require('../../electron/src/main/services/application/factories');
 
-test('defaultUpdateServiceFactory 读 config.json allowInsecureSSL=true 传入构造', () => {
-  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-factory-'));
+test('defaultUpdateServiceFactory 纯构造: 不读 config, allowInsecureSSL=false (M4)', () => {
+  const userDataService = { getUserConfigPath: () => '/nonexistent/path' };
+  const svc = defaultUpdateServiceFactory({ __tag: 'version' }, userDataService);
+  assert.strictEqual(svc._allowInsecureSSL, false, '纯构造默认 false');
+  assert.strictEqual(svc._httpsAgent, undefined, '无 agent');
+});
+
+// ── UpdateService.initialize(config) 二段构造 (M4) ──
+
+test('initialize(config) allowInsecureSSL=true: 调 setAllowInsecureSSL 重建 agent', () => {
+  const spy = makeSpyUpdateSourceFactory();
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService(), {
+    updateSourceFactory: spy,
+  });
+  assert.strictEqual(svc._allowInsecureSSL, false, '初始 false');
+
+  svc.initialize({ APP_SETTINGS: { allowInsecureSSL: true } });
+
+  assert.strictEqual(svc._allowInsecureSSL, true, 'config apply 后 true');
+  assert.ok(svc._httpsAgent instanceof https.Agent, '构建 agent');
+  assert.strictEqual(spy.calls.length, 2, 'factory 重新调');
+});
+
+test('initialize(config) allowInsecureSSL 缺失: 保持 false, 不重建 agent', () => {
+  const spy = makeSpyUpdateSourceFactory();
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService(), {
+    updateSourceFactory: spy,
+  });
+
+  svc.initialize({ APP_SETTINGS: { autoCheckUpdate: true } });
+
+  assert.strictEqual(svc._allowInsecureSSL, false, '无 key 保持 false');
+  assert.strictEqual(svc._httpsAgent, undefined, '无 agent');
+  assert.strictEqual(spy.calls.length, 1, 'factory 不重新调 (同值幂等)');
+});
+
+test('initialize(config) null config: 保持 false, 不抛', () => {
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService());
+  svc.initialize(null);
+  assert.strictEqual(svc._allowInsecureSSL, false, 'null config 保持 false');
+});
+
+// ── defaultUpdateServiceInitializer 读 config.json (M4: 副作用外移) ──
+
+const { defaultUpdateServiceInitializer } = require('../../electron/src/main/services/application/effects');
+
+test('defaultUpdateServiceInitializer 读 config.json allowInsecureSSL=true → 调 initialize', async () => {
+  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-init-'));
   try {
     fsReal.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
       APP_SETTINGS: { allowInsecureSSL: true }
     }));
-    const userDataService = { getUserConfigPath: () => tmpDir };
-    const svc = defaultUpdateServiceFactory({ __tag: 'version' }, userDataService);
-    assert.strictEqual(svc._allowInsecureSSL, true, '从 config 读 true');
+    const spy = makeSpyUpdateSourceFactory();
+    const svc = new UpdateService(makeFakeVersionService(), { getUserConfigPath: () => tmpDir }, {
+      updateSourceFactory: spy,
+    });
+    assert.strictEqual(svc._allowInsecureSSL, false, 'initializer 前默认 false');
+
+    await defaultUpdateServiceInitializer(svc, tmpDir);
+
+    assert.strictEqual(svc._allowInsecureSSL, true, 'initializer 后 true');
     assert.ok(svc._httpsAgent instanceof https.Agent, '构建 agent');
   } finally {
     fsReal.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 
-test('defaultUpdateServiceFactory 无 config.json 时默认 false', () => {
-  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-factory-'));
+test('defaultUpdateServiceInitializer 无 config.json → 不调 initialize (保持默认)', async () => {
+  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-init-'));
   try {
-    const userDataService = { getUserConfigPath: () => tmpDir };
-    const svc = defaultUpdateServiceFactory({ __tag: 'version' }, userDataService);
-    assert.strictEqual(svc._allowInsecureSSL, false, '无 config 默认 false');
-    assert.strictEqual(svc._httpsAgent, undefined, '无 agent');
+    const spy = makeSpyUpdateSourceFactory();
+    const svc = new UpdateService(makeFakeVersionService(), { getUserConfigPath: () => tmpDir }, {
+      updateSourceFactory: spy,
+    });
+
+    await defaultUpdateServiceInitializer(svc, tmpDir);
+
+    assert.strictEqual(svc._allowInsecureSSL, false, '无 config 保持 false');
+    assert.strictEqual(spy.calls.length, 1, 'factory 不重新调');
   } finally {
     fsReal.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 
-test('defaultUpdateServiceFactory config 无 allowInsecureSSL key 时默认 false', () => {
-  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-factory-'));
+test('defaultUpdateServiceInitializer config 无 allowInsecureSSL key → 保持 false', async () => {
+  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-init-'));
   try {
     fsReal.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
       APP_SETTINGS: { autoCheckUpdate: true }
     }));
-    const userDataService = { getUserConfigPath: () => tmpDir };
-    const svc = defaultUpdateServiceFactory({ __tag: 'version' }, userDataService);
-    assert.strictEqual(svc._allowInsecureSSL, false, '无 key 默认 false');
+    const svc = new UpdateService(makeFakeVersionService(), { getUserConfigPath: () => tmpDir });
+
+    await defaultUpdateServiceInitializer(svc, tmpDir);
+
+    assert.strictEqual(svc._allowInsecureSSL, false, '无 key 保持 false');
   } finally {
     fsReal.rmSync(tmpDir, { recursive: true, force: true });
   }

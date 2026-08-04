@@ -64,7 +64,9 @@ class Cli:
         匹配 test_initializer.py L146-198 模式 (7 工厂 kwargs)。
         """
         self._pytest_runner_factory: PytestRunnerFactory = pytest_runner_factory or (lambda: PytestRunner())
-        self._stdio_protocol_factory: StdioProtocolFactory = stdio_protocol_factory or (lambda: StdioProtocol())
+        self._stdio_protocol_factory: StdioProtocolFactory = stdio_protocol_factory or (
+            lambda: StdioProtocol(exit_command=STOP_SESSION)
+        )
         self._inspector_service_factory: InspectorServiceFactory = inspector_service_factory or (
             lambda proto: InspectorService(proto)
         )

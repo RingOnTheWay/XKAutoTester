@@ -17,7 +17,7 @@ src_dir = os.path.join(parent_dir, 'src')
 
 if os.path.exists(src_dir):
     sys.path.insert(0, src_dir)
-from main.utils.test_initializer import (
+from main.core.test_initializer import (
     TestInitializer, TestConfig, ADBConfig{{BLE_IMPORT}}, AppiumConfig
 )
 {{ADDITIONAL_IMPORTS}}

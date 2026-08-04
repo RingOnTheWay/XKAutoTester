@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const pathHelper = require('./utils/pathHelper');
+const { IPC_CHANNELS } = require('../shared/constants');
 
 class ElectronApp {
   constructor() {
@@ -122,6 +123,7 @@ class ElectronApp {
     }
 
     if (this.services.pythonTestService) {
+      // M2: PythonTestService 保留直字段赋值 (前5轮决定: 消除 setMainWindow 时序耦合, run() lazy 取 this.mainWindow)
       this.services.pythonTestService.mainWindow = this.mainWindow;
     }
 
@@ -130,12 +132,18 @@ class ElectronApp {
       this.services.scrcpyService.setMainWindow(this.mainWindow);
     }
 
+    // M2: DataTransferService 集中注入 (替代 dataTransferHandlers 内 3 处重复 setMainWindow 调用)
+    if (this.services.dataTransferService) {
+      this.services.dataTransferService.setMainWindow(this.mainWindow);
+    }
+
     this.mainWindow.on('maximize', () => {
-      this.mainWindow.webContents.send('window-maximized', true);
+      // M7: 走 IPC_CHANNELS 常量 (原硬编码 'window-maximized' 字符串)
+      this.mainWindow.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZED, true);
     });
 
     this.mainWindow.on('unmaximize', () => {
-      this.mainWindow.webContents.send('window-maximized', false);
+      this.mainWindow.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZED, false);
     });
 
     this.mainWindow.webContents.setWindowOpenHandler(() => {
@@ -313,10 +321,12 @@ class ElectronApp {
     });
 
     app.on('before-quit', () => {
-      if (this.services.schedulerService) {
-        // M1: SchedulerService facade 删除, 直接调 SmartScheduler.destroy()
-        this.services.schedulerService.destroy();
-      }
+      // S1: 持有子进程/会话的 service 必须在退出前同步释放, 避免孤儿进程
+      // 对称: schedulerService.destroy() + allureService.cleanupSync() (will-quit)
+      try { this.services.schedulerService && this.services.schedulerService.destroy(); } catch { /* 退出吞错 */ }
+      try { this.services.scrcpyService && this.services.scrcpyService.stopScrcpy(); } catch { /* 退出吞错 */ }
+      try { this.services.pythonTestService && this.services.pythonTestService.stop(); } catch { /* 退出吞错 */ }
+      try { this.services.inspectorService && this.services.inspectorService.dispose(); } catch { /* 退出吞错 */ }
     });
 
     app.on('will-quit', () => {
