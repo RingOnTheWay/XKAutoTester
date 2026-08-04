@@ -488,7 +488,8 @@ class TestInitializer:
         if self._safe("driver", self.driver, lambda d: d.quit()):
             self.logger.info(t("python.testInitializer.driverClosed"))
         # 确保 APP 已关闭
-        if self._safe("adb_manager", self.adb_manager, lambda m: m.ensure_app_closed(2)):
+        # P3 修复漏网: ensure_app_closed 已从 adb_manager 删除, 改调 adb_manager.app.ensure_closed
+        if self._safe("adb_manager", self.adb_manager, lambda m: m.app.ensure_closed(2)):
             self.logger.info(t("python.testInitializer.testAppForceStopped"))
         # 关闭蓝牙串口
         if self._safe("ble_device", self.ble_device, lambda d: d.close()):

@@ -180,7 +180,8 @@ class TestTestInitializerFailurePath:
         init.cleanup()
 
         mock_driver.quit.assert_called_once()
-        mock_adb.ensure_app_closed.assert_called_once_with(2)
+        # P3 修复漏网: ensure_app_closed 已从 adb_manager 删除, 改调 adb_manager.app.ensure_closed
+        mock_adb.app.ensure_closed.assert_called_once_with(2)
 
     def test_enter_exit_context_manager(self):
         """__enter__/__exit__ 上下文管理器"""

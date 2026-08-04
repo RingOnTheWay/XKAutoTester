@@ -268,7 +268,7 @@ class PytestRunner:
         )
 
 
-# 模块级懒加载实例 (避免导入时触发文件 I/O, 构造时会读 test_plans.json)
+# 模块级懒加载实例 (避免导入时触发文件 I/O, 构造时仅读 pytest.ini)
 _pytest_runner_instance: PytestRunner | None = None
 
 
