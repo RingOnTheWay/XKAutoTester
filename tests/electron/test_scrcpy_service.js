@@ -31,7 +31,7 @@ function makeFakeSpawner(childOverride) {
 }
 
 function makeFakePathResolver(scrcpyPath) {
-  return { findScrcpyPath: () => scrcpyPath };
+  return { findScrcpyPath: async () => scrcpyPath };
 }
 
 function makeFakeLogger() {
@@ -399,4 +399,114 @@ test('H2: child close code=0 正常退出不触发 notifier', async () => {
 
 test('H2: SCRCPY_CRASH_WINDOW_MS = 2000 (模块常量导出)', () => {
   assert.strictEqual(SCRCPY_CRASH_WINDOW_MS, 2000);
+});
+
+// M1: stopScrcpy 生命周期管理测试
+
+test('M1: stopScrcpy 无 child 时安全 no-op', () => {
+  const svc = new ScrcpyService('/proj', makeFakeI18n(), {
+    processSpawnerFactory: () => makeFakeSpawner(),
+    pathResolverFactory: () => makeFakePathResolver('/scrcpy.exe'),
+    loggerFactory: () => makeFakeLogger(),
+  });
+  assert.strictEqual(svc._child, null);
+  svc.stopScrcpy();  // 不抛错
+  assert.strictEqual(svc._child, null);
+});
+
+test('M1: startScrcpy 持有 child 引用 (svc._child 非 null)', async () => {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+  try {
+    const fakeChild = new EventEmitter();
+    fakeChild.kill = () => {};
+    fakeChild.stdout = { resume: () => {} };
+    fakeChild.stderr = { resume: () => {} };
+    const spawner = { spawn: () => fakeChild };
+    const svc = new ScrcpyService('/proj', makeFakeI18n(), {
+      processSpawnerFactory: () => spawner,
+      pathResolverFactory: () => makeFakePathResolver('/usr/bin/scrcpy'),
+      loggerFactory: () => makeFakeLogger(),
+    });
+    await svc.startScrcpy('dev:5555', {});
+    assert.strictEqual(svc._child, fakeChild, 'M1: _child 持有 spawn 返回的 child');
+  } finally {
+    Object.defineProperty(process, 'platform', originalPlatform);
+  }
+});
+
+test('M1: stopScrcpy kill child + 置 null', async () => {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+  try {
+    let killCalled = 0;
+    const fakeChild = new EventEmitter();
+    fakeChild.kill = () => { killCalled++; };
+    fakeChild.stdout = { resume: () => {} };
+    fakeChild.stderr = { resume: () => {} };
+    const spawner = { spawn: () => fakeChild };
+    const svc = new ScrcpyService('/proj', makeFakeI18n(), {
+      processSpawnerFactory: () => spawner,
+      pathResolverFactory: () => makeFakePathResolver('/usr/bin/scrcpy'),
+      loggerFactory: () => makeFakeLogger(),
+    });
+    await svc.startScrcpy('dev:5555', {});
+    assert.strictEqual(svc._child, fakeChild);
+    svc.stopScrcpy();
+    assert.strictEqual(killCalled, 1, 'child.kill() 调 1 次');
+    assert.strictEqual(svc._child, null, '_child 置 null');
+  } finally {
+    Object.defineProperty(process, 'platform', originalPlatform);
+  }
+});
+
+test('M1: startScrcpy 先停旧进程 (多次调用不累积)', async () => {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+  try {
+    let killCalled = 0;
+    const makeChild = () => {
+      const c = new EventEmitter();
+      c.kill = () => { killCalled++; };
+      c.stdout = { resume: () => {} };
+      c.stderr = { resume: () => {} };
+      return c;
+    };
+    const spawner = { spawn: () => makeChild() };
+    const svc = new ScrcpyService('/proj', makeFakeI18n(), {
+      processSpawnerFactory: () => spawner,
+      pathResolverFactory: () => makeFakePathResolver('/usr/bin/scrcpy'),
+      loggerFactory: () => makeFakeLogger(),
+    });
+    await svc.startScrcpy('dev:5555', {});
+    await svc.startScrcpy('dev:5555', {});
+    assert.strictEqual(killCalled, 1, '第二次 startScrcpy 前停旧 child, kill 调 1 次');
+  } finally {
+    Object.defineProperty(process, 'platform', originalPlatform);
+  }
+});
+
+test('M1: child close 后 _child 置 null (stopScrcpy 不重复 kill)', async () => {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+  try {
+    let killCalled = 0;
+    const fakeChild = new EventEmitter();
+    fakeChild.kill = () => { killCalled++; };
+    fakeChild.stdout = { resume: () => {} };
+    fakeChild.stderr = { resume: () => {} };
+    const spawner = { spawn: () => fakeChild };
+    const svc = new ScrcpyService('/proj', makeFakeI18n(), {
+      processSpawnerFactory: () => spawner,
+      pathResolverFactory: () => makeFakePathResolver('/usr/bin/scrcpy'),
+      loggerFactory: () => makeFakeLogger(),
+    });
+    await svc.startScrcpy('dev:5555', {});
+    fakeChild.emit('close', 0, null);  // 正常退出
+    assert.strictEqual(svc._child, null, 'close 后 _child 置 null');
+    svc.stopScrcpy();
+    assert.strictEqual(killCalled, 0, 'close 后 stopScrcpy 不再 kill');
+  } finally {
+    Object.defineProperty(process, 'platform', originalPlatform);
+  }
 });

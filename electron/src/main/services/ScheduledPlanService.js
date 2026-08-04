@@ -51,15 +51,14 @@ class ScheduledPlanService extends JsonFileCrudService {
    */
   constructor(userConfigPath, opts = {}) {
     const scheduledPlansPath = path.join(userConfigPath, 'scheduled_plans.json');
-    super(scheduledPlansPath, [], opts);  // 透传 opts.asyncFsFactory + opts.idGenerator 给 base
-    this._scheduledPlansPath = scheduledPlansPath;  // 暴露给 SmartScheduler 文件监听 (H1 修复: 原 undefined 导致监听静默失效)
+    super(scheduledPlansPath, [], opts);  // 透传 opts.asyncFsFactory + opts.idGenerator 给 base (filePath 由基类持有)
     this._loggerFactory = opts.loggerFactory || defaultLoggerFactory;
     this._logger = this._loggerFactory();
   }
 
-  /** 定时计划文件路径 (供 SmartScheduler 设置文件监听) */
+  /** 定时计划文件路径 (供 SmartScheduler 设置文件监听; 复用基类 filePath 单源, 避免双字段漂移) */
   get scheduledPlansPath() {
-    return this._scheduledPlansPath;
+    return this.filePath;
   }
 
   async getScheduledPlans() {

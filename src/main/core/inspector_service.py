@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import logging
 import re
 import socket
@@ -195,6 +196,7 @@ def _with_session(fn: Callable) -> Callable:
     start_session/stop_session (driver None 语义不同) / get_page_source (ET.ParseError 特殊处理) 不装饰。
     """
 
+    @functools.wraps(fn)
     def wrapper(self, *args, **kwargs):
         if self.driver is None:
             return {"success": False, "error": t("inspector.errorNoSession")}

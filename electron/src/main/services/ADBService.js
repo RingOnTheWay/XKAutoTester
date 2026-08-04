@@ -1,8 +1,8 @@
 /**
- * ADBService - facade
+ * ADBService - ADB 聚合根 (collaborator 协调器)
  *
  * 设计:
- * - 深模块架构: facade 持有 4 collaborator (AdbCommandExecutor + RemoteStatService + FileTransferService + ApkInstaller)
+ * - 深模块架构: 聚合根持有 4 collaborator (AdbCommandExecutor + RemoteStatService + FileTransferService + ApkInstaller)
  * - 公共 API 2 方法: getConnectedDevices / executeAdbCommand (其余通过属性暴露 collaborator)
  * - M4: 删 3 pass-through wrapper (uploadFile/downloadFile/installApk), 调用方直接持 .fileTransfer / .apkInstaller / .remoteStat
  * - M4: TarExtractor 改 factory-or-default 注入 (原硬编码 new TarExtractor())
@@ -82,14 +82,9 @@ class ADBService {
     return this._remoteStat;
   }
 
-  /** M4: collaborator 属性暴露 (供测试/扩展访问) */
+  /** M4: collaborator 属性暴露 (供测试访问) */
   get tarExtractor() {
     return this._tarExtractor;
-  }
-
-  /** M4: collaborator 属性暴露 (供测试/扩展访问) */
-  get commandExecutor() {
-    return this._executor;
   }
 
   /**

@@ -251,22 +251,23 @@ class TestCaseService {
   /**
    * 保存 + 强制生成 (吸收 testCaseHandlers L45-62 双委托)
    * H3: 生成在前, 保存 JSON 在后 (单源写入, 含 pyFilePath)
+   * A2: 不 mutation 入参 caseData, 内部用副本 enriched 操作 (原对象保持不变)
    * @param {Object} caseData
    * @param {string} outputDir
    * @returns {Promise<{success, data?, jsonPath?, pyPath?, error?}>}
    */
   async saveAndGenerate(caseData, outputDir) {
     try {
-      // H3: 先生成 (generator 不 mutation, 由 service set pyOutputDir/pyFilePath)
-      caseData.pyOutputDir = outputDir;
-      const genResult = await this._codeGenerator.generatePythonFile(caseData, outputDir);
+      // A2: 用副本操作, 不 mutation 调用方传入的 caseData
+      const enriched = { ...caseData, pyOutputDir: outputDir };
+      const genResult = await this._codeGenerator.generatePythonFile(enriched, outputDir);
       if (!genResult.success) {
         return genResult;
       }
-      caseData.pyFilePath = genResult.path;
+      enriched.pyFilePath = genResult.path;
 
       // H3: 后保存 JSON (单源写入, 含 pyOutputDir + pyFilePath)
-      const saveResult = await this._saveOnly(caseData);
+      const saveResult = await this._saveOnly(enriched);
       if (!saveResult.success) {
         return saveResult;
       }

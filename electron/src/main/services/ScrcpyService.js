@@ -70,20 +70,32 @@ const defaultProcessSpawnerFactory = () => {
 
 const defaultPathResolverFactory = (projectRoot) => {
   const fs = require('fs');
-  const { execSync } = require('child_process');
+  const { execFile } = require('child_process');
+  let cachedPath;  // undefined=未解析, null=解析失败, string=路径
   return {
-    findScrcpyPath() {
+    // A1: 异步化 (原 execSync 阻塞事件循环最长 3s) + 路径缓存 (避免每次 startScrcpy 都 where scrcpy)
+    async findScrcpyPath() {
+      if (cachedPath !== undefined) return cachedPath;
       const localScrcpy = path.join(projectRoot, 'env', 'scrcpy', 'scrcpy.exe');
-      if (fs.existsSync(localScrcpy)) return localScrcpy;
+      if (fs.existsSync(localScrcpy)) {
+        cachedPath = localScrcpy;
+        return cachedPath;
+      }
       try {
-        const result = execSync('where scrcpy', {
-          encoding: 'utf8', windowsHide: true, timeout: 3000
+        cachedPath = await new Promise((resolve) => {
+          execFile('where', ['scrcpy'], {
+            encoding: 'utf8', windowsHide: true, timeout: 3000
+          }, (err, stdout) => {
+            if (err) { resolve(null); return; }
+            const systemPath = stdout.split('\n').map(p => p.trim())
+              .find(p => p && p.endsWith('.exe'));
+            resolve(systemPath || null);
+          });
         });
-        const systemPath = result.split('\n').map(p => p.trim())
-          .find(p => p && p.endsWith('.exe'));
-        if (systemPath) return systemPath;
-      } catch {}
-      return null;
+      } catch {
+        cachedPath = null;
+      }
+      return cachedPath;
     }
   };
 };
@@ -114,6 +126,7 @@ class ScrcpyService {
     this.projectRoot = projectRoot;
     this.i18nService = i18nService;
     this._mainWindow = null;  // H2: setMainWindow 后填充 (对称 SmartScheduler._mainWindow)
+    this._child = null;  // M1: 持有 child 引用供 stopScrcpy 管理 (补齐 H2 下沉未完成部分)
     this._processSpawnerFactory = opts.processSpawnerFactory || defaultProcessSpawnerFactory;
     this._pathResolverFactory = opts.pathResolverFactory || defaultPathResolverFactory;
     this._loggerFactory = opts.loggerFactory || defaultLoggerFactory;
@@ -133,9 +146,24 @@ class ScrcpyService {
     this._mainWindow = mainWindow;
   }
 
+  /**
+   * M1: 停止当前 scrcpy 子进程 (补齐 H2 下沉: service 持 child 引用, 可控终止).
+   * startScrcpy 开头自动调此方法停旧进程, 避免累积.
+   */
+  stopScrcpy() {
+    if (this._child) {
+      try { this._child.kill(); } catch { /* 已退出 */ }
+      this._child = null;
+    }
+  }
+
   async startScrcpy(deviceId, scrcpyParams) {
     try {
-      const scrcpyPath = this._pathResolver.findScrcpyPath();
+      // M1: 先停旧 scrcpy 进程 (避免多次调用累积)
+      this.stopScrcpy();
+
+      // A1: findScrcpyPath 异步化 (原 execSync 阻塞事件循环)
+      const scrcpyPath = await this._pathResolver.findScrcpyPath();
       if (!scrcpyPath) {
         return {
           success: false,
@@ -161,17 +189,22 @@ class ScrcpyService {
         });
       }
 
+      // M1: 持有 child 引用供 stopScrcpy 管理
+      this._child = child;
+
       child.stdout.resume();
       child.stderr.resume();
 
       // H2: child process 生命周期下沉 (原 deviceHandlers START_SCRCPY L29-50)
       const startTime = Date.now();
       child.on('error', (err) => {
+        this._child = null;
         this._notifier.notify({
           error: err.message || 'Unknown spawn error'
         });
       });
       child.on('close', (code, signal) => {
+        this._child = null;
         const elapsed = Date.now() - startTime;
         if (code !== 0 && elapsed < SCRCPY_CRASH_WINDOW_MS) {
           this._notifier.notify({

@@ -240,6 +240,22 @@ test('saveAndGenerate 强制生成 + 返 {jsonPath, pyPath}', async () => {
   assert.strictEqual(result.data.pyOutputDir, '/fake/output', 'data 含 pyOutputDir');
 });
 
+test('A2: saveAndGenerate 不 mutation 入参 caseData (原对象保持不变)', async () => {
+  const { svc } = makeFakeApp();
+  const originalCase = { name: 'Test', fileName: 'demo' };
+  const originalSnapshot = { ...originalCase };
+
+  const result = await svc.saveAndGenerate(originalCase, '/fake/output');
+
+  assert.strictEqual(result.success, true, '保存成功');
+  assert.strictEqual(originalCase.pyOutputDir, undefined, '原 caseData 不被设 pyOutputDir');
+  assert.strictEqual(originalCase.pyFilePath, undefined, '原 caseData 不被设 pyFilePath');
+  assert.strictEqual(originalCase.id, undefined, '原 caseData 不被设 id');
+  assert.strictEqual(originalCase.updated, undefined, '原 caseData 不被设 updated');
+  assert.deepStrictEqual(originalCase, originalSnapshot, '原 caseData 完全不变');
+  assert.strictEqual(result.data.pyOutputDir, '/fake/output', 'result.data 含 pyOutputDir (副本)');
+});
+
 test('deleteTestCase 字符串参数 + 删 json + 删 py', async () => {
   const testCasesDir = '/fake/config/test_cases';
   const jsonPath = path.join(testCasesDir, 'test_demo.json');

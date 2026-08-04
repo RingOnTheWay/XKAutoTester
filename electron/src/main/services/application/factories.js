@@ -23,7 +23,7 @@ const ApkParserService = require('../ApkParserService');
 const { UpdateService } = require('../UpdateService');
 const InspectorService = require('../InspectorService');
 const { DataTransferService } = require('../DataTransferService');
-const { SmartScheduler } = require('../scheduler/smartScheduler');
+const { SmartScheduler } = require('../scheduler');
 const EnvironmentStartupService = require('../EnvironmentStartupService');
 
 const defaultVersionServiceFactory = (projectRoot) => new VersionService(projectRoot);
