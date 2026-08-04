@@ -4,8 +4,11 @@
  *
  * 平台策略: 仅 Windows 执行 reg 命令; 其他平台 noop。
  * 抽出目的: 隔离平台特定逻辑,便于测试 mock。
+ *
+ * R7: 改用 spawnSync 数组参数避免 shell 解析 (原 execSync 字符串拼接有命令注入风险,
+ * valueName 未转义, escapedPath 仅替换 " 未处理 &|%^ 等 cmd 元字符)
  */
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 
 class WindowsRegistryBridge {
     constructor(registryKey = 'HKCU\\Software\\XKAutoTester') {
@@ -20,10 +23,20 @@ class WindowsRegistryBridge {
     writePath(valueName, dataPath) {
         if (process.platform !== 'win32') return;
         try {
-            const escapedPath = dataPath.replace(/"/g, '\\"');
-            execSync(`reg add "${this.registryKey}" /v ${valueName} /t REG_SZ /d "${escapedPath}" /f`, {
-                windowsHide: true
+            // R7: spawnSync 数组参数不经 shell 解析, 根除命令注入
+            const result = spawnSync('reg', [
+                'add', this.registryKey,
+                '/v', valueName,
+                '/t', 'REG_SZ',
+                '/d', dataPath,
+                '/f'
+            ], {
+                windowsHide: true,
+                encoding: 'utf8'
             });
+            if (result.status !== 0) {
+                console.error('[WindowsRegistryBridge] reg add 失败:', result.stderr || result.stdout);
+            }
         } catch (error) {
             console.error('[WindowsRegistryBridge] 写入注册表失败:', error);
         }

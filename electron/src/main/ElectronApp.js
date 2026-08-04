@@ -39,10 +39,11 @@ class ElectronApp {
         contextIsolation: true,
         sandbox: false,
         preload: pathHelper.getPreloadPath(this.isPackaged, __dirname),
-        webSecurity: false
+        // R7: 改 webSecurity: true (splash 仅加载本地文件, 无跨域需求; 原 false 关闭同源策略有 XSS 风险)
+        webSecurity: true
       }
     });
-    
+
     const splashPath = pathHelper.getSplashPath(this.isPackaged, __dirname);
     this.splashWindow.loadFile(splashPath);
     
@@ -74,7 +75,8 @@ class ElectronApp {
         contextIsolation: true,
         sandbox: false,
         preload: pathHelper.getPreloadPath(this.isPackaged, __dirname),
-        webSecurity: false
+        // R7: 改 webSecurity: true (mainWindow 加载本地 renderer/, 无跨域需求; 原 false 关闭同源策略有 XSS 风险)
+        webSecurity: true
       },
       frame: false,
       transparent: true,
@@ -171,7 +173,9 @@ class ElectronApp {
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
-        webSecurity: false,
+        // R7 安全修复: webSecurity 改 true (allure 报告与 HTTP server 同源 http://localhost:PORT,
+        // 无跨域需求; 原 false 关闭同源策略有 XSS 风险)
+        webSecurity: true,
         partition: partitionName
       },
       autoHideMenuBar: true
@@ -188,11 +192,12 @@ class ElectronApp {
 
     ses.webRequest.onHeadersReceived((details, callback) => {
       const responseHeaders = { ...details.responseHeaders };
+      // R7 安全修复: 删除注入 ACAO:* (同源场景下无需, 且 * 允许任意网站读取响应, 有数据泄露风险)
+      // 仅保留 CSP 删除 (allure 内置 CSP 在 Electron 环境下可能阻断其自身内联脚本, 属已知兼容问题)
       delete responseHeaders['content-security-policy'];
       delete responseHeaders['content-security-policy-report-only'];
       delete responseHeaders['x-content-security-policy'];
       delete responseHeaders['x-webkit-csp'];
-      responseHeaders['access-control-allow-origin'] = ['*'];
       callback({ responseHeaders });
     });
 
@@ -323,10 +328,11 @@ class ElectronApp {
     app.on('before-quit', () => {
       // S1: 持有子进程/会话的 service 必须在退出前同步释放, 避免孤儿进程
       // 对称: schedulerService.destroy() + allureService.cleanupSync() (will-quit)
-      try { this.services.schedulerService && this.services.schedulerService.destroy(); } catch { /* 退出吞错 */ }
-      try { this.services.scrcpyService && this.services.scrcpyService.stopScrcpy(); } catch { /* 退出吞错 */ }
-      try { this.services.pythonTestService && this.services.pythonTestService.stop(); } catch { /* 退出吞错 */ }
-      try { this.services.inspectorService && this.services.inspectorService.dispose(); } catch { /* 退出吞错 */ }
+      // R7: catch 块加 console.error 可观测性 (原静默吞致资源泄漏 bug 不可排查)
+      try { this.services.schedulerService && this.services.schedulerService.destroy(); } catch (e) { console.error('[before-quit] schedulerService.destroy failed:', e); }
+      try { this.services.scrcpyService && this.services.scrcpyService.stopScrcpy(); } catch (e) { console.error('[before-quit] scrcpyService.stopScrcpy failed:', e); }
+      try { this.services.pythonTestService && this.services.pythonTestService.stop(); } catch (e) { console.error('[before-quit] pythonTestService.stop failed:', e); }
+      try { this.services.inspectorService && this.services.inspectorService.dispose(); } catch (e) { console.error('[before-quit] inspectorService.dispose failed:', e); }
     });
 
     app.on('will-quit', () => {

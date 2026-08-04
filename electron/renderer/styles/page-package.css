@@ -355,6 +355,11 @@
     background: rgba(var(--primary-rgb), 0.08);
 }
 
+/* R7 a11y: 键盘导航高亮 */
+.cascade-select__option.active {
+    background: rgba(var(--primary-rgb), 0.08);
+}
+
 .cascade-select__option.selected {
     background: rgba(var(--primary-rgb), 0.12);
     color: var(--primary);
@@ -435,6 +440,10 @@ body.dark-theme .cascade-select__dropdown {
 }
 
 body.dark-theme .cascade-select__option:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-theme .cascade-select__option.active {
     background: rgba(255, 255, 255, 0.08);
 }
 

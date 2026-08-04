@@ -215,6 +215,12 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
 
       writer.on('finish', () => {
         clearInterval(speedInterval);
+        // R7: 下载完整性校验 (防下载不完整的 .exe 被执行; 完整 SHA256 校验需业务决策 hash 存储位置)
+        if (totalLength > 0 && downloadedLength !== totalLength) {
+          try { fs.unlinkSync(filePath); } catch (e) {}
+          reject(new Error(`下载不完整: 预期 ${totalLength} 字节, 实际 ${downloadedLength} 字节`));
+          return;
+        }
         resolve({ success: true, filePath, message: 'Download completed' });
       });
 
@@ -235,6 +241,9 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
 
 const defaultInstallStrategyFactory = () => ({
   async install(filePath) {
+    // R7 安全 TODO: 此处直接 spawn 执行下载的 .exe, 无 SHA256/签名校验。
+    // 完整修复需在 GitHub Release body 中预埋 SHA256, 下载后校验比对。
+    // 当前依赖 download 方法的 content-length 完整性校验作为最低防线。
     const detached = spawn(filePath, ['--force-run'], {
       detached: true,
       stdio: 'ignore'

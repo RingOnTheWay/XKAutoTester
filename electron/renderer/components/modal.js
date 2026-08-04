@@ -40,7 +40,8 @@ export class Modal {
   }
 
   bindCloseEvents() {
-    const closeBtn = this.overlay.querySelector('.modal-close-btn');
+    // 兼容两种 close 按钮命名：.pp-modal-close 类（page-package modal）+ button[id$="-close-btn"]（其他 modal）
+    const closeBtn = this.overlay.querySelector('.pp-modal-close, button[id$="-close-btn"]');
     if (closeBtn) {
       closeBtn.addEventListener('click', (e) => {
         e.stopPropagation();

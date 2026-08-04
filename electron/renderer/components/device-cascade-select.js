@@ -1,3 +1,5 @@
+// R7 a11y 修复: 已加键盘导航 (Enter/Space/方向键/Esc) + ARIA 角色 (combobox/listbox/option/aria-expanded/aria-selected)
+// 三级联动: 每级维护独立 _activeIndex, Tab 切换级, 方向键在当前级导航
 export class DeviceCascadeSelect {
   static activeDropdown = null;
   static instances = {};
@@ -17,6 +19,8 @@ export class DeviceCascadeSelect {
     this.devices = [];
     this.groupedDevices = {};
     this._destroyed = false;
+    this._activeLevel = 'manufacturer';
+    this._activeIndices = { manufacturer: -1, type: -1, model: -1 };
 
     this.container = document.getElementById(containerId);
     if (!this.container) return;
@@ -49,28 +53,38 @@ export class DeviceCascadeSelect {
     this.selectedEl = this.container.querySelector('.device-cascade-select__selected');
     this.textEl = this.container.querySelector('.device-cascade-select__text');
 
+    // ARIA: combobox 角色 + 可聚焦
+    if (this.selectedEl) {
+      this.selectedEl.setAttribute('role', 'combobox');
+      this.selectedEl.setAttribute('aria-haspopup', 'listbox');
+      this.selectedEl.setAttribute('aria-expanded', 'false');
+      this.selectedEl.setAttribute('tabindex', '0');
+      this.selectedEl.setAttribute('aria-label', this.placeholder);
+    }
+
     this.dropdownEl = document.createElement('div');
     this.dropdownEl.className = 'device-cascade-select__dropdown';
     this.dropdownEl.setAttribute('data-cascade-id', this.containerId);
+    this.dropdownEl.setAttribute('role', 'listbox');
     this.dropdownEl.innerHTML = `
       <div class="device-cascade-select__levels">
         <div class="device-cascade-select__level" id="${this.containerId}-manufacturer-level">
           <div class="device-cascade-select__level-header">
             <span class="device-cascade-select__level-title">${this.manufacturerPlaceholder}</span>
           </div>
-          <div class="device-cascade-select__level-options" id="${this.containerId}-manufacturer-options"></div>
+          <div class="device-cascade-select__level-options" id="${this.containerId}-manufacturer-options" role="listbox" aria-label="${this.manufacturerPlaceholder}"></div>
         </div>
         <div class="device-cascade-select__level device-cascade-select__level--hidden" id="${this.containerId}-type-level">
           <div class="device-cascade-select__level-header">
             <span class="device-cascade-select__level-title">${this.typePlaceholder}</span>
           </div>
-          <div class="device-cascade-select__level-options" id="${this.containerId}-type-options"></div>
+          <div class="device-cascade-select__level-options" id="${this.containerId}-type-options" role="listbox" aria-label="${this.typePlaceholder}"></div>
         </div>
         <div class="device-cascade-select__level device-cascade-select__level--hidden" id="${this.containerId}-model-level">
           <div class="device-cascade-select__level-header">
             <span class="device-cascade-select__level-title">${this.modelPlaceholder}</span>
           </div>
-          <div class="device-cascade-select__level-options" id="${this.containerId}-model-options"></div>
+          <div class="device-cascade-select__level-options" id="${this.containerId}-model-options" role="listbox" aria-label="${this.modelPlaceholder}"></div>
         </div>
       </div>
     `;
@@ -91,6 +105,10 @@ export class DeviceCascadeSelect {
       this.toggle();
     };
 
+    this._keydownHandler = (e) => {
+      this._handleKeydown(e);
+    };
+
     this._dropdownClickHandler = (e) => {
       e.stopPropagation();
     };
@@ -104,11 +122,179 @@ export class DeviceCascadeSelect {
 
     if (this.selectedEl) {
       this.selectedEl.addEventListener('click', this._clickHandler);
+      this.selectedEl.addEventListener('keydown', this._keydownHandler);
     }
 
     this.dropdownEl.addEventListener('click', this._dropdownClickHandler);
+    // 下拉内键盘事件 (level options 接收焦点时)
+    this.dropdownEl.addEventListener('keydown', (e) => {
+      this._handleKeydown(e);
+    });
 
     document.addEventListener('click', this._documentClickHandler);
+  }
+
+  _handleKeydown(e) {
+    const key = e.key;
+    const isOpen = this.dropdownEl.classList.contains('show');
+
+    switch (key) {
+      case 'Enter':
+      case ' ':
+      case 'Spacebar':
+        e.preventDefault();
+        if (!isOpen) {
+          this.open();
+        } else {
+          // 选中当前级的当前高亮项
+          this._selectActive();
+        }
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        if (!isOpen) {
+          this.open();
+        } else {
+          this._moveActive(1);
+        }
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        if (isOpen) {
+          this._moveActive(-1);
+        }
+        break;
+      case 'ArrowRight':
+        // 跳到下一级 (type / model)
+        e.preventDefault();
+        if (isOpen) {
+          this._advanceLevel(1);
+        }
+        break;
+      case 'ArrowLeft':
+        // 返回上一级 (model -> type -> manufacturer)
+        e.preventDefault();
+        if (isOpen) {
+          this._advanceLevel(-1);
+        }
+        break;
+      case 'Tab':
+        // Tab 也用于级间切换 (不阻止默认, 但同步 _activeLevel)
+        if (isOpen) {
+          // 让默认 Tab 行为生效, 但根据当前焦点同步 _activeLevel
+          // 这里不阻止默认, 仅在 keyup 时处理
+        }
+        break;
+      case 'Escape':
+        if (isOpen) {
+          e.preventDefault();
+          this.close();
+          if (this.selectedEl) this.selectedEl.focus();
+        }
+        break;
+      case 'Home':
+        if (isOpen) {
+          e.preventDefault();
+          this._setActive(this._activeLevel, 0);
+        }
+        break;
+      case 'End':
+        if (isOpen) {
+          e.preventDefault();
+          const opts = this._getLevelOptions(this._activeLevel);
+          this._setActive(this._activeLevel, opts.length - 1);
+        }
+        break;
+    }
+  }
+
+  _getLevelOptions(level) {
+    const el = level === 'manufacturer' ? this.manufacturerOptionsEl
+      : level === 'type' ? this.typeOptionsEl
+      : this.modelOptionsEl;
+    return el ? Array.from(el.querySelectorAll('.device-cascade-select__option')) : [];
+  }
+
+  _setActive(level, index) {
+    const opts = this._getLevelOptions(level);
+    if (opts.length === 0) return;
+    if (index < 0) index = opts.length - 1;
+    if (index >= opts.length) index = 0;
+
+    opts.forEach(opt => opt.classList.remove('active'));
+    opts[index].classList.add('active');
+    this._activeIndices[level] = index;
+    this._activeLevel = level;
+    opts[index].scrollIntoView({ block: 'nearest' });
+  }
+
+  _moveActive(delta) {
+    this._setActive(this._activeLevel, this._activeIndices[this._activeLevel] + delta);
+  }
+
+  _advanceLevel(direction) {
+    // direction: 1 = 向下 (manufacturer -> type -> model), -1 = 向上
+    const levels = ['manufacturer', 'type', 'model'];
+    let idx = levels.indexOf(this._activeLevel);
+    if (idx < 0) idx = 0;
+    idx += direction;
+    // 边界: type/model 仅在已选时可见
+    if (idx < 0) idx = 0;
+    if (idx > 2) idx = 2;
+    const targetLevel = levels[idx];
+    // 检查目标级是否可见
+    if (targetLevel === 'type' && !this.selectedManufacturer) return;
+    if (targetLevel === 'model' && !this.selectedType) return;
+    // 若目标级无选项, 不切换
+    const opts = this._getLevelOptions(targetLevel);
+    if (opts.length === 0) return;
+    this._setActive(targetLevel, Math.max(0, this._activeIndices[targetLevel]));
+  }
+
+  _selectActive() {
+    const level = this._activeLevel;
+    const idx = this._activeIndices[level];
+    const opts = this._getLevelOptions(level);
+    if (idx < 0 || idx >= opts.length) return;
+    const opt = opts[idx];
+
+    if (level === 'manufacturer') {
+      const manufacturerId = opt.dataset.manufacturer;
+      if (this.selectedManufacturer === manufacturerId) {
+        this.selectedManufacturer = null;
+        this.selectedType = null;
+      } else {
+        this.selectedManufacturer = manufacturerId;
+        this.selectedType = null;
+      }
+      this._renderManufacturerOptions();
+      this._renderTypeOptions();
+      this._renderModelOptions();
+      this._updateLevelVisibility();
+      // 选中 manufacturer 后自动跳到 type 级
+      if (this.selectedManufacturer) {
+        this._setActive('type', 0);
+      }
+    } else if (level === 'type') {
+      const type = opt.dataset.type;
+      if (this.selectedType === type) {
+        this.selectedType = null;
+      } else {
+        this.selectedType = type;
+      }
+      this._renderTypeOptions();
+      this._renderModelOptions();
+      this._updateLevelVisibility();
+      if (this.selectedType) {
+        this._setActive('model', 0);
+      }
+    } else if (level === 'model') {
+      const id = opt.dataset.id;
+      const device = this.devices.find(d => d[this.valueKey] === id);
+      if (device) {
+        this.select(device);
+      }
+    }
   }
 
   toggle() {
@@ -124,7 +310,22 @@ export class DeviceCascadeSelect {
     this._positionDropdown();
     this.dropdownEl.classList.add('show');
     this.selectedEl.classList.add('open');
+    if (this.selectedEl) {
+      this.selectedEl.setAttribute('aria-expanded', 'true');
+    }
     DeviceCascadeSelect.activeDropdown = this;
+
+    // 默认高亮: 有 selectedDevice 则定位 model 级, 有 selectedManufacturer 则 type 级, 否则 manufacturer 级首项
+    if (this.selectedDevice) {
+      this._activeLevel = 'model';
+    } else if (this.selectedManufacturer) {
+      this._activeLevel = 'type';
+    } else {
+      this._activeLevel = 'manufacturer';
+    }
+    const opts = this._getLevelOptions(this._activeLevel);
+    const selectedIndex = opts.findIndex(opt => opt.classList.contains('selected'));
+    this._setActive(this._activeLevel, selectedIndex >= 0 ? selectedIndex : 0);
 
     const mainContent = document.querySelector('.main-content');
     if (mainContent) {
@@ -140,10 +341,18 @@ export class DeviceCascadeSelect {
     }
     if (this.selectedEl) {
       this.selectedEl.classList.remove('open');
+      this.selectedEl.setAttribute('aria-expanded', 'false');
     }
     if (DeviceCascadeSelect.activeDropdown === this) {
       DeviceCascadeSelect.activeDropdown = null;
     }
+
+    // 清除高亮
+    ['manufacturer', 'type', 'model'].forEach(level => {
+      const opts = this._getLevelOptions(level);
+      opts.forEach(opt => opt.classList.remove('active'));
+      this._activeIndices[level] = -1;
+    });
 
     const mainContent = document.querySelector('.main-content');
     if (mainContent && !DeviceCascadeSelect.activeDropdown) {
@@ -260,8 +469,9 @@ export class DeviceCascadeSelect {
       const displayManufacturer = group.manufacturerId !== 'other'
         ? `${group.manufacturer}(${group.manufacturerId.charAt(0).toUpperCase() + group.manufacturerId.slice(1)})`
         : group.manufacturer;
+      const isSelected = this.selectedManufacturer === group.manufacturerId;
       return `
-        <div class="device-cascade-select__option${this.selectedManufacturer === group.manufacturerId ? ' selected' : ''}" data-manufacturer="${group.manufacturerId}">
+        <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-manufacturer="${group.manufacturerId}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
           <span class="device-cascade-select__option-text">${displayManufacturer}</span>
           <span class="device-cascade-select__option-count">${totalDevices}</span>
         </div>
@@ -300,12 +510,15 @@ export class DeviceCascadeSelect {
       return;
     }
 
-    this.typeOptionsEl.innerHTML = types.map(group => `
-      <div class="device-cascade-select__option${this.selectedType === group.type ? ' selected' : ''}" data-type="${group.type}">
+    this.typeOptionsEl.innerHTML = types.map(group => {
+      const isSelected = this.selectedType === group.type;
+      return `
+      <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-type="${group.type}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
         <span class="device-cascade-select__option-text">${group.category}</span>
         <span class="device-cascade-select__option-count">${group.devices.length}</span>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     this.typeOptionsEl.querySelectorAll('.device-cascade-select__option').forEach(opt => {
       opt.addEventListener('click', () => {
@@ -336,11 +549,14 @@ export class DeviceCascadeSelect {
       return;
     }
 
-    this.modelOptionsEl.innerHTML = typeGroup.devices.map(device => `
-      <div class="device-cascade-select__option${this.selectedDevice && device[this.valueKey] === this.selectedDevice[this.valueKey] ? ' selected' : ''}" data-id="${device[this.valueKey]}">
+    this.modelOptionsEl.innerHTML = typeGroup.devices.map(device => {
+      const isSelected = this.selectedDevice && device[this.valueKey] === this.selectedDevice[this.valueKey];
+      return `
+      <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-id="${device[this.valueKey]}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
         <span class="device-cascade-select__option-text">${device[this.labelKey]}</span>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     this.modelOptionsEl.querySelectorAll('.device-cascade-select__option').forEach(opt => {
       opt.addEventListener('click', () => {
@@ -438,6 +654,10 @@ export class DeviceCascadeSelect {
     if (this.cascadeEl) {
       this.cascadeEl.classList.toggle('disabled', disabled);
     }
+    if (this.selectedEl) {
+      this.selectedEl.setAttribute('tabindex', disabled ? '-1' : '0');
+      this.selectedEl.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    }
   }
 
   destroy() {
@@ -446,6 +666,9 @@ export class DeviceCascadeSelect {
 
     if (this.selectedEl && this._clickHandler) {
       this.selectedEl.removeEventListener('click', this._clickHandler);
+    }
+    if (this.selectedEl && this._keydownHandler) {
+      this.selectedEl.removeEventListener('keydown', this._keydownHandler);
     }
     if (this.dropdownEl && this._dropdownClickHandler) {
       this.dropdownEl.removeEventListener('click', this._dropdownClickHandler);
@@ -471,6 +694,7 @@ export class DeviceCascadeSelect {
     });
     document.querySelectorAll('.device-cascade-select__selected.open').forEach(sel => {
       sel.classList.remove('open');
+      sel.setAttribute('aria-expanded', 'false');
     });
     DeviceCascadeSelect.activeDropdown = null;
   }

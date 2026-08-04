@@ -1,6 +1,7 @@
 // WindowsRegistryBridge 单元测试
 // 验证: 1) 默认 registry key 2) 自定义 registry key
-//      3) writePath 调用 execSync 4) 非 Windows 平台 noop 5) execSync 失败时不抛
+//      3) writePath 调用 spawnSync 4) 非 Windows 平台 noop 5) spawnSync 失败时不抛
+// R7: 改测 spawnSync (原 execSync 字符串拼接有命令注入风险, 已改 spawnSync 数组参数)
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
@@ -12,18 +13,19 @@ const REGISTRY_PATH = path.join(
 );
 
 /**
- * mock child_process.execSync
- * @returns {{ calls: Array, restore: Function, execSync: Function }}
+ * mock child_process.spawnSync
+ * @returns {{ calls: Array, restore: Function }}
  */
-function mockExecSync() {
+function mockSpawnSync() {
   const calls = [];
-  const fakeExecSync = (cmd, opts) => {
-    calls.push({ cmd, opts });
+  const fakeSpawnSync = (cmd, args, opts) => {
+    calls.push({ cmd, args, opts });
+    return { status: 0, stdout: '', stderr: '' };
   };
   const origLoad = Module._load;
   Module._load = function (request, parent, isMain) {
     if (request === 'child_process') {
-      return { execSync: fakeExecSync };
+      return { spawnSync: fakeSpawnSync };
     }
     return origLoad.call(this, request, parent, isMain);
   };
@@ -34,16 +36,35 @@ function mockExecSync() {
 }
 
 /**
- * mock child_process.execSync 抛异常
+ * mock child_process.spawnSync 抛异常
  */
-function mockExecSyncThrow(errorMsg) {
-  const fakeExecSync = () => {
+function mockSpawnSyncThrow(errorMsg) {
+  const fakeSpawnSync = () => {
     throw new Error(errorMsg);
   };
   const origLoad = Module._load;
   Module._load = function (request, parent, isMain) {
     if (request === 'child_process') {
-      return { execSync: fakeExecSync };
+      return { spawnSync: fakeSpawnSync };
+    }
+    return origLoad.call(this, request, parent, isMain);
+  };
+  return () => { Module._load = origLoad; };
+}
+
+/**
+ * mock child_process.spawnSync 返回非 0 退出码
+ */
+function mockSpawnSyncFailure() {
+  const fakeSpawnSync = () => ({
+    status: 1,
+    stdout: '',
+    stderr: 'reg add failed'
+  });
+  const origLoad = Module._load;
+  Module._load = function (request, parent, isMain) {
+    if (request === 'child_process') {
+      return { spawnSync: fakeSpawnSync };
     }
     return origLoad.call(this, request, parent, isMain);
   };
@@ -98,47 +119,49 @@ test('自定义 registry key', () => {
 
 // ─── writePath (Windows) ──────────────────────────────────────
 
-test('writePath 在 Windows 平台调用 execSync 执行 reg add', () => {
+test('writePath 在 Windows 平台调用 spawnSync 执行 reg add', () => {
   const restorePlatform = setPlatform('win32');
-  const execMock = mockExecSync();
+  const spawnMock = mockSpawnSync();
   try {
     const WindowsRegistryBridge = loadBridge();
     const bridge = new WindowsRegistryBridge();
     bridge.writePath('UserDataPath', 'C:\\Users\\Test\\XKAutoTester');
 
-    assert.strictEqual(execMock.calls.length, 1);
-    assert.ok(execMock.calls[0].cmd.includes('reg add'));
-    assert.ok(execMock.calls[0].cmd.includes('"HKCU\\Software\\XKAutoTester"'));
-    assert.ok(execMock.calls[0].cmd.includes('/v UserDataPath'));
-    assert.ok(execMock.calls[0].cmd.includes('/t REG_SZ'));
-    assert.ok(execMock.calls[0].cmd.includes('/d "C:\\Users\\Test\\XKAutoTester"'));
-    assert.ok(execMock.calls[0].cmd.includes('/f'));
-    assert.strictEqual(execMock.calls[0].opts.windowsHide, true);
+    assert.strictEqual(spawnMock.calls.length, 1);
+    assert.strictEqual(spawnMock.calls[0].cmd, 'reg');
+    // R7: args 数组参数, 不经 shell 解析, 根除命令注入
+    assert.deepStrictEqual(spawnMock.calls[0].args, [
+      'add', 'HKCU\\Software\\XKAutoTester',
+      '/v', 'UserDataPath',
+      '/t', 'REG_SZ',
+      '/d', 'C:\\Users\\Test\\XKAutoTester',
+      '/f'
+    ]);
+    assert.strictEqual(spawnMock.calls[0].opts.windowsHide, true);
   } finally {
-    execMock.restore();
+    spawnMock.restore();
     restorePlatform();
   }
 });
 
-test('writePath 路径含双引号时正确转义', () => {
+test('writePath 路径含双引号/cmd 元字符时原样传递 (spawnSync 无需转义)', () => {
   const restorePlatform = setPlatform('win32');
-  const execMock = mockExecSync();
+  const spawnMock = mockSpawnSync();
   try {
     const WindowsRegistryBridge = loadBridge();
     const bridge = new WindowsRegistryBridge();
-    // 路径含 3 个双引号
-    bridge.writePath('UserDataPath', 'C:\\path"with"quotes"');
+    // 路径含双引号和 & | 等 cmd 元字符 (原 execSync 需转义, spawnSync 数组参数原样传递)
+    const maliciousPath = 'C:\\path"with"quotes" & | % ^';
 
-    assert.strictEqual(execMock.calls.length, 1);
-    const cmd = execMock.calls[0].cmd;
-    // 验证: 每个 " 应被转义为 \" (即 cmd 中 \\" 出现 3 次, 排除 /d 开头/结尾的 2 个)
-    // 简化: 验证 cmd 中包含 \\\"path\\\"with\\\"quotes\\\" 序列
-    assert.ok(
-      cmd.includes('C:\\path\\"with\\"quotes\\"'),
-      `路径中的双引号应转义为 \\", 实际 cmd: ${cmd}`
-    );
+    bridge.writePath('UserDataPath', maliciousPath);
+
+    assert.strictEqual(spawnMock.calls.length, 1);
+    // 验证 dataPath 原样出现在 args[7] (add/key//v/name//t/type//d/data//f), 未经 shell 解释
+    assert.strictEqual(spawnMock.calls[0].args[7], maliciousPath);
+    // 验证 cmd 不是字符串拼接 (无注入点)
+    assert.strictEqual(spawnMock.calls[0].cmd, 'reg');
   } finally {
-    execMock.restore();
+    spawnMock.restore();
     restorePlatform();
   }
 });
@@ -146,42 +169,42 @@ test('writePath 路径含双引号时正确转义', () => {
 
 // ─── writePath (非 Windows) ────────────────────────────────────
 
-test('writePath 在非 Windows 平台 noop (不调用 execSync)', () => {
+test('writePath 在非 Windows 平台 noop (不调用 spawnSync)', () => {
   const restorePlatform = setPlatform('linux');
-  const execMock = mockExecSync();
+  const spawnMock = mockSpawnSync();
   try {
     const WindowsRegistryBridge = loadBridge();
     const bridge = new WindowsRegistryBridge();
     bridge.writePath('UserDataPath', '/home/user/data');
 
-    assert.strictEqual(execMock.calls.length, 0, '非 Windows 平台不应调用 execSync');
+    assert.strictEqual(spawnMock.calls.length, 0, '非 Windows 平台不应调用 spawnSync');
   } finally {
-    execMock.restore();
+    spawnMock.restore();
     restorePlatform();
   }
 });
 
 test('writePath 在 darwin 平台 noop', () => {
   const restorePlatform = setPlatform('darwin');
-  const execMock = mockExecSync();
+  const spawnMock = mockSpawnSync();
   try {
     const WindowsRegistryBridge = loadBridge();
     const bridge = new WindowsRegistryBridge();
     bridge.writePath('UserDataPath', '/Users/test/data');
 
-    assert.strictEqual(execMock.calls.length, 0);
+    assert.strictEqual(spawnMock.calls.length, 0);
   } finally {
-    execMock.restore();
+    spawnMock.restore();
     restorePlatform();
   }
 });
 
 
-// ─── execSync 失败容错 ─────────────────────────────────────────
+// ─── spawnSync 失败容错 ─────────────────────────────────────────
 
-test('writePath execSync 抛异常时不传播', () => {
+test('writePath spawnSync 抛异常时不传播', () => {
   const restorePlatform = setPlatform('win32');
-  const restoreExec = mockExecSyncThrow('reg command failed');
+  const restoreSpawn = mockSpawnSyncThrow('reg command failed');
   try {
     const WindowsRegistryBridge = loadBridge();
     const bridge = new WindowsRegistryBridge();
@@ -190,7 +213,23 @@ test('writePath execSync 抛异常时不传播', () => {
       bridge.writePath('UserDataPath', 'C:\\test');
     });
   } finally {
-    restoreExec();
+    restoreSpawn();
+    restorePlatform();
+  }
+});
+
+test('writePath spawnSync 返回非 0 退出码时不抛 (仅记日志)', () => {
+  const restorePlatform = setPlatform('win32');
+  const restoreSpawn = mockSpawnSyncFailure();
+  try {
+    const WindowsRegistryBridge = loadBridge();
+    const bridge = new WindowsRegistryBridge();
+    // 不应抛异常 (R7: status !== 0 时 console.error 但不抛)
+    assert.doesNotThrow(() => {
+      bridge.writePath('UserDataPath', 'C:\\test');
+    });
+  } finally {
+    restoreSpawn();
     restorePlatform();
   }
 });

@@ -386,7 +386,9 @@ class AppiumServer:
         try:
             response = requests.get(f"{self.server_url}/status", timeout=5)
             return response.status_code == 200
-        except Exception:
+        except Exception as e:
+            # R7: 加可观测性, 区分"未运行"与"检查失败" (HTTP 异常被当作未运行会触发重复 start 或端口冲突)
+            logger.warning(f"Appium server 状态检查失败 (视为未运行): {e}")
             return False
 
     def __enter__(self) -> "AppiumServer":

@@ -21,6 +21,17 @@ const TarExtractor = require('./TarExtractor');
 // 不需要 shell 前缀的 adb 子命令 (直接 adb <cmd>, 不经过 device shell)
 const NO_SHELL_COMMANDS = ['connect', 'disconnect', 'devices', 'kill-server', 'start-server', 'version', 'tcpip'];
 
+// R7: 危险命令黑名单 (阻止 XSS 攻击者通过 executeAdbCommand 执行破坏性操作)
+// 命中黑名单的命令直接拒绝, 不执行
+const DANGEROUS_COMMAND_PATTERNS = [
+  /\brm\s+-rf?\s+\/(data|system|sdcard|)/i,  // rm -rf /data 等
+  /\breboot\b/i,                                // 重启设备
+  /\bflash\s+/i,                                // 刷机
+  /\boem\s+unlock\b/i,                          // 解锁 bootloader
+  /\bfactory\s*reset\b/i,                       // 恢复出厂
+  /\bwipe\s+/i,                                 // wipe 分区
+];
+
 class ADBService {
   /**
    * @param {string} projectRoot
@@ -123,6 +134,14 @@ class ADBService {
    */
   async executeAdbCommand(cmd, deviceId) {
     try {
+      // R7: 危险命令黑名单校验 (防 XSS 攻击者执行破坏性 adb 命令)
+      for (const pattern of DANGEROUS_COMMAND_PATTERNS) {
+        if (pattern.test(cmd)) {
+          console.error(`[ADBService] 危险命令被拒绝: ${cmd}`);
+          return { success: false, error: `命令被安全策略拒绝: ${cmd}` };
+        }
+      }
+
       const adbPath = pathHelper.getAdbPath(this.projectRoot, true);
       const cmdParts = cmd.split(/\s+/).filter(part => part.trim() !== '');
 

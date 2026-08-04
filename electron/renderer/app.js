@@ -124,7 +124,7 @@ export class App {
     try {
       if (window.electronAPI?.i18n) {
         window.i18n = window.electronAPI.i18n;
-        await window.i18n.changeLanguage('zh-CN');
+        // 不强制 changeLanguage('zh-CN')：preload 已根据 config.APP_SETTINGS.language 初始化为用户偏好语言
       }
     } catch (error) {
       console.error('初始化i18next失败:', error);
@@ -548,7 +548,7 @@ export class App {
               <path d="M4 16V6a2 2 0 0 1 2-2h10"/>
             </svg>
           `;
-          maximizeBtn.title = '还原';
+          maximizeBtn.title = (window.i18n && window.i18n.t('windowControls.restore')) || '还原';
           document.body.classList.add('window-maximized');
         } else {
           maximizeBtn.innerHTML = `
@@ -556,7 +556,7 @@ export class App {
               <rect x="4" y="4" width="16" height="16" rx="2"/>
             </svg>
           `;
-          maximizeBtn.title = '最大化';
+          maximizeBtn.title = (window.i18n && window.i18n.t('windowControls.maximize')) || '最大化';
           document.body.classList.remove('window-maximized');
         }
       }

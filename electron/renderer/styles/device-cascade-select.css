@@ -181,6 +181,11 @@
   background: rgba(var(--primary-rgb, 33, 150, 243), 0.12);
 }
 
+/* R7 a11y: 键盘导航高亮 */
+.device-cascade-select__option.active {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.12);
+}
+
 .device-cascade-select__option.selected {
   color: var(--primary);
   background: rgba(var(--primary-rgb, 33, 150, 243), 0.15);
@@ -269,6 +274,10 @@ body.dark-theme .device-cascade-select__dropdown {
 }
 
 body.dark-theme .device-cascade-select__option:hover {
+  background: rgba(var(--primary-rgb, 33, 150, 243), 0.15);
+}
+
+body.dark-theme .device-cascade-select__option.active {
   background: rgba(var(--primary-rgb, 33, 150, 243), 0.15);
 }
 

@@ -14,7 +14,11 @@ dependencies = [
     "requests==2.32.5",
     "Faker==37.11.0",
     "ddddocr==1.5.6",
-    "Pillow==9.5.0",
+    # R7 安全修复: Pillow 9.5.0 有 CVE-2023-50447 (任意代码执行) / CVE-2024-28219 等。
+    # 升级到 10.4.0 已修复上述 CVE。Pillow 10.x 移除了 Image.ANTIALIAS 等 API,
+    # 但 ddddocr 1.5.6 __init__.py 内置兼容 shim (line 50-51: hasattr 时 setattr ANTIALIAS=LANCZOS),
+    # 已验证可兼容 Pillow 10.x。本项目代码不直接调用 Pillow, 仅通过 ddddocr 间接使用。
+    "Pillow==10.4.0",
     "Appium-Python-Client==5.2.4",
     "playwright==1.55.0",
     "pytest-playwright==0.7.1",

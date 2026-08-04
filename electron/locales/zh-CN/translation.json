@@ -3,6 +3,15 @@
     "title": "XKAutoTester",
     "version": "版本"
   },
+  "windowControls": {
+    "restore": "还原",
+    "maximize": "最大化"
+  },
+  "saveConfirm": {
+    "title": "未保存的更改",
+    "message": "当前编辑有未保存的更改，是否保存？",
+    "discard": "不保存"
+  },
   "common": {
     "none": "无",
     "yes": "是",

@@ -55,7 +55,9 @@ def _check_port_in_use(port: int) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(2)
             return s.connect_ex((AppiumServer.DEFAULT_HOST, port)) == 0
-    except Exception:
+    except Exception as e:
+        # R7: 加可观测性, 区分"端口未占用"与"检查失败" (socket 异常被当作未占用会触发端口冲突)
+        logger.warning(f"端口 {port} 占用检查失败 (视为未占用): {e}")
         return False
 
 

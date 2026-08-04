@@ -237,16 +237,23 @@ class TestFactoryInjection:
     """
 
     def _make_fake_adb(self, *, check_service: bool = True, connect: tuple[bool, str] = (True, "ok")) -> MagicMock:
-        """构造 fake ADBManager。"""
+        """构造 fake ADBManager。
+
+        方法名对齐 ADBManager 聚合根实际调用路径：
+        - adb_manager.connection.check_adb_service() / .connect()
+        - adb_manager.bluetooth.ensure_enabled()
+        - adb_manager.app.force_stop(silent=True) / .get_pid() / .get_dumpsys_window() / .ensure_closed(2)
+        - adb_manager.update_logcat_pid(pid)  # 自身方法
+        """
         adb = MagicMock()
-        adb.check_adb_service.return_value = check_service
-        adb.connect_device.return_value = connect
-        adb.ensure_bluetooth_enabled.return_value = True
-        adb.force_stop_app_silent.return_value = None
-        adb.get_app_pid.return_value = "1234"
+        adb.connection.check_adb_service.return_value = check_service
+        adb.connection.connect.return_value = connect
+        adb.bluetooth.ensure_enabled.return_value = True
+        adb.app.force_stop.return_value = None
+        adb.app.get_pid.return_value = "1234"
+        adb.app.get_dumpsys_window.return_value = "window_state"
+        adb.app.ensure_closed.return_value = True
         adb.update_logcat_pid.return_value = None
-        adb.ensure_app_closed.return_value = True
-        adb.get_dumpsys_window.return_value = "window_state"
         return adb
 
     def _make_fake_appium_server(self, *, start_ok: bool = True) -> MagicMock:
@@ -403,10 +410,10 @@ class TestFactoryInjection:
         assert init._outcome is not None
         assert init._outcome.severity == "fail"
         # dumpsys 兜底应被调
-        fake_adb.get_dumpsys_window.assert_called_once()
+        fake_adb.app.get_dumpsys_window.assert_called_once()
 
     def test_cleanup_calls_quit_stop_close_on_fake_resources(self) -> None:
-        """cleanup: 调 driver.quit + appium_server.stop + adb.ensure_app_closed + crash_monitor.stop。"""
+        """cleanup: 调 driver.quit + appium_server.stop + adb.app.ensure_closed + crash_monitor.stop。"""
         fake_adb = self._make_fake_adb()
         fake_server = self._make_fake_appium_server()
         fake_driver = self._make_fake_driver()
@@ -429,7 +436,7 @@ class TestFactoryInjection:
 
         fake_crash.stop_and_attach_log.assert_called_once()
         fake_driver.quit.assert_called_once()
-        fake_adb.ensure_app_closed.assert_called_once()
+        fake_adb.app.ensure_closed.assert_called_once_with(2)
         fake_server.stop.assert_called_once()
 
     def test_time_provider_fake_clock_no_real_sleep(self) -> None:
