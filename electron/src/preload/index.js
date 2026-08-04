@@ -343,6 +343,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startChecks: () => invokeWithCheck(IPC_CHANNELS.START_CHECKS),
   splashReady: () => invokeWithCheck(IPC_CHANNELS.SPLASH_READY),
 
+  // 启动检查事件 (splash.html 监听)
+  onCheckProgress: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.CHECK_PROGRESS, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CHECK_PROGRESS, listener);
+  },
+  onCheckResult: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.CHECK_RESULT, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CHECK_RESULT, listener);
+  },
+  onCheckComplete: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.CHECK_COMPLETE, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CHECK_COMPLETE, listener);
+  },
+
   setPreventSleep: (enable) => invokeWithCheck(IPC_CHANNELS.SET_PREVENT_SLEEP, enable),
 
   selectExportPath: (options) => invokeWithCheck(IPC_CHANNELS.SELECT_EXPORT_PATH, options),

@@ -1065,18 +1065,18 @@
             });
         }
         
-        window.electronAPI.on('check-progress', (data) => {
+        window.electronAPI.onCheckProgress((data) => {
             updateProgress(data.percentage, data.message);
         });
         
-        window.electronAPI.on('check-result', (data) => {
+        window.electronAPI.onCheckResult((data) => {
             addCheckItem(data.name, data.status, data.message, {
                 canInstall: data.canInstall,
                 installerPath: data.installerPath
             });
         });
         
-        window.electronAPI.on('check-complete', (data) => {
+        window.electronAPI.onCheckComplete((data) => {
             updateProgress(100, window.electronAPI.i18n.t('splash.checkComplete'));
             const canEnter = data.requiredErrors.length === 0;
             showActionButtons(canEnter);
