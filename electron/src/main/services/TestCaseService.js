@@ -71,6 +71,18 @@ class TestCaseService {
     this._codeGenerator = this._codeGeneratorFactory(userConfigPath, projectRoot);
   }
 
+  /**
+   * M6 修复: 切换 userConfigPath 后更新 testCasesDir + 重建 codeGenerator
+   * (TestCaseService 未继承 JsonFileCrudService, 自管理 filePath, 故不调 super)
+   */
+  updateConfigPath(userConfigPath) {
+    this.userConfigPath = userConfigPath;
+    this.testCasesDir = path.join(userConfigPath, 'test_cases');
+    this._codeGenerator = this._codeGeneratorFactory(userConfigPath, this.projectRoot);
+    // 懒初始化标志重置, 下次操作会重新 ensureDir
+    this._initialized = false;
+  }
+
   // 懒初始化 (消除构造期 I/O, 对称 UpdateService._ensureInitialized)
   async _ensureInitialized() {
     if (this._initialized) return;
@@ -329,8 +341,14 @@ class TestCaseService {
   }
 
   /**
-   * 生成 Python 测试文件
-   * 委托给 TestCaseCodeGenerator
+   * 生成 Python 测试文件 (仅生成 .py, 不写 JSON)。
+   * 委托给 TestCaseCodeGenerator。
+   *
+   * 保留此 1-liner 委托 (非死代码, 未删中间人):
+   * - 唯一调用方: testCaseHandlers.js 的 TEST_CASE_GENERATE_PYTHON handler (generate-only 语义)。
+   * - 不改调 saveAndGenerate: 语义不同 (saveAndGenerate 会写 JSON, 此处仅需生成)。
+   * - 不让 handler 直接持 _codeGenerator: 破坏 factory-or-default 封装, 且 handler 仅持有
+   *   testCaseService 引用, 直接访问私有字段属反模式。
    */
   async generatePythonFile(caseData, outputDir) {
     return this._codeGenerator.generatePythonFile(caseData, outputDir);

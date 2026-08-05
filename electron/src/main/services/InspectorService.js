@@ -62,11 +62,12 @@ class InspectorService {
             };
         }
 
-        const transport = this._ensureTransport();
-
-        if (transport.isActive()) {
+        // M4 修复: 若已有 transport 活跃, 先 stopSession (其 finally 调 _cleanup 置 null),
+        // 再重新 _ensureTransport 创建新 transport, 避免对已 dispose 的 transport 调 request
+        if (this._transport && this._transport.isActive()) {
             await this.stopSession();
         }
+        const transport = this._ensureTransport();
 
         try {
             const response = await transport.request('start-session', {

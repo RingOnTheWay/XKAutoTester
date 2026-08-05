@@ -51,6 +51,8 @@ export class Modal {
   }
 
   _addEscListener() {
+    // M5 修复: 重复 open 时先移除旧 handler, 避免泄漏 + 多 handler 同时触发
+    this._removeEscListener();
     this._escHandler = (e) => {
       if (e.key === 'Escape') {
         this.close();

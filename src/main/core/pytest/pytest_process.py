@@ -22,6 +22,7 @@ from collections.abc import Callable
 from threading import Thread
 
 from main.core.pytest.pytest_process_port import PytestRunResult
+from main.core.subprocess_handle import SubprocessHandle
 from main.utils.text import clean_ansi_escape
 
 logger = logging.getLogger(__name__)
@@ -39,8 +40,12 @@ def _default_popen(command: list[str]) -> subprocess.Popen:
     )
 
 
-class PytestProcess:
+class PytestProcess(SubprocessHandle):
     """pytest 子进程边界封装。"""
+
+    _TERMINATE_TIMEOUT = 2.0
+    _KILL_TIMEOUT = 2.0
+    _LABEL = "PytestProcess"
 
     def __init__(
         self,
@@ -56,27 +61,12 @@ class PytestProcess:
         self._process: subprocess.Popen | None = None
 
     def stop(self) -> None:
-        """M6: 终止 pytest 子进程 (幂等, mirror LogcatProcess.stop).
+        """M6: 终止 pytest 子进程 (幂等, 委托 SubprocessHandle._stop_process).
 
         由 cli KeyboardInterrupt 处理或外部中断调用.
-        terminate→wait(2s)→kill 兜底, 不抛异常.
+        terminate→wait(2s)→kill→wait(2s) 兜底, 不抛异常.
         """
-        process = self._process
-        if process is None:
-            return
-        try:
-            process.terminate()
-            process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            try:
-                process.kill()
-                process.wait(timeout=2)
-            except Exception as e:  # noqa: BLE001
-                logger.warning(f"PytestProcess stop kill failed: {e}")
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"PytestProcess stop terminate failed: {e}")
-        finally:
-            self._process = None
+        self._stop_process()
 
     def run(self, command: list[str]) -> PytestRunResult:
         """执行 pytest 命令, 阻塞至结束, 返回 PytestRunResult。

@@ -320,6 +320,21 @@ class UpdateService {
     this._initialized = true;
   }
 
+  /**
+   * S3 修复: 判断当前是否完整版安装 (含 bundled .venv)。
+   * 完整版: 打包模式 process.resourcesPath/.venv 存在 (extraResources 含 .venv)
+   * Lite 版/开发模式: .venv 不存在
+   */
+  _isFullInstall() {
+    try {
+      if (!app.isPackaged) return false;  // 开发模式不作完整版判定
+      const venvPath = path.join(process.resourcesPath, '.venv');
+      return fs.existsSync(venvPath);
+    } catch {
+      return false;
+    }
+  }
+
   _cleanupOldUpdates() {
     try {
       if (this._fileSystem.exists(this.updateDir)) {
@@ -360,9 +375,23 @@ class UpdateService {
     let fileSize = 0;
 
     if (hasUpdate && latestRelease.assets && latestRelease.assets.length > 0) {
-      let exeAsset = latestRelease.assets.find(a =>
-        a.name.endsWith('.exe') && a.name.includes('Lite')
-      );
+      // S3 修复: 按当前安装类型选 asset, 避免完整版用户被降级更新为 Lite
+      // 完整版: process.resourcesPath/.venv 存在 (extraResources 含 .venv)
+      // Lite 版: .venv 未打包
+      const isLiteInstall = !this._isFullInstall();
+      let exeAsset;
+      if (isLiteInstall) {
+        // Lite 版: 优先选 Lite asset
+        exeAsset = latestRelease.assets.find(a =>
+          a.name.endsWith('.exe') && a.name.includes('Lite')
+        );
+      } else {
+        // 完整版: 优先选非 Lite 的 .exe
+        exeAsset = latestRelease.assets.find(a =>
+          a.name.endsWith('.exe') && !a.name.includes('Lite')
+        );
+      }
+      // 回退: 任意 .exe
       if (!exeAsset) {
         exeAsset = latestRelease.assets.find(a => a.name.endsWith('.exe'));
       }

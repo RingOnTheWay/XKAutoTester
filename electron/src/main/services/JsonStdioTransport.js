@@ -144,10 +144,19 @@ class JsonStdioTransport {
       this._readyPromise = new Promise((resolve, reject) => {
         this._readyResolve = resolve;
         this._readyReject = reject;
-        // 握手超时兜底
+        // M4 修复: 握手超时兜底 - 超时后杀进程 + dispose, 避免进程泄漏
         const timeout = setTimeout(() => {
           if (this._readyReject) {
             this._readyReject(new Error(`Handshake timeout after ${this._handshakeTimeoutMs}ms`));
+            // 超时后清理进程, 避免泄漏 (与 dispose 一致, 但不设 _disposed 标志, 允许后续重试)
+            if (this._process) {
+              try { this._process.kill(); } catch (e) { /* ignore */ }
+              this._process = null;
+            }
+            this._buffer = '';
+            this._readyPromise = null;
+            this._readyResolve = null;
+            this._readyReject = null;
           }
         }, this._handshakeTimeoutMs);
         this._readyTimeout = timeout;

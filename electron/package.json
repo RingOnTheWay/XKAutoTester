@@ -58,8 +58,7 @@
       "renderer/**/*",
       "assets/**/*",
       "locales/**/*",
-      "templates/**/*",
-      "node_modules/**/*"
+      "templates/**/*"
     ],
     "asar": true,
     "asarUnpack": [

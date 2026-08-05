@@ -4,8 +4,10 @@
 // 7 factory-or-default (对称 test_initializer.py L146-198 + cli.py L46-71):
 //   queueFactory / timerProvider / watcherFactory / notifierFactory / nowProvider / logger / (compare via queueFactory)
 //
-// 行为零变化: 保留 executePlan catch 写 status='completed' bug (RFC §1.3) +
-//   finalCountdown setImmediate 递归 + SAFETY_THRESHOLD=100ms 提前量。
+// 行为变更 (R8-S1): executePlan catch 改写 status='failed' (原 'completed' 误标完成) +
+//   _executePlan 加执行超时看门狗 (EXECUTION_TIMEOUT_MS) 避免 plan 永停 'running' +
+//   updatePlan 当 scheduledTime 变化时重新入队 (原仅 status==='pending' 才入队)。
+// 保留 finalCountdown setImmediate 递归 + SAFETY_THRESHOLD=100ms 提前量。
 
 const { IPC_CHANNELS } = require('../../../shared/constants');
 const { ScheduledPlanQueue } = require('./planQueue');
@@ -17,6 +19,10 @@ const {
   calculateMediumCheckInterval,
 } = require('./strategies');
 const { globalTimerProvider, defaultWatcherFactory, defaultNotifierFactory } = require('./effects');
+
+// 执行超时阈值: plan 进入 running 后若 N 分钟未收到 SCHEDULED_TEST_COMPLETE 回调, 视为渲染进程
+// 未就绪/异常, 自动标记 failed 避免 plan 永停 'running' (S1 修复)
+const EXECUTION_TIMEOUT_MS = 30 * 60 * 1000;
 
 class SmartScheduler {
   /**
@@ -49,6 +55,8 @@ class SmartScheduler {
     this.fileWatcher = null;
     this.mainWindow = null;
     this._notifier = this._notifierFactory(null);
+    // plan 执行超时看门狗: planId → timeout timer (S1 修复, 防止 plan 永停 'running')
+    this._runningPlanTimeouts = new Map();
     this.state = {
       mode: 'idle',
       nextCheckTime: null,
@@ -218,17 +226,59 @@ class SmartScheduler {
         scheduledTime: plan.scheduledTime,
         executionTime: new Date(this._now()).toLocaleString(),
       });
+
+      // S1 修复: 启动执行超时看门狗。若渲染进程未就绪/被关闭, N 分钟内不会收到
+      // SCHEDULED_TEST_COMPLETE 回调, 看门狗自动将 plan 标记 failed, 避免永停 'running'。
+      this._startExecutionWatchdog(plan.id);
     } catch (error) {
       this._logger.error('执行定时计划失败:', error);
-      // RFC §1.3: 保留 bug (status='completed' 而非 'failed'), 零行为变化
+      // S1 修复: catch 写 'failed' (原 'completed' 误标完成, 注释自承"保留 bug")
       await this.scheduledPlanService.updateScheduledPlan({
         id: plan.id,
-        status: 'completed',
+        status: 'failed',
         lastRun: new Date(this._now()).toISOString(),
       });
     } finally {
       this.isExecuting = false;
       await this._startSmartScheduling();
+    }
+  }
+
+  /**
+   * 启动执行超时看门狗 (S1 修复)
+   * plan 进入 running 后, 若 EXECUTION_TIMEOUT_MS 内未收到 SCHEDULED_TEST_COMPLETE
+   * (即 _clearExecutionWatchdog 未被调用), 自动标记 plan 为 failed。
+   */
+  _startExecutionWatchdog(planId) {
+    this._clearExecutionWatchdog(planId);
+    const timer = this._timer.setTimeout(() => {
+      this._handleExecutionTimeout(planId);
+    }, EXECUTION_TIMEOUT_MS);
+    this._runningPlanTimeouts.set(planId, timer);
+  }
+
+  _clearExecutionWatchdog(planId) {
+    const timer = this._runningPlanTimeouts.get(planId);
+    if (timer) {
+      this._timer.clearTimeout(timer);
+      this._runningPlanTimeouts.delete(planId);
+    }
+  }
+
+  async _handleExecutionTimeout(planId) {
+    this._runningPlanTimeouts.delete(planId);
+    try {
+      const plans = await this.scheduledPlanService.getScheduledPlans();
+      const plan = plans.find((p) => p.id === planId);
+      if (plan && plan.status === 'running') {
+        this._logger.warn(`定时计划 ${planId} 执行超时 (${EXECUTION_TIMEOUT_MS / 60000} 分钟), 自动标记为 failed`);
+        await this.scheduledPlanService.updateScheduledPlan({
+          id: planId,
+          status: 'failed',
+        });
+      }
+    } catch (error) {
+      this._logger.error('处理执行超时失败:', error);
     }
   }
 
@@ -279,13 +329,27 @@ class SmartScheduler {
   async updatePlan(planId, updates) {
     this.removePlan(planId);
 
-    if (updates.status === 'pending') {
+    // S1 修复: 计划完成/失败时清除执行看门狗
+    if (updates.status === 'completed' || updates.status === 'failed') {
+      this._clearExecutionWatchdog(planId);
+    }
+
+    // S1 修复: 重新入队条件放宽 - 原仅 status==='pending' 才入队, 导致 expired plan
+    // 改 scheduledTime 后不入队。现: status==='pending' 或 scheduledTime 变化且新时间在未来,
+    // 且状态非终态 (completed/failed) 时均重新入队。
+    const shouldReenqueue = updates.status === 'pending' || updates.scheduledTime;
+    if (shouldReenqueue) {
       try {
         const plans = await this.scheduledPlanService.getScheduledPlans();
         const originalPlan = plans.find((p) => p.id === planId);
         if (originalPlan) {
           const updatedPlan = { ...originalPlan, ...updates };
-          this.addPlan(updatedPlan);
+          const isTerminal = updatedPlan.status === 'completed' || updatedPlan.status === 'failed';
+          const planTime = new Date(updatedPlan.scheduledTime).getTime();
+          const now = this._now();
+          if (!isTerminal && planTime > now) {
+            this.addPlan(updatedPlan);
+          }
         }
       } catch (error) {
         this._logger.error('更新调度计划失败:', error);
@@ -318,6 +382,10 @@ class SmartScheduler {
 
   destroy() {
     this._clearAllTimers();
+    // S1 修复: 清除所有执行看门狗
+    for (const planId of this._runningPlanTimeouts.keys()) {
+      this._clearExecutionWatchdog(planId);
+    }
     if (this.fileWatcher) {
       this.fileWatcher.close();
       this.fileWatcher = null;

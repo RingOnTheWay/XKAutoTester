@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
+const { ProcessRunner } = require('../spawnHelper');
 
 /**
  * Allure CLI 调用器
@@ -10,6 +11,7 @@ class AllureCliInvoker {
   constructor(projectRoot, logger) {
     this.projectRoot = projectRoot;
     this.logger = logger;
+    this._runner = new ProcessRunner();
   }
 
   /**
@@ -85,29 +87,17 @@ class AllureCliInvoker {
       await this.logger.warning('Allure npm package not found, falling back to npx');
     }
 
-    const result = await new Promise((resolve) => {
-      const child = require('child_process').spawn(command, args, {
-        env,
-        windowsHide: true,
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout.on('data', (data) => { stdout += data.toString(); });
-      child.stderr.on('data', (data) => { stderr += data.toString(); });
-
-      child.on('close', (code) => {
-        resolve({ code, stdout, stderr });
-      });
-
-      child.on('error', (error) => {
-        resolve({ code: -1, stdout: '', stderr: error.message });
-      });
+    const result = await this._runner.execute({
+      command,
+      args,
+      options: { env, stdio: ['pipe', 'pipe', 'pipe'] },
     });
 
-    return result;
+    // 与原逻辑一致: error 事件映射到 stderr 字段 (code:-1, stdout:'')
+    if (result.errorObject) {
+      return { code: -1, stdout: '', stderr: result.errorObject.message };
+    }
+    return { code: result.code, stdout: result.stdout, stderr: result.stderr };
   }
 }
 

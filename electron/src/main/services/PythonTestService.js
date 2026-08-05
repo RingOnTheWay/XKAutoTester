@@ -128,6 +128,9 @@ class PythonTestService {
 
     /** @type {import('child_process').ChildProcess|null} */
     this.currentPythonProcess = null;
+    // M3 修复: 显式状态机 idle/running/stopping, stop() 后 close 回调走 run-stopped 分支
+    /** @type {'idle'|'running'|'stopping'|'error'} */
+    this._state = 'idle';
 
     // ── 已有注入 (保留, Q5 A: deps.dialogMonitor 直传) ──
     this._spawn = deps.spawn || defaultSpawn;
@@ -201,6 +204,9 @@ class PythonTestService {
       // Step 2: 启动 dialog monitor
       this._dialogMonitor.start();
 
+      // M3 修复: 进入 running 状态
+      this._state = 'running';
+
       // Step 3: 组装 args + env + spawn
       const args = this._buildPythonArgs(testConfig);
       const env = this._buildSpawnEnv(pythonCmd);
@@ -213,26 +219,40 @@ class PythonTestService {
 
       // Step 5: close → 清理 + 构建结果
       pythonProcess.on('close', async (code) => {
+        // M3 修复: 捕获 stopping 状态, stop() 触发的 close 走"已停止"分支
+        const wasStopping = this._state === 'stopping';
         this._cleanupAfterRun();
         try {
-          const result = await this._buildRunResult(code, buffers, testPlanName);
-          resolve(result);
+          if (wasStopping) {
+            // stop() 主动终止: 返回"已停止"结果, 不走 stats/allure pipeline
+            resolve(this._buildStoppedResult(testPlanName));
+          } else {
+            const result = await this._buildRunResult(code, buffers, testPlanName);
+            resolve(result);
+          }
         } catch (err) {
+          this._state = 'error';
           reject(err);
         }
       });
 
-      pythonProcess.on('error', reject);
+      pythonProcess.on('error', (err) => {
+        this._state = 'error';
+        reject(err);
+      });
     });
   }
 
   /**
    * 终止运行中的测试进程。
+   * M3 修复: 进入 stopping 状态, close 回调据此走"已停止"分支而非"完成"分支
    * @returns {{ success: boolean, message: string }}
    */
   stop() {
     try {
       if (this.currentPythonProcess) {
+        // M3 修复: 先标记 stopping, close 回调据此识别
+        this._state = 'stopping';
         this.currentPythonProcess.kill();
         this.currentPythonProcess = null;
 
@@ -243,6 +263,7 @@ class PythonTestService {
         return { success: false, message: this.i18nService.t('testExecution.noSelectedTestPlan') };
       }
     } catch (error) {
+      this._state = 'error';
       console.error('Stop test failed:', error);
       return { success: false, message: this.i18nService.t('testExecution.stopTestFailed') + ': ' + error.message };
     }
@@ -327,6 +348,29 @@ class PythonTestService {
   _cleanupAfterRun() {
     this._dialogMonitor.stop();
     this.currentPythonProcess = null;
+    // M3 修复: 清理后回到 idle (stopping/error 已被 close 回调消费, 这里兜底)
+    if (this._state === 'running' || this._state === 'stopping') {
+      this._state = 'idle';
+    }
+  }
+
+  /**
+   * M3 修复: stop() 触发的 close 结果构建
+   * 不走 stats 解析/allure pipeline, 仅返回"已停止"语义结果
+   */
+  _buildStoppedResult(testPlanName) {
+    this._state = 'idle';
+    return {
+      success: false,
+      exitCode: -1,
+      output: '',
+      error: this.i18nService.t('testExecution.testManuallyStopped'),
+      testPlanName,
+      testStats: { passed: 0, failed: 0, skipped: 0, broken: 0, total: 0 },
+      allureReportPath: null,
+      sideEffectFailures: [],
+      stopped: true  // M3: 标识位, 渲染进程可据此区分"完成"与"已停止"
+    };
   }
 
   /**

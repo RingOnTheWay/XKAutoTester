@@ -1,10 +1,14 @@
 // R7 a11y 修复: 已加键盘导航 (Enter/Space/方向键/Esc) + ARIA 角色 (combobox/listbox/option/aria-expanded/aria-selected)
 // 三级联动: 每级维护独立 _activeIndex, Tab 切换级, 方向键在当前级导航
-export class DeviceCascadeSelect {
-  static activeDropdown = null;
+// 重构: 继承 BaseSelect, 复用 toggle/_showDropdown/_setAriaExpanded/_registerActiveDropdown/_lockMainContentScroll/
+// 文档点击外部关闭/static closeAll 等; 多级 _handleKeydown/_setActive/open/close 因签名差异自行覆盖。
+import { BaseSelect } from './base-select.js';
+
+export class DeviceCascadeSelect extends BaseSelect {
   static instances = {};
 
   constructor(containerId, options = {}) {
+    super();
     this.containerId = containerId;
     this.placeholder = options.placeholder || window.i18n.t('deviceCascadeSelect.placeholder');
     this.manufacturerPlaceholder = options.manufacturerPlaceholder || window.i18n.t('deviceCascadeSelect.manufacturerPlaceholder');
@@ -33,6 +37,11 @@ export class DeviceCascadeSelect {
     this._bindEvents();
 
     DeviceCascadeSelect.instances[containerId] = this;
+  }
+
+  // DeviceCascadeSelect 用 _getLevelOptions, 不使用单级 optionsEl
+  _getOptionsContainer() {
+    return null;
   }
 
   _render() {
@@ -113,13 +122,6 @@ export class DeviceCascadeSelect {
       e.stopPropagation();
     };
 
-    this._documentClickHandler = (e) => {
-      if (this._destroyed) return;
-      if (!this.container.contains(e.target) && !this.dropdownEl.contains(e.target)) {
-        this.close();
-      }
-    };
-
     if (this.selectedEl) {
       this.selectedEl.addEventListener('click', this._clickHandler);
       this.selectedEl.addEventListener('keydown', this._keydownHandler);
@@ -131,25 +133,28 @@ export class DeviceCascadeSelect {
       this._handleKeydown(e);
     });
 
+    this._bindOutsideClickHandler();
+  }
+
+  // 覆盖: 追加 _destroyed 守卫
+  _bindOutsideClickHandler() {
+    this._documentClickHandler = (e) => {
+      if (this._destroyed) return;
+      if (!this._isInsideComponent(e.target)) {
+        this.close();
+      }
+    };
     document.addEventListener('click', this._documentClickHandler);
   }
 
+  // 多级键盘导航: 覆盖 BaseSelect._handleKeydown (单级), 在当前级导航
   _handleKeydown(e) {
     const key = e.key;
-    const isOpen = this.dropdownEl.classList.contains('show');
+    const isOpen = this._isDropdownOpen();
+
+    if (this._handleExtraKeys(e, key, isOpen)) return;
 
     switch (key) {
-      case 'Enter':
-      case ' ':
-      case 'Spacebar':
-        e.preventDefault();
-        if (!isOpen) {
-          this.open();
-        } else {
-          // 选中当前级的当前高亮项
-          this._selectActive();
-        }
-        break;
       case 'ArrowDown':
         e.preventDefault();
         if (!isOpen) {
@@ -162,34 +167,6 @@ export class DeviceCascadeSelect {
         e.preventDefault();
         if (isOpen) {
           this._moveActive(-1);
-        }
-        break;
-      case 'ArrowRight':
-        // 跳到下一级 (type / model)
-        e.preventDefault();
-        if (isOpen) {
-          this._advanceLevel(1);
-        }
-        break;
-      case 'ArrowLeft':
-        // 返回上一级 (model -> type -> manufacturer)
-        e.preventDefault();
-        if (isOpen) {
-          this._advanceLevel(-1);
-        }
-        break;
-      case 'Tab':
-        // Tab 也用于级间切换 (不阻止默认, 但同步 _activeLevel)
-        if (isOpen) {
-          // 让默认 Tab 行为生效, 但根据当前焦点同步 _activeLevel
-          // 这里不阻止默认, 仅在 keyup 时处理
-        }
-        break;
-      case 'Escape':
-        if (isOpen) {
-          e.preventDefault();
-          this.close();
-          if (this.selectedEl) this.selectedEl.focus();
         }
         break;
       case 'Home':
@@ -205,7 +182,46 @@ export class DeviceCascadeSelect {
           this._setActive(this._activeLevel, opts.length - 1);
         }
         break;
+      case 'Escape':
+        if (isOpen) {
+          e.preventDefault();
+          this.close();
+          this._onEscapeKey();
+        }
+        break;
     }
+  }
+
+  // Enter/Space 选中当前级当前高亮项; ArrowLeft/Right 切换级
+  _handleExtraKeys(e, key, isOpen) {
+    if (key === 'Enter' || key === ' ' || key === 'Spacebar') {
+      e.preventDefault();
+      if (!isOpen) {
+        this.open();
+      } else {
+        // 选中当前级的当前高亮项
+        this._selectActive();
+      }
+      return true;
+    }
+    if (key === 'ArrowRight') {
+      // 跳到下一级 (type / model)
+      e.preventDefault();
+      if (isOpen) {
+        this._advanceLevel(1);
+      }
+      return true;
+    }
+    if (key === 'ArrowLeft') {
+      // 返回上一级 (model -> type -> manufacturer)
+      e.preventDefault();
+      if (isOpen) {
+        this._advanceLevel(-1);
+      }
+      return true;
+    }
+    // Tab: 不阻止默认, 不处理 (让默认 Tab 行为生效)
+    return false;
   }
 
   _getLevelOptions(level) {
@@ -215,6 +231,7 @@ export class DeviceCascadeSelect {
     return el ? Array.from(el.querySelectorAll('.device-cascade-select__option')) : [];
   }
 
+  // 多级 _setActive: 覆盖 BaseSelect._setActive(index) (单级)
   _setActive(level, index) {
     const opts = this._getLevelOptions(level);
     if (opts.length === 0) return;
@@ -297,23 +314,16 @@ export class DeviceCascadeSelect {
     }
   }
 
-  toggle() {
-    if (this.dropdownEl.classList.contains('show')) {
-      this.close();
-    } else {
-      this.open();
-    }
-  }
-
+  // 覆盖 open: _positionDropdown 顺序特殊 (需临时 add show 测高度), 且有 'open' class + 多级默认高亮
   open() {
-    DeviceCascadeSelect.closeAll();
+    BaseSelect.closeAll();
     this._positionDropdown();
-    this.dropdownEl.classList.add('show');
-    this.selectedEl.classList.add('open');
+    this._showDropdown();
     if (this.selectedEl) {
-      this.selectedEl.setAttribute('aria-expanded', 'true');
+      this.selectedEl.classList.add('open');
     }
-    DeviceCascadeSelect.activeDropdown = this;
+    this._setAriaExpanded(true);
+    this._registerActiveDropdown();
 
     // 默认高亮: 有 selectedDevice 则定位 model 级, 有 selectedManufacturer 则 type 级, 否则 manufacturer 级首项
     if (this.selectedDevice) {
@@ -327,25 +337,20 @@ export class DeviceCascadeSelect {
     const selectedIndex = opts.findIndex(opt => opt.classList.contains('selected'));
     this._setActive(this._activeLevel, selectedIndex >= 0 ? selectedIndex : 0);
 
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) {
-      mainContent.classList.add('dropdown-open');
-      mainContent.addEventListener('wheel', DeviceCascadeSelect.preventScroll, { passive: false });
-    }
+    this._lockMainContentScroll();
   }
 
+  // 覆盖 close: 清 'open' class + above class + 三级高亮
   close() {
+    this._hideDropdown();
     if (this.dropdownEl) {
-      this.dropdownEl.classList.remove('show');
       this.dropdownEl.classList.remove('device-cascade-select__dropdown--above');
     }
     if (this.selectedEl) {
       this.selectedEl.classList.remove('open');
-      this.selectedEl.setAttribute('aria-expanded', 'false');
     }
-    if (DeviceCascadeSelect.activeDropdown === this) {
-      DeviceCascadeSelect.activeDropdown = null;
-    }
+    this._setAriaExpanded(false);
+    this._unregisterActiveDropdown();
 
     // 清除高亮
     ['manufacturer', 'type', 'model'].forEach(level => {
@@ -354,11 +359,7 @@ export class DeviceCascadeSelect {
       this._activeIndices[level] = -1;
     });
 
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent && !DeviceCascadeSelect.activeDropdown) {
-      mainContent.classList.remove('dropdown-open');
-      mainContent.removeEventListener('wheel', DeviceCascadeSelect.preventScroll, { passive: false });
-    }
+    this._unlockMainContentScroll();
   }
 
   _positionDropdown() {
@@ -418,10 +419,6 @@ export class DeviceCascadeSelect {
     } else {
       this.dropdownEl.classList.remove('device-cascade-select__dropdown--above');
     }
-  }
-
-  static preventScroll(e) {
-    e.preventDefault();
   }
 
   render(devices) {
@@ -673,9 +670,7 @@ export class DeviceCascadeSelect {
     if (this.dropdownEl && this._dropdownClickHandler) {
       this.dropdownEl.removeEventListener('click', this._dropdownClickHandler);
     }
-    if (this._documentClickHandler) {
-      document.removeEventListener('click', this._documentClickHandler);
-    }
+    this._unbindOutsideClickHandler();
 
     if (this.dropdownEl && this.dropdownEl.parentElement) {
       this.dropdownEl.parentElement.removeChild(this.dropdownEl);
@@ -688,15 +683,7 @@ export class DeviceCascadeSelect {
   }
 
   static closeAll() {
-    document.querySelectorAll('.device-cascade-select__dropdown.show').forEach(dd => {
-      dd.classList.remove('show');
-      dd.classList.remove('device-cascade-select__dropdown--above');
-    });
-    document.querySelectorAll('.device-cascade-select__selected.open').forEach(sel => {
-      sel.classList.remove('open');
-      sel.setAttribute('aria-expanded', 'false');
-    });
-    DeviceCascadeSelect.activeDropdown = null;
+    BaseSelect.closeAll();
   }
 
   static destroyAll() {

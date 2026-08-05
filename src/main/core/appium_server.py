@@ -20,6 +20,7 @@ from pathlib import Path
 
 import requests
 
+from main.core.subprocess_handle import SubprocessHandle
 from main.utils.paths import get_logs_path
 from main.utils.text import DATETIME_FORMAT, clean_ansi_escape
 
@@ -175,7 +176,7 @@ def _kill_port_process(port: int, subprocess_module=subprocess) -> None:
         _kill_port_unix(port, subprocess_module)
 
 
-class AppiumServer:
+class AppiumServer(SubprocessHandle):
     """Appium服务器管理器
 
     深模块接口:
@@ -187,7 +188,12 @@ class AppiumServer:
     内部实现藏深:
     - _LogPump: 日志文件 + 读取线程 (全权拥有)
     - 模块级端口清理函数 (_kill_port_process 平台分发): 跨平台端口清理
+    - 继承 SubprocessHandle: 统一 terminate→wait→kill→wait 终止模板 (M10 抽取)
     """
+
+    _TERMINATE_TIMEOUT = 10.0
+    _KILL_TIMEOUT = 2.0  # 修复: 原 kill 后不 wait, 可能孤儿; 统一 2s wait
+    _LABEL = "AppiumServer"
 
     DEFAULT_HOST = "127.0.0.1"
     DEFAULT_PORT = 4723
@@ -221,7 +227,7 @@ class AppiumServer:
         self.host = host
         self.port = port
         self.log_level = log_level
-        self.process: subprocess.Popen | None = None
+        self._process: subprocess.Popen | None = None
         self._subprocess = subprocess_module
         self._log_pump: _LogPump | None = None
 
@@ -235,6 +241,19 @@ class AppiumServer:
         # 生成与XKAT日志格式一致的日志文件名
         current_time = datetime.datetime.now().strftime(DATETIME_FORMAT)
         self.log_file = self.log_dir / f"Appium-{current_time}.log"
+
+    @property
+    def process(self) -> subprocess.Popen | None:
+        """公开 process 字段 (测试 + 外部读取兼容, 内部存 self._process)。
+
+        M10: 继承 SubprocessHandle 后内部用 self._process, 此 property 保持原公开 API
+        (测试 server.process = fake_process 赋值 + server.process is None 读取零改动)。
+        """
+        return self._process
+
+    @process.setter
+    def process(self, value: subprocess.Popen | None) -> None:
+        self._process = value
 
     @property
     def server_url(self) -> str:
@@ -344,9 +363,8 @@ class AppiumServer:
 
         顺序:
         1. _LogPump.stop() (join 线程 + 关日志文件)
-        2. self.process.terminate() + wait(timeout=10), 超时 kill()
+        2. self._stop_process() (委托 SubprocessHandle: terminate→wait(10)→kill→wait(2), 修复原 kill 后不 wait 的潜在孤儿)
         3. _kill_port_process(port) 兜底 (杀端口上残留进程)
-        4. self.process = None
         """
         # 1. 停止日志泵
         if self._log_pump is not None:
@@ -356,19 +374,8 @@ class AppiumServer:
                 logger.error(f"停止日志泵时出错: {e}")
             self._log_pump = None
 
-        # 2. 优雅终止进程
-        if self.process is not None:
-            try:
-                self.process.terminate()
-                self.process.wait(timeout=10)
-                logger.info("Appium服务器已停止")
-            except subprocess.TimeoutExpired:
-                logger.warning("Appium服务器终止超时，强制杀死进程")
-                self.process.kill()
-            except Exception as e:
-                logger.error(f"停止Appium服务器时出错: {e}")
-            finally:
-                self.process = None
+        # 2. 优雅终止进程 (M10: 委托 SubprocessHandle._stop_process, 统一 terminate→wait→kill→wait 模板)
+        self._stop_process()
 
         # 3. 端口清理兜底 (不管是否有 process, 都扫一遍端口)
         try:

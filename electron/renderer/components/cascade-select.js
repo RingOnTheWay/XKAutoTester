@@ -1,8 +1,10 @@
 // R7 a11y 修复: 已加键盘导航 (Enter/Space/方向键/Esc) + ARIA 角色 (combobox/listbox/option/aria-expanded/aria-selected)
-export class CascadeSelect {
-  static activeDropdown = null;
+// 重构: 继承 BaseSelect, 复用 open/close/toggle/_handleKeydown/_setupAria/选项高亮/文档点击外部关闭/static closeAll 等。
+import { BaseSelect } from './base-select.js';
 
+export class CascadeSelect extends BaseSelect {
   constructor(containerId, options = {}) {
+    super();
     this.containerId = containerId;
     this.placeholder = options.placeholder || window.i18n.t('cascadeSelect.placeholder');
     this.searchPlaceholder = options.searchPlaceholder || window.i18n.t('cascadeSelect.searchPlaceholder');
@@ -15,7 +17,6 @@ export class CascadeSelect {
     this.valueKey = options.valueKey || 'id';
     this.selectedItem = null;
     this.items = [];
-    this._activeIndex = -1;
 
     this.container = document.getElementById(containerId);
     if (!this.container) return;
@@ -39,19 +40,22 @@ export class CascadeSelect {
   }
 
   _setupAria() {
-    if (this.selectedEl) {
-      this.selectedEl.setAttribute('role', 'combobox');
-      this.selectedEl.setAttribute('aria-haspopup', 'listbox');
-      this.selectedEl.setAttribute('aria-expanded', 'false');
-      this.selectedEl.setAttribute('tabindex', '0');
-    }
-    if (this.optionsEl) {
-      this.optionsEl.setAttribute('role', 'listbox');
-    }
+    super._setupAria();
     if (this.searchInput) {
       this.searchInput.setAttribute('role', 'searchbox');
       this.searchInput.setAttribute('aria-label', this.searchPlaceholder);
     }
+  }
+
+  _getOptionSelector() {
+    return '.cascade-select__option';
+  }
+
+  // searchInput 上的 Enter 选中当前高亮项
+  _selectOptionElement(optionEl) {
+    const itemId = optionEl.dataset.id;
+    const item = this.items.find(it => String(it[this.valueKey]) === String(itemId));
+    if (item) this.select(item);
   }
 
   bindEvents() {
@@ -61,6 +65,7 @@ export class CascadeSelect {
         this.toggle();
       });
 
+      // selectedEl 上 Enter/Space 仅切换开闭 (不选中, 选中由 searchInput 键盘处理)
       this.selectedEl.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
           e.preventDefault();
@@ -80,7 +85,7 @@ export class CascadeSelect {
         e.stopPropagation();
       });
 
-      // 键盘导航: 方向键/Enter/Esc
+      // 键盘导航: 方向键/Enter/Esc (BaseSelect._handleKeydown)
       this.searchInput.addEventListener('keydown', (e) => {
         this._handleKeydown(e);
       });
@@ -107,113 +112,17 @@ export class CascadeSelect {
       });
     }
 
-    document.addEventListener('click', (e) => {
-      if (!this.container.contains(e.target)) {
-        this.close();
-      }
-    });
+    this._bindOutsideClickHandler();
   }
 
-  _handleKeydown(e) {
-    const key = e.key;
-    const opts = this._getVisibleOptions();
-
-    switch (key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        this._setActive(this._activeIndex + 1);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        this._setActive(this._activeIndex - 1);
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (opts.length > 0 && this._activeIndex >= 0 && this._activeIndex < opts.length) {
-          const itemId = opts[this._activeIndex].dataset.id;
-          const item = this.items.find(it => String(it[this.valueKey]) === String(itemId));
-          if (item) this.select(item);
-        }
-        break;
-      case 'Escape':
-        e.preventDefault();
-        this.close();
-        if (this.selectedEl) this.selectedEl.focus();
-        break;
-      case 'Home':
-        e.preventDefault();
-        this._setActive(0);
-        break;
-      case 'End':
-        e.preventDefault();
-        this._setActive(opts.length - 1);
-        break;
-    }
-  }
-
-  _getVisibleOptions() {
-    return Array.from(this.optionsEl.querySelectorAll('.cascade-select__option')).filter(opt => opt.style.display !== 'none');
-  }
-
-  _setActive(index) {
-    const opts = this._getVisibleOptions();
-    if (opts.length === 0) {
-      this._activeIndex = -1;
-      return;
-    }
-    if (index < 0) index = opts.length - 1;
-    if (index >= opts.length) index = 0;
-
-    opts.forEach(opt => opt.classList.remove('active'));
-    opts[index].classList.add('active');
-    this._activeIndex = index;
-    opts[index].scrollIntoView({ block: 'nearest' });
-  }
-
-  toggle() {
-    if (this.dropdownEl.classList.contains('show')) {
-      this.close();
-    } else {
-      this.open();
-    }
-  }
-
-  open() {
-    CascadeSelect.closeAll();
-
-    this.dropdownEl.classList.add('show');
-    if (this.selectedEl) {
-      this.selectedEl.setAttribute('aria-expanded', 'true');
-    }
+  // open 时: 清空搜索 + 聚焦 searchInput + 默认高亮已选/首项
+  _afterOpen() {
     if (this.searchInput) {
       this.searchInput.value = '';
       this.filterOptions('');
       this.searchInput.focus();
     }
-    // 默认高亮已选中项, 没有则第一项
-    const opts = this._getVisibleOptions();
-    const selectedIndex = opts.findIndex(opt => opt.classList.contains('selected'));
-    this._setActive(selectedIndex >= 0 ? selectedIndex : 0);
-    CascadeSelect.activeDropdown = this;
-  }
-
-  close() {
-    if (this.dropdownEl) {
-      this.dropdownEl.classList.remove('show');
-    }
-    if (this.selectedEl) {
-      this.selectedEl.setAttribute('aria-expanded', 'false');
-    }
-    if (CascadeSelect.activeDropdown === this) {
-      CascadeSelect.activeDropdown = null;
-    }
-    // 清除高亮
-    if (this.optionsEl) {
-      this.optionsEl.querySelectorAll('.cascade-select__option.active').forEach(opt => {
-        opt.classList.remove('active');
-      });
-    }
-    this._activeIndex = -1;
+    this._highlightSelectedOrDefault();
   }
 
   render(items) {
@@ -300,12 +209,6 @@ export class CascadeSelect {
   }
 
   static closeAll() {
-    document.querySelectorAll('.cascade-select__dropdown.show').forEach(dd => {
-      dd.classList.remove('show');
-    });
-    document.querySelectorAll('.cascade-select__selected[aria-expanded="true"]').forEach(el => {
-      el.setAttribute('aria-expanded', 'false');
-    });
-    CascadeSelect.activeDropdown = null;
+    BaseSelect.closeAll();
   }
 }
