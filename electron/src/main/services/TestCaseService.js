@@ -19,6 +19,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const asyncFs = require('../utils/asyncFs');
 const TestCaseCodeGenerator = require('./TestCaseCodeGenerator');
 
 // ── module-level 纯函数 (对称 UpdateService compareVersions/normalizeUpdateError) ──
@@ -39,6 +40,8 @@ const defaultFileSystemFactory = () => ({
   readdir: (dir) => fs.readdir(dir),
   readFile: (p) => fs.readFile(p, 'utf8'),
   writeFile: (p, content) => fs.writeFile(p, content, 'utf8'),
+  // P2 修复: 原子写 (temp+rename), 防并发写产生半截 JSON 文件
+  writeJson: (p, data) => asyncFs.writeJson(p, data),
   access: (p) => fs.access(p),
   unlink: (p) => fs.unlink(p),
 });
@@ -117,7 +120,9 @@ class TestCaseService {
 
   async _writeJsonFile(filePath, data) {
     try {
-      await this._fileSystem.writeFile(filePath, JSON.stringify(data, null, 2));
+      // P2 修复: 用 writeJson 原子写 (temp+rename), 替代 writeFile + JSON.stringify
+      // 防并发写产生半截 JSON 文件 (对称 JsonFileCrudService.saveData)
+      await this._fileSystem.writeJson(filePath, data);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -202,15 +207,17 @@ class TestCaseService {
    */
   async saveTestCase(caseData) {
     try {
+      // P2 修复: 用副本操作, 不 mutation 调用方传入的 caseData (对称 saveAndGenerate)
+      const enriched = { ...caseData };
       // 内化条件生成 (吸收 testCaseHandlers L11-27 双委托)
       let pyPath = null;
-      if (caseData.pyOutputDir) {
+      if (enriched.pyOutputDir) {
         try {
-          const genResult = await this._codeGenerator.generatePythonFile(caseData, caseData.pyOutputDir);
+          const genResult = await this._codeGenerator.generatePythonFile(enriched, enriched.pyOutputDir);
           if (genResult.success) {
             pyPath = genResult.path || null;
             // H3: 由 service 负责 set pyFilePath (原由 generator mutation, 现 generator 不 mutation)
-            caseData.pyFilePath = pyPath;
+            enriched.pyFilePath = pyPath;
           }
         } catch (e) {
           console.error('同步更新Python文件失败:', e);
@@ -218,12 +225,12 @@ class TestCaseService {
       }
 
       // H3: 生成后再保存 JSON (单源写入, 含 pyFilePath)
-      const saveResult = await this._saveOnly(caseData);
+      const saveResult = await this._saveOnly(enriched);
       if (!saveResult.success) {
         return saveResult;
       }
 
-      return { success: true, data: caseData, path: saveResult.path, pyPath };
+      return { success: true, data: saveResult.data, path: saveResult.path, pyPath };
     } catch (error) {
       console.error('保存测试用例失败:', error);
       return { success: false, error: error.message };
@@ -238,26 +245,29 @@ class TestCaseService {
   async _saveOnly(caseData) {
     await this._ensureInitialized();
 
+    // P2 修复: 用副本操作, 不 mutation 入参 (对称 saveAndGenerate 的 enriched 副本)
+    const data = { ...caseData };
+
     // ID + 时间戳
-    if (!caseData.id) {
-      caseData.id = this._idGenerator();
+    if (!data.id) {
+      data.id = this._idGenerator();
     }
-    caseData.updated = new Date().toISOString();
-    if (!caseData.created) {
-      caseData.created = caseData.updated;
+    data.updated = new Date().toISOString();
+    if (!data.created) {
+      data.created = data.updated;
     }
 
     // 文件名清理
-    caseData.fileName = this._fileNameSanitizer(caseData.fileName);
+    data.fileName = this._fileNameSanitizer(data.fileName);
 
-    // 写 JSON
-    const jsonPath = path.join(this.testCasesDir, `${caseData.fileName}.json`);
-    const writeResult = await this._writeJsonFile(jsonPath, caseData);
+    // 写 JSON (P2: writeJson 原子写)
+    const jsonPath = path.join(this.testCasesDir, `${data.fileName}.json`);
+    const writeResult = await this._writeJsonFile(jsonPath, data);
     if (!writeResult.success) {
       return writeResult;
     }
 
-    return { success: true, data: caseData, path: jsonPath };
+    return { success: true, data, path: jsonPath };
   }
 
   /**

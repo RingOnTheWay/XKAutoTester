@@ -3,6 +3,7 @@ const { dialog, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { IPC_CHANNELS } = require('../../shared/constants');
+const { isAllowedExternalUrl } = require('../utils/urlGuard');
 
 function register(ipcMain, services) {
   const { electronApp, i18nService } = services;
@@ -52,7 +53,16 @@ function register(ipcMain, services) {
     return { success: true };
   });
 
-  registerHandler(ipcMain, IPC_CHANNELS.OPEN_EXTERNAL, (url) => shell.openExternal(url));
+  // P1 修复: openExternal 强制 https: + 白名单 host, 防止 XSS 注入危险协议/任意域外跳。
+  // 文件打开应走 OPEN_PATH (shell.openPath), 不应通过 openExternal + file://。
+  registerHandler(ipcMain, IPC_CHANNELS.OPEN_EXTERNAL, (url) => {
+    const { allowed, reason } = isAllowedExternalUrl(url);
+    if (!allowed) {
+      console.error(`[openExternal] 拒绝打开 URL: ${url} (${reason})`);
+      return { success: false, error: `不允许打开此链接: ${reason}` };
+    }
+    return shell.openExternal(url);
+  });
 
   registerHandler(ipcMain, IPC_CHANNELS.OPEN_PATH, (pathToOpen) => {
     if (!fs.existsSync(pathToOpen)) {

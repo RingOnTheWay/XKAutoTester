@@ -66,68 +66,77 @@ class ScheduledPlanService extends JsonFileCrudService {
   }
 
   async saveScheduledPlan(planData) {
-    try {
-      let existingPlans = await this.getData();
-      const newPlan = {
-        id: planData.id || this._generateId(),
-        name: planData.name,
-        testPlans: planData.testPlans || [],
-        testPlanNames: planData.testPlanNames ||
-          (planData.testPlans ? planData.testPlans.map(p => p.name) : []),
-        scheduledTime: planData.scheduledTime,
-        status: 'pending',
-        created: planData.created || new Date().toISOString(),
-        lastRun: null
-      };
-      existingPlans.push(newPlan);
-      await this.saveData(existingPlans);
-      return { success: true, plan: newPlan };
-    } catch (error) {
-      this._logger.error('保存定时计划失败: ' + error.message);
-      return { success: false, error: error.message };
-    }
+    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新
+    return this.withLock(async () => {
+      try {
+        let existingPlans = await this.getData();
+        const newPlan = {
+          id: planData.id || this._generateId(),
+          name: planData.name,
+          testPlans: planData.testPlans || [],
+          testPlanNames: planData.testPlanNames ||
+            (planData.testPlans ? planData.testPlans.map(p => p.name) : []),
+          scheduledTime: planData.scheduledTime,
+          status: 'pending',
+          created: planData.created || new Date().toISOString(),
+          lastRun: null
+        };
+        existingPlans.push(newPlan);
+        await this.saveData(existingPlans);
+        return { success: true, plan: newPlan };
+      } catch (error) {
+        this._logger.error('保存定时计划失败: ' + error.message);
+        return { success: false, error: error.message };
+      }
+    });
   }
 
   async updateScheduledPlan(planData) {
-    try {
-      let existingPlans = await this.getData();
-      const index = existingPlans.findIndex(p => p.id === planData.id);
-      if (index >= 0) {
-        const originalPlan = existingPlans[index];
-        existingPlans[index] = {
-          ...originalPlan,
-          ...planData,
-          id: originalPlan.id,
-          created: originalPlan.created,
-          testPlanNames: planData.testPlanNames ||
-            (planData.testPlans ? planData.testPlans.map(p => p.name) : originalPlan.testPlanNames || [])
-        };
-        await this.saveData(existingPlans);
-        return { success: true };
-      } else {
-        return { success: false, error: '未找到指定的定时计划' };
+    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新
+    return this.withLock(async () => {
+      try {
+        let existingPlans = await this.getData();
+        const index = existingPlans.findIndex(p => p.id === planData.id);
+        if (index >= 0) {
+          const originalPlan = existingPlans[index];
+          existingPlans[index] = {
+            ...originalPlan,
+            ...planData,
+            id: originalPlan.id,
+            created: originalPlan.created,
+            testPlanNames: planData.testPlanNames ||
+              (planData.testPlans ? planData.testPlans.map(p => p.name) : originalPlan.testPlanNames || [])
+          };
+          await this.saveData(existingPlans);
+          return { success: true };
+        } else {
+          return { success: false, error: '未找到指定的定时计划' };
+        }
+      } catch (error) {
+        this._logger.error('更新定时计划失败: ' + error.message);
+        return { success: false, error: error.message };
       }
-    } catch (error) {
-      this._logger.error('更新定时计划失败: ' + error.message);
-      return { success: false, error: error.message };
-    }
+    });
   }
 
   async deleteScheduledPlan(planId) {
-    try {
-      let existingPlans = await this.getData();
-      const index = existingPlans.findIndex(p => p.id === planId);
-      if (index >= 0) {
-        existingPlans.splice(index, 1);
-        await this.saveData(existingPlans);
-        return { success: true };
-      } else {
-        return { success: false, error: '未找到指定的定时计划' };
+    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新
+    return this.withLock(async () => {
+      try {
+        let existingPlans = await this.getData();
+        const index = existingPlans.findIndex(p => p.id === planId);
+        if (index >= 0) {
+          existingPlans.splice(index, 1);
+          await this.saveData(existingPlans);
+          return { success: true };
+        } else {
+          return { success: false, error: '未找到指定的定时计划' };
+        }
+      } catch (error) {
+        this._logger.error('删除定时计划失败: ' + error.message);
+        return { success: false, error: error.message };
       }
-    } catch (error) {
-      this._logger.error('删除定时计划失败: ' + error.message);
-      return { success: false, error: error.message };
-    }
+    });
   }
 
   async checkTimeConflict(scheduledTime, excludeId = null) {

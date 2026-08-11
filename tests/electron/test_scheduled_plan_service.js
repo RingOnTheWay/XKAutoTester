@@ -210,3 +210,76 @@ test('checkTimeConflict excludeId 跳过 + cancelled 跳过 + 同分钟返 confl
   const result3 = await svc.checkTimeConflict('2026-07-28T15:00');
   assert.strictEqual(result3.hasConflict, false);
 });
+
+// ── P0 并发回归: Promise.all 并发 saveScheduledPlan 不丢更新 ────
+
+test('P0 并发回归: 20 个并发 saveScheduledPlan 全部持久化 (withLock 串行化)', async () => {
+  const os = require('os');
+  const fs = require('fs');
+  const path = require('path');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xkat-sp-conc-'));
+  try {
+    const svc = new ScheduledPlanService(tmpDir, {
+      idGenerator: (() => {
+        let n = 0;
+        return () => `id-${++n}`;
+      })(),
+    });
+
+    const N = 20;
+    const baseTime = new Date(2026, 6, 28, 14, 30).getTime();
+    const results = await Promise.all(
+      Array.from({ length: N }, (_, i) => svc.saveScheduledPlan({
+        name: `Plan${i}`,
+        scheduledTime: new Date(baseTime + i * 60000).toISOString(),  // 每个错开 1 分钟避免冲突
+      }))
+    );
+
+    assert.ok(results.every(r => r.success === true), '所有 saveScheduledPlan 应成功');
+
+    const fileContent = fs.readFileSync(path.join(tmpDir, 'scheduled_plans.json'), 'utf8');
+    const persisted = JSON.parse(fileContent);
+    assert.strictEqual(persisted.length, N, `应持久化 ${N} 个 plan (withLock 防丢更新)`);
+
+    const names = new Set(persisted.map(p => p.name));
+    assert.strictEqual(names.size, N, 'plan 名称应无重复');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('P0 并发回归: 10 个并发 deleteScheduledPlan 互不干扰', async () => {
+  const os = require('os');
+  const fs = require('fs');
+  const path = require('path');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xkat-sp-conc2-'));
+  try {
+    const svc = new ScheduledPlanService(tmpDir, {
+      idGenerator: (() => {
+        let n = 0;
+        return () => `id-${++n}`;
+      })(),
+    });
+
+    // 先 seed 10 个 plan
+    const seedTime = new Date(2026, 6, 28, 10, 0).getTime();
+    for (let i = 0; i < 10; i++) {
+      await svc.saveScheduledPlan({
+        name: `Seed${i}`,
+        scheduledTime: new Date(seedTime + i * 60000).toISOString(),
+      });
+    }
+
+    // 并发删除全部 10 个
+    const allPlans = await svc.getScheduledPlans();
+    const results = await Promise.all(
+      allPlans.map(p => svc.deleteScheduledPlan(p.id))
+    );
+
+    assert.ok(results.every(r => r.success === true));
+    const remaining = await svc.getScheduledPlans();
+    assert.strictEqual(remaining.length, 0, '并发删除后应剩 0 个 plan');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

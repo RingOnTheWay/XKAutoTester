@@ -320,7 +320,14 @@ class ElectronApp {
     app.on('web-contents-created', (event, contents) => {
       contents.on('new-window', (event, navigationUrl) => {
         event.preventDefault();
+        // P1 修复: new-window 同样走 urlGuard 校验, 防止页面内链接跳危险协议/任意域。
         const { shell } = require('electron');
+        const { isAllowedExternalUrl } = require('./utils/urlGuard');
+        const { allowed, reason } = isAllowedExternalUrl(navigationUrl);
+        if (!allowed) {
+          console.error(`[new-window] 拒绝打开 URL: ${navigationUrl} (${reason})`);
+          return;
+        }
         shell.openExternal(navigationUrl);
       });
     });

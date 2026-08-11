@@ -207,35 +207,41 @@ class PagePackageService extends JsonFileCrudService {
     }
   }
 
-  /** 写路径: getData → navigate → mutateFn → saveData → _success */
+  /** 写路径: withLock(getData → navigate → mutateFn → saveData) → _success
+   *  P0 修复: read-modify-write 包进 withLock, 防并发丢更新 */
   async _applyMutation(nav, mutateFn) {
     try {
-      const data = await this.getData();
-      const ctx = this._navigate(data, nav);
-      if (ctx.error) return this._error(ctx.error);
-      const result = mutateFn(ctx);
-      await this.saveData(data);
-      return this._success(result);
+      return await this.withLock(async () => {
+        const data = await this.getData();
+        const ctx = this._navigate(data, nav);
+        if (ctx.error) return this._error(ctx.error);
+        const result = mutateFn(ctx);
+        await this.saveData(data);
+        return this._success(result);
+      });
     } catch (error) {
       this._errorReporter('PagePackage 修改失败:', error);
       return this._error(error.message);
     }
   }
 
-  /** 删路径: getData → navigate → findIndexFn → splice → saveData → {success:true} */
+  /** 删路径: withLock(getData → navigate → findIndexFn → splice → saveData) → {success:true}
+   *  P0 修复: read-modify-write 包进 withLock, 防并发丢更新 */
   async _applyDelete(nav, findIndexFn) {
     try {
-      const data = await this.getData();
-      const ctx = this._navigate(data, nav);
-      if (ctx.error) return this._error(ctx.error);
-      const index = findIndexFn(ctx);
-      if (index === -1) return this._error('未找到项');
-      // 按导航深度 splice
-      if (nav.elementId) ctx.page.elements.splice(index, 1);
-      else if (nav.pageId) ctx.app.pages.splice(index, 1);
-      else ctx.data.apps.splice(index, 1);
-      await this.saveData(data);
-      return { success: true };
+      return await this.withLock(async () => {
+        const data = await this.getData();
+        const ctx = this._navigate(data, nav);
+        if (ctx.error) return this._error(ctx.error);
+        const index = findIndexFn(ctx);
+        if (index === -1) return this._error('未找到项');
+        // 按导航深度 splice
+        if (nav.elementId) ctx.page.elements.splice(index, 1);
+        else if (nav.pageId) ctx.app.pages.splice(index, 1);
+        else ctx.data.apps.splice(index, 1);
+        await this.saveData(data);
+        return { success: true };
+      });
     } catch (error) {
       this._errorReporter('PagePackage 删除失败:', error);
       return this._error(error.message);

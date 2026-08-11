@@ -9,7 +9,7 @@ const path = require('path');
 const UPDATE_SERVICE_PATH = path.join(
   __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'UpdateService.js'
 );
-const { UpdateService, normalizeUpdateError } = require(UPDATE_SERVICE_PATH);
+const { UpdateService, normalizeUpdateError, parseSha256FromBody, computeFileSha256 } = require(UPDATE_SERVICE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
 
@@ -633,6 +633,212 @@ test('defaultUpdateServiceInitializer config 无 allowInsecureSSL key → 保持
     await defaultUpdateServiceInitializer(svc, tmpDir);
 
     assert.strictEqual(svc._allowInsecureSSL, false, '无 key 保持 false');
+  } finally {
+    fsReal.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// ── P1 SHA256 校验 ───────────────────────────────────────
+
+// fake hashCalculator: 返回可配置的 hash
+function makeFakeHashCalculator(hashToReturn) {
+  const calls = [];
+  return {
+    calls,
+    compute: async (filePath) => {
+      calls.push(filePath);
+      return hashToReturn;
+    },
+  };
+}
+
+// 构造带 SHA256 校验的 service (checkForUpdate 已调, _expectedSha256 已设)
+function makeAppWithSha256(opts = {}) {
+  const expectedHash = opts.expectedHash || 'a'.repeat(64);
+  const actualHash = opts.actualHash !== undefined ? opts.actualHash : expectedHash;
+  const hashCalculator = makeFakeHashCalculator(actualHash);
+  const release = makeRelease({
+    body: opts.body !== undefined ? opts.body : `Release notes\nSHA256: ${expectedHash}\nMore notes`,
+  });
+  const app = makeFakeApp({
+    release,
+    fileSystem: { defaultExists: false, readdirResult: [], existsResults: opts.existsResults || {} },
+  });
+  // 注入 hashCalculator (makeFakeApp 不支持, 手动替换)
+  app.svc._hashCalculator = hashCalculator;
+  return { ...app, expectedHash, hashCalculator };
+}
+
+test('parseSha256FromBody 解析 SHA256 行 (64位 hex)', () => {
+  const hash = 'a3f5b8c1d2e4f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1';
+  const body = `# Release v2.0.0\n\nSHA256: ${hash}\n\n- feature A\n- feature B`;
+  assert.strictEqual(parseSha256FromBody(body), hash);
+});
+
+test('parseSha256FromBody 大写 hex 转小写', () => {
+  const hashUpper = 'A3F5B8C1D2E4F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2E3F4A5B6C7D8E9F0A1';
+  const hashLower = hashUpper.toLowerCase();
+  assert.strictEqual(parseSha256FromBody(`SHA256: ${hashUpper}`), hashLower);
+});
+
+test('parseSha256FromBody 无 SHA256 行返 null', () => {
+  assert.strictEqual(parseSha256FromBody('Release notes without hash'), null);
+  assert.strictEqual(parseSha256FromBody(''), null);
+  assert.strictEqual(parseSha256FromBody(null), null);
+  assert.strictEqual(parseSha256FromBody(undefined), null);
+});
+
+test('parseSha256FromBody 短 hash 不匹配 (需 64 位)', () => {
+  assert.strictEqual(parseSha256FromBody('SHA256: abc123'), null);
+});
+
+test('parseSha256FromBody 容忍前后空格 + 多种分隔', () => {
+  const hash = 'b'.repeat(64);
+  assert.strictEqual(parseSha256FromBody(`SHA256:  ${hash}`), hash);
+  assert.strictEqual(parseSha256FromBody(`SHA256:${hash}`), hash);
+  assert.strictEqual(parseSha256FromBody(`  SHA256:   ${hash}  `), hash);
+});
+
+test('checkForUpdate 解析 Release body 存 _expectedSha256 + 透出 sha256 字段', async () => {
+  const expectedHash = 'c'.repeat(64);
+  const release = makeRelease({ body: `Release notes\nSHA256: ${expectedHash}` });
+  const { svc } = makeFakeApp({ release });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.sha256, expectedHash, '结果含 sha256 字段');
+  assert.strictEqual(svc._expectedSha256, expectedHash, '_expectedSha256 已存');
+});
+
+test('checkForUpdate Release body 无 hash → sha256=null + _expectedSha256=null (向后兼容)', async () => {
+  const release = makeRelease({ body: 'Release notes without hash' });
+  const { svc } = makeFakeApp({ release });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.sha256, null);
+  assert.strictEqual(svc._expectedSha256, null);
+});
+
+test('downloadUpdate 下载后 SHA256 匹配 → 成功', async () => {
+  const { svc, hashCalculator } = makeAppWithSha256({ expectedHash: 'd'.repeat(64) });
+  await svc.checkForUpdate();  // 设置 _expectedSha256
+
+  const result = await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+
+  assert.strictEqual(result.success, true);
+  assert.strictEqual(hashCalculator.calls.length, 1, '下载后调 1 次 hash 计算');
+});
+
+test('downloadUpdate 下载后 SHA256 不匹配 → 删除文件 + 抛错', async () => {
+  const { svc, fileSystem } = makeAppWithSha256({
+    expectedHash: 'e'.repeat(64),
+    actualHash: 'f'.repeat(64),  // 不匹配
+  });
+  await svc.checkForUpdate();
+
+  await assert.rejects(
+    svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null),
+    /SHA256 校验失败/
+  );
+  // 文件应被删除
+  assert.ok(fileSystem.calls.unlink.length >= 1, '校验失败应删除文件');
+});
+
+test('downloadUpdate 快路径文件已存在 + SHA256 匹配 → 直接返回', async () => {
+  const filePath = path.join('/fake/config', 'updates', 'setup.exe');
+  const { svc, hashCalculator } = makeAppWithSha256({
+    expectedHash: '1'.repeat(64),
+    existsResults: { [filePath]: true },
+  });
+  await svc.checkForUpdate();
+
+  const result = await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+
+  assert.strictEqual(result.success, true);
+  assert.strictEqual(result.message, 'File already downloaded');
+  assert.strictEqual(hashCalculator.calls.length, 1, '快路径也调 hash 计算');
+});
+
+test('downloadUpdate 快路径文件已存在 + SHA256 不匹配 → 删除 + 重新下载', async () => {
+  const filePath = path.join('/fake/config', 'updates', 'setup.exe');
+  let currentHash = 'wrong-hash';
+  const { svc, fileSystem, downloadStrategy } = makeAppWithSha256({
+    expectedHash: '2'.repeat(64),
+    existsResults: { [filePath]: true },
+  });
+  // 第一次 compute 返错 hash (快路径校验), 第二次返正确 hash (下载后校验)
+  svc._hashCalculator = {
+    compute: async () => {
+      const r = currentHash;
+      currentHash = '2'.repeat(64);  // 后续调用返正确 hash
+      return r;
+    },
+  };
+  await svc.checkForUpdate();
+
+  const result = await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+
+  assert.strictEqual(result.success, true, '重下载后应成功');
+  assert.ok(fileSystem.calls.unlink.length >= 1, '缓存文件应被删除');
+  assert.strictEqual(downloadStrategy.calls.download.length, 1, '应触发重新下载');
+});
+
+test('installUpdate 安装前 SHA256 匹配 → 调 installStrategy', async () => {
+  const filePath = '/fake/config/updates/setup.exe';
+  const { svc, installStrategy } = makeAppWithSha256({
+    expectedHash: '3'.repeat(64),
+    existsResults: { [filePath]: true },
+  });
+  await svc.checkForUpdate();
+
+  await svc.installUpdate(filePath);
+
+  assert.strictEqual(installStrategy.calls.install.length, 1, '应调 install');
+});
+
+test('installUpdate 安装前 SHA256 不匹配 → 抛错 + 不调 installStrategy', async () => {
+  const filePath = '/fake/config/updates/setup.exe';
+  const { svc, installStrategy } = makeAppWithSha256({
+    expectedHash: '4'.repeat(64),
+    actualHash: '5'.repeat(64),
+    existsResults: { [filePath]: true },
+  });
+  await svc.checkForUpdate();
+
+  await assert.rejects(
+    svc.installUpdate(filePath),
+    /SHA256 校验失败/
+  );
+  assert.strictEqual(installStrategy.calls.install.length, 0, '不应调 install');
+});
+
+test('无 _expectedSha256 (checkForUpdate 未调) → 跳过校验 (向后兼容)', async () => {
+  // 不调 checkForUpdate, _expectedSha256=null
+  const { svc, hashCalculator } = makeFakeApp({
+    fileSystem: { defaultExists: false, readdirResult: [] },
+  });
+
+  const result = await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+
+  assert.strictEqual(result.success, true, '无 hash 时应正常下载');
+  assert.strictEqual(hashCalculator ? hashCalculator.calls : undefined, undefined, '不应调 hash 计算');
+});
+
+test('computeFileSha256 真实文件计算 (集成)', async () => {
+  const os = require('os');
+  const fsReal = require('fs');
+  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-sha-'));
+  try {
+    const filePath = path.join(tmpDir, 'test.bin');
+    const content = 'hello world';
+    fsReal.writeFileSync(filePath, content);
+    const hash = await computeFileSha256(filePath);
+    // 已知 'hello world' 的 SHA256
+    const crypto = require('crypto');
+    const expected = crypto.createHash('sha256').update(content).digest('hex');
+    assert.strictEqual(hash, expected);
+    assert.strictEqual(hash.length, 64);
   } finally {
     fsReal.rmSync(tmpDir, { recursive: true, force: true });
   }

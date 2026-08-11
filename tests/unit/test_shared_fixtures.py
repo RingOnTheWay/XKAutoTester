@@ -3,23 +3,38 @@
 覆盖 mock_adb / mock_subprocess / tmp_config_dir 等共享 fixture。
 """
 
+import pytest
+
 
 class TestSharedFixtures:
     """验证 tests/unit/helpers/fixtures.py 的共享 fixture"""
 
-    def test_mock_adb_returns_empty_devices(self, mock_adb):
-        """mock_adb 默认返回空设备列表"""
-        assert mock_adb.get_connected_devices() == []
+    def test_mock_adb_returns_empty_crash_logs(self, mock_adb):
+        """mock_adb 默认返回空崩溃日志列表 (对齐 ADBManager.check_crash_logs)"""
+        assert mock_adb.check_crash_logs() == []
 
     def test_mock_adb_records_calls(self, mock_adb):
-        """mock_adb 记录方法调用"""
-        mock_adb.execute_command("devices")
-        mock_adb.execute_command.assert_called_once_with("devices")
+        """mock_adb 记录方法调用 (对齐 ADBManager.update_logcat_pid)"""
+        mock_adb.update_logcat_pid(1234)
+        mock_adb.update_logcat_pid.assert_called_once_with(1234)
 
-    def test_mock_adb_push_pull(self, mock_adb):
-        """mock_adb push/pull 默认返回 True"""
-        assert mock_adb.push_file("src", "dst") is True
-        assert mock_adb.pull_file("src", "dst") is True
+    def test_mock_adb_logcat_monitor_lifecycle(self, mock_adb):
+        """mock_adb logcat 监控生命周期 (对齐 ADBManager.start/stop_logcat_monitor)"""
+        assert mock_adb.start_logcat_monitor() is True
+        assert mock_adb.stop_logcat_monitor() is None
+        mock_adb.start_logcat_monitor.assert_called_once()
+        mock_adb.stop_logcat_monitor.assert_called_once()
+
+    def test_mock_adb_crash_state_defaults(self, mock_adb):
+        """mock_adb 崩溃状态默认值 (对齐 ADBManager.is_crash_detected/get_logcat_full_log)"""
+        assert mock_adb.is_crash_detected() is False
+        assert mock_adb.get_logcat_full_log() == ""
+
+    def test_mock_adb_spec_rejects_unknown_method(self, mock_adb):
+        """P2: spec=ADBManager 阻止调用不存在方法 (调用漂移检测)"""
+        # get_connected_devices 是模块级函数不是 ADBManager 方法, spec 应阻止
+        with pytest.raises(AttributeError):
+            mock_adb.get_connected_devices()
 
     def test_mock_subprocess_run(self, mock_subprocess):
         """mock_subprocess.run 默认 returncode=0"""

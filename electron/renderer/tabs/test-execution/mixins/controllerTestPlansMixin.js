@@ -37,9 +37,15 @@ export const controllerTestPlansMixin = {
       const result = await window.electronAPI?.getDataPath?.();
       const dataPath = result?.currentPath || (typeof result === 'string' ? result : '');
       if (dataPath) {
-        // 打开 logs 子目录 (userDataPath/logs, 约定路径, 见 FileBasedDialogMonitor/DataTransferService)
+        // P1 修复: 文件/目录打开走 openPath (shell.openPath), 不走 openExternal + file://。
+        // openExternal 现强制 https: + 白名单 host, file:// 会被拒绝。
         const normalized = dataPath.replace(/\\/g, '/').replace(/\/$/, '');
-        window.electronAPI?.openExternal?.(`file:///${normalized}/logs`);
+        const logsPath = `${normalized}/logs`;
+        const openResult = await window.electronAPI?.openPath?.(logsPath);
+        if (openResult && openResult.success === false) {
+          Toast.error(window.i18n.t('testExecution.openFolderFailed'));
+          return;
+        }
         Toast.success(window.i18n.t('testExecution.openFolderSuccess'));
       } else {
         Toast.error(window.i18n.t('testExecution.openFolderFailed'));

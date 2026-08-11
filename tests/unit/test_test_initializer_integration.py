@@ -5,6 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from main.core.adb_manager import ADBManager
+from main.core.crash_monitor import CrashMonitor
 from main.core.test_initializer import TestInitializer
 from main.utils.test_reporter import TestReporter
 
@@ -161,7 +163,7 @@ class TestTestInitializerFailurePath:
     def test_cleanup_idempotent(self):
         """cleanup 多次调用安全（_cleaned 幂等）"""
         init = self._make_init()
-        mock_monitor = MagicMock()
+        mock_monitor = MagicMock(spec=CrashMonitor)
         init.crash_monitor = mock_monitor
         init.cleanup()
         init.cleanup()
@@ -174,7 +176,7 @@ class TestTestInitializerFailurePath:
         mock_driver = MagicMock()
         mock_driver.quit.side_effect = Exception("driver quit failed")
         init.driver = mock_driver
-        mock_adb = MagicMock()
+        mock_adb = MagicMock(spec=ADBManager)
         init.adb_manager = mock_adb
 
         init.cleanup()

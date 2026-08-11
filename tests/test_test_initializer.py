@@ -15,6 +15,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from main.core.adb_manager import ADBManager
+from main.core.appium_server import AppiumServer
+from main.core.ble_device import BLEDevice
+from main.core.crash_monitor import CrashMonitor
 from main.core.test_initializer import (
     ADBConfig,
     AppiumConfig,
@@ -237,7 +241,7 @@ class TestFactoryInjection:
     """
 
     def _make_fake_adb(self, *, check_service: bool = True, connect: tuple[bool, str] = (True, "ok")) -> MagicMock:
-        """构造 fake ADBManager。
+        """构造 fake ADBManager (P2: spec=ADBManager, 阻止调用漂移)。
 
         方法名对齐 ADBManager 聚合根实际调用路径：
         - adb_manager.connection.check_adb_service() / .connect()
@@ -245,7 +249,7 @@ class TestFactoryInjection:
         - adb_manager.app.force_stop(silent=True) / .get_pid() / .get_dumpsys_window() / .ensure_closed(2)
         - adb_manager.update_logcat_pid(pid)  # 自身方法
         """
-        adb = MagicMock()
+        adb = MagicMock(spec=ADBManager)
         adb.connection.check_adb_service.return_value = check_service
         adb.connection.connect.return_value = connect
         adb.bluetooth.ensure_enabled.return_value = True
@@ -257,15 +261,15 @@ class TestFactoryInjection:
         return adb
 
     def _make_fake_appium_server(self, *, start_ok: bool = True) -> MagicMock:
-        """构造 fake AppiumServer。"""
-        server = MagicMock()
+        """构造 fake AppiumServer (P2: spec=AppiumServer, 阻止调用漂移)。"""
+        server = MagicMock(spec=AppiumServer)
         server.start.return_value = start_ok
         server.stop.return_value = None
         server.server_url = "http://fake:4723"
         return server
 
     def _make_fake_driver(self) -> MagicMock:
-        """构造 fake webdriver.Remote。"""
+        """构造 fake webdriver.Remote (无 spec: appium.webdriver.Remote 跨包, 用鸭子类型)。"""
         driver = MagicMock()
         driver.session_id = "fake-sid"
         driver.current_activity = ".MainActivity"
@@ -277,7 +281,7 @@ class TestFactoryInjection:
         fake_adb = self._make_fake_adb()
         fake_server = self._make_fake_appium_server()
         fake_driver = self._make_fake_driver()
-        fake_crash = MagicMock()
+        fake_crash = MagicMock(spec=CrashMonitor)
         fake_faker = MagicMock()
         clock = FakeClock()
 
@@ -285,7 +289,7 @@ class TestFactoryInjection:
             config=_make_real_config(),
             logger=logging.getLogger("test"),
             adb_manager_factory=lambda d, p: fake_adb,
-            ble_device_factory=lambda cfg: MagicMock(),
+            ble_device_factory=lambda cfg: MagicMock(spec=BLEDevice),
             appium_server_factory=lambda h, p: fake_server,
             driver_factory=lambda url, options: fake_driver,
             crash_monitor_factory=lambda adb, reporter, lg: fake_crash,
@@ -348,7 +352,7 @@ class TestFactoryInjection:
             logger=logging.getLogger("test"),
             adb_manager_factory=lambda d, p: fake_adb,
             appium_server_factory=lambda h, p: fake_server,
-            crash_monitor_factory=lambda *a: MagicMock(),
+            crash_monitor_factory=lambda *a: MagicMock(spec=CrashMonitor),
             time_provider=FakeClock(),
         )
 
@@ -362,7 +366,7 @@ class TestFactoryInjection:
         """appium_init: driver_factory 抛 Activity 错误 → _fail (severity=fail)。"""
         fake_adb = self._make_fake_adb()
         fake_server = self._make_fake_appium_server()
-        fake_crash = MagicMock()
+        fake_crash = MagicMock(spec=CrashMonitor)
 
         def _raise_activity_error(url, options):
             raise RuntimeError("Activity name '.Main' doesn't exist or cannot be launched")
@@ -389,7 +393,7 @@ class TestFactoryInjection:
         """appium_init: driver_factory 抛 SDK 错误 → _fail + dumpsys 兜底。"""
         fake_adb = self._make_fake_adb()
         fake_server = self._make_fake_appium_server()
-        fake_crash = MagicMock()
+        fake_crash = MagicMock(spec=CrashMonitor)
 
         def _raise_sdk_error(url, options):
             raise RuntimeError("Could not start session. Invalid address")
@@ -417,7 +421,7 @@ class TestFactoryInjection:
         fake_adb = self._make_fake_adb()
         fake_server = self._make_fake_appium_server()
         fake_driver = self._make_fake_driver()
-        fake_crash = MagicMock()
+        fake_crash = MagicMock(spec=CrashMonitor)
 
         init = TestInitializer(
             config=_make_real_config(),
@@ -452,7 +456,7 @@ class TestFactoryInjection:
             adb_manager_factory=lambda d, p: fake_adb,
             appium_server_factory=lambda h, p: fake_server,
             driver_factory=lambda url, options: fake_driver,
-            crash_monitor_factory=lambda *a: MagicMock(),
+            crash_monitor_factory=lambda *a: MagicMock(spec=CrashMonitor),
             faker_factory=lambda: MagicMock(),
             time_provider=clock,
         )
