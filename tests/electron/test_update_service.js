@@ -699,6 +699,62 @@ test('parseSha256FromBody 容忍前后空格 + 多种分隔', () => {
   assert.strictEqual(parseSha256FromBody(`  SHA256:   ${hash}  `), hash);
 });
 
+// ── P1 扩展: parseSha256FromBody 按 fileName 匹配 asset 专属 hash ──
+
+test('parseSha256FromBody 按 fileName 匹配 asset 专属 hash (完整包)', () => {
+  const fullHash = 'a'.repeat(64);
+  const liteHash = 'b'.repeat(64);
+  const fullFileName = 'XKAutoTester Setup v2.0.0.exe';
+  const liteFileName = 'XKAutoTester Setup v2.0.0 Lite.exe';
+  const body = `## v2.0.0\n\n**${fullFileName}**\nSHA256: ${fullHash}\n\n**${liteFileName}**\nSHA256: ${liteHash}\n`;
+
+  assert.strictEqual(parseSha256FromBody(body, fullFileName), fullHash, '完整包 fileName 匹配完整包 hash');
+  assert.strictEqual(parseSha256FromBody(body, liteFileName), liteHash, 'Lite 包 fileName 匹配 Lite 包 hash');
+});
+
+test('parseSha256FromBody 按 fileName 匹配 Lite 包 hash (Lite 包)', () => {
+  const fullHash = 'c'.repeat(64);
+  const liteHash = 'd'.repeat(64);
+  const fullFileName = 'XKAutoTester Setup v2.0.0.exe';
+  const liteFileName = 'XKAutoTester Setup v2.0.0 Lite.exe';
+  // Lite 在前, 完整在后, 验证按名匹配不取首个
+  const body = `**${liteFileName}**\nSHA256: ${liteHash}\n\n**${fullFileName}**\nSHA256: ${fullHash}\n`;
+
+  assert.strictEqual(parseSha256FromBody(body, liteFileName), liteHash, 'Lite 在前仍按名匹配');
+  assert.strictEqual(parseSha256FromBody(body, fullFileName), fullHash, '完整在后仍按名匹配');
+});
+
+test('parseSha256FromBody fileName 不匹配回退首个 SHA256', () => {
+  const hash = 'e'.repeat(64);
+  const body = `Release notes\nSHA256: ${hash}\n`;
+  // fileName 在 body 中无对应 **fileName** 块
+  assert.strictEqual(parseSha256FromBody(body, 'nonexistent.exe'), hash, 'fileName 不匹配回退首个');
+});
+
+test('parseSha256FromBody fileName 含正则特殊字符 (.exe 的 .) 正确转义', () => {
+  const hash = 'f'.repeat(64);
+  // fileName 含 . 和空格, 需正确转义否则正则匹配失败
+  const fileName = 'XKAutoTester Setup v2.0.0.exe';
+  const body = `**${fileName}**\nSHA256: ${hash}\n`;
+  assert.strictEqual(parseSha256FromBody(body, fileName), hash, '. 正确转义, 按名匹配');
+});
+
+test('parseSha256FromBody fileName 匹配但块内无 SHA256 回退首个', () => {
+  const hash = '1'.repeat(64);
+  const fileName = 'XKAutoTester Setup v2.0.0.exe';
+  // fileName 块存在但块内无 SHA256 行, 应回退到 body 首个 SHA256
+  const body = `**${fileName}**\nno hash here\n\nOther section\nSHA256: ${hash}\n`;
+  assert.strictEqual(parseSha256FromBody(body, fileName), hash, '块内无 hash 回退首个');
+});
+
+test('parseSha256FromBody 无 fileName 回退首个 (向后兼容)', () => {
+  const hash = '2'.repeat(64);
+  const body = `SHA256: ${hash}\n`;
+  assert.strictEqual(parseSha256FromBody(body), hash, '不传 fileName 取首个');
+  assert.strictEqual(parseSha256FromBody(body, undefined), hash, 'fileName=undefined 取首个');
+  assert.strictEqual(parseSha256FromBody(body, ''), hash, 'fileName=空串取首个');
+});
+
 test('checkForUpdate 解析 Release body 存 _expectedSha256 + 透出 sha256 字段', async () => {
   const expectedHash = 'c'.repeat(64);
   const release = makeRelease({ body: `Release notes\nSHA256: ${expectedHash}` });

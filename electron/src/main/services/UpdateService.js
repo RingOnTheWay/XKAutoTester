@@ -120,17 +120,42 @@ function normalizeUpdateError(error) {
 }
 
 /**
- * P1 修复: 从 GitHub Release body 解析 SHA256 hash。
- * 约定格式: Release notes 中包含一行 `SHA256: <64位十六进制>` (大小写不敏感)。
- * 发布时需在 Release notes 中预埋此行, 例:
+ * P1 修复: 从 GitHub Release body 解析 SHA256 hash, 按 asset 名匹配。
+ * 约定格式 (多 asset Release notes, 各 asset 独立标注):
+ *   **XKAutoTester Setup v2.0.0.exe**
  *   SHA256: a3f5b8c1d2e4f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1
+ *
+ *   **XKAutoTester Setup v2.0.0 Lite.exe**
+ *   SHA256: b4c6d9e2f3a5b7c8d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
+ *
+ * 解析顺序:
+ * 1. 若传 fileName, 优先找 `**<fileName>**` 后的 SHA256 (asset 专属 hash)
+ * 2. 回退: 取首个 SHA256 行 (兼容旧格式单 hash Release, 不区分 asset)
+ * 3. 都没找到返 null (向后兼容, 跳过校验)
+ *
  * @param {string} body - Release notes body
+ * @param {string} [fileName] - asset 文件名 (可选, 多 asset 时按名匹配)
  * @returns {string|null} 64位小写 hex hash, 未找到返 null
  */
-function parseSha256FromBody(body) {
+function parseSha256FromBody(body, fileName) {
   if (typeof body !== 'string' || body.length === 0) return null;
-  const match = body.match(/SHA256:\s*([a-fA-F0-9]{64})\b/);
-  return match ? match[1].toLowerCase() : null;
+
+  // 优先: 按 fileName 匹配 asset 专属 hash
+  if (fileName) {
+    // 转义 fileName 中的正则特殊字符 (如 . + ( ))
+    const escapedName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // 匹配 `**<fileName>**` 后 (允许任意字符含换行) 的首个 SHA256 行
+    const assetPattern = new RegExp(
+      `\\*\\*${escapedName}\\*\\*[\\s\\S]*?SHA256:\\s*([a-fA-F0-9]{64})\\b`,
+      'i'
+    );
+    const assetMatch = body.match(assetPattern);
+    if (assetMatch) return assetMatch[1].toLowerCase();
+  }
+
+  // 回退: 取首个 SHA256 行 (兼容旧格式单 hash Release)
+  const fallbackMatch = body.match(/SHA256:\s*([a-fA-F0-9]{64})\b/);
+  return fallbackMatch ? fallbackMatch[1].toLowerCase() : null;
 }
 
 /**
@@ -441,8 +466,9 @@ class UpdateService {
       }
     }
 
-    // P1 修复: 解析 Release body 中的 SHA256, 供 download/install 校验
-    const sha256 = parseSha256FromBody(latestRelease.body || '');
+    // P1 修复: 解析 Release body 中的 SHA256, 按 fileName 匹配 asset 专属 hash
+    // 完整版用户匹配完整包 hash, Lite 版用户匹配 Lite 包 hash, 互不干扰
+    const sha256 = parseSha256FromBody(latestRelease.body || '', fileName);
     this._expectedSha256 = sha256;  // null 表示 Release 未预埋 hash (向后兼容, 跳过校验)
 
     return {
