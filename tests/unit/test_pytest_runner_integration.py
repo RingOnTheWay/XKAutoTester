@@ -51,6 +51,8 @@ class TestPytestRunnerResultData:
     @patch("subprocess.Popen")
     def test_run_tests_returns_run_data(self, mock_popen, runner, capsys):
         """run_tests 应返回含运行数据的 result dict (供 Cli._write_electron_markers 写标记行)"""
+        # R10: 不用 spec=Popen — stdout/stderr 是 Popen __init__ 实例属性, 不在 dir(Popen) 中,
+        # spec 会阻止 mock.stdout 访问。poll/wait 是类方法在 spec 中, 但 stdout 不在。
         mock_process = MagicMock()
         mock_process.stdout.readline.return_value = ""  # 立即结束读取循环
         mock_process.stderr.readline.return_value = ""
@@ -72,6 +74,8 @@ class TestPytestRunnerResultData:
     @patch("subprocess.Popen")
     def test_result_includes_markers_when_provided(self, mock_popen, runner, capsys):
         """result dict 应包含 markers 字段"""
+        # R10: 不用 spec=Popen — stdout/stderr 是 Popen __init__ 实例属性, 不在 dir(Popen) 中,
+        # spec 会阻止 mock.stdout 访问。poll/wait 是类方法在 spec 中, 但 stdout 不在。
         mock_process = MagicMock()
         mock_process.stdout.readline.return_value = ""
         mock_process.stderr.readline.return_value = ""

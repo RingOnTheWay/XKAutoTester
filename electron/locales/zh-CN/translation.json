@@ -130,7 +130,8 @@
       "dns_failed": "DNS 解析失败，请检查网络连接",
       "network_unreachable": "网络不可达，请检查网络连接",
       "unknown": "未知错误",
-      "ssl_failed": "SSL 证书验证失败，请检查系统时间或网络代理"
+      "ssl_failed": "SSL 证书验证失败，请检查系统时间或网络代理",
+      "missing_hash": "更新包缺少 SHA256 校验值，拒绝下载/安装 (安全闭环)"
     },
     "downloadUpdate": "下载更新",
     "downloading": "下载中",
@@ -138,6 +139,8 @@
     "cancelUpdate": "取消",
     "downloadFailed": "下载更新失败",
     "updateChangelog": "更新日志",
+    "insecureReleaseWarning": "⚠ 该版本未提供 SHA256 校验值，无法验证完整性，已禁用下载 (安全闭环)",
+    "updateHashVerified": "✓ SHA256 校验值已就绪，可安全下载安装",
     "run": "运行",
     "preventSleep": "程序运行时禁用睡眠模式"
   },

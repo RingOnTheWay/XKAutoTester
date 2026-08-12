@@ -2,7 +2,6 @@
 //
 // 藏 20 服务依赖图编排 + 3 await 顺序 + electronApp 副作用 + 错误兜底。
 // 26 factory-or-default (20 服务 factory + 3 await injector + registerHandlers + errorHandler)。
-// M1: 删 schedulerInitializer (SmartScheduler 直接 factory 2 参构造, 总数 27→26)。
 //
 // 生产: new ApplicationService().run()  # 一行
 // 测试: new ApplicationService({ electronApp: mock, versionServiceFactory: fake, ... }).run()
@@ -69,8 +68,6 @@ class ApplicationService {
     this._environmentStartupServiceFactory = opts.environmentStartupServiceFactory || defaultEnvironmentStartupServiceFactory;
 
     // 4 await injector + registerHandlers + errorHandler
-    // M1: 删 schedulerInitializer (SmartScheduler 直接 factory 2 参构造, 无需 2-step init)
-    // M4: 新增 updateServiceInitializer (从 factory 外移的读 config 副作用)
     this._i18nInitializer = opts.i18nInitializer || defaultI18nInitializer;
     this._pythonEnvConfigurer = opts.pythonEnvConfigurer || defaultPythonEnvConfigurer;
     this._apkParserInitializer = opts.apkParserInitializer || defaultApkParserInitializer;
@@ -150,8 +147,6 @@ class ApplicationService {
     // CONFIGURE phase: await #4 updateService.initialize (读 config + apply allowInsecureSSL)
     await this._updateServiceInitializer(updateService, userConfigPath);
 
-    // M1: scheduler 1-step (factory 直接构造 SmartScheduler, 无需 init)
-    // M4: 参数顺序 (scheduledPlanService, i18nService) 对齐 SmartScheduler 构造器
     const schedulerService = this._schedulerServiceFactory(scheduledPlanService, i18nService);
 
     // EnvironmentStartupService: 启动期编排 (3 服务 + driver install + app lifecycle)

@@ -144,7 +144,7 @@ class JsonStdioTransport {
       this._readyPromise = new Promise((resolve, reject) => {
         this._readyResolve = resolve;
         this._readyReject = reject;
-        // M4 修复: 握手超时兜底 - 超时后杀进程 + dispose, 避免进程泄漏
+        // 握手超时兜底: 超时后杀进程 + dispose, 避免进程泄漏
         const timeout = setTimeout(() => {
           if (this._readyReject) {
             this._readyReject(new Error(`Handshake timeout after ${this._handshakeTimeoutMs}ms`));

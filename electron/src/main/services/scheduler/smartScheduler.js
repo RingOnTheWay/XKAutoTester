@@ -4,7 +4,8 @@
 // 7 factory-or-default (对称 test_initializer.py L146-198 + cli.py L46-71):
 //   queueFactory / timerProvider / watcherFactory / notifierFactory / nowProvider / logger / (compare via queueFactory)
 //
-// 行为变更 (R8-S1): executePlan catch 改写 status='failed' (原 'completed' 误标完成) +
+// 行为变更:
+//   executePlan catch 改写 status='failed' (原 'completed' 误标完成) +
 //   _executePlan 加执行超时看门狗 (EXECUTION_TIMEOUT_MS) 避免 plan 永停 'running' +
 //   updatePlan 当 scheduledTime 变化时重新入队 (原仅 status==='pending' 才入队)。
 // 保留 finalCountdown setImmediate 递归 + SAFETY_THRESHOLD=100ms 提前量。
@@ -21,7 +22,7 @@ const {
 const { globalTimerProvider, defaultWatcherFactory, defaultNotifierFactory } = require('./effects');
 
 // 执行超时阈值: plan 进入 running 后若 N 分钟未收到 SCHEDULED_TEST_COMPLETE 回调, 视为渲染进程
-// 未就绪/异常, 自动标记 failed 避免 plan 永停 'running' (S1 修复)
+// 未就绪/异常, 自动标记 failed 避免 plan 永停 'running'
 const EXECUTION_TIMEOUT_MS = 30 * 60 * 1000;
 
 class SmartScheduler {
@@ -55,7 +56,7 @@ class SmartScheduler {
     this.fileWatcher = null;
     this.mainWindow = null;
     this._notifier = this._notifierFactory(null);
-    // plan 执行超时看门狗: planId → timeout timer (S1 修复, 防止 plan 永停 'running')
+    // plan 执行超时看门狗: planId → timeout timer (防止 plan 永停 'running')
     this._runningPlanTimeouts = new Map();
     this.state = {
       mode: 'idle',
@@ -227,12 +228,12 @@ class SmartScheduler {
         executionTime: new Date(this._now()).toLocaleString(),
       });
 
-      // S1 修复: 启动执行超时看门狗。若渲染进程未就绪/被关闭, N 分钟内不会收到
+      // 启动执行超时看门狗。若渲染进程未就绪/被关闭, N 分钟内不会收到
       // SCHEDULED_TEST_COMPLETE 回调, 看门狗自动将 plan 标记 failed, 避免永停 'running'。
       this._startExecutionWatchdog(plan.id);
     } catch (error) {
       this._logger.error('执行定时计划失败:', error);
-      // S1 修复: catch 写 'failed' (原 'completed' 误标完成, 注释自承"保留 bug")
+      // catch 写 'failed' (原 'completed' 误标完成)
       await this.scheduledPlanService.updateScheduledPlan({
         id: plan.id,
         status: 'failed',
@@ -245,7 +246,7 @@ class SmartScheduler {
   }
 
   /**
-   * 启动执行超时看门狗 (S1 修复)
+   * 启动执行超时看门狗
    * plan 进入 running 后, 若 EXECUTION_TIMEOUT_MS 内未收到 SCHEDULED_TEST_COMPLETE
    * (即 _clearExecutionWatchdog 未被调用), 自动标记 plan 为 failed。
    */
@@ -329,14 +330,13 @@ class SmartScheduler {
   async updatePlan(planId, updates) {
     this.removePlan(planId);
 
-    // S1 修复: 计划完成/失败时清除执行看门狗
+    // 计划完成/失败时清除执行看门狗
     if (updates.status === 'completed' || updates.status === 'failed') {
       this._clearExecutionWatchdog(planId);
     }
 
-    // S1 修复: 重新入队条件放宽 - 原仅 status==='pending' 才入队, 导致 expired plan
-    // 改 scheduledTime 后不入队。现: status==='pending' 或 scheduledTime 变化且新时间在未来,
-    // 且状态非终态 (completed/failed) 时均重新入队。
+    // 重新入队条件放宽: status==='pending' 或 scheduledTime 变化且新时间在未来,
+    // 且状态非终态 (completed/failed) 时均重新入队
     const shouldReenqueue = updates.status === 'pending' || updates.scheduledTime;
     if (shouldReenqueue) {
       try {
@@ -382,7 +382,7 @@ class SmartScheduler {
 
   destroy() {
     this._clearAllTimers();
-    // S1 修复: 清除所有执行看门狗
+    // 清除所有执行看门狗
     for (const planId of this._runningPlanTimeouts.keys()) {
       this._clearExecutionWatchdog(planId);
     }

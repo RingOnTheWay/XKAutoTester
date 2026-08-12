@@ -53,7 +53,7 @@ function register(ipcMain, services) {
     return { success: true };
   });
 
-  // P1 修复: openExternal 强制 https: + 白名单 host, 防止 XSS 注入危险协议/任意域外跳。
+  // openExternal 强制 https: + 白名单 host, 防止 XSS 注入危险协议/任意域外跳。
   // 文件打开应走 OPEN_PATH (shell.openPath), 不应通过 openExternal + file://。
   registerHandler(ipcMain, IPC_CHANNELS.OPEN_EXTERNAL, (url) => {
     const { allowed, reason } = isAllowedExternalUrl(url);

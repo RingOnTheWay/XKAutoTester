@@ -253,7 +253,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 定时计划测试完成
   scheduledTestComplete: (planId) => invokeWithCheck(IPC_CHANNELS.SCHEDULED_TEST_COMPLETE, planId),
 
-  // R7: 删除通用 send/on/removeAllListeners 入口 (renderer 0 处使用, 已有 10 个专门 onXxx 方法)
+  // 删除通用 send/on/removeAllListeners 入口 (renderer 0 处使用, 已有 10 个专门 onXxx 方法)
   // 原通用入口绕过 IPC_CHANNELS 白名单, 被 XSS 后可调任意通道 (含 changeDataPath/installUpdate/sendDingTalk)
 
   // i18next相关

@@ -180,7 +180,7 @@ class TestSetConfigManager:
         """注入后 get_config_manager() 返回注入的实例"""
         from unittest.mock import MagicMock
 
-        fake = MagicMock()
+        fake = MagicMock(spec=ConfigManager)
         old = config_module._config_manager_instance
         try:
             config_module.set_config_manager(fake)
@@ -192,7 +192,7 @@ class TestSetConfigManager:
         """重置为 None 后恢复懒加载构造"""
         from unittest.mock import MagicMock
 
-        fake = MagicMock()
+        fake = MagicMock(spec=ConfigManager)
         old = config_module._config_manager_instance
         try:
             config_module.set_config_manager(fake)

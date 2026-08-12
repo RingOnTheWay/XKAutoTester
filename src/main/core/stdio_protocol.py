@@ -52,12 +52,24 @@ class StdioProtocol:
         """发 Notification 帧。藏 JSON 编码 + flush + 异常吞。
 
         例: self._proto.notify('progress', {'stage': 'appium-starting'})
+
+        R10 协议契约收紧 (inspector-protocol.json additionalProperties: false):
+        - ``stage`` 提升到帧顶层 (schema 显式允许, JS handler 直读 frame.stage)
+        - 其他 payload 字段统一塞进 ``payload`` 子对象 (schema 显式允许, 避免每次扩 schema)
+        - 调用方传 ``kind``/``type`` 会被丢弃 (防覆盖帧头)
         """
         frame: dict[str, Any] = {"kind": "notification", "type": notification_type}
         if payload:
+            extra: dict[str, Any] = {}
             for k, v in payload.items():
-                if k not in ("kind", "type"):
-                    frame[k] = v
+                if k in ("kind", "type"):
+                    continue
+                if k == "stage":
+                    frame["stage"] = v
+                else:
+                    extra[k] = v
+            if extra:
+                frame["payload"] = extra
         self._write_frame(frame)
 
     def run(self) -> None:

@@ -14,6 +14,8 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
+from appium import webdriver
+from faker import Faker
 
 from main.core.adb_manager import ADBManager
 from main.core.appium_server import AppiumServer
@@ -269,8 +271,8 @@ class TestFactoryInjection:
         return server
 
     def _make_fake_driver(self) -> MagicMock:
-        """构造 fake webdriver.Remote (无 spec: appium.webdriver.Remote 跨包, 用鸭子类型)。"""
-        driver = MagicMock()
+        """构造 fake webdriver.Remote (R10: spec=webdriver.Remote, 阻止调用漂移)。"""
+        driver = MagicMock(spec=webdriver.Remote)
         driver.session_id = "fake-sid"
         driver.current_activity = ".MainActivity"
         driver.quit.return_value = None
@@ -282,7 +284,7 @@ class TestFactoryInjection:
         fake_server = self._make_fake_appium_server()
         fake_driver = self._make_fake_driver()
         fake_crash = MagicMock(spec=CrashMonitor)
-        fake_faker = MagicMock()
+        fake_faker = MagicMock(spec=Faker)
         clock = FakeClock()
 
         init = TestInitializer(
@@ -430,7 +432,7 @@ class TestFactoryInjection:
             appium_server_factory=lambda h, p: fake_server,
             driver_factory=lambda url, options: fake_driver,
             crash_monitor_factory=lambda *a: fake_crash,
-            faker_factory=lambda: MagicMock(),
+            faker_factory=lambda: MagicMock(spec=Faker),
             time_provider=FakeClock(),
         )
         init.init_all()
@@ -457,7 +459,7 @@ class TestFactoryInjection:
             appium_server_factory=lambda h, p: fake_server,
             driver_factory=lambda url, options: fake_driver,
             crash_monitor_factory=lambda *a: MagicMock(spec=CrashMonitor),
-            faker_factory=lambda: MagicMock(),
+            faker_factory=lambda: MagicMock(spec=Faker),
             time_provider=clock,
         )
 

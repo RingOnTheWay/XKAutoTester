@@ -9,11 +9,10 @@
  * 不负责:
  *  - 测试用例 CRUD (由 TestCaseService 处理)
  *  - 目录创建 (由 TestCaseService.ensureDirectories 处理)
- *  - case JSON 持久化 (H3: 删 JSON 回写, SSOT 由 TestCaseService 单源写)
- *  - caseData 字段更新 (H3: 删 mutation, TestCaseService 自己 set pyFilePath)
+ *  - case JSON 持久化 (SSOT 由 TestCaseService 单源写)
+ *  - caseData 字段更新 (TestCaseService 自己 set pyFilePath)
  *
- * H3: 加 fileSystemFactory + templateLoaderFactory (factory-or-default)
- * H3: 删构造期 ensureDirectories (lazy / 由 service 负责)
+ * 加 fileSystemFactory + templateLoaderFactory (factory-or-default 模式)
  *
  * 架构说明 (合回单文件, 原 mixins/ 目录已删):
  *  - 原 5 mixin (Helpers/TemplateConfig/CodeBuilders/TestMethods/Steps) 通过
@@ -24,19 +23,19 @@
 const fs = require('fs').promises;
 const path = require('path');
 
-// H3: 默认 fileSystem factory (包装 fs.promises 4 方法, 对称 TestCaseService.defaultFileSystemFactory)
+// 默认 fileSystem factory: 包装 fs.promises 4 方法
 const defaultFileSystemFactory = () => ({
     mkdir: (dir, opts) => fs.mkdir(dir, opts),
     readFile: (p, enc) => fs.readFile(p, enc),
     writeFile: (p, content, enc) => fs.writeFile(p, content, enc),
 });
 
-// H3: 默认 templateLoader factory (返 async () => string, 闭包捕获 templatePath)
+// 默认 templateLoader factory: 返 async () => string, 闭包捕获 templatePath
 const defaultTemplateLoaderFactory = (templatePath) => async () => fs.readFile(templatePath, 'utf8');
 
 class TestCaseCodeGenerator {
     /**
-     * H3: 加 opts 参数 (factory-or-default, 全可选, 生产不传)
+     * 加 opts 参数 (factory-or-default, 全可选, 生产不传)
      * @param {string} userConfigPath
      * @param {string} projectRoot
      * @param {Object} [opts]
@@ -49,19 +48,18 @@ class TestCaseCodeGenerator {
         this.testCasesDir = path.join(userConfigPath, 'test_cases');
         this.templatePath = path.join(__dirname, '..', '..', '..', 'templates', 'test_case_template.py');
         this.pagePackagePath = path.join(userConfigPath, 'page_package.json');
-        // H3: factory-or-default (对称 TestCaseService 4-factory + I18nService 3-factory)
+        // factory-or-default 模式
         this._fileSystemFactory = opts.fileSystemFactory || defaultFileSystemFactory;
         this._templateLoaderFactory = opts.templateLoaderFactory || defaultTemplateLoaderFactory;
         this._fileSystem = this._fileSystemFactory();
         this._loadTemplate = this._templateLoaderFactory(this.templatePath);
-        // H3: 删构造期 ensureDirectories (lazy / 由 TestCaseService 负责 testCasesDir 创建)
     }
 
     // ─── 入口方法 ──────────────────────────────────────────────
 
     /**
      * 生成 Python 测试文件
-     * H3: 不再回写 .json, 不再 mutation caseData (SSOT 由 TestCaseService)
+     * 不回写 .json, 不 mutation caseData (SSOT 由 TestCaseService)
      * @returns {Promise<{success: boolean, path?: string, error?: string}>}
      */
     async generatePythonFile(caseData, outputDir) {
@@ -93,8 +91,6 @@ class TestCaseCodeGenerator {
             const pyPath = path.join(outputDir, pyFileName);
             await this._fileSystem.writeFile(pyPath, template, 'utf8');
 
-            // H3: 删 caseData mutation (TestCaseService 自己 set pyFilePath)
-            // H3: 删 jsonPath 回写 (SSOT 由 TestCaseService 单源写)
             return { success: true, path: pyPath };
         } catch (error) {
             console.error('生成Python文件失败:', error);
@@ -106,7 +102,7 @@ class TestCaseCodeGenerator {
 
     /**
      * 加载最新的页面封装数据
-     * H3: 用 this._fileSystem.readFile (factory-or-default)
+     * 用 this._fileSystem.readFile (factory-or-default 模式)
      */
     async loadPagePackageData() {
         try {

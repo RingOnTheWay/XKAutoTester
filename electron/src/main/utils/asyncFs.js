@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const pathLib = require('path');
 
-// S2 修复: 简单互斥锁, 保护 read-modify-write 序列避免并发丢更新
+// 简单互斥锁, 保护 read-modify-write 序列避免并发丢更新
 class Mutex {
   constructor() {
     this._queue = [];
@@ -34,7 +34,7 @@ class Mutex {
   }
 }
 
-// S2 修复: per-path 锁注册表, 同路径的 read-modify-write 串行化
+// per-path 锁注册表, 同路径的 read-modify-write 串行化
 const _pathLocks = new Map();
 function getLock(filePath) {
   const resolved = pathLib.resolve(filePath);
@@ -58,7 +58,7 @@ async function readJson(path) {
   return JSON.parse(data);
 }
 
-// S2 修复: 原子写 - 先写临时文件再 rename, 防止并发写产生半截文件
+// 原子写 - 先写临时文件再 rename, 防止并发写产生半截文件
 async function writeJson(path, data, spaces = 2) {
   const tmpPath = path + '.tmp.' + process.pid + '.' + Date.now();
   await fs.writeFile(tmpPath, JSON.stringify(data, null, spaces), 'utf8');

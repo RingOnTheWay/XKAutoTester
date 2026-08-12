@@ -1,6 +1,5 @@
 const path = require('path');
 const fs = require('fs');
-const { execSync } = require('child_process');
 const { ProcessRunner } = require('../spawnHelper');
 
 /**
@@ -15,21 +14,19 @@ class AllureCliInvoker {
   }
 
   /**
-   * 查找系统 Node.js 可执行文件路径
+   * 异步查找系统 Node.js 可执行文件路径。
+   * R10: 原 execSync('where node') 阻塞主进程最长 3s, 改用 ProcessRunner.spawn 异步执行。
+   * @returns {Promise<string|null>} node.exe 路径, 未找到返 null
    */
-  _findSystemNode() {
-    try {
-      const result = execSync('where node', {
-        encoding: 'utf8',
-        timeout: 3000,
-        windowsHide: true,
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-      const paths = result.split('\n').map(p => p.trim()).filter(p => p && p.endsWith('.exe'));
-      return paths[0] || null;
-    } catch {
-      return null;
-    }
+  async _findSystemNode() {
+    const result = await this._runner.execute({
+      command: 'where',
+      args: ['node'],
+      timeout: 3000,
+    });
+    if (result.code !== 0 || !result.stdout) return null;
+    const paths = result.stdout.split('\n').map(p => p.trim()).filter(p => p && p.endsWith('.exe'));
+    return paths[0] || null;
   }
 
   /**
@@ -72,7 +69,7 @@ class AllureCliInvoker {
 
     if (allureCliPath) {
       // Electron 的 process.execPath 是 electron.exe，ELECTRON_RUN_AS_NODE=1 可能有 ESM 问题
-      const systemNode = this._findSystemNode();
+      const systemNode = await this._findSystemNode();
       command = systemNode || process.execPath;
       // Allure 3 generate: allure generate <resultsDir> -o <outputDir>
       args = [allureCliPath, 'generate', resultsDir, '-o', outputDir];

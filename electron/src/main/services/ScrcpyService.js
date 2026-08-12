@@ -1,24 +1,22 @@
 // ScrcpyService — scrcpy 投屏深模块。
 //
 // 藏 scrcpy 路径解析 (本地优先 + where 兜底) + 6 参数 args 构建 + 平台分支 +
-// H2: child process 生命周期 + crash 检测 (SCRCPY_CRASH_WINDOW_MS) + notifier 通知。
+// child process 生命周期 + crash 检测 (SCRCPY_CRASH_WINDOW_MS) + notifier 通知。
 //
 // 4 factory-or-default (processSpawner + pathResolver + logger + notifier) + buildScrcpyArgs 纯函数。
 //
 // 生产: new ScrcpyService(projectRoot, i18nService)  # 2 参
 // 测试: new ScrcpyService(projectRoot, i18nService, { processSpawnerFactory, pathResolverFactory, loggerFactory, notifierFactory })
 //
-// H2 重构: crash 检测下沉 (原 deviceHandlers START_SCRCPY 监听 child error/close + 直接 webContents.send).
-//   - SCRCPY_CRASH_WINDOW_MS 模块常量 (原 deviceHandlers L4)
-//   - child error/close 监听移入 service
-//   - notifierFactory (getMainWindow) → { notify(errorInfo) } (对称 PythonTestService progressSenderFactory)
-//   - startScrcpy 不再返回 process (消除句柄泄漏)
-//   - setMainWindow(mainWindow) (对称 SmartScheduler.setMainWindow)
+// 接口契约:
+//   - notifierFactory (getMainWindow) → { notify(errorInfo) }
+//   - startScrcpy 不再返回 process (消除句柄泄漏, service 内部管理生命周期)
+//   - setMainWindow(mainWindow)
 
 const path = require('path');
 const { IPC_CHANNELS } = require('../../shared/constants');
 
-/** scrcpy 启动后 2 秒内非 0 退出视为 crash (原 deviceHandlers SCRCPY_CRASH_WINDOW_MS) */
+/** scrcpy 启动后 2 秒内非 0 退出视为 crash */
 const SCRCPY_CRASH_WINDOW_MS = 2000;
 
 /** @typedef {Object} ScrcpyProcessSpawner
@@ -73,7 +71,7 @@ const defaultPathResolverFactory = (projectRoot) => {
   const { execFile } = require('child_process');
   let cachedPath;  // undefined=未解析, null=解析失败, string=路径
   return {
-    // A1: 异步化 (原 execSync 阻塞事件循环最长 3s) + 路径缓存 (避免每次 startScrcpy 都 where scrcpy)
+    // 异步化避免阻塞事件循环 + 路径缓存 (避免每次 startScrcpy 都 where scrcpy)
     async findScrcpyPath() {
       if (cachedPath !== undefined) return cachedPath;
       const localScrcpy = path.join(projectRoot, 'env', 'scrcpy', 'scrcpy.exe');
@@ -103,7 +101,7 @@ const defaultPathResolverFactory = (projectRoot) => {
 const defaultLoggerFactory = () => ({ error: (msg) => console.error(msg) });
 
 /**
- * H2: 默认 notifier factory (对称 PythonTestService.defaultProgressSenderFactory)
+ * 默认 notifier factory
  * 接受 getMainWindow 函数 (lazy 获取, 因 mainWindow 在 service 构造后才 setMainWindow).
  * 返 { notify(errorInfo) } 包装 mainWindow.webContents.send(IPC_CHANNELS.SCRCPY_ERROR, ...)
  */
@@ -125,8 +123,8 @@ class ScrcpyService {
   constructor(projectRoot, i18nService, opts = {}) {
     this.projectRoot = projectRoot;
     this.i18nService = i18nService;
-    this._mainWindow = null;  // H2: setMainWindow 后填充 (对称 SmartScheduler._mainWindow)
-    this._child = null;  // M1: 持有 child 引用供 stopScrcpy 管理 (补齐 H2 下沉未完成部分)
+    this._mainWindow = null;  // setMainWindow 后填充
+    this._child = null;  // 持有 child 引用供 stopScrcpy 管理
     this._processSpawnerFactory = opts.processSpawnerFactory || defaultProcessSpawnerFactory;
     this._pathResolverFactory = opts.pathResolverFactory || defaultPathResolverFactory;
     this._loggerFactory = opts.loggerFactory || defaultLoggerFactory;
@@ -138,7 +136,7 @@ class ScrcpyService {
   }
 
   /**
-   * H2: 注入 mainWindow (对称 SmartScheduler.setMainWindow)
+   * 注入 mainWindow
    * ElectronApp.initialize 创建 mainWindow 后调用.
    * @param {object} mainWindow
    */
@@ -147,7 +145,7 @@ class ScrcpyService {
   }
 
   /**
-   * M1: 停止当前 scrcpy 子进程 (补齐 H2 下沉: service 持 child 引用, 可控终止).
+   * 停止当前 scrcpy 子进程.
    * startScrcpy 开头自动调此方法停旧进程, 避免累积.
    */
   stopScrcpy() {
@@ -159,10 +157,10 @@ class ScrcpyService {
 
   async startScrcpy(deviceId, scrcpyParams) {
     try {
-      // M1: 先停旧 scrcpy 进程 (避免多次调用累积)
+      // 先停旧 scrcpy 进程 (避免多次调用累积)
       this.stopScrcpy();
 
-      // A1: findScrcpyPath 异步化 (原 execSync 阻塞事件循环)
+      // findScrcpyPath 异步化 (避免阻塞事件循环)
       const scrcpyPath = await this._pathResolver.findScrcpyPath();
       if (!scrcpyPath) {
         return {
@@ -189,13 +187,13 @@ class ScrcpyService {
         });
       }
 
-      // M1: 持有 child 引用供 stopScrcpy 管理
+      // 持有 child 引用供 stopScrcpy 管理
       this._child = child;
 
       child.stdout.resume();
       child.stderr.resume();
 
-      // H2: child process 生命周期下沉 (原 deviceHandlers START_SCRCPY L29-50)
+      // child process 生命周期管理
       const startTime = Date.now();
       child.on('error', (err) => {
         this._child = null;
@@ -215,7 +213,7 @@ class ScrcpyService {
         }
       });
 
-      // H2: 不再返回 process (消除句柄泄漏, service 内部管理生命周期)
+      // 不再返回 process (消除句柄泄漏, service 内部管理生命周期)
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };

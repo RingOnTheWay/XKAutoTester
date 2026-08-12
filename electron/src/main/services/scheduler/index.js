@@ -1,6 +1,5 @@
 // scheduler/ — 调度深模块子目录。对称 src/main/core/adb/。
 //
-// M1: 删 SchedulerService facade (全 delegate SmartScheduler, Middle Man)。
 // 现 5 文件:
 //   planQueue.js       — 纯数据 heap (compare 注入)
 //   strategies.js      — 常量 SSOT + checkInterval 纯函数

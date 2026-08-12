@@ -66,7 +66,7 @@ class ScheduledPlanService extends JsonFileCrudService {
   }
 
   async saveScheduledPlan(planData) {
-    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新
+    // read-modify-write 包进 withLock, 防并发丢更新
     return this.withLock(async () => {
       try {
         let existingPlans = await this.getData();
@@ -92,7 +92,7 @@ class ScheduledPlanService extends JsonFileCrudService {
   }
 
   async updateScheduledPlan(planData) {
-    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新
+    // read-modify-write 包进 withLock, 防并发丢更新
     return this.withLock(async () => {
       try {
         let existingPlans = await this.getData();
@@ -120,7 +120,7 @@ class ScheduledPlanService extends JsonFileCrudService {
   }
 
   async deleteScheduledPlan(planId) {
-    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新
+    // read-modify-write 包进 withLock, 防并发丢更新
     return this.withLock(async () => {
       try {
         let existingPlans = await this.getData();

@@ -122,6 +122,14 @@ function makeFakeApp(opts = {}) {
     versionComparator,
   });
 
+  // R10: 测试可注入 expectedSha256 + matching hashCalculator, 跳过 checkForUpdate 直接验证 download/install
+  if (opts.expectedSha256) {
+    svc._expectedSha256 = opts.expectedSha256;
+    svc._hashCalculator = {
+      compute: async () => opts.expectedSha256,
+    };
+  }
+
   return {
     svc,
     versionService,
@@ -167,6 +175,7 @@ test('constructor 收 5 factory + 5 实例建 + _initialized=false', () => {
 test('懒初始化: constructor 不触发 fs, 首次 downloadUpdate 触发 ensureDir + cleanupOldUpdates', async () => {
   // defaultExists=true 让 cleanupOldUpdates 的 exists(updateDir) 返 true, 触发 readdir
   const { svc, fileSystem } = makeFakeApp({
+    expectedSha256: 'a'.repeat(64),  // R10: 注入 hash 避免 missing_hash 拒绝
     fileSystem: {
       defaultExists: true,
       readdirResult: ['old-installer.exe', 'readme.txt'],
@@ -190,6 +199,7 @@ test('懒初始化: constructor 不触发 fs, 首次 downloadUpdate 触发 ensur
 
 test('懒初始化幂等: 重复 downloadUpdate 仅初始化一次', async () => {
   const { svc, fileSystem } = makeFakeApp({
+    expectedSha256: 'a'.repeat(64),  // R10: 注入 hash 避免 missing_hash 拒绝
     fileSystem: { defaultExists: false, readdirResult: [] }
   });
 
@@ -261,6 +271,7 @@ test('checkForUpdate 错误分类透传 (updateSource 抛 classified error)', as
 test('downloadUpdate 已存在文件返快路径 {success, filePath, message}', async () => {
   const { svc, fileSystem, downloadStrategy } = makeFakeApp({
     configPath: '/fake/config',
+    expectedSha256: 'a'.repeat(64),  // R10: 注入 hash 避免 missing_hash 拒绝
     fileSystem: {
       defaultExists: true,  // updateDir 和 filePath 都返 true
       readdirResult: [],
@@ -282,6 +293,7 @@ test('downloadUpdate 已存在文件返快路径 {success, filePath, message}', 
 test('downloadUpdate 不存在调 downloadStrategy.download', async () => {
   const { svc, downloadStrategy } = makeFakeApp({
     configPath: '/fake/config',
+    expectedSha256: 'a'.repeat(64),  // R10: 注入 hash 避免 missing_hash 拒绝
     fileSystem: {
       defaultExists: false,  // 文件不存在
       readdirResult: [],
@@ -308,6 +320,7 @@ test('downloadUpdate 不存在调 downloadStrategy.download', async () => {
 test('installUpdate 调 installStrategy.install (fileSystem.exists=true)', async () => {
   const filePath = '/fake/config/updates/setup.exe';
   const { svc, installStrategy, fileSystem } = makeFakeApp({
+    expectedSha256: 'a'.repeat(64),  // R10: 注入 hash 避免 missing_hash 拒绝
     fileSystem: {
       existsResults: { [filePath]: true },
       readdirResult: [],
@@ -766,7 +779,7 @@ test('checkForUpdate 解析 Release body 存 _expectedSha256 + 透出 sha256 字
   assert.strictEqual(svc._expectedSha256, expectedHash, '_expectedSha256 已存');
 });
 
-test('checkForUpdate Release body 无 hash → sha256=null + _expectedSha256=null (向后兼容)', async () => {
+test('checkForUpdate Release body 无 hash → sha256=null + _expectedSha256=null (R10: download/install 将拒绝)', async () => {
   const release = makeRelease({ body: 'Release notes without hash' });
   const { svc } = makeFakeApp({ release });
 
@@ -774,6 +787,7 @@ test('checkForUpdate Release body 无 hash → sha256=null + _expectedSha256=nul
 
   assert.strictEqual(result.sha256, null);
   assert.strictEqual(svc._expectedSha256, null);
+  assert.strictEqual(result.secure, false, 'R10: 无 hash → secure=false');
 });
 
 test('downloadUpdate 下载后 SHA256 匹配 → 成功', async () => {
@@ -869,16 +883,90 @@ test('installUpdate 安装前 SHA256 不匹配 → 抛错 + 不调 installStrate
   assert.strictEqual(installStrategy.calls.install.length, 0, '不应调 install');
 });
 
-test('无 _expectedSha256 (checkForUpdate 未调) → 跳过校验 (向后兼容)', async () => {
-  // 不调 checkForUpdate, _expectedSha256=null
-  const { svc, hashCalculator } = makeFakeApp({
+// R10: 严格拒绝无 hash 版本 (安全闭环) ─────────────────────────
+
+test('R10 downloadUpdate 无 _expectedSha256 (checkForUpdate 未调) → 拒绝下载 + missing_hash code', async () => {
+  const { svc, downloadStrategy } = makeFakeApp({
     fileSystem: { defaultExists: false, readdirResult: [] },
   });
 
-  const result = await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+  await assert.rejects(
+    svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null),
+    (err) => {
+      assert.match(err.message, /缺少 SHA256 hash/, '错误消息含"缺少 SHA256 hash"');
+      assert.strictEqual(err.code, 'missing_hash', 'errorCode=missing_hash');
+      return true;
+    }
+  );
+  assert.strictEqual(downloadStrategy.calls.download.length, 0, '不应触发下载');
+});
 
-  assert.strictEqual(result.success, true, '无 hash 时应正常下载');
-  assert.strictEqual(hashCalculator ? hashCalculator.calls : undefined, undefined, '不应调 hash 计算');
+test('R10 downloadUpdate checkForUpdate 调了但 Release 无 hash → 拒绝下载 + missing_hash code', async () => {
+  const release = makeRelease({ body: 'Release notes without hash' });
+  const { svc, downloadStrategy } = makeFakeApp({
+    release,
+    fileSystem: { defaultExists: false, readdirResult: [] },
+  });
+  await svc.checkForUpdate();  // _expectedSha256=null (body 无 hash)
+
+  await assert.rejects(
+    svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null),
+    (err) => {
+      assert.strictEqual(err.code, 'missing_hash');
+      return true;
+    }
+  );
+  assert.strictEqual(downloadStrategy.calls.download.length, 0, '不应触发下载');
+});
+
+test('R10 installUpdate 无 _expectedSha256 → 拒绝安装 + missing_hash code', async () => {
+  const filePath = '/fake/config/updates/setup.exe';
+  const { svc, installStrategy } = makeFakeApp({
+    fileSystem: {
+      existsResults: { [filePath]: true },
+      readdirResult: [],
+    }
+  });
+  // 不调 checkForUpdate, _expectedSha256=null
+
+  await assert.rejects(
+    svc.installUpdate(filePath),
+    (err) => {
+      assert.match(err.message, /缺少 SHA256 hash/);
+      assert.strictEqual(err.code, 'missing_hash');
+      return true;
+    }
+  );
+  assert.strictEqual(installStrategy.calls.install.length, 0, '不应调 install');
+});
+
+test('R10 checkForUpdate Release 有 hash → result.secure=true', async () => {
+  const expectedHash = 'a'.repeat(64);
+  const release = makeRelease({ body: `Release notes\nSHA256: ${expectedHash}` });
+  const { svc } = makeFakeApp({ release });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.secure, true, '有 hash → secure=true');
+  assert.strictEqual(result.sha256, expectedHash);
+});
+
+test('R10 checkForUpdate Release 无 hash → result.secure=false (UI 可警告)', async () => {
+  const release = makeRelease({ body: 'Release notes without hash' });
+  const { svc } = makeFakeApp({ release });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.secure, false, '无 hash → secure=false');
+  assert.strictEqual(result.sha256, null);
+});
+
+test('R10 checkForUpdate 无 release → result.secure=false (无更新场景)', async () => {
+  const { svc } = makeFakeApp({ release: null });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.secure, false, '无 release 时 secure=false (无更新不安装)');
 });
 
 test('computeFileSha256 真实文件计算 (集成)', async () => {

@@ -170,7 +170,7 @@ class TestPlanService extends JsonFileCrudService {
   }
 
   async updateRunReportPath(testPlanName, reportPath) {
-    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新
+    // read-modify-write 包进 withLock, 防并发丢更新
     return this.withLock(async () => {
       try {
         const plans = await this.getData();
@@ -196,7 +196,7 @@ class TestPlanService extends JsonFileCrudService {
    */
   async recordRun(testPlanName) {
     this._ensureInitialized();
-    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新
+    // read-modify-write 包进 withLock, 防并发丢更新
     return this.withLock(async () => {
       try {
         const plans = await this.getData();
@@ -226,7 +226,7 @@ class TestPlanService extends JsonFileCrudService {
 
   async saveTestPlan(planData) {
     this._ensureInitialized();
-    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新
+    // read-modify-write 包进 withLock, 防并发丢更新
     return this.withLock(async () => {
       try {
         let existingPlans = await this.getData();
@@ -249,7 +249,7 @@ class TestPlanService extends JsonFileCrudService {
 
   async updateTestPlan(planData) {
     this._ensureInitialized();
-    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新
+    // read-modify-write 包进 withLock, 防并发丢更新
     return this.withLock(async () => {
       try {
         let existingPlans = await this.getData();
@@ -273,7 +273,7 @@ class TestPlanService extends JsonFileCrudService {
 
   async deleteTestPlan(planId) {
     this._ensureInitialized();
-    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新
+    // read-modify-write 包进 withLock, 防并发丢更新
     return this.withLock(async () => {
       try {
         let existingPlans = await this.getData();
@@ -331,7 +331,7 @@ class TestPlanService extends JsonFileCrudService {
    * @returns {Promise<{success: boolean, error?: string}>}
    */
   async deleteReportRun(testPlanName, identifier) {
-    // P0 修复: read-modify-write 包进 withLock, 防并发丢更新 (deleteReportRun 含 fs 副作用 + saveData)
+    // read-modify-write 包进 withLock, 防并发丢更新 (deleteReportRun 含 fs 副作用 + saveData)
     return this.withLock(async () => {
       try {
         const plans = await this.getData();

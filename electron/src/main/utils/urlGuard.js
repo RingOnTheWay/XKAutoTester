@@ -1,6 +1,6 @@
 // urlGuard — openExternal URL 安全校验。
 //
-// P1 修复: shell.openExternal 若被 XSS 注入危险协议 (javascript:/data:/file:) 或
+// shell.openExternal 若被 XSS 注入危险协议 (javascript:/data:/file:) 或
 // 任意 host, 可触发 RCE/本地文件读取。本模块强制 https: + 白名单 host。
 //
 // 用法:

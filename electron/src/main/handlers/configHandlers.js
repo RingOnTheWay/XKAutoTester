@@ -7,12 +7,12 @@ const { IPC_CHANNELS } = require('../../shared/constants');
 function register(ipcMain, services) {
   const {
     electronApp, i18nService, versionService, userDataService, updateService,
-    // M6 修复: changeDataPath 后需通知各 service 更新内部 filePath
+    // changeDataPath 后需通知各 service 更新内部 filePath
     scheduledPlanService, testPlanService, pagePackageService, testCaseService,
   } = services;
 
   /**
-   * M6 修复: changeDataPath/resetDataPath 后通知各 service 更新内部 filePath
+   * changeDataPath/resetDataPath 后通知各 service 更新内部 filePath
    * 避免 service 持有旧路径导致数据写错位置 (原仅靠 relaunchApp 兜底)
    */
   function _notifyServicesPathChange(newConfigPath) {
@@ -41,7 +41,7 @@ function register(ipcMain, services) {
   registerHandler(ipcMain, IPC_CHANNELS.SAVE_CONFIG, async (newConfig) => {
     const configPath = path.join(electronApp.userConfigPath, 'config.json');
 
-    // S2 修复: 串行化 read-merge-write, 防止多 handler 并发写丢字段
+    // 串行化 read-merge-write, 防止多 handler 并发写丢字段
     return asyncFs.withLock(configPath, async () => {
       let currentConfig = {};
 
@@ -111,7 +111,7 @@ function register(ipcMain, services) {
     if (result.success) {
       electronApp.userConfigPath = userDataService.getUserConfigPath();
       electronApp.userDataPath = userDataService.getUserDataPath();
-      // M6 修复: 通知各 service 更新内部 filePath, 避免写旧路径
+      // 通知各 service 更新内部 filePath, 避免写旧路径
       _notifyServicesPathChange(electronApp.userConfigPath);
     }
     return result;
@@ -123,7 +123,7 @@ function register(ipcMain, services) {
     if (result.success) {
       electronApp.userConfigPath = userDataService.getUserConfigPath();
       electronApp.userDataPath = userDataService.getUserDataPath();
-      // M6 修复: 通知各 service 更新内部 filePath
+      // 通知各 service 更新内部 filePath
       _notifyServicesPathChange(electronApp.userConfigPath);
     }
     return result;

@@ -13,7 +13,11 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from main.core.adb.adb_port import AdbResult
+from main.core.adb.app_lifecycle import AppLifecycleService
+from main.core.adb.bluetooth_control import BluetoothService
+from main.core.adb.device_connection import DeviceConnectionService
 from main.core.adb_manager import ADBManager, create_adb_manager, get_connected_devices
+from main.core.logcat_monitor import LogcatMonitor
 from tests.unit.helpers.fake_adb_adapter import FakeAdbAdapter
 
 
@@ -36,9 +40,9 @@ class TestADBManagerFacade:
 
     def test_collaborators_kwarg_injection(self):
         """collaborators kwarg 注入自定义协作器, 通过属性暴露。"""
-        fake_conn = MagicMock()
-        fake_app = MagicMock()
-        fake_bt = MagicMock()
+        fake_conn = MagicMock(spec=DeviceConnectionService)
+        fake_app = MagicMock(spec=AppLifecycleService)
+        fake_bt = MagicMock(spec=BluetoothService)
         mgr = ADBManager(
             "dev",
             "com.x",
@@ -108,7 +112,7 @@ class TestADBManagerFacade:
     def test_check_crash_logs_uses_monitor_when_crash_detected(self):
         """monitor 已检测崩溃 → 走 monitor 路径,不调 adb。"""
         mgr, _ = self._make_manager()
-        fake_monitor = MagicMock()
+        fake_monitor = MagicMock(spec=LogcatMonitor)
         fake_monitor.crash_detected = True
         fake_monitor.get_full_log.return_value = "full log content"
         fake_monitor.crash_info = {
@@ -139,7 +143,7 @@ class TestADBManagerFacade:
     def test_start_logcat_monitor_lazy_imports(self):
         """start_logcat_monitor lazy import LogcatMonitor。"""
         mgr, _ = self._make_manager()
-        fake_monitor = MagicMock()
+        fake_monitor = MagicMock(spec=LogcatMonitor)
         fake_monitor.start.return_value = True
 
         with patch("main.core.logcat_monitor.LogcatMonitor", return_value=fake_monitor) as mock_cls:
@@ -173,7 +177,7 @@ class TestADBManagerFacade:
     def test_update_logcat_pid_none_is_noop(self):
         """pid=None → 静默跳过。"""
         mgr, _ = self._make_manager()
-        fake_monitor = MagicMock()
+        fake_monitor = MagicMock(spec=LogcatMonitor)
         mgr._logcat_monitor = fake_monitor
 
         mgr.update_logcat_pid(None)
@@ -182,7 +186,7 @@ class TestADBManagerFacade:
     def test_update_logcat_pid_delegates_when_started(self):
         """已启动 → 委托 update_pid。"""
         mgr, _ = self._make_manager()
-        fake_monitor = MagicMock()
+        fake_monitor = MagicMock(spec=LogcatMonitor)
         mgr._logcat_monitor = fake_monitor
 
         mgr.update_logcat_pid(99999)

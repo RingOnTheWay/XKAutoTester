@@ -66,7 +66,7 @@ class I18nService {
   async init(projectRoot, isPackaged, userConfigPath) {
     if (this.initialized) return;
     try {
-      // S5: 走 pathHelper.getLocalesPath (SSOT), 与 PythonTestService._buildSpawnEnv 注入 Python 的路径一致.
+      // 走 pathHelper.getLocalesPath (SSOT): 与 PythonTestService._buildSpawnEnv 注入 Python 的路径一致.
       // 原 __dirname/../../../locales 硬编码在打包模式与 pathHelper 返回值错位 (asar 内 vs resourcesPath/electron/locales).
       const localesPath = pathHelper.getLocalesPath(projectRoot);
       const resources = await this._localesLoader(localesPath);  // 步骤 1: 加载 locales

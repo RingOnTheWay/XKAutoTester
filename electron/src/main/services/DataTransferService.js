@@ -55,7 +55,7 @@ function isValidManifest(manifest, expectedType) {
 
 // ── 3 默认 factory (factory-or-default, 对称 H1 TestPlanService 3 factory) ──
 
-/** 包装 fs 4 方法为 async 接口 (Q3 B: 升级 async, 对称 H1 TestCaseService fileSystemFactory) */
+/** 包装 fs 4 方法为 async 接口 (对称 H1 TestCaseService fileSystemFactory) */
 const defaultFileSystemFactory = () => ({
   exists: async (p) => fs.existsSync(p),
   readdir: async (d) => fs.readdirSync(d, { withFileTypes: true }),
@@ -103,7 +103,7 @@ class DataTransferService {
     this._initialized = true;
   }
 
-  // Q1 A: 双路径保留 (setMainWindow 优先 + mainWindowProvider fallback)
+  // 双路径保留 (setMainWindow 优先 + mainWindowProvider fallback)
   setMainWindow(mainWindow) {
     this._mainWindow = mainWindow;
   }
@@ -281,7 +281,7 @@ class DataTransferService {
     }
   }
 
-  /** 递归收集文件 (Q2 A: class method, 用 this._fs) */
+  /** 递归收集文件 (class method, 用 this._fs) */
   async _collectFiles(dirPath, basePath = '') {
     const results = [];
     if (!(await this._fs.exists(dirPath))) return results;

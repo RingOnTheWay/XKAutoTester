@@ -1,0 +1,158 @@
+/**
+ * OptionPanel - 测试用例选项面板深模块 (R10 renderer mixin → deep module)
+ *
+ * 领域边界：应用列表 / 平台 / 蓝牙设备 / pytest markers 的加载与选择
+ * 不负责：文件浏览 (FileBrowser)、步骤编辑 (StepEditor)、编辑器状态机 (TestCaseEditor)
+ *
+ * 取自原 modelDirectoryMixin (loadApps/loadBleDevices/loadMarkers) +
+ * modelCaseMixin (selectApp/selectPlatform) + modelStepMixin (toggleMarker)。
+ * Model 持有实例并委托方法，事件经 Model 转发给 Controller (保持现有 Controller 监听不变)。
+ *
+ * 事件：
+ *   - apps-changed(apps)                 应用列表变更
+ *   - ble-devices-changed(devices)       蓝牙设备列表变更
+ *   - markers-list-changed(markers)      可用 markers 列表变更
+ *   - app-changed(app)                   选中应用变更
+ *   - platform-changed(platform)         选中平台变更
+ *   - markers-changed(selectedMarkers)   选中 markers 变更
+ *   - error({source, error})             操作失败
+ */
+import { EventEmitter } from '../../../core/EventEmitter.js';
+
+export class OptionPanel extends EventEmitter {
+  /** @param {Object} api - ApiBridge 绑定后的 API 对象 */
+  constructor(api) {
+    super();
+    this._api = api;
+    this._state = {
+      apps: [],
+      selectedApp: null,
+      selectedPlatform: 'android',
+      bleDevices: [],
+      markers: [],
+      selectedMarkers: [],
+    };
+  }
+
+  // ── State Getters ──────────────────────────────────────────────
+
+  get apps() { return this._state.apps; }
+  get selectedApp() { return this._state.selectedApp; }
+  get selectedPlatform() { return this._state.selectedPlatform; }
+  get bleDevices() { return this._state.bleDevices; }
+  get markers() { return this._state.markers; }
+  get selectedMarkers() { return this._state.selectedMarkers; }
+
+  /**
+   * 通用状态获取（供 Model.get 委托）
+   * @param {string} key - 状态键名
+   * @returns {*} 状态值
+   */
+  get(key) { return this._state[key]; }
+
+  /**
+   * 更新状态并触发对应事件
+   * @param {string} key - 状态键名
+   * @param {*} value - 新值
+   * @param {string} [event] - 事件名，默认 `${key}-changed`
+   */
+  _set(key, value, event) {
+    const old = this._state[key];
+    if (old === value) return;
+    this._state[key] = value;
+    this.emit(event || `${key}-changed`, value, old);
+  }
+
+  // ── Reference Data Loaders ─────────────────────────────────────
+
+  /**
+   * 并行加载所有引用数据 (apps + bleDevices + markers)
+   */
+  async load() {
+    await Promise.all([
+      this.loadApps(),
+      this.loadBleDevices(),
+      this.loadMarkers(),
+    ]);
+  }
+
+  /**
+   * 加载应用列表
+   */
+  async loadApps() {
+    try {
+      const result = await this._api.getApps();
+      // invokeWithCheck 已保证失败时抛错，此处只需校验业务字段 data
+      this._set('apps', result.data || [], 'apps-changed');
+    } catch (error) {
+      this.emit('error', { source: 'loadApps', error });
+    }
+  }
+
+  /**
+   * 加载蓝牙设备列表
+   */
+  async loadBleDevices() {
+    try {
+      const result = await this._api.getBleDevices();
+      // invokeWithCheck 已保证失败时抛错，此处只需校验业务字段 data
+      this._set('bleDevices', result.data || [], 'ble-devices-changed');
+    } catch (error) {
+      this.emit('error', { source: 'loadBleDevices', error });
+    }
+  }
+
+  /**
+   * 加载 pytest markers 列表
+   */
+  async loadMarkers() {
+    try {
+      const markers = await this._api.getPytestMarkers();
+      this._set('markers', markers || [], 'markers-list-changed');
+    } catch (error) {
+      this._set('markers', [], 'markers-list-changed');
+      this.emit('error', { source: 'loadMarkers', error });
+    }
+  }
+
+  // ── Selection Mutators ─────────────────────────────────────────
+
+  /**
+   * 设置选中的应用
+   * @param {Object} app - 应用对象
+   */
+  selectApp(app) {
+    this._set('selectedApp', app, 'app-changed');
+  }
+
+  /**
+   * 设置选中的平台
+   * @param {string} platform - 平台标识
+   */
+  selectPlatform(platform) {
+    this._set('selectedPlatform', platform, 'platform-changed');
+  }
+
+  /**
+   * 切换 Marker 选中状态
+   * @param {string} marker - Marker 名称
+   */
+  toggleMarker(marker) {
+    const markers = [...this._state.selectedMarkers];
+    const idx = markers.indexOf(marker);
+    if (idx === -1) {
+      markers.push(marker);
+    } else {
+      markers.splice(idx, 1);
+    }
+    this._set('selectedMarkers', markers, 'markers-changed');
+  }
+
+  /**
+   * 替换选中的 markers 列表 (用于从已保存用例恢复)
+   * @param {string[]} markers - marker 名称数组
+   */
+  replaceSelectedMarkers(markers) {
+    this._set('selectedMarkers', markers || [], 'markers-changed');
+  }
+}

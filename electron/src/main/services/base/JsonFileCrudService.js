@@ -59,7 +59,7 @@ class JsonFileCrudService {
       if (!(await this._asyncFs.exists(configDir))) {
         await this._asyncFs.ensureDir(configDir);
       }
-      // S2 修复: asyncFs.writeJson 已改为原子写 (temp+rename), 这里无需额外锁
+      // asyncFs.writeJson 已改为原子写 (temp+rename), 这里无需额外锁
       await this._asyncFs.writeJson(this.filePath, data);
       return { success: true };
     } catch (error) {
@@ -69,7 +69,7 @@ class JsonFileCrudService {
   }
 
   /**
-   * S2 修复: 串行化 read-modify-write 序列, 防止并发丢更新。
+   * 串行化 read-modify-write 序列, 防止并发丢更新。
    * 子类做 getData → mutate → saveData 时应包裹在此方法内:
    *   return this.withLock(async () => { const data = await this.getData(); ... await this.saveData(data); });
    */
@@ -79,7 +79,7 @@ class JsonFileCrudService {
   }
 
   /**
-   * M6 修复: 切换 userConfigPath 后更新 filePath。
+   * 切换 userConfigPath 后更新 filePath。
    * 子类若有额外路径 (如 TestCaseService.testCasesDir) 应覆盖此方法并调 super。
    * @param {string} userConfigPath
    * @param {string} [fileName] - 文件名 (默认沿用当前 filePath 的 basename)

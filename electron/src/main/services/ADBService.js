@@ -4,8 +4,6 @@
  * 设计:
  * - 深模块架构: 聚合根持有 4 collaborator (AdbCommandExecutor + RemoteStatService + FileTransferService + ApkInstaller)
  * - 公共 API 2 方法: getConnectedDevices / executeAdbCommand (其余通过属性暴露 collaborator)
- * - M4: 删 3 pass-through wrapper (uploadFile/downloadFile/installApk), 调用方直接持 .fileTransfer / .apkInstaller / .remoteStat
- * - M4: TarExtractor 改 factory-or-default 注入 (原硬编码 new TarExtractor())
  * - 消除 shell=True: 全改 spawn(adbPath, args, {}) 形式
  * - 路径解析委托 pathHelper.getAdbPath
  * - 调试 console.log 全删
@@ -21,7 +19,7 @@ const TarExtractor = require('./TarExtractor');
 // 不需要 shell 前缀的 adb 子命令 (直接 adb <cmd>, 不经过 device shell)
 const NO_SHELL_COMMANDS = ['connect', 'disconnect', 'devices', 'kill-server', 'start-server', 'version', 'tcpip'];
 
-// R7: 危险命令黑名单 (阻止 XSS 攻击者通过 executeAdbCommand 执行破坏性操作)
+// 危险命令黑名单: 阻止 XSS 攻击者通过 executeAdbCommand 执行破坏性操作
 // 命中黑名单的命令直接拒绝, 不执行
 const DANGEROUS_COMMAND_PATTERNS = [
   /\brm\s+-rf?\s+\/(data|system|sdcard|)/i,  // rm -rf /data 等
@@ -41,7 +39,7 @@ class ADBService {
    * @param {object} [collaborators.fileTransferService]
    * @param {object} [collaborators.apkInstaller]
    * @param {object} [collaborators.remoteStatService]
-   * @param {object} [collaborators.tarExtractor] - M4: TarExtractor 注入 (默认 new TarExtractor())
+   * @param {object} [collaborators.tarExtractor] - TarExtractor 注入 (默认 new TarExtractor())
    * @param {Function} [collaborators.spawnFn] - spawn 函数 (测试用)
    */
   constructor(projectRoot, i18nService, collaborators = {}) {
@@ -60,7 +58,7 @@ class ADBService {
       i18nService,
     });
 
-    // M4: TarExtractor factory-or-default (原硬编码 new TarExtractor())
+    // TarExtractor factory-or-default
     this._tarExtractor = collaborators.tarExtractor || new TarExtractor();
 
     this._fileTransfer = collaborators.fileTransferService || new FileTransferService({
@@ -78,22 +76,22 @@ class ADBService {
     });
   }
 
-  /** M4: collaborator 属性暴露 (调用方直接持属性, 消除 pass-through wrapper) */
+  /** collaborator 属性暴露: 调用方直接持属性 */
   get fileTransfer() {
     return this._fileTransfer;
   }
 
-  /** M4: collaborator 属性暴露 */
+  /** collaborator 属性暴露 */
   get apkInstaller() {
     return this._apkInstaller;
   }
 
-  /** M4: collaborator 属性暴露 */
+  /** collaborator 属性暴露 */
   get remoteStat() {
     return this._remoteStat;
   }
 
-  /** M4: collaborator 属性暴露 (供测试访问) */
+  /** collaborator 属性暴露 (供测试访问) */
   get tarExtractor() {
     return this._tarExtractor;
   }
@@ -134,7 +132,7 @@ class ADBService {
    */
   async executeAdbCommand(cmd, deviceId) {
     try {
-      // R7: 危险命令黑名单校验 (防 XSS 攻击者执行破坏性 adb 命令)
+      // 危险命令黑名单校验: 防 XSS 攻击者执行破坏性 adb 命令
       for (const pattern of DANGEROUS_COMMAND_PATTERNS) {
         if (pattern.test(cmd)) {
           console.error(`[ADBService] 危险命令被拒绝: ${cmd}`);

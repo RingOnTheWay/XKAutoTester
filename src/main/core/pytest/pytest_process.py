@@ -57,11 +57,11 @@ class PytestProcess(SubprocessHandle):
             popen_factory: Popen 工厂 (默认 subprocess.Popen, 测试用 FakePopen)
         """
         self._popen_factory = popen_factory or _default_popen
-        # M6: 持有 process 引用供 stop() 终止 (mirror LogcatProcess.stop 幂等模式)
+        # 持有 process 引用供 stop() 终止 (mirror LogcatProcess.stop 幂等模式)
         self._process: subprocess.Popen | None = None
 
     def stop(self) -> None:
-        """M6: 终止 pytest 子进程 (幂等, 委托 SubprocessHandle._stop_process).
+        """终止 pytest 子进程 (幂等, 委托 SubprocessHandle._stop_process).
 
         由 cli KeyboardInterrupt 处理或外部中断调用.
         terminate→wait(2s)→kill→wait(2s) 兜底, 不抛异常.
@@ -86,7 +86,7 @@ class PytestProcess(SubprocessHandle):
         """
         logger.info(f"Execute: {' '.join(command)}")
 
-        # M6: 存 self._process 供 stop() 终止
+        # 存 self._process 供 stop() 终止
         self._process = self._popen_factory(command)
         process = self._process
 
@@ -126,7 +126,7 @@ class PytestProcess(SubprocessHandle):
                     sys.stdout.flush()
 
         # 获取退出码 + 等 stderr 线程结束 (管道关闭后线程自然退出, 加 5s 超时保险)
-        # M6: KeyboardInterrupt 显式 stop() 终止子进程, 避免孤儿
+        # KeyboardInterrupt 显式 stop() 终止子进程, 避免孤儿
         try:
             exit_code = process.wait()
         except KeyboardInterrupt:

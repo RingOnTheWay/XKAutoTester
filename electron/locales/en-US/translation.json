@@ -130,7 +130,8 @@
       "dns_failed": "DNS resolution failed, please check your network connection",
       "network_unreachable": "Network unreachable, please check your network connection",
       "unknown": "Unknown error",
-      "ssl_failed": "SSL certificate verification failed, please check system time or network proxy"
+      "ssl_failed": "SSL certificate verification failed, please check system time or network proxy",
+      "missing_hash": "Update package missing SHA256 hash, download/install refused (security closure)"
     },
     "downloadUpdate": "Download Update",
     "downloading": "Downloading",
@@ -138,6 +139,8 @@
     "cancelUpdate": "Cancel",
     "downloadFailed": "Failed to download update",
     "updateChangelog": "Release Notes",
+    "insecureReleaseWarning": "⚠ This release has no SHA256 hash; integrity cannot be verified. Download disabled (security closure).",
+    "updateHashVerified": "✓ SHA256 hash present; safe to download and install.",
     "run": "Run",
     "preventSleep": "Prevent sleep mode while running"
   },

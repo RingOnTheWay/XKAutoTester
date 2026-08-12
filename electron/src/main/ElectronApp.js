@@ -39,7 +39,7 @@ class ElectronApp {
         contextIsolation: true,
         sandbox: false,
         preload: pathHelper.getPreloadPath(this.isPackaged, __dirname),
-        // R7: 改 webSecurity: true (splash 仅加载本地文件, 无跨域需求; 原 false 关闭同源策略有 XSS 风险)
+        // webSecurity: true — splash 仅加载本地文件; 关闭同源策略有 XSS 风险
         webSecurity: true
       }
     });
@@ -75,7 +75,7 @@ class ElectronApp {
         contextIsolation: true,
         sandbox: false,
         preload: pathHelper.getPreloadPath(this.isPackaged, __dirname),
-        // R7: 改 webSecurity: true (mainWindow 加载本地 renderer/, 无跨域需求; 原 false 关闭同源策略有 XSS 风险)
+        // webSecurity: true — mainWindow 加载本地 renderer/; 关闭同源策略有 XSS 风险
         webSecurity: true
       },
       frame: false,
@@ -125,22 +125,21 @@ class ElectronApp {
     }
 
     if (this.services.pythonTestService) {
-      // M2: PythonTestService 保留直字段赋值 (前5轮决定: 消除 setMainWindow 时序耦合, run() lazy 取 this.mainWindow)
+      // PythonTestService 保留直字段赋值: 消除 setMainWindow 时序耦合, run() lazy 取 this.mainWindow
       this.services.pythonTestService.mainWindow = this.mainWindow;
     }
 
-    // H2: ScrcpyService 下沉 crash 检测后需 mainWindow 引用 (notifierFactory lazy 获取)
+    // ScrcpyService 需 mainWindow 引用 (notifierFactory lazy 获取)
     if (this.services.scrcpyService) {
       this.services.scrcpyService.setMainWindow(this.mainWindow);
     }
 
-    // M2: DataTransferService 集中注入 (替代 dataTransferHandlers 内 3 处重复 setMainWindow 调用)
     if (this.services.dataTransferService) {
       this.services.dataTransferService.setMainWindow(this.mainWindow);
     }
 
     this.mainWindow.on('maximize', () => {
-      // M7: 走 IPC_CHANNELS 常量 (原硬编码 'window-maximized' 字符串)
+      // 走 IPC_CHANNELS 常量
       this.mainWindow.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZED, true);
     });
 
@@ -173,8 +172,7 @@ class ElectronApp {
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
-        // R7 安全修复: webSecurity 改 true (allure 报告与 HTTP server 同源 http://localhost:PORT,
-        // 无跨域需求; 原 false 关闭同源策略有 XSS 风险)
+        // webSecurity: true — allure 报告与 HTTP server 同源 http://localhost:PORT; 关闭同源策略有 XSS 风险
         webSecurity: true,
         partition: partitionName
       },
@@ -192,7 +190,7 @@ class ElectronApp {
 
     ses.webRequest.onHeadersReceived((details, callback) => {
       const responseHeaders = { ...details.responseHeaders };
-      // R7 安全修复: 删除注入 ACAO:* (同源场景下无需, 且 * 允许任意网站读取响应, 有数据泄露风险)
+      // 删除注入 ACAO:* — 同源场景下无需, * 允许任意网站读取响应, 有数据泄露风险
       // 仅保留 CSP 删除 (allure 内置 CSP 在 Electron 环境下可能阻断其自身内联脚本, 属已知兼容问题)
       delete responseHeaders['content-security-policy'];
       delete responseHeaders['content-security-policy-report-only'];
@@ -310,7 +308,6 @@ class ElectronApp {
       }
 
       if (this.services.schedulerService) {
-        // M1: SchedulerService facade 删除, 直接调 SmartScheduler.initialize()
         this.services.schedulerService.initialize();
       }
 
@@ -320,7 +317,7 @@ class ElectronApp {
     app.on('web-contents-created', (event, contents) => {
       contents.on('new-window', (event, navigationUrl) => {
         event.preventDefault();
-        // P1 修复: new-window 同样走 urlGuard 校验, 防止页面内链接跳危险协议/任意域。
+        // new-window 同样走 urlGuard 校验: 防止页面内链接跳危险协议/任意域
         const { shell } = require('electron');
         const { isAllowedExternalUrl } = require('./utils/urlGuard');
         const { allowed, reason } = isAllowedExternalUrl(navigationUrl);
@@ -333,9 +330,9 @@ class ElectronApp {
     });
 
     app.on('before-quit', () => {
-      // S1: 持有子进程/会话的 service 必须在退出前同步释放, 避免孤儿进程
+      // 持有子进程/会话的 service 必须在退出前同步释放, 避免孤儿进程
       // 对称: schedulerService.destroy() + allureService.cleanupSync() (will-quit)
-      // R7: catch 块加 console.error 可观测性 (原静默吞致资源泄漏 bug 不可排查)
+      // catch 块加 console.error 可观测性: 静默吞异常致资源泄漏不可排查
       try { this.services.schedulerService && this.services.schedulerService.destroy(); } catch (e) { console.error('[before-quit] schedulerService.destroy failed:', e); }
       try { this.services.scrcpyService && this.services.scrcpyService.stopScrcpy(); } catch (e) { console.error('[before-quit] scrcpyService.stopScrcpy failed:', e); }
       try { this.services.pythonTestService && this.services.pythonTestService.stop(); } catch (e) { console.error('[before-quit] pythonTestService.stop failed:', e); }

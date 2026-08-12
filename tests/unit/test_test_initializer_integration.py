@@ -4,6 +4,7 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
+from appium import webdriver
 
 from main.core.adb_manager import ADBManager
 from main.core.crash_monitor import CrashMonitor
@@ -84,7 +85,7 @@ class TestTestInitializerCrashMonitorGuard:
     def test_cleanup_with_mocked_crash_monitor(self):
         """cleanup 应调用 crash_monitor.stop_and_attach_log"""
         init = TestInitializer(config=None, logger=logging.getLogger("test"))
-        mock_monitor = MagicMock()
+        mock_monitor = MagicMock(spec=CrashMonitor)
         init.crash_monitor = mock_monitor
         init.cleanup()
         mock_monitor.stop_and_attach_log.assert_called_once()
@@ -173,7 +174,7 @@ class TestTestInitializerFailurePath:
     def test_cleanup_per_resource_failure_isolation(self):
         """cleanup 单资源失败不阻塞后续"""
         init = self._make_init()
-        mock_driver = MagicMock()
+        mock_driver = MagicMock(spec=webdriver.Remote)
         mock_driver.quit.side_effect = Exception("driver quit failed")
         init.driver = mock_driver
         mock_adb = MagicMock(spec=ADBManager)

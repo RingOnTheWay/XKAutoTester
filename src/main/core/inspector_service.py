@@ -56,7 +56,7 @@ def _check_port_in_use(port: int) -> bool:
             s.settimeout(2)
             return s.connect_ex((AppiumServer.DEFAULT_HOST, port)) == 0
     except Exception as e:
-        # R7: 加可观测性, 区分"端口未占用"与"检查失败" (socket 异常被当作未占用会触发端口冲突)
+        # 加可观测性, 区分"端口未占用"与"检查失败" (socket 异常被当作未占用会触发端口冲突)
         logger.warning(f"端口 {port} 占用检查失败 (视为未占用): {e}")
         return False
 
@@ -277,7 +277,7 @@ class InspectorService:
             try:
                 self.driver.command_executor.set_timeout(15)
             except Exception as e:
-                # M8: 加可观测性 (与 stdio_protocol._write_frame 的 logger.warning 模式一致)
+                # 加可观测性 (与 stdio_protocol._write_frame 的 logger.warning 模式一致)
                 logger.warning(f"set HTTP timeout 15s failed (non-fatal, will use default): {e}")
 
             self._notify_progress("session-created")
@@ -298,7 +298,7 @@ class InspectorService:
                 try:
                     self.driver.quit()
                 except Exception as quit_err:
-                    # M8: 加可观测性 (driver.quit 失败已知, 但记录原因便于排查 session 泄漏)
+                    # 加可观测性 (driver.quit 失败已知, 但记录原因便于排查 session 泄漏)
                     logger.warning(f"driver.quit on start_session failure failed: {quit_err}")
                 self.driver = None
             if self.appium_server:

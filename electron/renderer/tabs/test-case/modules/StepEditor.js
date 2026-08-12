@@ -1,19 +1,115 @@
 /**
- * Model Mixin - 步骤操作与变更辅助
- * 提供 addStep / deleteStep / copyStep / moveStep / updateStepOrders /
- *   setSearchQuery / updateStepSelect / changeStepType / updateStepName /
- *   toggleMarker 方法
- * 通过 Object.assign 挂载到 TestCaseModel.prototype
+ * StepEditor - 测试用例步骤编辑器深模块 (R10 renderer mixin → deep module)
+ *
+ * 领域边界：步骤数组 CRUD / 拖拽状态 / 步骤字段更新 (含 selectId 路由)
+ * 不负责：文件浏览 (FileBrowser)、引用数据 (OptionPanel)、编辑器状态机 (TestCaseEditor)、
+ *         hasUnsavedChanges 标记 (Model 通过 markDirty 编排)
+ *
+ * 取自原 modelStepMixin 全部 8 方法。
+ * Model 持有实例并委托方法，事件经 Model 转发给 Controller (保持现有 Controller 监听不变)。
+ *
+ * 依赖注入：构造时注入 getApp 回调，避免与 OptionPanel 硬耦合，
+ *           updateStepSelect 中需要 selectedApp 来解析 element locator。
+ *
+ * 事件：
+ *   - steps-changed(steps)           步骤数组变更 (增/删/复制/移动/类型切换/加载/重置)
+ *   - step-updated({stepId, selectId, value, index})  单步字段变更 (updateStepSelect)
+ *   - dragged-step-changed(step)     拖拽中步骤变更
  */
-export const modelStepMixin = {
-  // ── Step Operations ────────────────────────────────────────────
+import { EventEmitter } from '../../../core/EventEmitter.js';
+
+// 模块级计数器，避免同毫秒内 Date.now() 碰撞导致 stepId 重复
+let _stepSeq = 0;
+function nextStepId() {
+  _stepSeq += 1;
+  return `step_${Date.now()}_${_stepSeq}`;
+}
+
+export class StepEditor extends EventEmitter {
+  /**
+   * @param {Object} opts
+   * @param {() => Object|null} opts.getApp - 返回当前选中应用 (从 OptionPanel 注入)
+   */
+  constructor({ getApp } = {}) {
+    super();
+    this._getApp = getApp || (() => null);
+    this._state = {
+      steps: [],
+      draggedStep: null,
+    };
+  }
+
+  // ── State Getters ──────────────────────────────────────────────
+
+  get steps() { return this._state.steps; }
+  get draggedStep() { return this._state.draggedStep; }
+
+  /**
+   * 通用状态获取（供 Model.get 委托）
+   * @param {string} key - 状态键名
+   * @returns {*} 状态值
+   */
+  get(key) { return this._state[key]; }
+
+  /**
+   * 更新状态并触发对应事件
+   * @param {string} key - 状态键名
+   * @param {*} value - 新值
+   * @param {string} [event] - 事件名，默认 `${key}-changed`
+   */
+  _set(key, value, event) {
+    const old = this._state[key];
+    if (old === value) return;
+    this._state[key] = value;
+    this.emit(event || `${key}-changed`, value, old);
+  }
+
+  // ── Load / Reset / Sync (不触发 dirty) ─────────────────────────
+
+  /**
+   * 设置步骤数组 (从已保存用例加载)
+   * 注：不触发 dirty-requested，由 Model 调用方决定是否标记 dirty
+   * @param {Array} steps - 步骤数组
+   */
+  setSteps(steps) {
+    this._state.steps = Array.isArray(steps) ? [...steps] : [];
+    this.emit('steps-changed', this._state.steps);
+  }
+
+  /**
+   * 重置步骤为空数组
+   */
+  reset() {
+    this._state.steps = [];
+    this.emit('steps-changed', this._state.steps);
+  }
+
+  /**
+   * 从 DOM 收集的步骤数据静默同步 (不触发事件)
+   * 保留原 syncStepsFromDOM 行为：直接覆盖 _state.steps，无 emit
+   * @param {Array} steps - View 收集的步骤数据
+   */
+  syncFromDOM(steps) {
+    if (!Array.isArray(steps) || steps.length === 0) return;
+    this._state.steps = steps;
+  }
+
+  /**
+   * 设置拖拽中的步骤
+   * @param {Object|null} step - 步骤对象或 null
+   */
+  setDraggedStep(step) {
+    this._set('draggedStep', step, 'dragged-step-changed');
+  }
+
+  // ── Step Operations (用户编辑，由 Model 包装标记 dirty) ────────
 
   /**
    * 添加新步骤
    * @returns {Object} 新创建的步骤
    */
   addStep() {
-    const stepId = `step_${Date.now()}`;
+    const stepId = nextStepId();
     const newStep = {
       id: stepId,
       order: this._state.steps.length + 1,
@@ -31,10 +127,9 @@ export const modelStepMixin = {
       },
     };
     this._state.steps.push(newStep);
-    this._set('hasUnsavedChanges', true, 'dirty-changed');
     this.emit('steps-changed', this._state.steps);
     return newStep;
-  },
+  }
 
   /**
    * 删除步骤
@@ -43,20 +138,19 @@ export const modelStepMixin = {
   deleteStep(stepId) {
     this._state.steps = this._state.steps.filter(s => s.id !== stepId);
     this.updateStepOrders();
-    this._set('hasUnsavedChanges', true, 'dirty-changed');
     this.emit('steps-changed', this._state.steps);
-  },
+  }
 
   /**
    * 深拷贝步骤并追加到末尾
    * @param {string} stepId - 源步骤 ID
-   * @returns {Object} 新步骤
+   * @returns {Object|null} 新步骤
    */
   copyStep(stepId) {
     const original = this._state.steps.find(s => s.id === stepId);
     if (!original) return null;
 
-    const newStepId = `step_${Date.now()}`;
+    const newStepId = nextStepId();
     const newStep = {
       ...JSON.parse(JSON.stringify(original)),
       id: newStepId,
@@ -65,10 +159,9 @@ export const modelStepMixin = {
     };
 
     this._state.steps.push(newStep);
-    this._set('hasUnsavedChanges', true, 'dirty-changed');
     this.emit('steps-changed', this._state.steps);
     return newStep;
-  },
+  }
 
   /**
    * 上下移动步骤
@@ -87,9 +180,8 @@ export const modelStepMixin = {
     this._state.steps[targetIdx] = temp;
 
     this.updateStepOrders();
-    this._set('hasUnsavedChanges', true, 'dirty-changed');
     this.emit('steps-changed', this._state.steps);
-  },
+  }
 
   /**
    * 根据 steps 数组索引同步 step.order
@@ -98,17 +190,7 @@ export const modelStepMixin = {
     this._state.steps.forEach((step, index) => {
       step.order = index + 1;
     });
-  },
-
-  // ── Step Mutation Helpers ──────────────────────────────────────
-
-  /**
-   * 设置搜索查询并触发文件列表重新渲染
-   * @param {string} query - 搜索关键词
-   */
-  setSearchQuery(query) {
-    this._set('searchQuery', query, 'files-changed');
-  },
+  }
 
   /**
    * 更新步骤中下拉选择器的值
@@ -205,7 +287,7 @@ export const modelStepMixin = {
       config.compareConfig = config.compareConfig || {};
       config.compareConfig.elementId = value;
       // 更新 element locator
-      const app = this._state.selectedApp;
+      const app = this._getApp();
       if (app && config.compareConfig.pageId) {
         const page = app.pages?.find(p => p.id === config.compareConfig.pageId);
         const element = page?.elements?.find(el => el.id === value);
@@ -223,7 +305,7 @@ export const modelStepMixin = {
     } else if (selectId.startsWith('tc-search-element-select')) {
       config.searchConfig = config.searchConfig || {};
       config.searchConfig.elementId = value;
-      const app = this._state.selectedApp;
+      const app = this._getApp();
       if (app && config.searchConfig?.pageId) {
         const page = app.pages?.find(p => p.id === config.searchConfig.pageId);
         const element = page?.elements?.find(el => el.id === value);
@@ -239,7 +321,6 @@ export const modelStepMixin = {
     }
 
     step.config = config;
-    this._set('hasUnsavedChanges', true, 'dirty-changed');
 
     // 级联更新：页面变更时清空元素和操作
     if (selectId.startsWith('tc-page-select')) {
@@ -249,7 +330,7 @@ export const modelStepMixin = {
       config.locatorValue = null;
       config.operation = 'click';
       config.operationValue = {};
-      const app = this._state.selectedApp;
+      const app = this._getApp();
       if (app) {
         const page = app.pages?.find(p => p.id === value);
         config.pageName = page?.name || '';
@@ -258,7 +339,7 @@ export const modelStepMixin = {
 
     // 元素变更时更新 locator
     if (selectId.startsWith('tc-element-select')) {
-      const app = this._state.selectedApp;
+      const app = this._getApp();
       if (app && config.pageId) {
         const page = app.pages?.find(p => p.id === config.pageId);
         const element = page?.elements?.find(el => el.id === value);
@@ -280,7 +361,7 @@ export const modelStepMixin = {
     }
 
     this.emit('step-updated', { stepId, selectId, value, index });
-  },
+  }
 
   /**
    * 更改步骤类型
@@ -294,9 +375,8 @@ export const modelStepMixin = {
     step.type = type;
     // 重置类型特定配置
     step.config = { type };
-    this._set('hasUnsavedChanges', true, 'dirty-changed');
     this.emit('steps-changed', this._state.steps);
-  },
+  }
 
   /**
    * 更新步骤名称
@@ -308,21 +388,5 @@ export const modelStepMixin = {
     if (!step) return;
 
     step.name = name;
-    this._set('hasUnsavedChanges', true, 'dirty-changed');
-  },
-
-  /**
-   * 切换 Marker 选中状态
-   * @param {string} marker - Marker 名称
-   */
-  toggleMarker(marker) {
-    const markers = [...this._state.selectedMarkers];
-    const idx = markers.indexOf(marker);
-    if (idx === -1) {
-      markers.push(marker);
-    } else {
-      markers.splice(idx, 1);
-    }
-    this._set('selectedMarkers', markers, 'markers-changed');
-  },
-};
+  }
+}

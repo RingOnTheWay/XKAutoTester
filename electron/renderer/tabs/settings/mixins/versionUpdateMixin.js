@@ -33,7 +33,12 @@ export const versionUpdateMixin = {
 
     if (this.els.updateChangelog) {
       const changelog = updateData.changelog || updateData.releaseNotes || '';
-      this.els.updateChangelog.innerHTML = SettingsModel.renderMarkdown(changelog);
+      // R10 安全闭环: 无 SHA256 hash 的 release 加警告横幅, 有 hash 加已校验提示
+      const secure = updateData.secure !== false;
+      const banner = secure
+        ? `<div class="update-hash-verified">${window.i18n.t('settings.updateHashVerified')}</div>`
+        : `<div class="update-insecure-warning">${window.i18n.t('settings.insecureReleaseWarning')}</div>`;
+      this.els.updateChangelog.innerHTML = banner + SettingsModel.renderMarkdown(changelog);
     }
 
     // 重置进度
@@ -50,10 +55,10 @@ export const versionUpdateMixin = {
       this.els.updateProgressSpeed.textContent = '';
     }
 
-    // 重置下载按钮
+    // 重置下载按钮: R10 无 hash (secure=false) 时禁用, 防用户绕过后端拒绝
     if (this.els.updateDownloadBtn) {
       this.els.updateDownloadBtn.textContent = window.i18n.t('settings.downloadUpdate');
-      this.els.updateDownloadBtn.disabled = false;
+      this.els.updateDownloadBtn.disabled = updateData.secure === false;
     }
 
     if (this.els.updateModalOverlay) {

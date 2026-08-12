@@ -62,7 +62,7 @@ class InspectorService {
             };
         }
 
-        // M4 修复: 若已有 transport 活跃, 先 stopSession (其 finally 调 _cleanup 置 null),
+        // 若已有 transport 活跃, 先 stopSession (其 finally 调 _cleanup 置 null),
         // 再重新 _ensureTransport 创建新 transport, 避免对已 dispose 的 transport 调 request
         if (this._transport && this._transport.isActive()) {
             await this.stopSession();
@@ -138,7 +138,7 @@ class InspectorService {
     }
 
     /**
-     * S1: 同步释放资源 (供 ElectronApp before-quit 调用).
+     * 同步释放资源 (供 ElectronApp before-quit 调用).
      * 与 ScrcpyService.stopScrcpy / PythonTestService.stop 对称, 无需 await.
      * 不发送 stop-session 命令到 Python (进程将随 stdin EOF 自然退出),
      * 仅本地 dispose transport + 清空会话状态.

@@ -39,7 +39,7 @@ function register(ipcMain, services) {
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.EXPORT_CONFIG, async (outputPath) => {
-    // M2: mainWindow 由 ElectronApp.createWindow 集中注入, handler 不再重复 setMainWindow
+    // mainWindow 由 ElectronApp.createWindow 集中注入, handler 不再重复 setMainWindow
     return await dataTransferService.exportConfig(outputPath);
   });
 

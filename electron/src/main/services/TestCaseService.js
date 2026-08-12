@@ -40,7 +40,7 @@ const defaultFileSystemFactory = () => ({
   readdir: (dir) => fs.readdir(dir),
   readFile: (p) => fs.readFile(p, 'utf8'),
   writeFile: (p, content) => fs.writeFile(p, content, 'utf8'),
-  // P2 修复: 原子写 (temp+rename), 防并发写产生半截 JSON 文件
+  // 原子写 (temp+rename): 防并发写产生半截 JSON 文件
   writeJson: (p, data) => asyncFs.writeJson(p, data),
   access: (p) => fs.access(p),
   unlink: (p) => fs.unlink(p),
@@ -75,7 +75,7 @@ class TestCaseService {
   }
 
   /**
-   * M6 修复: 切换 userConfigPath 后更新 testCasesDir + 重建 codeGenerator
+   * 切换 userConfigPath 后更新 testCasesDir + 重建 codeGenerator
    * (TestCaseService 未继承 JsonFileCrudService, 自管理 filePath, 故不调 super)
    */
   updateConfigPath(userConfigPath) {
@@ -120,8 +120,8 @@ class TestCaseService {
 
   async _writeJsonFile(filePath, data) {
     try {
-      // P2 修复: 用 writeJson 原子写 (temp+rename), 替代 writeFile + JSON.stringify
-      // 防并发写产生半截 JSON 文件 (对称 JsonFileCrudService.saveData)
+      // 用 writeJson 原子写 (temp+rename), 替代 writeFile + JSON.stringify
+      // 防并发写产生半截 JSON 文件
       await this._fileSystem.writeJson(filePath, data);
       return { success: true };
     } catch (error) {
@@ -202,12 +202,12 @@ class TestCaseService {
   /**
    * 保存测试用例 (仅写 JSON, 不生成 .py)
    * 内化条件生成在 saveTestCase 中触发: 若 caseData.pyOutputDir 存在则调 generatePythonFile (失败吞错)
-   * H3: 由 service 自己 set caseData.pyFilePath (原由 generator mutation, 现 generator 不再 mutation)
+   * 由 service 自己 set caseData.pyFilePath (generator 不 mutation)
    * (吸收 testCaseHandlers L11-27 双委托)
    */
   async saveTestCase(caseData) {
     try {
-      // P2 修复: 用副本操作, 不 mutation 调用方传入的 caseData (对称 saveAndGenerate)
+      // 用副本操作, 不 mutation 调用方传入的 caseData
       const enriched = { ...caseData };
       // 内化条件生成 (吸收 testCaseHandlers L11-27 双委托)
       let pyPath = null;
@@ -216,7 +216,7 @@ class TestCaseService {
           const genResult = await this._codeGenerator.generatePythonFile(enriched, enriched.pyOutputDir);
           if (genResult.success) {
             pyPath = genResult.path || null;
-            // H3: 由 service 负责 set pyFilePath (原由 generator mutation, 现 generator 不 mutation)
+            // 由 service 负责 set pyFilePath (generator 不 mutation)
             enriched.pyFilePath = pyPath;
           }
         } catch (e) {
@@ -224,7 +224,7 @@ class TestCaseService {
         }
       }
 
-      // H3: 生成后再保存 JSON (单源写入, 含 pyFilePath)
+      // 生成后再保存 JSON (单源写入, 含 pyFilePath)
       const saveResult = await this._saveOnly(enriched);
       if (!saveResult.success) {
         return saveResult;
@@ -245,7 +245,7 @@ class TestCaseService {
   async _saveOnly(caseData) {
     await this._ensureInitialized();
 
-    // P2 修复: 用副本操作, 不 mutation 入参 (对称 saveAndGenerate 的 enriched 副本)
+    // 用副本操作, 不 mutation 入参
     const data = { ...caseData };
 
     // ID + 时间戳
@@ -260,7 +260,7 @@ class TestCaseService {
     // 文件名清理
     data.fileName = this._fileNameSanitizer(data.fileName);
 
-    // 写 JSON (P2: writeJson 原子写)
+    // 写 JSON (writeJson 原子写)
     const jsonPath = path.join(this.testCasesDir, `${data.fileName}.json`);
     const writeResult = await this._writeJsonFile(jsonPath, data);
     if (!writeResult.success) {
@@ -272,15 +272,15 @@ class TestCaseService {
 
   /**
    * 保存 + 强制生成 (吸收 testCaseHandlers L45-62 双委托)
-   * H3: 生成在前, 保存 JSON 在后 (单源写入, 含 pyFilePath)
-   * A2: 不 mutation 入参 caseData, 内部用副本 enriched 操作 (原对象保持不变)
+   * 生成在前, 保存 JSON 在后 (单源写入, 含 pyFilePath)
+   * 不 mutation 入参 caseData, 内部用副本 enriched 操作 (原对象保持不变)
    * @param {Object} caseData
    * @param {string} outputDir
    * @returns {Promise<{success, data?, jsonPath?, pyPath?, error?}>}
    */
   async saveAndGenerate(caseData, outputDir) {
     try {
-      // A2: 用副本操作, 不 mutation 调用方传入的 caseData
+      // 用副本操作, 不 mutation 调用方传入的 caseData
       const enriched = { ...caseData, pyOutputDir: outputDir };
       const genResult = await this._codeGenerator.generatePythonFile(enriched, outputDir);
       if (!genResult.success) {
@@ -288,7 +288,7 @@ class TestCaseService {
       }
       enriched.pyFilePath = genResult.path;
 
-      // H3: 后保存 JSON (单源写入, 含 pyOutputDir + pyFilePath)
+      // 后保存 JSON (单源写入, 含 pyOutputDir + pyFilePath)
       const saveResult = await this._saveOnly(enriched);
       if (!saveResult.success) {
         return saveResult;

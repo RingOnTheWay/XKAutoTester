@@ -4,6 +4,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from main.core.appium_server import (
     AppiumServer,
@@ -397,6 +398,8 @@ class TestApplyDefaultCapabilities:
 
     def test_sets_six_fields(self):
         """应设置 6 个 capability 字段"""
+        # R10: 不用 spec=UiAutomator2Options — camelCase setter (ensureWebviewsHavePages 等)
+        # 不在 spec dir() 中, spec 会阻止 set。此处需灵活 mock 接受任意 attr set。
         options = MagicMock()
         AppiumServer.apply_default_capabilities(options)
         assert options.automation_name == AppiumServer.DEFAULT_AUTOMATION_NAME
@@ -409,6 +412,7 @@ class TestApplyDefaultCapabilities:
 
     def test_returns_options(self):
         """应返回 options 对象本身"""
+        # R10: 同 test_sets_six_fields, camelCase setter 不兼容 spec
         options = MagicMock()
         result = AppiumServer.apply_default_capabilities(options)
         assert result is options
@@ -535,7 +539,7 @@ class TestAppiumServerIsRunning:
         """200 -> True"""
         server = AppiumServer()
         with patch("main.core.appium_server.requests") as mock_req:
-            mock_resp = MagicMock()
+            mock_resp = MagicMock(spec=requests.Response)
             mock_resp.status_code = 200
             mock_req.get.return_value = mock_resp
             assert server.is_server_running() is True
@@ -544,7 +548,7 @@ class TestAppiumServerIsRunning:
         """非 200 -> False"""
         server = AppiumServer()
         with patch("main.core.appium_server.requests") as mock_req:
-            mock_resp = MagicMock()
+            mock_resp = MagicMock(spec=requests.Response)
             mock_resp.status_code = 500
             mock_req.get.return_value = mock_resp
             assert server.is_server_running() is False

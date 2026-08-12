@@ -208,7 +208,7 @@ class PagePackageService extends JsonFileCrudService {
   }
 
   /** 写路径: withLock(getData → navigate → mutateFn → saveData) → _success
-   *  P0 修复: read-modify-write 包进 withLock, 防并发丢更新 */
+   *  read-modify-write 包进 withLock, 防并发丢更新 */
   async _applyMutation(nav, mutateFn) {
     try {
       return await this.withLock(async () => {
@@ -226,7 +226,7 @@ class PagePackageService extends JsonFileCrudService {
   }
 
   /** 删路径: withLock(getData → navigate → findIndexFn → splice → saveData) → {success:true}
-   *  P0 修复: read-modify-write 包进 withLock, 防并发丢更新 */
+   *  read-modify-write 包进 withLock, 防并发丢更新 */
   async _applyDelete(nav, findIndexFn) {
     try {
       return await this.withLock(async () => {

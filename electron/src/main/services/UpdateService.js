@@ -120,7 +120,7 @@ function normalizeUpdateError(error) {
 }
 
 /**
- * P1 修复: 从 GitHub Release body 解析 SHA256 hash, 按 asset 名匹配。
+ * 从 GitHub Release body 解析 SHA256 hash, 按 asset 名匹配。
  * 约定格式 (多 asset Release notes, 各 asset 独立标注):
  *   **XKAutoTester Setup v2.0.0.exe**
  *   SHA256: a3f5b8c1d2e4f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1
@@ -159,7 +159,7 @@ function parseSha256FromBody(body, fileName) {
 }
 
 /**
- * P1 修复: 计算文件 SHA256 (流式, 避免大文件 OOM)。
+ * 计算文件 SHA256 (流式, 避免大文件 OOM)。
  * @param {string} filePath - 待校验文件路径
  * @returns {Promise<string>} 64位小写 hex hash
  */
@@ -270,7 +270,7 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
 
       writer.on('finish', () => {
         clearInterval(speedInterval);
-        // R7: 下载完整性校验 (防下载不完整的 .exe 被执行; 完整 SHA256 校验需业务决策 hash 存储位置)
+        // 下载完整性校验: 防下载不完整的 .exe 被执行; 完整 SHA256 校验需业务决策 hash 存储位置
         if (totalLength > 0 && downloadedLength !== totalLength) {
           try { fs.unlinkSync(filePath); } catch (e) {}
           reject(new Error(`下载不完整: 预期 ${totalLength} 字节, 实际 ${downloadedLength} 字节`));
@@ -296,8 +296,7 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
 
 const defaultInstallStrategyFactory = () => ({
   async install(filePath) {
-    // P1 修复: SHA256 校验已在 UpdateService.installUpdate 层完成, 此处直接 spawn。
-    // (原 R7 TODO 已闭环: checkForUpdate 解析 hash → download 后校验 → install 前再校验)
+    // SHA256 校验已在 UpdateService.installUpdate 层完成, 此处直接 spawn。
     const detached = spawn(filePath, ['--force-run'], {
       detached: true,
       stdio: 'ignore'
@@ -308,7 +307,7 @@ const defaultInstallStrategyFactory = () => ({
   }
 });
 
-// P1 修复: 默认 hash 计算器 (流式 SHA256), 测试可注入 fake
+// 默认 hash 计算器 (流式 SHA256), 测试可注入 fake
 const defaultHashCalculatorFactory = () => ({
   compute: computeFileSha256,
 });
@@ -325,7 +324,7 @@ class UpdateService {
    * @param {Function} [opts.installStrategyFactory] - 默认包装 spawn + app.quit
    * @param {Function} [opts.fileSystemFactory] - 默认包装 fs 5 方法 + ensureDirectoryExists
    * @param {Function} [opts.versionComparator] - 默认 module-level compareVersions
-   * @param {Function} [opts.hashCalculatorFactory] - 默认包装 crypto SHA256 流式计算 (P1)
+   * @param {Function} [opts.hashCalculatorFactory] - 默认包装 crypto SHA256 流式计算
    */
   constructor(versionService, userDataService, opts = {}) {
     this.versionService = versionService;
@@ -348,7 +347,7 @@ class UpdateService {
     this._installStrategy = this._installStrategyFactory();
     this._fileSystem = this._fileSystemFactory();
     this._hashCalculator = this._hashCalculatorFactory();
-    // P1 修复: checkForUpdate 解析 Release body 后存此处, 供 download/install 校验
+    // checkForUpdate 解析 Release body 后存此处, 供 download/install 校验
     this._expectedSha256 = null;
   }
 
@@ -385,7 +384,7 @@ class UpdateService {
   }
 
   /**
-   * S3 修复: 判断当前是否完整版安装 (含 bundled .venv)。
+   * 判断当前是否完整版安装 (含 bundled .venv)。
    * 完整版: 打包模式 process.resourcesPath/.venv 存在 (extraResources 含 .venv)
    * Lite 版/开发模式: .venv 不存在
    */
@@ -426,7 +425,8 @@ class UpdateService {
       return {
         hasUpdate: false,
         currentVersion: this.versionService.getVersion(),
-        latestVersion: this.versionService.getVersion()
+        latestVersion: this.versionService.getVersion(),
+        secure: false  // 无 release 不存在安装场景, secure=false
       };
     }
 
@@ -439,7 +439,7 @@ class UpdateService {
     let fileSize = 0;
 
     if (hasUpdate && latestRelease.assets && latestRelease.assets.length > 0) {
-      // S3 修复: 按当前安装类型选 asset, 避免完整版用户被降级更新为 Lite
+      // 按当前安装类型选 asset, 避免完整版用户被降级更新为 Lite
       // 完整版: process.resourcesPath/.venv 存在 (extraResources 含 .venv)
       // Lite 版: .venv 未打包
       const isLiteInstall = !this._isFullInstall();
@@ -466,10 +466,10 @@ class UpdateService {
       }
     }
 
-    // P1 修复: 解析 Release body 中的 SHA256, 按 fileName 匹配 asset 专属 hash
+    // 解析 Release body 中的 SHA256, 按 fileName 匹配 asset 专属 hash
     // 完整版用户匹配完整包 hash, Lite 版用户匹配 Lite 包 hash, 互不干扰
     const sha256 = parseSha256FromBody(latestRelease.body || '', fileName);
-    this._expectedSha256 = sha256;  // null 表示 Release 未预埋 hash (向后兼容, 跳过校验)
+    this._expectedSha256 = sha256;
 
     return {
       hasUpdate,
@@ -480,7 +480,8 @@ class UpdateService {
       downloadUrl,
       fileName,
       fileSize,
-      sha256,  // 透出给 UI 显示校验状态
+      sha256,  // 透出给 UI 显示校验状态 (null 表示 Release 未预埋 hash)
+      secure: sha256 !== null,  // 是否可安全安装 (有 hash 才能 download/install)
       htmlUrl: latestRelease.html_url
     };
   }
@@ -489,10 +490,18 @@ class UpdateService {
     try {
       this._ensureInitialized();  // 懒初始化触发
 
+      // 严格拒绝无 hash 版本, 防供应链攻击。
+      // _expectedSha256 为 null 表示 checkForUpdate 未调 或 Release 未预埋 hash, 一律拒绝下载。
+      if (!this._expectedSha256) {
+        const err = new Error('Release 缺少 SHA256 hash, 拒绝下载 (安全闭环)');
+        err.code = 'missing_hash';
+        throw err;
+      }
+
       const filePath = path.join(this.updateDir, fileName);
 
       if (this._fileSystem.exists(filePath)) {
-        // P1 修复: 快路径也校验 SHA256, 防止已被篡改/损坏的缓存文件被直接安装
+        // 快路径也校验 SHA256: 防止已被篡改/损坏的缓存文件被直接安装
         const verifyError = await this._verifySha256IfExists(filePath);
         if (verifyError) {
           // 校验失败 → 删除缓存文件, 走全量下载
@@ -509,7 +518,7 @@ class UpdateService {
 
       const result = await this._downloadStrategy.download(downloadUrl, filePath, eventSender);
 
-      // P1 修复: 下载完成后校验 SHA256, 防止下载不完整/中间人篡改
+      // 下载完成后校验 SHA256: 防止下载不完整/中间人篡改
       const postDownloadError = await this._verifySha256IfExists(filePath);
       if (postDownloadError) {
         try { this._fileSystem.unlink(filePath); } catch (e) { /* ignore */ }
@@ -519,7 +528,10 @@ class UpdateService {
       return result;
     } catch (error) {
       console.error('[UpdateService] Download update failed:', error.message);
-      throw new Error(`Failed to download update: ${error.message}`);
+      // 保留 missing_hash code 透出给 UI 区分 (而非统一 unknown)
+      const wrapped = new Error(`Failed to download update: ${error.message}`);
+      if (error.code) wrapped.code = error.code;
+      throw wrapped;
     }
   }
 
@@ -528,7 +540,13 @@ class UpdateService {
       if (!this._fileSystem.exists(filePath)) {
         throw new Error('Update file not found');
       }
-      // P1 修复: 安装前重新校验 SHA256, 防止下载后被替换/篡改 (TOCTOU)
+      // 严格拒绝无 hash 版本安装。
+      if (!this._expectedSha256) {
+        const err = new Error('Release 缺少 SHA256 hash, 拒绝安装 (安全闭环)');
+        err.code = 'missing_hash';
+        throw err;
+      }
+      // 安装前重新校验 SHA256: 防止下载后被替换/篡改 (TOCTOU)
       const verifyError = await this._verifySha256IfExists(filePath);
       if (verifyError) {
         throw new Error(`安装前 SHA256 校验失败: ${verifyError}`);
@@ -536,18 +554,21 @@ class UpdateService {
       return await this._installStrategy.install(filePath);
     } catch (error) {
       console.error('[UpdateService] Install update failed:', error.message);
-      throw new Error(`Failed to install update: ${error.message}`);
+      const wrapped = new Error(`Failed to install update: ${error.message}`);
+      if (error.code) wrapped.code = error.code;
+      throw wrapped;
     }
   }
 
   /**
-   * P1 修复: 校验文件 SHA256, 仅当 _expectedSha256 非空时执行。
-   * Release 未预埋 hash (向后兼容) 或 checkForUpdate 未调用时跳过校验。
+   * 校验文件 SHA256, 仅当 _expectedSha256 非空时执行。
+   * downloadUpdate/installUpdate 入口已严格拒绝 _expectedSha256=null,
+   * 此处保留 null 跳过分支仅作防御性兜底 (例如直接调 _verifySha256IfExists 的内部测试)。
    * @param {string} filePath - 待校验文件路径
    * @returns {Promise<string|null>} null=通过/跳过; string=失败原因
    */
   async _verifySha256IfExists(filePath) {
-    if (!this._expectedSha256) return null;  // 无预期 hash, 跳过 (向后兼容)
+    if (!this._expectedSha256) return null;  // 防御性兜底 (入口已拒绝)
     let actualHash;
     try {
       actualHash = await this._hashCalculator.compute(filePath);

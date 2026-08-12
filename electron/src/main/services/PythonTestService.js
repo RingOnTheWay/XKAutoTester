@@ -88,10 +88,10 @@ const defaultFileSystemFactory = () => ({
   readdirSync: (d) => fs.readdirSync(d),
 });
 
-/** 包装 new Logger (Q1 A: eager, 消除 L42 硬编码 new) */
+/** 包装 new Logger (eager, 消除硬编码 new) */
 const defaultLoggerFactory = (logsPath) => new Logger(logsPath, 'PythonTest');
 
-/** 包装 mainWindow.webContents.send (Q2 A: progressSenderFactory, 集中 2 处 → 1 处) */
+/** 包装 mainWindow.webContents.send (progressSenderFactory, 集中 2 处 → 1 处) */
 const defaultProgressSenderFactory = (mainWindow) => ({
   send: (channel, data) => {
     if (mainWindow) {
@@ -111,7 +111,7 @@ class PythonTestService {
    * @param {Electron.BrowserWindow} deps.mainWindow
    * @param {Object}   deps.allureService
    * @param {Object}   deps.testPlanService
-   * @param {Object}   [deps.dialogMonitor]          - 已注入, 保留 (Q5 A)
+   * @param {Object}   [deps.dialogMonitor]          - 已注入, 保留
    * @param {Function} [deps.spawn]                  - 已注入, 保留
    * @param {Function} [deps.fileSystemFactory]      - 新增, 默认包装 fs 2 方法
    * @param {Function} [deps.loggerFactory]          - 新增, 默认 new Logger
@@ -128,11 +128,11 @@ class PythonTestService {
 
     /** @type {import('child_process').ChildProcess|null} */
     this.currentPythonProcess = null;
-    // M3 修复: 显式状态机 idle/running/stopping, stop() 后 close 回调走 run-stopped 分支
+    // 显式状态机 idle/running/stopping, stop() 后 close 回调走 run-stopped 分支
     /** @type {'idle'|'running'|'stopping'|'error'} */
     this._state = 'idle';
 
-    // ── 已有注入 (保留, Q5 A: deps.dialogMonitor 直传) ──
+    // ── 已有注入 (保留, deps.dialogMonitor 直传) ──
     this._spawn = deps.spawn || defaultSpawn;
     this._dialogMonitor = deps.dialogMonitor || new FileBasedDialogMonitor({
       mainWindow: this.mainWindow,
@@ -145,7 +145,7 @@ class PythonTestService {
     this._loggerFactory = deps.loggerFactory || defaultLoggerFactory;
     this._progressSenderFactory = deps.progressSenderFactory || defaultProgressSenderFactory;
 
-    // ── eager 创建 (Q1 A: Logger eager, 无行为微变; 对称 TestCaseService L70-71) ──
+    // ── eager 创建 (Logger eager, 无行为微变) ──
     this._fs = this._fileSystemFactory();
     this.logger = this._loggerFactory(this._getLogsPath('XKAT'));
     this._progressSender = this._progressSenderFactory(this.mainWindow);
@@ -156,7 +156,7 @@ class PythonTestService {
     return pathHelper.getLogsPath(baseDir, ...subdirs);
   }
 
-  // Q4 A: 保留实例方法委托 (测试 L386 直接调用), 委托模块级 buildPythonPathEnv
+  // 保留实例方法委托 (测试 L386 直接调用), 委托模块级 buildPythonPathEnv
   buildPythonPathEnv(pythonCmd) {
     return buildPythonPathEnv(pythonCmd, path.join(this.projectRoot, 'src'));
   }
@@ -204,7 +204,7 @@ class PythonTestService {
       // Step 2: 启动 dialog monitor
       this._dialogMonitor.start();
 
-      // M3 修复: 进入 running 状态
+      // 进入 running 状态
       this._state = 'running';
 
       // Step 3: 组装 args + env + spawn
@@ -219,7 +219,7 @@ class PythonTestService {
 
       // Step 5: close → 清理 + 构建结果
       pythonProcess.on('close', async (code) => {
-        // M3 修复: 捕获 stopping 状态, stop() 触发的 close 走"已停止"分支
+        // 捕获 stopping 状态, stop() 触发的 close 走"已停止"分支
         const wasStopping = this._state === 'stopping';
         this._cleanupAfterRun();
         try {
@@ -245,13 +245,13 @@ class PythonTestService {
 
   /**
    * 终止运行中的测试进程。
-   * M3 修复: 进入 stopping 状态, close 回调据此走"已停止"分支而非"完成"分支
+   * 进入 stopping 状态, close 回调据此走"已停止"分支而非"完成"分支
    * @returns {{ success: boolean, message: string }}
    */
   stop() {
     try {
       if (this.currentPythonProcess) {
-        // M3 修复: 先标记 stopping, close 回调据此识别
+        // 先标记 stopping, close 回调据此识别
         this._state = 'stopping';
         this.currentPythonProcess.kill();
         this.currentPythonProcess = null;
@@ -306,7 +306,7 @@ class PythonTestService {
       PYTHONUTF8: '1',
       XKAUTOTESTER_LANG: this.i18nService.getLanguage(),
       XKAUTOTESTER_LOCALES_PATH: pathHelper.getLocalesPath(this.projectRoot),
-      // S2: 注入 adb 路径供 Python subprocess_adb_adapter 使用 (打包模式 PATH 无 adb 时必需,
+      // 注入 adb 路径供 Python subprocess_adb_adapter 使用 (打包模式 PATH 无 adb 时必需,
       // inspector_service._wake_device 等依赖此 env 找到 adb.exe)
       XKAUTOTESTER_ADB_PATH: pathHelper.getAdbPath(this.projectRoot),
       ...(pythonCmd.isEmbedded ? {} : this.buildPythonPathEnv(pythonCmd)),
@@ -348,14 +348,14 @@ class PythonTestService {
   _cleanupAfterRun() {
     this._dialogMonitor.stop();
     this.currentPythonProcess = null;
-    // M3 修复: 清理后回到 idle (stopping/error 已被 close 回调消费, 这里兜底)
+    // 清理后回到 idle (stopping/error 已被 close 回调消费, 这里兜底)
     if (this._state === 'running' || this._state === 'stopping') {
       this._state = 'idle';
     }
   }
 
   /**
-   * M3 修复: stop() 触发的 close 结果构建
+   * stop() 触发的 close 结果构建
    * 不走 stats 解析/allure pipeline, 仅返回"已停止"语义结果
    */
   _buildStoppedResult(testPlanName) {
@@ -369,7 +369,7 @@ class PythonTestService {
       testStats: { passed: 0, failed: 0, skipped: 0, broken: 0, total: 0 },
       allureReportPath: null,
       sideEffectFailures: [],
-      stopped: true  // M3: 标识位, 渲染进程可据此区分"完成"与"已停止"
+      stopped: true  // 标识位, 渲染进程可据此区分"完成"与"已停止"
     };
   }
 
@@ -454,7 +454,7 @@ class PythonTestService {
     return { allureReportPath, sideEffectFailures };
   }
 
-  // ═════════════════ 保留实例方法 (Q4 A: 委托模块级纯函数, 测试 L386/L416 依赖) ═════════════════
+  // ═════════════════ 保留实例方法 (委托模块级纯函数, 测试 L386/L416 依赖) ═════════════════
 
   /** 保留为实例方法 (测试 L386 直接调用), 委托模块级 parseTestStats */
   _parseTestStats(output) {
@@ -480,7 +480,7 @@ class PythonTestService {
   }
 }
 
-// Q3 A: Object.assign 保 default export (零测试改 + factories.js 零改)
+// Object.assign 保 default export (零测试改 + factories.js 零改)
 // 附加 3 模块级纯函数为静态属性 (可 PythonTestService.parseTestStats 访问)
 module.exports = Object.assign(PythonTestService, {
   parseTestStats,

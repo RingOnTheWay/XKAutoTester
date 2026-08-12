@@ -38,14 +38,15 @@
     {
       "type": "object",
       "title": "Notification",
-      "description": "Python → JS。无 id,fire-and-forget。type=ready 握手,type=progress 进度。",
+      "description": "Python → JS。无 id,fire-and-forget。type=ready 握手,type=progress 进度。R10: additionalProperties 收紧为 false, 新增 payload 字段需先在此登记。",
       "properties": {
         "kind": { "const": "notification" },
         "type": { "enum": ["ready", "progress"] },
-        "stage": { "type": "string" }
+        "stage": { "type": "string", "description": "progress 通知的当前阶段标识 (如 appium-starting/screenshot-capturing)" },
+        "payload": { "type": "object", "description": "R10: 扩展 payload 容器, 未来新增字段统一放此 (避免每次扩 schema)", "additionalProperties": true }
       },
       "required": ["kind", "type"],
-      "additionalProperties": true
+      "additionalProperties": false
     }
   ]
 }
