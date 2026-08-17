@@ -8,6 +8,8 @@
  * modelCaseMixin (selectApp/selectPlatform) + modelStepMixin (toggleMarker)。
  * Model 持有实例并委托方法，事件经 Model 转发给 Controller (保持现有 Controller 监听不变)。
  *
+ * R10 阶段 3 接口收紧：_api/_state/_set 全部转为 #private。
+ *
  * 事件：
  *   - apps-changed(apps)                 应用列表变更
  *   - ble-devices-changed(devices)       蓝牙设备列表变更
@@ -20,46 +22,58 @@
 import { EventEmitter } from '../../../core/EventEmitter.js';
 
 export class OptionPanel extends EventEmitter {
-  /** @param {Object} api - ApiBridge 绑定后的 API 对象 */
+  /** @type {Object} ApiBridge 绑定后的 API 对象 */
+  #api;
+  /** @type {Object} 内部状态容器 */
+  #state = {
+    apps: [],
+    selectedApp: null,
+    selectedPlatform: 'android',
+    bleDevices: [],
+    markers: [],
+    selectedMarkers: [],
+  };
+
+  /**
+   * @param {Object} api - ApiBridge 绑定后的 API 对象
+   */
   constructor(api) {
     super();
-    this._api = api;
-    this._state = {
-      apps: [],
-      selectedApp: null,
-      selectedPlatform: 'android',
-      bleDevices: [],
-      markers: [],
-      selectedMarkers: [],
-    };
+    this.#api = api;
   }
 
   // ── State Getters ──────────────────────────────────────────────
 
-  get apps() { return this._state.apps; }
-  get selectedApp() { return this._state.selectedApp; }
-  get selectedPlatform() { return this._state.selectedPlatform; }
-  get bleDevices() { return this._state.bleDevices; }
-  get markers() { return this._state.markers; }
-  get selectedMarkers() { return this._state.selectedMarkers; }
+  /** @returns {Array} 应用列表 */
+  get apps() { return this.#state.apps; }
+  /** @returns {Object|null} 选中的应用 */
+  get selectedApp() { return this.#state.selectedApp; }
+  /** @returns {string} 选中的平台标识 */
+  get selectedPlatform() { return this.#state.selectedPlatform; }
+  /** @returns {Array} 蓝牙设备列表 */
+  get bleDevices() { return this.#state.bleDevices; }
+  /** @returns {Array} 可用 markers 列表 */
+  get markers() { return this.#state.markers; }
+  /** @returns {string[]} 选中的 markers 名称数组 */
+  get selectedMarkers() { return this.#state.selectedMarkers; }
 
   /**
    * 通用状态获取（供 Model.get 委托）
    * @param {string} key - 状态键名
-   * @returns {*} 状态值
+   * @returns {*} 状态值，键不存在返回 undefined
    */
-  get(key) { return this._state[key]; }
+  get(key) { return this.#state[key]; }
 
   /**
-   * 更新状态并触发对应事件
+   * 更新状态并触发对应事件 (内部方法)
    * @param {string} key - 状态键名
    * @param {*} value - 新值
    * @param {string} [event] - 事件名，默认 `${key}-changed`
    */
-  _set(key, value, event) {
-    const old = this._state[key];
+  #set(key, value, event) {
+    const old = this.#state[key];
     if (old === value) return;
-    this._state[key] = value;
+    this.#state[key] = value;
     this.emit(event || `${key}-changed`, value, old);
   }
 
@@ -81,9 +95,9 @@ export class OptionPanel extends EventEmitter {
    */
   async loadApps() {
     try {
-      const result = await this._api.getApps();
+      const result = await this.#api.getApps();
       // invokeWithCheck 已保证失败时抛错，此处只需校验业务字段 data
-      this._set('apps', result.data || [], 'apps-changed');
+      this.#set('apps', result.data || [], 'apps-changed');
     } catch (error) {
       this.emit('error', { source: 'loadApps', error });
     }
@@ -94,9 +108,9 @@ export class OptionPanel extends EventEmitter {
    */
   async loadBleDevices() {
     try {
-      const result = await this._api.getBleDevices();
+      const result = await this.#api.getBleDevices();
       // invokeWithCheck 已保证失败时抛错，此处只需校验业务字段 data
-      this._set('bleDevices', result.data || [], 'ble-devices-changed');
+      this.#set('bleDevices', result.data || [], 'ble-devices-changed');
     } catch (error) {
       this.emit('error', { source: 'loadBleDevices', error });
     }
@@ -107,10 +121,10 @@ export class OptionPanel extends EventEmitter {
    */
   async loadMarkers() {
     try {
-      const markers = await this._api.getPytestMarkers();
-      this._set('markers', markers || [], 'markers-list-changed');
+      const markers = await this.#api.getPytestMarkers();
+      this.#set('markers', markers || [], 'markers-list-changed');
     } catch (error) {
-      this._set('markers', [], 'markers-list-changed');
+      this.#set('markers', [], 'markers-list-changed');
       this.emit('error', { source: 'loadMarkers', error });
     }
   }
@@ -122,7 +136,7 @@ export class OptionPanel extends EventEmitter {
    * @param {Object} app - 应用对象
    */
   selectApp(app) {
-    this._set('selectedApp', app, 'app-changed');
+    this.#set('selectedApp', app, 'app-changed');
   }
 
   /**
@@ -130,7 +144,7 @@ export class OptionPanel extends EventEmitter {
    * @param {string} platform - 平台标识
    */
   selectPlatform(platform) {
-    this._set('selectedPlatform', platform, 'platform-changed');
+    this.#set('selectedPlatform', platform, 'platform-changed');
   }
 
   /**
@@ -138,14 +152,14 @@ export class OptionPanel extends EventEmitter {
    * @param {string} marker - Marker 名称
    */
   toggleMarker(marker) {
-    const markers = [...this._state.selectedMarkers];
+    const markers = [...this.#state.selectedMarkers];
     const idx = markers.indexOf(marker);
     if (idx === -1) {
       markers.push(marker);
     } else {
       markers.splice(idx, 1);
     }
-    this._set('selectedMarkers', markers, 'markers-changed');
+    this.#set('selectedMarkers', markers, 'markers-changed');
   }
 
   /**
@@ -153,6 +167,6 @@ export class OptionPanel extends EventEmitter {
    * @param {string[]} markers - marker 名称数组
    */
   replaceSelectedMarkers(markers) {
-    this._set('selectedMarkers', markers || [], 'markers-changed');
+    this.#set('selectedMarkers', markers || [], 'markers-changed');
   }
 }

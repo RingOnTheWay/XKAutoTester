@@ -105,15 +105,17 @@ describe('TestCaseEditor markDirty / clearDirty', () => {
 describe('TestCaseEditor resetEditor', () => {
   test('resetEditor 编排 StepEditor.reset + OptionPanel 重置 + 清空 loadedConfigs', async () => {
     const TestCaseEditor = await loadTestCaseEditor();
-    const deps = makeFakeDeps();
+    const deps = makeFakeDeps({
+      getCase: { data: { deviceConfig: { dev: 1 }, bleDevice: { ble: 2 } } },
+    });
     const ed = new TestCaseEditor(deps);
-    // 设置非默认值
+    // 通过公共 loadCaseData 设置 loaded* 状态 (内部 #set 私有，不能直访)
+    await ed.loadCaseData('x');
+    // 设置其他非默认值
     deps.stepEditor.steps = [{ id: 's1' }];
     deps.optionPanel.selectedApp = { id: 'x' };
     deps.optionPanel.selectedPlatform = 'ios';
     deps.optionPanel.selectedMarkers = ['smoke'];
-    ed._set('loadedDeviceConfig', { dev: 1 });
-    ed._set('loadedBleDevice', { ble: 2 });
 
     ed.resetEditor();
 
@@ -127,9 +129,12 @@ describe('TestCaseEditor resetEditor', () => {
 
   test('resetEditor 触发 loaded-*-changed 事件', async () => {
     const TestCaseEditor = await loadTestCaseEditor();
-    const ed = new TestCaseEditor(makeFakeDeps());
-    ed._set('loadedDeviceConfig', { dev: 1 });
-    ed._set('loadedBleDevice', { ble: 2 });
+    const deps = makeFakeDeps({
+      getCase: { data: { deviceConfig: { dev: 1 }, bleDevice: { ble: 2 } } },
+    });
+    const ed = new TestCaseEditor(deps);
+    // 通过公共 loadCaseData 设置非默认 loaded* 状态
+    await ed.loadCaseData('x');
     const events = [];
     ed.on('loaded-device-config-changed', (v) => events.push(['dev', v]));
     ed.on('loaded-ble-device-changed', (v) => events.push(['ble', v]));
@@ -176,11 +181,13 @@ describe('TestCaseEditor selectFile', () => {
 describe('TestCaseEditor deselectFile', () => {
   test('deselectFile 委托 FileBrowser + 清空 loadedConfigs + clearDirty', async () => {
     const TestCaseEditor = await loadTestCaseEditor();
-    const deps = makeFakeDeps();
+    const deps = makeFakeDeps({
+      getCase: { data: { deviceConfig: { dev: 1 }, bleDevice: { ble: 2 } } },
+    });
     const ed = new TestCaseEditor(deps);
+    // 通过公共 loadCaseData 设置非默认 loaded* 状态
+    await ed.loadCaseData('x');
     deps.fileBrowser.selectedFile = { name: 'x.py' };
-    ed._set('loadedDeviceConfig', { dev: 1 });
-    ed._set('loadedBleDevice', { ble: 2 });
     ed.markDirty();
 
     ed.deselectFile();
@@ -194,12 +201,15 @@ describe('TestCaseEditor deselectFile', () => {
 describe('TestCaseEditor cancelEdit', () => {
   test('cancelEdit 编排 resetEditor + FileBrowser.deselectFile + isEditing=false + emit cancel-edit', async () => {
     const TestCaseEditor = await loadTestCaseEditor();
-    const deps = makeFakeDeps();
+    const deps = makeFakeDeps({
+      checkJsonExists: { exists: true },
+      getCase: { data: { deviceConfig: { dev: 1 } } },
+    });
     const ed = new TestCaseEditor(deps);
+    // 通过公共 showEditor(file) 进入编辑模式 (isEditing=true) + loadCaseData 设置 loadedDeviceConfig
+    await ed.showEditor({ name: 'x.py' });
     deps.fileBrowser.selectedFile = { name: 'x.py' };
-    ed._set('isEditing', true);
     ed.markDirty();
-    ed._set('loadedDeviceConfig', { dev: 1 });
 
     let cancelEmitted = false;
     ed.on('cancel-edit', () => { cancelEmitted = true; });
@@ -531,8 +541,12 @@ describe('TestCaseEditor collectFormData', () => {
 
   test('collectFormData 无 BLE 步骤时保留 loadedBleDevice', async () => {
     const TestCaseEditor = await loadTestCaseEditor();
-    const ed = new TestCaseEditor(makeFakeDeps());
-    ed._set('loadedBleDevice', { deviceId: 'loaded', port: 'COM5' });
+    const deps = makeFakeDeps({
+      getCase: { data: { bleDevice: { deviceId: 'loaded', port: 'COM5' } } },
+    });
+    const ed = new TestCaseEditor(deps);
+    // 通过公共 loadCaseData 设置 loadedBleDevice
+    await ed.loadCaseData('x');
 
     const data = ed.collectFormData({
       inputs: { fileName: 'x' },
@@ -546,14 +560,17 @@ describe('TestCaseEditor collectFormData', () => {
 
   test('collectFormData BLE 步骤优先使用 loadedBleDevice.port', async () => {
     const TestCaseEditor = await loadTestCaseEditor();
-    const deps = makeFakeDeps();
+    const deps = makeFakeDeps({
+      getCase: { data: { bleDevice: { port: 'COM9' } } },
+    });
     deps.optionPanel.bleDevices = [{
       deviceId: 'ble1',
       name: 'BLE',
       bleConfig: {},
     }];
     const ed = new TestCaseEditor(deps);
-    ed._set('loadedBleDevice', { port: 'COM9' });
+    // 通过公共 loadCaseData 设置 loadedBleDevice
+    await ed.loadCaseData('x');
 
     const data = ed.collectFormData({
       inputs: { fileName: 'x' },
@@ -568,33 +585,15 @@ describe('TestCaseEditor collectFormData', () => {
 
   test('collectFormData deviceConfig 来自 loadedDeviceConfig', async () => {
     const TestCaseEditor = await loadTestCaseEditor();
-    const ed = new TestCaseEditor(makeFakeDeps());
-    ed._set('loadedDeviceConfig', { platform: 'android', version: '12' });
+    const deps = makeFakeDeps({
+      getCase: { data: { deviceConfig: { platform: 'android', version: '12' } } },
+    });
+    const ed = new TestCaseEditor(deps);
+    // 通过公共 loadCaseData 设置 loadedDeviceConfig
+    await ed.loadCaseData('x');
 
     const data = ed.collectFormData({ inputs: { fileName: 'x' }, steps: [] });
     assert.deepStrictEqual(data.deviceConfig, { platform: 'android', version: '12' });
-  });
-});
-
-describe('TestCaseEditor _set 通用机制', () => {
-  test('_set 同值不触发事件', async () => {
-    const TestCaseEditor = await loadTestCaseEditor();
-    const ed = new TestCaseEditor(makeFakeDeps());
-    let emitCount = 0;
-    ed.on('isEditing-changed', () => { emitCount++; });
-
-    ed._set('isEditing', false); // 同 false
-    assert.strictEqual(emitCount, 0);
-  });
-
-  test('_set 默认事件名', async () => {
-    const TestCaseEditor = await loadTestCaseEditor();
-    const ed = new TestCaseEditor(makeFakeDeps());
-    let emitted = null;
-    ed.on('isEditing-changed', (v) => { emitted = v; });
-
-    ed._set('isEditing', true);
-    assert.strictEqual(emitted, true);
   });
 });
 

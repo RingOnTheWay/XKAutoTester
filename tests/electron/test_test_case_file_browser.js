@@ -117,7 +117,7 @@ describe('FileBrowser scanTestFiles', () => {
     const FileBrowser = await loadFileBrowser();
     const { api, calls } = makeFakeApi();
     const fb = new FileBrowser(api);
-    fb._set('searchQuery', 'old-query'); // 模拟旧查询
+    fb.setSearchQuery('old-query'); // 模拟旧查询 (公共 API)
     await fb.scanTestFiles('/fake/dir');
     assert.strictEqual(fb.testFiles.length, 2);
     assert.strictEqual(fb.searchQuery, '');
@@ -140,9 +140,11 @@ describe('FileBrowser scanTestFiles', () => {
 describe('FileBrowser batchCheckJsonExists', () => {
   test('空列表清空 jsonExistsMap 并触发 files-changed', async () => {
     const FileBrowser = await loadFileBrowser();
-    const { api } = makeFakeApi();
+    // 先用非空结果建立非空 baseline (公共 API 路径)
+    const { api } = makeFakeApi({ batchCheckJsonExists: { success: true, data: { old: true } } });
     const fb = new FileBrowser(api);
-    fb._set('jsonExistsMap', { old: true });
+    await fb.batchCheckJsonExists(['old']);
+    assert.deepStrictEqual(fb.jsonExistsMap, { old: true });
     let filesChanged = 0;
     fb.on('files-changed', () => { filesChanged++; });
     await fb.batchCheckJsonExists([]);

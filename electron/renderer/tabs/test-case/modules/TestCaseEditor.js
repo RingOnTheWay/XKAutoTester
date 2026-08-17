@@ -13,6 +13,8 @@
  * 依赖注入：构造时注入 api + fileBrowser + optionPanel + stepEditor 实例，
  *           TestCaseEditor 作为编排者协调四个深模块。
  *
+ * R10 阶段 3 接口收紧：_api/_fileBrowser/_optionPanel/_stepEditor/_state/_set 全部转为 #private。
+ *
  * 事件：
  *   - editing-changed(isEditing)         编辑模式变更
  *   - dirty-changed(dirty)               脏标记变更
@@ -28,6 +30,22 @@
 import { EventEmitter } from '../../../core/EventEmitter.js';
 
 export class TestCaseEditor extends EventEmitter {
+  /** @type {Object} ApiBridge 绑定后的 API 对象 */
+  #api;
+  /** @type {Object} FileBrowser 实例 */
+  #fileBrowser;
+  /** @type {Object} OptionPanel 实例 */
+  #optionPanel;
+  /** @type {Object} StepEditor 实例 */
+  #stepEditor;
+  /** @type {Object} 内部状态容器 */
+  #state = {
+    isEditing: false,
+    hasUnsavedChanges: false,
+    loadedDeviceConfig: null,
+    loadedBleDevice: null,
+  };
+
   /**
    * @param {Object} opts
    * @param {Object} opts.api - ApiBridge 绑定后的 API 对象
@@ -37,42 +55,40 @@ export class TestCaseEditor extends EventEmitter {
    */
   constructor({ api, fileBrowser, optionPanel, stepEditor }) {
     super();
-    this._api = api;
-    this._fileBrowser = fileBrowser;
-    this._optionPanel = optionPanel;
-    this._stepEditor = stepEditor;
-    this._state = {
-      isEditing: false,
-      hasUnsavedChanges: false,
-      loadedDeviceConfig: null,
-      loadedBleDevice: null,
-    };
+    this.#api = api;
+    this.#fileBrowser = fileBrowser;
+    this.#optionPanel = optionPanel;
+    this.#stepEditor = stepEditor;
   }
 
   // ── State Getters ──────────────────────────────────────────────
 
-  get isEditing() { return this._state.isEditing; }
-  get hasUnsavedChanges() { return this._state.hasUnsavedChanges; }
-  get loadedDeviceConfig() { return this._state.loadedDeviceConfig; }
-  get loadedBleDevice() { return this._state.loadedBleDevice; }
+  /** @returns {boolean} 是否处于编辑模式 */
+  get isEditing() { return this.#state.isEditing; }
+  /** @returns {boolean} 是否有未保存更改 */
+  get hasUnsavedChanges() { return this.#state.hasUnsavedChanges; }
+  /** @returns {Object|null} 已加载的设备配置 */
+  get loadedDeviceConfig() { return this.#state.loadedDeviceConfig; }
+  /** @returns {Object|null} 已加载的蓝牙设备 */
+  get loadedBleDevice() { return this.#state.loadedBleDevice; }
 
   /**
    * 通用状态获取（供 Model.get 委托）
    * @param {string} key - 状态键名
-   * @returns {*} 状态值
+   * @returns {*} 状态值，键不存在返回 undefined
    */
-  get(key) { return this._state[key]; }
+  get(key) { return this.#state[key]; }
 
   /**
-   * 更新状态并触发对应事件
+   * 更新状态并触发对应事件 (内部方法)
    * @param {string} key - 状态键名
    * @param {*} value - 新值
    * @param {string} [event] - 事件名，默认 `${key}-changed`
    */
-  _set(key, value, event) {
-    const old = this._state[key];
+  #set(key, value, event) {
+    const old = this.#state[key];
     if (old === value) return;
-    this._state[key] = value;
+    this.#state[key] = value;
     this.emit(event || `${key}-changed`, value, old);
   }
 
@@ -82,14 +98,14 @@ export class TestCaseEditor extends EventEmitter {
    * 标记为有未保存更改
    */
   markDirty() {
-    this._set('hasUnsavedChanges', true, 'dirty-changed');
+    this.#set('hasUnsavedChanges', true, 'dirty-changed');
   }
 
   /**
    * 清除脏标记 (保存完成 / 加载文件 / 取消编辑时调用)
    */
   clearDirty() {
-    this._set('hasUnsavedChanges', false, 'dirty-changed');
+    this.#set('hasUnsavedChanges', false, 'dirty-changed');
   }
 
   /**
@@ -97,12 +113,12 @@ export class TestCaseEditor extends EventEmitter {
    * 编排 StepEditor.reset + OptionPanel.selectApp/Platform/Markers + 清除已加载设备配置
    */
   resetEditor() {
-    this._stepEditor.reset();
-    this._optionPanel.selectApp(null);
-    this._optionPanel.selectPlatform('android');
-    this._optionPanel.replaceSelectedMarkers([]);
-    this._set('loadedDeviceConfig', null, 'loaded-device-config-changed');
-    this._set('loadedBleDevice', null, 'loaded-ble-device-changed');
+    this.#stepEditor.reset();
+    this.#optionPanel.selectApp(null);
+    this.#optionPanel.selectPlatform('android');
+    this.#optionPanel.replaceSelectedMarkers([]);
+    this.#set('loadedDeviceConfig', null, 'loaded-device-config-changed');
+    this.#set('loadedBleDevice', null, 'loaded-ble-device-changed');
   }
 
   // ── File → Editor Lifecycle ────────────────────────────────────
@@ -112,7 +128,7 @@ export class TestCaseEditor extends EventEmitter {
    * @param {Object} file - 文件对象 { name, path, ... }
    */
   selectFile(file) {
-    this._fileBrowser.selectFile(file);
+    this.#fileBrowser.selectFile(file);
     this.clearDirty();
     // 选中文件后自动进入编辑模式 (异步)
     this.showEditor(file);
@@ -122,9 +138,9 @@ export class TestCaseEditor extends EventEmitter {
    * 取消选中文件：委托 FileBrowser 清空 selectedFile，重置编辑器关联状态
    */
   deselectFile() {
-    this._fileBrowser.deselectFile();
-    this._set('loadedDeviceConfig', null, 'loaded-device-config-changed');
-    this._set('loadedBleDevice', null, 'loaded-ble-device-changed');
+    this.#fileBrowser.deselectFile();
+    this.#set('loadedDeviceConfig', null, 'loaded-device-config-changed');
+    this.#set('loadedBleDevice', null, 'loaded-ble-device-changed');
     this.clearDirty();
   }
 
@@ -138,14 +154,14 @@ export class TestCaseEditor extends EventEmitter {
         ? file.name.replace(/\.[^/.]+$/, '')
         : file.name;
       try {
-        const jsonCheck = await this._api.checkJsonExists(fileName);
+        const jsonCheck = await this.#api.checkJsonExists(fileName);
         if (!jsonCheck.exists) {
-          this._set('isEditing', false, 'editing-changed');
+          this.#set('isEditing', false, 'editing-changed');
           this.resetEditor();
           this.emit('show-editor', { file, isNew: false, jsonMissing: true, fileName });
           return;
         }
-        this._set('isEditing', true, 'editing-changed');
+        this.#set('isEditing', true, 'editing-changed');
         this.emit('show-editor', { file, isNew: false, jsonMissing: false, fileName });
         await this.loadCaseData(fileName);
       } catch (error) {
@@ -153,7 +169,7 @@ export class TestCaseEditor extends EventEmitter {
       }
     } else {
       // 新建模式
-      this._set('isEditing', false, 'editing-changed');
+      this.#set('isEditing', false, 'editing-changed');
       this.resetEditor();
       this.emit('show-editor', { file: null, isNew: true, jsonMissing: false, fileName: '' });
     }
@@ -164,11 +180,11 @@ export class TestCaseEditor extends EventEmitter {
    */
   cancelEdit() {
     this.resetEditor();
-    this._fileBrowser.deselectFile();
-    this._set('isEditing', false, 'editing-changed');
+    this.#fileBrowser.deselectFile();
+    this.#set('isEditing', false, 'editing-changed');
     this.clearDirty();
-    this._set('loadedDeviceConfig', null, 'loaded-device-config-changed');
-    this._set('loadedBleDevice', null, 'loaded-ble-device-changed');
+    this.#set('loadedDeviceConfig', null, 'loaded-device-config-changed');
+    this.#set('loadedBleDevice', null, 'loaded-ble-device-changed');
     this.emit('cancel-edit');
   }
 
@@ -187,24 +203,24 @@ export class TestCaseEditor extends EventEmitter {
       this.emit('error', { source: 'saveCase', message: 'fileNameInvalidChars' });
       return;
     }
-    if (!this._fileBrowser.selectedDirectory) {
+    if (!this.#fileBrowser.selectedDirectory) {
       this.emit('error', { source: 'saveCase', message: 'selectCaseFirst' });
       return;
     }
-    if (!this._optionPanel.selectedApp) {
+    if (!this.#optionPanel.selectedApp) {
       this.emit('error', { source: 'saveCase', message: 'selectAppFirst' });
       return;
     }
 
     try {
-      const result = await this._api.saveAndGenerate(
+      const result = await this.#api.saveAndGenerate(
         caseData,
-        this._fileBrowser.selectedDirectory,
+        this.#fileBrowser.selectedDirectory,
       );
       // invokeWithCheck 已保证失败时抛错，走到这里即成功
       this.clearDirty();
       this.emit('case-saved', result);
-      await this._fileBrowser.scanTestFiles(this._fileBrowser.selectedDirectory);
+      await this.#fileBrowser.scanTestFiles(this.#fileBrowser.selectedDirectory);
     } catch (error) {
       this.emit('error', { source: 'saveCase', message: 'saveFailed', error });
     }
@@ -217,11 +233,11 @@ export class TestCaseEditor extends EventEmitter {
    */
   async deleteCase(fileName, pyFilePath) {
     try {
-      const result = await this._api.deleteCase({ fileName, pyFilePath });
+      const result = await this.#api.deleteCase({ fileName, pyFilePath });
       // invokeWithCheck 已保证失败时抛错，走到这里即成功
       void result; // 删除结果未使用
       this.emit('case-deleted', { fileName, pyFilePath });
-      await this._fileBrowser.scanTestFiles(this._fileBrowser.selectedDirectory);
+      await this.#fileBrowser.scanTestFiles(this.#fileBrowser.selectedDirectory);
     } catch (error) {
       this.emit('error', { source: 'deleteCase', message: 'deleteFailed', error });
     }
@@ -234,25 +250,25 @@ export class TestCaseEditor extends EventEmitter {
    */
   async loadCaseData(fileName) {
     try {
-      const result = await this._api.getCase(fileName);
+      const result = await this.#api.getCase(fileName);
       // invokeWithCheck 已保证失败时抛错，此处只需校验业务字段 data
       const caseData = result.data;
 
       // 恢复 markers (OptionPanel 拥有)
       const savedMarkers = caseData.allureConfig?.markers || [];
-      this._optionPanel.replaceSelectedMarkers(savedMarkers);
+      this.#optionPanel.replaceSelectedMarkers(savedMarkers);
 
       // 恢复 targetApp (OptionPanel 拥有)
       if (caseData.targetApp?.id) {
-        this._optionPanel.selectApp(caseData.targetApp);
+        this.#optionPanel.selectApp(caseData.targetApp);
       }
 
       // 恢复 steps (StepEditor 拥有)
-      this._stepEditor.setSteps(caseData.steps || []);
+      this.#stepEditor.setSteps(caseData.steps || []);
 
       // 恢复设备配置 (TestCaseEditor 拥有)
-      this._set('loadedDeviceConfig', caseData.deviceConfig || null, 'loaded-device-config-changed');
-      this._set('loadedBleDevice', caseData.bleDevice || null, 'loaded-ble-device-changed');
+      this.#set('loadedDeviceConfig', caseData.deviceConfig || null, 'loaded-device-config-changed');
+      this.#set('loadedBleDevice', caseData.bleDevice || null, 'loaded-ble-device-changed');
 
       this.emit('case-loaded', caseData);
     } catch (error) {
@@ -286,7 +302,7 @@ export class TestCaseEditor extends EventEmitter {
     } = inputs;
 
     // 从 OptionPanel 收集 markers
-    const markers = [...this._optionPanel.selectedMarkers];
+    const markers = [...this.#optionPanel.selectedMarkers];
 
     // 从步骤中提取蓝牙设备信息
     let bleDevice = null;
@@ -295,7 +311,7 @@ export class TestCaseEditor extends EventEmitter {
         const config = step.config || {};
         const deviceConfig = config.deviceConfig || {};
         if (deviceConfig.deviceId) {
-          const device = this._optionPanel.bleDevices.find(d => d.deviceId === deviceConfig.deviceId);
+          const device = this.#optionPanel.bleDevices.find(d => d.deviceId === deviceConfig.deviceId);
           if (device) {
             const bleConfig = device.bleConfig || {};
             bleDevice = {
@@ -317,25 +333,25 @@ export class TestCaseEditor extends EventEmitter {
     }
 
     // 合并蓝牙设备配置：优先使用加载配置中的端口
-    if (bleDevice && this._state.loadedBleDevice) {
-      if (this._state.loadedBleDevice.port) {
-        bleDevice.port = this._state.loadedBleDevice.port;
+    if (bleDevice && this.#state.loadedBleDevice) {
+      if (this.#state.loadedBleDevice.port) {
+        bleDevice.port = this.#state.loadedBleDevice.port;
       }
     }
 
     // 如果步骤中没有蓝牙设备信息，但之前加载了蓝牙设备配置，保留它
-    if (!bleDevice && this._state.loadedBleDevice) {
-      bleDevice = this._state.loadedBleDevice;
+    if (!bleDevice && this.#state.loadedBleDevice) {
+      bleDevice = this.#state.loadedBleDevice;
     }
 
-    const deviceConfig = this._state.loadedDeviceConfig || null;
+    const deviceConfig = this.#state.loadedDeviceConfig || null;
 
     return {
       fileName,
       name: caseName || fileName,
       description,
-      platform: this._optionPanel.selectedPlatform || 'android',
-      targetApp: this._optionPanel.selectedApp,
+      platform: this.#optionPanel.selectedPlatform || 'android',
+      targetApp: this.#optionPanel.selectedApp,
       steps: stepsFromDOM,
       deviceConfig,
       bleDevice,

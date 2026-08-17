@@ -58,10 +58,17 @@ describe('StepEditor 初始状态', () => {
     assert.strictEqual(se.get('unknown'), undefined);
   });
 
-  test('未注入 getApp 时返回 null', async () => {
+  test('未注入 getApp 时 updateStepSelect 不抛错 (内部默认返回 null)', async () => {
+    setupI18n();
     const StepEditor = await loadStepEditor();
-    const se = new StepEditor();
-    assert.strictEqual(se._getApp(), null);
+    const se = new StepEditor(); // 无 getApp 注入
+    const s = se.addStep();
+    s.config.compareConfig = { pageId: 'p1' };
+    // 走 tc-compare-element-select 路径会调用 #getApp()，未注入时应安全返回 null 不抛错
+    se.updateStepSelect('tc-compare-element-select-1', 'el1', s.id);
+    assert.strictEqual(s.config.compareConfig.elementId, 'el1');
+    // 因 getApp 返回 null，elementName/locator 不会被填充
+    assert.ok(!('elementName' in s.config.compareConfig));
   });
 });
 
@@ -731,28 +738,5 @@ describe('StepEditor setDraggedStep', () => {
 
     se.setDraggedStep(step);
     assert.strictEqual(emitCount, 0);
-  });
-});
-
-describe('StepEditor _set 通用机制', () => {
-  test('_set 同值不触发事件', async () => {
-    const StepEditor = await loadStepEditor();
-    const se = new StepEditor();
-    se._set('draggedStep', null, 'dragged-step-changed'); // 同 null
-    let emitCount = 0;
-    se.on('dragged-step-changed', () => { emitCount++; });
-
-    se._set('draggedStep', null, 'dragged-step-changed');
-    assert.strictEqual(emitCount, 0);
-  });
-
-  test('_set 默认事件名', async () => {
-    const StepEditor = await loadStepEditor();
-    const se = new StepEditor();
-    let emitted = null;
-    se.on('draggedStep-changed', (v) => { emitted = v; });
-
-    se._set('draggedStep', { id: 'x' });
-    assert.ok(emitted);
   });
 });

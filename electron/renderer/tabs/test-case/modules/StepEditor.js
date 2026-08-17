@@ -11,6 +11,8 @@
  * 依赖注入：构造时注入 getApp 回调，避免与 OptionPanel 硬耦合，
  *           updateStepSelect 中需要 selectedApp 来解析 element locator。
  *
+ * R10 阶段 3 接口收紧：_getApp/_state/_set 全部转为 #private。
+ *
  * 事件：
  *   - steps-changed(steps)           步骤数组变更 (增/删/复制/移动/类型切换/加载/重置)
  *   - step-updated({stepId, selectId, value, index})  单步字段变更 (updateStepSelect)
@@ -26,41 +28,47 @@ function nextStepId() {
 }
 
 export class StepEditor extends EventEmitter {
+  /** @type {() => Object|null} 返回当前选中应用 (从 OptionPanel 注入) */
+  #getApp;
+  /** @type {Object} 内部状态容器 */
+  #state = {
+    steps: [],
+    draggedStep: null,
+  };
+
   /**
    * @param {Object} opts
-   * @param {() => Object|null} opts.getApp - 返回当前选中应用 (从 OptionPanel 注入)
+   * @param {() => Object|null} [opts.getApp] - 返回当前选中应用 (从 OptionPanel 注入)
    */
   constructor({ getApp } = {}) {
     super();
-    this._getApp = getApp || (() => null);
-    this._state = {
-      steps: [],
-      draggedStep: null,
-    };
+    this.#getApp = getApp || (() => null);
   }
 
   // ── State Getters ──────────────────────────────────────────────
 
-  get steps() { return this._state.steps; }
-  get draggedStep() { return this._state.draggedStep; }
+  /** @returns {Array} 步骤数组 */
+  get steps() { return this.#state.steps; }
+  /** @returns {Object|null} 当前拖拽中的步骤 */
+  get draggedStep() { return this.#state.draggedStep; }
 
   /**
    * 通用状态获取（供 Model.get 委托）
    * @param {string} key - 状态键名
-   * @returns {*} 状态值
+   * @returns {*} 状态值，键不存在返回 undefined
    */
-  get(key) { return this._state[key]; }
+  get(key) { return this.#state[key]; }
 
   /**
-   * 更新状态并触发对应事件
+   * 更新状态并触发对应事件 (内部方法)
    * @param {string} key - 状态键名
    * @param {*} value - 新值
    * @param {string} [event] - 事件名，默认 `${key}-changed`
    */
-  _set(key, value, event) {
-    const old = this._state[key];
+  #set(key, value, event) {
+    const old = this.#state[key];
     if (old === value) return;
-    this._state[key] = value;
+    this.#state[key] = value;
     this.emit(event || `${key}-changed`, value, old);
   }
 
@@ -72,26 +80,26 @@ export class StepEditor extends EventEmitter {
    * @param {Array} steps - 步骤数组
    */
   setSteps(steps) {
-    this._state.steps = Array.isArray(steps) ? [...steps] : [];
-    this.emit('steps-changed', this._state.steps);
+    this.#state.steps = Array.isArray(steps) ? [...steps] : [];
+    this.emit('steps-changed', this.#state.steps);
   }
 
   /**
    * 重置步骤为空数组
    */
   reset() {
-    this._state.steps = [];
-    this.emit('steps-changed', this._state.steps);
+    this.#state.steps = [];
+    this.emit('steps-changed', this.#state.steps);
   }
 
   /**
    * 从 DOM 收集的步骤数据静默同步 (不触发事件)
-   * 保留原 syncStepsFromDOM 行为：直接覆盖 _state.steps，无 emit
+   * 保留原 syncStepsFromDOM 行为：直接覆盖 #state.steps，无 emit
    * @param {Array} steps - View 收集的步骤数据
    */
   syncFromDOM(steps) {
     if (!Array.isArray(steps) || steps.length === 0) return;
-    this._state.steps = steps;
+    this.#state.steps = steps;
   }
 
   /**
@@ -99,7 +107,7 @@ export class StepEditor extends EventEmitter {
    * @param {Object|null} step - 步骤对象或 null
    */
   setDraggedStep(step) {
-    this._set('draggedStep', step, 'dragged-step-changed');
+    this.#set('draggedStep', step, 'dragged-step-changed');
   }
 
   // ── Step Operations (用户编辑，由 Model 包装标记 dirty) ────────
@@ -112,8 +120,8 @@ export class StepEditor extends EventEmitter {
     const stepId = nextStepId();
     const newStep = {
       id: stepId,
-      order: this._state.steps.length + 1,
-      name: window.i18n.t('testCase.defaultStepName', { n: this._state.steps.length + 1 }),
+      order: this.#state.steps.length + 1,
+      name: window.i18n.t('testCase.defaultStepName', { n: this.#state.steps.length + 1 }),
       type: 'element',
       config: {
         pageId: null,
@@ -126,8 +134,8 @@ export class StepEditor extends EventEmitter {
         operationValue: {},
       },
     };
-    this._state.steps.push(newStep);
-    this.emit('steps-changed', this._state.steps);
+    this.#state.steps.push(newStep);
+    this.emit('steps-changed', this.#state.steps);
     return newStep;
   }
 
@@ -136,9 +144,9 @@ export class StepEditor extends EventEmitter {
    * @param {string} stepId - 步骤 ID
    */
   deleteStep(stepId) {
-    this._state.steps = this._state.steps.filter(s => s.id !== stepId);
+    this.#state.steps = this.#state.steps.filter(s => s.id !== stepId);
     this.updateStepOrders();
-    this.emit('steps-changed', this._state.steps);
+    this.emit('steps-changed', this.#state.steps);
   }
 
   /**
@@ -147,7 +155,7 @@ export class StepEditor extends EventEmitter {
    * @returns {Object|null} 新步骤
    */
   copyStep(stepId) {
-    const original = this._state.steps.find(s => s.id === stepId);
+    const original = this.#state.steps.find(s => s.id === stepId);
     if (!original) return null;
 
     const newStepId = nextStepId();
@@ -155,11 +163,11 @@ export class StepEditor extends EventEmitter {
       ...JSON.parse(JSON.stringify(original)),
       id: newStepId,
       name: window.i18n.t('testCase.copySuffix', { name: original.name }),
-      order: this._state.steps.length + 1,
+      order: this.#state.steps.length + 1,
     };
 
-    this._state.steps.push(newStep);
-    this.emit('steps-changed', this._state.steps);
+    this.#state.steps.push(newStep);
+    this.emit('steps-changed', this.#state.steps);
     return newStep;
   }
 
@@ -169,25 +177,25 @@ export class StepEditor extends EventEmitter {
    * @param {'up'|'down'} direction - 移动方向
    */
   moveStep(stepId, direction) {
-    const idx = this._state.steps.findIndex(s => s.id === stepId);
+    const idx = this.#state.steps.findIndex(s => s.id === stepId);
     if (idx === -1) return;
     if (direction === 'up' && idx === 0) return;
-    if (direction === 'down' && idx === this._state.steps.length - 1) return;
+    if (direction === 'down' && idx === this.#state.steps.length - 1) return;
 
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-    const temp = this._state.steps[idx];
-    this._state.steps[idx] = this._state.steps[targetIdx];
-    this._state.steps[targetIdx] = temp;
+    const temp = this.#state.steps[idx];
+    this.#state.steps[idx] = this.#state.steps[targetIdx];
+    this.#state.steps[targetIdx] = temp;
 
     this.updateStepOrders();
-    this.emit('steps-changed', this._state.steps);
+    this.emit('steps-changed', this.#state.steps);
   }
 
   /**
    * 根据 steps 数组索引同步 step.order
    */
   updateStepOrders() {
-    this._state.steps.forEach((step, index) => {
+    this.#state.steps.forEach((step, index) => {
       step.order = index + 1;
     });
   }
@@ -200,7 +208,7 @@ export class StepEditor extends EventEmitter {
    * @param {number} [index] - 多元素索引
    */
   updateStepSelect(selectId, value, stepId, index) {
-    const step = this._state.steps.find(s => s.id === stepId);
+    const step = this.#state.steps.find(s => s.id === stepId);
     if (!step) return;
 
     // 根据 selectId 前缀更新步骤配置
@@ -287,7 +295,7 @@ export class StepEditor extends EventEmitter {
       config.compareConfig = config.compareConfig || {};
       config.compareConfig.elementId = value;
       // 更新 element locator
-      const app = this._getApp();
+      const app = this.#getApp();
       if (app && config.compareConfig.pageId) {
         const page = app.pages?.find(p => p.id === config.compareConfig.pageId);
         const element = page?.elements?.find(el => el.id === value);
@@ -305,7 +313,7 @@ export class StepEditor extends EventEmitter {
     } else if (selectId.startsWith('tc-search-element-select')) {
       config.searchConfig = config.searchConfig || {};
       config.searchConfig.elementId = value;
-      const app = this._getApp();
+      const app = this.#getApp();
       if (app && config.searchConfig?.pageId) {
         const page = app.pages?.find(p => p.id === config.searchConfig.pageId);
         const element = page?.elements?.find(el => el.id === value);
@@ -330,7 +338,7 @@ export class StepEditor extends EventEmitter {
       config.locatorValue = null;
       config.operation = 'click';
       config.operationValue = {};
-      const app = this._getApp();
+      const app = this.#getApp();
       if (app) {
         const page = app.pages?.find(p => p.id === value);
         config.pageName = page?.name || '';
@@ -339,7 +347,7 @@ export class StepEditor extends EventEmitter {
 
     // 元素变更时更新 locator
     if (selectId.startsWith('tc-element-select')) {
-      const app = this._getApp();
+      const app = this.#getApp();
       if (app && config.pageId) {
         const page = app.pages?.find(p => p.id === config.pageId);
         const element = page?.elements?.find(el => el.id === value);
@@ -369,13 +377,13 @@ export class StepEditor extends EventEmitter {
    * @param {string} type - 新类型
    */
   changeStepType(stepId, type) {
-    const step = this._state.steps.find(s => s.id === stepId);
+    const step = this.#state.steps.find(s => s.id === stepId);
     if (!step) return;
 
     step.type = type;
     // 重置类型特定配置
     step.config = { type };
-    this.emit('steps-changed', this._state.steps);
+    this.emit('steps-changed', this.#state.steps);
   }
 
   /**
@@ -384,7 +392,7 @@ export class StepEditor extends EventEmitter {
    * @param {string} name - 新名称
    */
   updateStepName(stepId, name) {
-    const step = this._state.steps.find(s => s.id === stepId);
+    const step = this.#state.steps.find(s => s.id === stepId);
     if (!step) return;
 
     step.name = name;

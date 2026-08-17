@@ -34,8 +34,9 @@ describe('TestCaseModel FileBrowser 集成 (R10)', () => {
   test('Model.get(key) 优先读 FileBrowser 状态', async () => {
     const Model = await loadModel();
     const m = new Model();
-    m.fileBrowser._set('selectedDirectory', '/fake');
-    assert.strictEqual(m.get('selectedDirectory'), '/fake');
+    // 通过公共 API 写入状态 (searchQuery 有公共 setter，无需 poke 内部)
+    m.setSearchQuery('fake-kw');
+    assert.strictEqual(m.get('searchQuery'), 'fake-kw');
     // Model 自有状态
     assert.strictEqual(m.get('isEditing'), false);
   });
@@ -49,9 +50,10 @@ describe('TestCaseModel FileBrowser 集成 (R10)', () => {
     m.on('json-exists-changed', (map) => events.push(['json', map]));
     m.on('selected-file-changed', (f) => events.push(['file', f]));
 
-    m.fileBrowser._set('selectedDirectory', '/x', 'directory-changed');
-    m.fileBrowser._set('testFiles', [{ name: 'a.py' }], 'files-changed');
-    m.fileBrowser._set('jsonExistsMap', { a: true }, 'json-exists-changed');
+    // 直接 emit 验证转发接线 (FileBrowser 单测已覆盖 _set→emit 内部行为)
+    m.fileBrowser.emit('directory-changed', '/x');
+    m.fileBrowser.emit('files-changed');
+    m.fileBrowser.emit('json-exists-changed', { a: true });
     m.fileBrowser.selectFile({ name: 'b.py' });
 
     assert.ok(events.some(([t, p]) => t === 'dir' && p === '/x'));
@@ -126,39 +128,27 @@ describe('TestCaseModel FileBrowser 集成 (R10)', () => {
     assert.ok(dirtyChangedEmitted);
   });
 
-  test('Model.deselectFile 编排 FileBrowser + 编辑器状态', async () => {
+  test('Model.deselectFile 委托 TestCaseEditor.deselectFile', async () => {
     const Model = await loadModel();
     const m = new Model();
-    m.showEditor = () => {};
-    m.selectFile({ name: 'x.py' });
-    m.testCaseEditor._set('loadedDeviceConfig', { dev: 1 }, 'loaded-device-config-changed');
-    m.testCaseEditor._set('loadedBleDevice', { ble: 2 }, 'loaded-ble-device-changed');
-    m.markDirty();
-
+    let called = false;
+    m.testCaseEditor.deselectFile = () => { called = true; };
     m.deselectFile();
-    assert.strictEqual(m.selectedFile, null);
-    assert.strictEqual(m.loadedDeviceConfig, null);
-    assert.strictEqual(m.loadedBleDevice, null);
-    assert.strictEqual(m.hasUnsavedChanges, false);
+    assert.strictEqual(called, true);
   });
 
-  test('Model.cancelEdit 编排 FileBrowser + 编辑器状态', async () => {
+  test('Model.cancelEdit 委托 TestCaseEditor.cancelEdit', async () => {
     const Model = await loadModel();
     const m = new Model();
-    m.showEditor = () => {};
-    m.selectFile({ name: 'x.py' });
-    m.testCaseEditor._set('isEditing', true, 'editing-changed');
-    m.markDirty();
-
+    let called = false;
+    m.testCaseEditor.cancelEdit = () => { called = true; };
     let cancelEmitted = false;
     m.on('cancel-edit', () => { cancelEmitted = true; });
     m.cancelEdit();
-    assert.strictEqual(m.selectedFile, null);
-    assert.strictEqual(m.isEditing, false);
-    assert.strictEqual(m.hasUnsavedChanges, false);
-    assert.strictEqual(m.loadedDeviceConfig, null);
-    assert.strictEqual(m.loadedBleDevice, null);
-    assert.ok(cancelEmitted);
+    assert.strictEqual(called, true);
+    // cancel-edit 事件由 TestCaseEditor 发出，Model 转发；spy 替换后不会 emit
+    // 这里仅验证委托调用，事件转发由 TestCaseEditor 单测覆盖
+    assert.strictEqual(cancelEmitted, false);
   });
 });
 
@@ -184,7 +174,7 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
   test('Model.get(key) 读 OptionPanel 状态', async () => {
     const Model = await loadModel();
     const m = new Model();
-    m.optionPanel._set('selectedApp', { id: 'x' });
+    m.optionPanel.selectApp({ id: 'x' });
     assert.deepStrictEqual(m.get('selectedApp'), { id: 'x' });
     assert.strictEqual(m.get('selectedPlatform'), 'android');
   });
@@ -200,12 +190,13 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
     m.on('markers-list-changed', (mk) => events.push(['markers-list', mk]));
     m.on('ble-devices-changed', (d) => events.push(['ble', d]));
 
-    m.optionPanel._set('apps', [{ id: 'a' }], 'apps-changed');
+    // apps/markers-list/ble 通过直接 emit 验证转发接线 (load* 单测已覆盖 #set→emit 内部行为)
+    m.optionPanel.emit('apps-changed', [{ id: 'a' }]);
     m.optionPanel.selectApp({ id: 'a' });
     m.optionPanel.selectPlatform('ios');
     m.optionPanel.toggleMarker('smoke');
-    m.optionPanel._set('markers', [{ name: 'x' }], 'markers-list-changed');
-    m.optionPanel._set('bleDevices', [{ deviceId: 'd' }], 'ble-devices-changed');
+    m.optionPanel.emit('markers-list-changed', [{ name: 'x' }]);
+    m.optionPanel.emit('ble-devices-changed', [{ deviceId: 'd' }]);
 
     assert.ok(events.some(([t, v]) => t === 'apps' && v.length === 1));
     assert.ok(events.some(([t, v]) => t === 'app' && v?.id === 'a'));
@@ -301,13 +292,11 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
   test('resetEditor 经 OptionPanel/StepEditor 重置选中状态', async () => {
     const Model = await loadModel();
     const m = new Model();
-    // 设置非默认值
+    // 设置非默认值 (loaded* 初始即为 null，公共 API 无法设置非默认值，由 TestCaseEditor 单测覆盖)
     m.selectApp({ id: 'x' });
     m.selectPlatform('ios');
     m.toggleMarker('smoke');
     m.setSteps([{ id: 's1' }]);
-    m.testCaseEditor._set('loadedDeviceConfig', { dev: 1 }, 'loaded-device-config-changed');
-    m.testCaseEditor._set('loadedBleDevice', { ble: 2 }, 'loaded-ble-device-changed');
 
     m.resetEditor();
     assert.strictEqual(m.selectedApp, null);
@@ -349,7 +338,7 @@ describe('TestCaseModel StepEditor 集成 (R10)', () => {
   test('Model.get(key) 读 StepEditor 状态', async () => {
     const Model = await loadModel();
     const m = new Model();
-    m.stepEditor._set('draggedStep', { id: 'x' }, 'dragged-step-changed');
+    m.stepEditor.setDraggedStep({ id: 'x' });
     assert.deepStrictEqual(m.get('draggedStep'), { id: 'x' });
     assert.deepStrictEqual(m.get('steps'), []);
   });
@@ -364,7 +353,7 @@ describe('TestCaseModel StepEditor 集成 (R10)', () => {
 
     m.stepEditor.setSteps([{ id: 'a' }]);
     m.stepEditor.setDraggedStep({ id: 'x' });
-    m.stepEditor._set('steps', [{ id: 'b' }], 'steps-changed');
+    m.stepEditor.setSteps([{ id: 'b' }]);
 
     assert.ok(events.some(([t, v]) => t === 'steps' && v.length === 1));
     assert.ok(events.some(([t, v]) => t === 'dragged' && v?.id === 'x'));
@@ -514,8 +503,15 @@ describe('TestCaseModel StepEditor 集成 (R10)', () => {
   test('StepEditor.getApp 注入 OptionPanel.selectedApp', async () => {
     const Model = await loadModel();
     const m = new Model();
-    m.optionPanel._set('selectedApp', { id: 'app1', name: 'App1' });
-    assert.strictEqual(m.stepEditor._getApp()?.id, 'app1');
+    // 通过公共行为间接验证：selectApp 后，tc-page-select 路由应能读到 app.pages 填充 pageName
+    if (!global.window) global.window = {};
+    global.window.i18n = { t: (k, o = {}) => k === 'testCase.defaultStepName' ? `步骤 ${o.n || 1}` : k };
+    const fakeApp = { id: 'app1', name: 'App1', pages: [{ id: 'p1', name: 'Page1', elements: [] }] };
+    m.optionPanel.selectApp(fakeApp);
+    const s = m.stepEditor.addStep();
+    m.stepEditor.updateStepSelect('tc-page-select-1', 'p1', s.id);
+    // pageName 被填充即证明 #getApp() 返回了 OptionPanel.selectedApp
+    assert.strictEqual(s.config.pageName, 'Page1');
   });
 
   test('resetEditor 经 StepEditor 重置 steps', async () => {
