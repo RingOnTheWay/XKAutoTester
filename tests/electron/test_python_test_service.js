@@ -43,6 +43,9 @@ function createMockDeps(spawn, overrides = {}) {
     allureService: { generateAllureReport: async () => ({ success: true, reportPath: '/fake/report' }) },
     testPlanService: { updateRunReportPath: async () => {} },
     spawn,
+    // 默认注入 mock dialogMonitor: 防止 run() 触发真实 FileBasedDialogMonitor.start(),
+    // 在 Windows 上把 Unix 桩路径 /fake/userdata 解析为当前盘根目录并真实创建 D:\fake\userdata\logs
+    dialogMonitor: { start: () => {}, stop: () => {} },
     ...overrides
   };
 }
@@ -68,7 +71,8 @@ describe('PythonTestService 构造', () => {
 
   test('应创建 FileBasedDialogMonitor 默认实例', () => {
     const spawn = createMockSpawn();
-    const svc = new PythonTestService(createMockDeps(spawn));
+    // dialogMonitor: null 显式触发 deps.dialogMonitor || new FileBasedDialogMonitor(...) 默认分支
+    const svc = new PythonTestService(createMockDeps(spawn, { dialogMonitor: null }));
     assert.ok(svc._dialogMonitor);
     assert.strictEqual(typeof svc._dialogMonitor.start, 'function');
     assert.strictEqual(typeof svc._dialogMonitor.stop, 'function');
