@@ -1,6 +1,7 @@
 const { registerHandler } = require('./base/handlerUtils');
 const { dialog, shell } = require('electron');
 const fs = require('fs');
+const fsp = require('fs').promises;
 const path = require('path');
 const { IPC_CHANNELS } = require('../../shared/constants');
 const { isAllowedExternalUrl } = require('../utils/urlGuard');
@@ -72,7 +73,7 @@ function register(ipcMain, services) {
     return { success: true };
   });
 
-  registerHandler(ipcMain, IPC_CHANNELS.SAVE_TEST_CASE, (data) => {
+  registerHandler(ipcMain, IPC_CHANNELS.SAVE_TEST_CASE, async (data) => {
     const { directory, fileName, content } = data;
 
     let finalFileName = fileName.trim();
@@ -97,7 +98,7 @@ class Test${finalFileName.replace('.py', '').replace(/[-\s]/g, '_')}:
         assert True
 `;
 
-    fs.writeFileSync(filePath, defaultContent, 'utf8');
+    await fsp.writeFile(filePath, defaultContent, 'utf8');
 
     return {
       success: true,

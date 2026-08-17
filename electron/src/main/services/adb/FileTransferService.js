@@ -353,9 +353,11 @@ class FileTransferService {
 
         if (stats.isDirectory()) {
           zip.addFile(`${zipFilePath}/`, Buffer.alloc(0));
-          await addDirectoryToZip(filePath, zipFilePath);
+          await addDirectoryToZip(filePath, zipPath);
         } else {
-          zip.addFile(zipFilePath, this._fs.readFileSync(filePath));
+          // 传 null encoding 拿 Buffer (二进制安全, adm-zip addFile 需 Buffer)
+          const buf = await this._asyncFs.readFile(filePath, null);
+          zip.addFile(zipPath, buf);
         }
       }
     };
