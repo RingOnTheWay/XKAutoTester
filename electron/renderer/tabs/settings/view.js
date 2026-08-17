@@ -9,7 +9,7 @@
  * 通过 Object.assign 绑定到原型，现全部内联到类体方法。
  */
 
-import { SettingsModel } from '../model.js';
+import { SettingsModel } from './model.js';
 
 export class SettingsView {
   #scrollPreventHandler = null;
