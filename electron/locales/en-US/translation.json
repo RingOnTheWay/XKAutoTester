@@ -5,7 +5,30 @@
   },
   "windowControls": {
     "restore": "Restore",
-    "maximize": "Maximize"
+    "maximize": "Maximize",
+    "minimize": "Minimize",
+    "close": "Close"
+  },
+  "errors": {
+    "invalidPath": "Invalid path parameter",
+    "checkPathFailed": "Failed to check path",
+    "openUrlNotAllowed": "URL is not allowed to open",
+    "pathNotExist": "Path does not exist",
+    "invalidSaveTestCase": "Invalid test case save parameters",
+    "saveDirNotAllowed": "Save directory must be within the test case directory",
+    "invalidDeleteTestCase": "Invalid test case delete parameters",
+    "deleteNotAllowed": "Delete target must be within the test case directory",
+    "fileNotExist": "File does not exist",
+    "invalidConfig": "Invalid config data",
+    "serviceNotInit": "Service is not initialized",
+    "adbServiceNotInit": "ADB service is not initialized",
+    "invalidApkPath": "Invalid APK path",
+    "invalidDeviceId": "Invalid device ID",
+    "invalidNotification": "Invalid notification data",
+    "updateUrlMissing": "Download URL or file name not provided",
+    "invalidUpdatePath": "Invalid update file path",
+    "apkParserNotInit": "APK parser service is not initialized",
+    "scheduledPlanNotFound": "Specified scheduled plan not found"
   },
   "saveConfirm": {
     "title": "Unsaved Changes",

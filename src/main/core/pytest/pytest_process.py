@@ -28,10 +28,16 @@ from main.utils.text import clean_ansi_escape
 logger = logging.getLogger(__name__)
 
 
-def _default_popen(command: list[str]) -> subprocess.Popen:
-    """默认 popen 工厂: subprocess.Popen + text + 行缓冲。"""
+def _default_popen(command: list[str], cwd: str | None = None) -> subprocess.Popen:
+    """默认 popen 工厂: subprocess.Popen + text + 行缓冲。
+
+    Args:
+        command: 待执行命令
+        cwd: 子进程工作目录 (None 时继承父进程 CWD)
+    """
     return subprocess.Popen(
         command,
+        cwd=cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -50,13 +56,22 @@ class PytestProcess(SubprocessHandle):
     def __init__(
         self,
         *,
+        cwd: str | None = None,
         popen_factory: Callable[[list[str]], subprocess.Popen] | None = None,
     ) -> None:
         """
         Args:
-            popen_factory: Popen 工厂 (默认 subprocess.Popen, 测试用 FakePopen)
+            cwd: pytest 子进程工作目录。传 project_root 可避免 Windows 相对路径
+                在错误 CWD 下执行 (测试路径按 project_root 相对解析后须以
+                project_root 为基准执行)。
+            popen_factory: Popen 工厂 (默认 subprocess.Popen, 测试用 FakePopen)。
+                Pop 工厂签名保持 [command] -> Popen; 默认工厂通过 self._cwd 捕获 cwd。
         """
-        self._popen_factory = popen_factory or _default_popen
+        self._cwd = cwd
+        if popen_factory is None:
+            self._popen_factory = lambda command: _default_popen(command, cwd=self._cwd)
+        else:
+            self._popen_factory = popen_factory
         # 持有 process 引用供 stop() 终止 (mirror LogcatProcess.stop 幂等模式)
         self._process: subprocess.Popen | None = None
 

@@ -255,6 +255,9 @@ class InspectorService:
             self._notify_progress("appium-starting")
             self.appium_server = self._server_factory(AppiumServer.DEFAULT_HOST, INSPECTOR_PORT)
             if not self.appium_server.start():
+                # 失败分支清理残留实例, 与下方异常分支保持状态一致 (避免实例残留泄漏)
+                self.appium_server.stop()
+                self.appium_server = None
                 return {"success": False, "error": t("inspector.errorAppiumStartFailed")}
 
             self._notify_progress("appium-started")

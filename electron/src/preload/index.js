@@ -84,7 +84,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximizeWindow: () => invokeWithCheck(IPC_CHANNELS.WINDOW_MAXIMIZE),
   closeWindow: () => invokeWithCheck(IPC_CHANNELS.WINDOW_CLOSE),
   isWindowMaximized: () => invokeWithCheck(IPC_CHANNELS.WINDOW_IS_MAXIMIZED),
-  onWindowMaximized: (callback) => ipcRenderer.on(IPC_CHANNELS.WINDOW_MAXIMIZED, (event, isMaximized) => callback(isMaximized)),
+  onWindowMaximized: (callback) => {
+    const listener = (event, isMaximized) => callback(isMaximized);
+    ipcRenderer.on(IPC_CHANNELS.WINDOW_MAXIMIZED, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_MAXIMIZED, listener);
+  },
   setIgnoreMouseEvents: (ignore, options, windowType) => invokeWithCheck(IPC_CHANNELS.WINDOW_SET_IGNORE_MOUSE_EVENTS, ignore, options, windowType),
 
   // 窗口拖拽
@@ -222,7 +226,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // 文件管理器相关
-  executeAdbCommand: (cmd, deviceId) => invokeWithCheck(IPC_CHANNELS.EXECUTE_ADB_COMMAND, cmd, deviceId),
+  // executeAdbCommand 最小约束 (保守, 不破坏现有 getConnectedDevices / connect 单参 / tcpip 等调用):
+  //  - cmd 必须是非空字符串
+  //  - deviceId 若提供则须为非空字符串 (connect 等命令可省略 deviceId)
+  //  - 拒绝以 shell 元字符开头的命令 (防注入; 主进程 ADBService 另有危险子命令黑名单兜底)
+  executeAdbCommand: (cmd, deviceId) => {
+    if (typeof cmd !== 'string' || cmd.trim() === '') {
+      return Promise.reject(new Error('Invalid adb command'));
+    }
+    if (deviceId !== undefined && (typeof deviceId !== 'string' || deviceId.trim() === '')) {
+      return Promise.reject(new Error('Invalid device id'));
+    }
+    const firstChar = cmd.trim().charAt(0);
+    if (';&|<>`$\n\t'.includes(firstChar)) {
+      return Promise.reject(new Error('Insecure adb command'));
+    }
+    return invokeWithCheck(IPC_CHANNELS.EXECUTE_ADB_COMMAND, cmd, deviceId);
+  },
   selectFiles: () => invokeWithCheck(IPC_CHANNELS.SELECT_FILES),
   uploadFile: (localPath, remotePath, deviceId) => invokeWithCheck(IPC_CHANNELS.UPLOAD_FILE, localPath, remotePath, deviceId),
   onUploadProgress: (callback) => {

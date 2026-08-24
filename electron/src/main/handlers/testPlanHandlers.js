@@ -16,15 +16,19 @@ function register(ipcMain, services) {
   registerHandler(ipcMain, IPC_CHANNELS.GET_PYTEST_MARKERS, () => testPlanService.getPytestMarkers());
 
   ipcMain.on(IPC_CHANNELS.LOG_TEST_OUTPUT, (event, text, isError) => {
-    if (pythonTestService.logger) {
-      const trimmed = typeof text === 'string' ? text.trimEnd() : '';
-      if (trimmed) {
-        if (isError) {
-          pythonTestService.logger.stderr(trimmed);
-        } else {
-          pythonTestService.logger.stdout(trimmed);
+    try {
+      if (pythonTestService.logger) {
+        const trimmed = typeof text === 'string' ? text.trimEnd() : '';
+        if (trimmed) {
+          if (isError) {
+            pythonTestService.logger.stderr(trimmed);
+          } else {
+            pythonTestService.logger.stdout(trimmed);
+          }
         }
       }
+    } catch (error) {
+      console.error(`IPC handler error [${IPC_CHANNELS.LOG_TEST_OUTPUT}]:`, error);
     }
   });
 }

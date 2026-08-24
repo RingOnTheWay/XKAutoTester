@@ -90,8 +90,9 @@ class LogcatMonitor:
 
     @property
     def crash_detected(self) -> bool:
-        """是否检测到崩溃。"""
-        return self._crash_detected
+        """是否检测到崩溃。统一走 _crash_lock 读取 (与 crash_info 对称)。"""
+        with self._crash_lock:
+            return self._crash_detected
 
     @property
     def crash_info(self) -> dict:

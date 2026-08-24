@@ -151,23 +151,24 @@ export class App {
     }
   }
 
-  updateUIText() {
+  updateUIText(scope = document) {
     if (!window.i18n) return;
-    document.querySelectorAll('[data-i18n]').forEach(el => {
+    const root = scope || document;
+    root.querySelectorAll('[data-i18n]').forEach(el => {
       const key = el.getAttribute('data-i18n');
       if (key) {
         const translation = window.i18n.t(key);
         if (translation) el.textContent = translation;
       }
     });
-    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
       const key = el.getAttribute('data-i18n-placeholder');
       if (key) {
         const translation = window.i18n.t(key);
         if (translation) el.placeholder = translation;
       }
     });
-    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    root.querySelectorAll('[data-i18n-title]').forEach(el => {
       const key = el.getAttribute('data-i18n-title');
       if (key) {
         const translation = window.i18n.t(key);
@@ -177,14 +178,8 @@ export class App {
   }
 
   updateComponentTranslations() {
-    if (!window.i18n) return;
-    document.querySelectorAll('#confirm-modal-container [data-i18n]').forEach(el => {
-      const key = el.getAttribute('data-i18n');
-      if (key) {
-        const translation = window.i18n.t(key);
-        if (translation) el.textContent = translation;
-      }
-    });
+    const container = document.getElementById('confirm-modal-container');
+    if (container) this.updateUIText(container);
   }
 
   // ==================== 组件加载 ====================
@@ -586,6 +581,8 @@ export class App {
 
     window.electronAPI.isWindowMaximized().then(isMaximized => {
       updateMaximizeButton(isMaximized);
+    }).catch(error => {
+      console.error('获取窗口最大化状态失败:', error);
     });
 
     window.electronAPI.onWindowMaximized((isMaximized) => {

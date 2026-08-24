@@ -31,6 +31,7 @@ const { executeCommand } = require('./spawnHelper');
 const DriverChecker = require('./DriverChecker');
 const SerialPortEnumerator = require('./SerialPortEnumerator');
 const { IPC_CHANNELS } = require('../../shared/constants');
+const { compareVersions } = require('../utils/versionCompare');
 
 // ── module-level 常量 (对称 UpdateService GITHUB_OWNER/REPO) ──────────
 
@@ -86,25 +87,6 @@ function checkMissingPackages(installed, requirements) {
     if (!found) missing.push(req);
   }
   return missing;
-}
-
-/**
- * 比较语义化版本号 (仅数字段, 如 '3.12.4')
- * @param {string} a
- * @param {string} b
- * @returns {number} -1 (a<b) / 0 (a==b) / 1 (a>b)
- */
-function compareVersions(a, b) {
-  const pa = String(a).split('.').map(n => parseInt(n, 10) || 0);
-  const pb = String(b).split('.').map(n => parseInt(n, 10) || 0);
-  const len = Math.max(pa.length, pb.length);
-  for (let i = 0; i < len; i++) {
-    const na = pa[i] || 0;
-    const nb = pb[i] || 0;
-    if (na < nb) return -1;
-    if (na > nb) return 1;
-  }
-  return 0;
 }
 
 /**

@@ -29,6 +29,7 @@ class ApkInstaller {
   constructor({
     commandExecutor,
     i18nService,
+    projectRoot,
     spawnFn,
     fs: fsDep,
     progressMonitorFactory,
@@ -39,6 +40,8 @@ class ApkInstaller {
 
     this._executor = commandExecutor;
     this._i18n = i18nService;
+    // 统一 adb 路径解析根 (与 ADBService 用同一 projectRoot; 未注入时回退到传统值)
+    this._projectRoot = projectRoot || process.resourcesPath || process.cwd();
     this._runner = new ProcessRunner({ spawnFn });
     this._fs = fsDep || fs;
     this._monitorFactory = progressMonitorFactory || ((opts) => new AdbProgressMonitor(opts));
@@ -81,7 +84,8 @@ class ApkInstaller {
         ? ['-s', deviceId, 'push', apkPath, tempRemotePath]
         : ['push', apkPath, tempRemotePath];
 
-      const adbPath = pathHelper.getAdbPath(process.resourcesPath || process.cwd(), true);
+      // 复用 pathHelper.getAdbPath 统一解析入口 (与 ADBService 同一 projectRoot)
+      const adbPath = pathHelper.getAdbPath(this._projectRoot, true);
 
       monitor.start(500);
 

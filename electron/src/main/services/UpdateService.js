@@ -23,26 +23,14 @@ const { app } = require('electron');
 const { spawn } = require('child_process');
 const { ensureDirectoryExists } = require('../utils/pathHelper');
 const { IPC_CHANNELS } = require('../../shared/constants');
+const { compareVersions } = require('../utils/versionCompare');
 
 const GITHUB_OWNER = 'RingOnTheWay';
 const GITHUB_REPO = 'XKAutoTester';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
 
 // ── module-level 纯函数 (对称 I18nService default factory 模式) ──
-
-/** 版本比较纯函数: 返 -1 (v1<v2) / 0 (相等) / 1 (v1>v2) */
-function compareVersions(v1, v2) {
-  const parts1 = v1.replace(/^v/, '').split('.').map(Number);
-  const parts2 = v2.replace(/^v/, '').split('.').map(Number);
-  const maxLen = Math.max(parts1.length, parts2.length);
-  for (let i = 0; i < maxLen; i++) {
-    const p1 = parts1[i] || 0;
-    const p2 = parts2[i] || 0;
-    if (p1 < p2) return -1;
-    if (p1 > p2) return 1;
-  }
-  return 0;
-}
+// (compareVersions 已抽取至 utils/versionCompare, 见文件头部 import)
 
 /** 错误分类纯函数: 将 axios/network error 转 classified error (含 .code + .statusCode) */
 function normalizeUpdateError(error) {

@@ -26,6 +26,20 @@ logger = logging.getLogger(__name__)
 # 设备行匹配: "设备ID    device" (仅 device 状态,跳过 unauthorized/offline)
 _DEVICE_LINE_RE = re.compile(r"^([^\s]+)\s+device$")
 
+# 默认 TCP 连接端口 (device_name 不含 ':' 时使用)
+_DEFAULT_TCP_PORT = 5555
+
+# adb connect 输出判定用稳定子串/错误码:
+# - adb 对连接成功/重复连接/认证失败输出为英文前缀, 非本地化, 可稳定匹配 (兼容中英文系统)
+# - 连接被拒时 adb 代理 OS 错误, 错误码 10061 与本地化描述 (如中文 '目标计算机积极拒绝')
+#   可能引起子串探测失效, 故集中为常量并仅作兜底
+_CONNECTED_PREFIX = "connected to"
+_ALREADY_PREFIX = "already connected"
+_AUTH_FAILED_SUBSTR = "failed to authenticate"
+_CANNOT_CONNECT_PREFIX = "cannot connect"
+_ECONNREFUSED_WIN_CODE = "10061"
+_CONN_REFUSED_LOCALIZED = "目标计算机积极拒绝"
+
 
 class DeviceConnectionService:
     """设备连接服务: ADB 服务检查 + 设备列表 + USB/TCP 路由连接。"""
@@ -169,7 +183,9 @@ class DeviceConnectionService:
 
     def _connect_tcp_device(self) -> tuple[bool, str]:
         """TCP/IP 设备连接: adb connect + 重新认证流程。"""
-        device_address = self._device_name if ":" in self._device_name else f"{self._device_name}:5555"
+        device_address = (
+            self._device_name if ":" in self._device_name else f"{self._device_name}:{_DEFAULT_TCP_PORT}"
+        )
 
         connect_result = self._executor.execute(
             ["connect", device_address]
@@ -181,7 +197,11 @@ class DeviceConnectionService:
             logger.info(t("python.adbManager.adbConnectStderr", output=stderr))
         logger.info(t("python.adbManager.adbConnectReturnCode", code=connect_result.returncode))
 
-        if "connected" in stdout or "already" in stdout or "failed to authenticate" in stdout:
+        # 稳定前缀判定 (非本地化): 连接成功 / 重复连接(已连接) / 认证失败
+        # 优先用稳定前缀, 避免依赖本地化 OS 错误描述
+        connected = _CONNECTED_PREFIX in stdout or _ALREADY_PREFIX in stdout
+        auth_failed = _AUTH_FAILED_SUBSTR in stdout
+        if connected or auth_failed:
             logger.info(t("python.adbManager.deviceConnectResult", output=stdout.strip()))
 
             # 第一次查列表
@@ -208,7 +228,7 @@ class DeviceConnectionService:
             )
 
             if device_address in devices_result.stdout:
-                if "unauthorized" in devices_result.stdout or "failed to authenticate" in stdout:
+                if "unauthorized" in devices_result.stdout or auth_failed:
                     logger.warning(t("python.adbManager.deviceUnauthorized", device=self._device_name))
                     return self._wait_for_usb_authorization()
                 logger.info(t("python.adbManager.deviceAuthorized", device=self._device_name))
@@ -216,7 +236,11 @@ class DeviceConnectionService:
             logger.warning(t("python.adbManager.deviceNotInList", device=self._device_name))
             return False, t("python.adbManager.deviceNotInListShort")
 
-        if "cannot connect" in stdout or "目标计算机积极拒绝" in stdout or "10061" in stdout:
+        if (
+            _CANNOT_CONNECT_PREFIX in stdout
+            or _CONN_REFUSED_LOCALIZED in stdout
+            or _ECONNREFUSED_WIN_CODE in stdout
+        ):
             logger.warning(t("python.adbManager.deviceConnectionRefused", device=self._device_name))
             return False, t("python.adbManager.deviceConnectionRefusedShort")
         logger.warning(t("python.adbManager.deviceConnectionFailed", device=self._device_name))

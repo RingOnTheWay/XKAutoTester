@@ -1,3 +1,6 @@
+// lucide 通过 ES import 引入 (electron-vite 打包), 替代 index.html 中已移除的 UMD 全局脚本
+import { icons as lucideIcons } from 'lucide';
+
 export const ICON_MAPPING = {
   play_circle: 'CirclePlay',
   devices: 'Smartphone',
@@ -117,7 +120,7 @@ export function lucideToSvg(iconData) {
 export const Icons = {};
 
 Object.entries(ICON_MAPPING).forEach(([oldName, lucideName]) => {
-  const iconData = lucide.icons[lucideName];
+  const iconData = lucideIcons[lucideName];
   if (iconData) {
     Icons[oldName] = lucideToSvg(iconData);
   } else {

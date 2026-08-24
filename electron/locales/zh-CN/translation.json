@@ -5,7 +5,30 @@
   },
   "windowControls": {
     "restore": "还原",
-    "maximize": "最大化"
+    "maximize": "最大化",
+    "minimize": "最小化",
+    "close": "关闭"
+  },
+  "errors": {
+    "invalidPath": "无效的路径参数",
+    "checkPathFailed": "检查路径失败",
+    "openUrlNotAllowed": "不允许打开此链接",
+    "pathNotExist": "路径不存在",
+    "invalidSaveTestCase": "无效的测试用例保存参数",
+    "saveDirNotAllowed": "保存目录必须在测试用例目录下",
+    "invalidDeleteTestCase": "无效的测试用例删除参数",
+    "deleteNotAllowed": "删除目标必须在测试用例目录下",
+    "fileNotExist": "文件不存在",
+    "invalidConfig": "无效的配置数据",
+    "serviceNotInit": "服务未初始化",
+    "adbServiceNotInit": "ADB 服务未初始化",
+    "invalidApkPath": "无效的 APK 路径",
+    "invalidDeviceId": "无效的设备 ID",
+    "invalidNotification": "无效的通知数据",
+    "updateUrlMissing": "未提供下载地址或文件名",
+    "invalidUpdatePath": "无效的更新文件路径",
+    "apkParserNotInit": "APK 解析服务未初始化",
+    "scheduledPlanNotFound": "未找到指定的定时计划"
   },
   "saveConfirm": {
     "title": "未保存的更改",

@@ -59,7 +59,7 @@ class PytestRunner:
         self.allure_results_dir = self.allure_base_dir / "allure-results"
         self.allure_report_base_dir = self.allure_base_dir / "allure-reports"
 
-        self._process: PytestProcessPort = process or PytestProcess()
+        self._process: PytestProcessPort = process or PytestProcess(cwd=str(self.project_root))
         self._pytest_ini = self.project_root / "config" / "pytest.ini"
 
     def run_tests(

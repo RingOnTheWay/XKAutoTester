@@ -85,7 +85,8 @@ class NotificationService {
       if (!accessToken || !secret) {
         return {
           success: false,
-          error: '钉钉配置不完整，请检查 access_token 和 secret'
+          // 复用既有 i18n key (未配置通知平台); 无法新增 key (locales 只读), 采用现有文案
+          error: this.i18nService.t('notificationNotConfigured')
         };
       }
 

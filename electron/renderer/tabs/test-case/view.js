@@ -399,6 +399,13 @@ export class TestCaseView {
         `).join('');
     }
 
+    // R10: 转义用户可控文本，防止 XSS（marker 名称来自用户配置）
+    escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+        return String(str).replace(/[&<>"']/g, (ch) => map[ch]);
+    }
+
     updateMarkersDisplay(selectedMarkers) {
         const selectedContainer = this.els.markersSelected;
         if (!selectedContainer) return;
@@ -414,7 +421,8 @@ export class TestCaseView {
         // Build badges HTML
         let badgesHtml = '';
         selectedMarkers.forEach(marker => {
-            badgesHtml += `<span class="marker-badge" data-marker="${marker}">${marker}<span class="marker-badge-remove" data-marker="${marker}">x</span></span>`;
+            const safe = this.escapeHtml(marker);
+            badgesHtml += `<span class="marker-badge" data-marker="${safe}">${safe}<span class="marker-badge-remove" data-marker="${safe}">x</span></span>`;
         });
         textSpan.innerHTML = badgesHtml;
     }

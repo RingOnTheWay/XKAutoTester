@@ -362,20 +362,25 @@ class AppiumServer(SubprocessHandle):
         """统一停止: 优雅终止 self.process + 端口扫描清理兜底. 幂等.
 
         顺序:
-        1. _LogPump.stop() (join 线程 + 关日志文件)
-        2. self._stop_process() (委托 SubprocessHandle: terminate→wait(10)→kill→wait(2), 修复原 kill 后不 wait 的潜在孤儿)
+        1. self._stop_process() (委托 SubprocessHandle: terminate→wait(10)→kill→wait(2))
+           ── 先终止进程, 使日志读取线程的 readline() 读到 EOF / poll() 非 None 尽快退出,
+              避免日志线程 join(timeout=5) 元阻塞滞留
+        2. _LogPump.stop() (join 线程 + 关日志文件)
         3. _kill_port_process(port) 兜底 (杀端口上残留进程)
+
+        注: _LogPump 持有自己的 process 引用 (构造时传入), 不受 _stop_process 置
+            self._process=None 影响, 仍能正确 poll() 感知进程结束。
         """
-        # 1. 停止日志泵
+        # 1. 先优雅终止进程 (M10: 委托 SubprocessHandle._stop_process, 统一 terminate→wait→kill→wait 模板)
+        self._stop_process()
+
+        # 2. 再停日志泵 (此时进程已死, 日志线程迅速读到 EOF 退出, join 不被阻塞)
         if self._log_pump is not None:
             try:
                 self._log_pump.stop()
             except Exception as e:
                 logger.error(f"停止日志泵时出错: {e}")
             self._log_pump = None
-
-        # 2. 优雅终止进程 (M10: 委托 SubprocessHandle._stop_process, 统一 terminate→wait→kill→wait 模板)
-        self._stop_process()
 
         # 3. 端口清理兜底 (不管是否有 process, 都扫一遍端口)
         try:

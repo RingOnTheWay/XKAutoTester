@@ -125,6 +125,18 @@ export class AndroidConnectionView {
   }
 
   /**
+   * HTML 转义工具：转义 & < > 双引号 单引号
+   * 用于插入 innerHTML 的动态值（文本内容与属性值均安全）
+   * @param {*} str
+   * @returns {string}
+   */
+  escapeHtml(str) {
+    if (str === undefined || str === null) return '';
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return String(str).replace(/[&<>"']/g, m => map[m]);
+  }
+
+  /**
    * 显示设备选择弹窗 (封装 DeviceSelectionModal)
    * MVC: UI 组件实例化归 view,与 test-execution/test-case/page-package 一致
    * @param {Object} options - { mode: 'select' | 'inspector' | 'test' }
@@ -239,7 +251,7 @@ export class AndroidConnectionView {
     const icon = deviceId.includes(':') ? 'wifi' : 'usb';
     el.innerHTML = `
       ${this.getIconHtml(icon, 'vertical-align:top;margin-right:8px;flex-shrink:0;margin-top:2px;')}
-      <span style="vertical-align:top;flex:1;min-width:0;word-wrap:break-word;overflow-wrap:break-word;white-space:normal;">${deviceId}</span>
+      <span style="vertical-align:top;flex:1;min-width:0;word-wrap:break-word;overflow-wrap:break-word;white-space:normal;">${this.escapeHtml(deviceId)}</span>
     `;
 
     el.addEventListener('mouseenter', () => {
@@ -461,8 +473,8 @@ export class AndroidConnectionView {
           <div style="display:flex;align-items:center;">
             ${this.getIconHtml('cable', 'margin-right:8px;')}
             <div>
-              <div style="font-weight:500;">${port.deviceId}</div>
-              <div style="font-size:12px;color:var(--text-secondary);">${port.name || ''}</div>
+              <div style="font-weight:500;">${this.escapeHtml(port.deviceId)}</div>
+              <div style="font-size:12px;color:var(--text-secondary);">${this.escapeHtml(port.name || '')}</div>
             </div>
           </div>
         `;
@@ -542,18 +554,18 @@ export class AndroidConnectionView {
       row.setAttribute('data-is-directory', file.isDirectory);
 
       row.innerHTML = `
-        <td><input type="checkbox" class="file-checkbox" ${isSelected ? 'checked' : ''} data-path="${file.path}"></td>
+        <td><input type="checkbox" class="file-checkbox" ${isSelected ? 'checked' : ''} data-path="${this.escapeHtml(file.path)}"></td>
         <td>
           <div class="file-item-name ${file.isDirectory ? 'directory' : 'file'}">
             ${this.getIconHtml(file.isDirectory ? 'folder' : 'description')}
-            <span>${file.name}</span>
+            <span>${this.escapeHtml(file.name)}</span>
           </div>
         </td>
         <td class="file-size">${sizeDisplay}</td>
         <td class="file-date">${file.modifiedTime || ''}</td>
         <td class="file-date">${file.createdAt || ''}</td>
         <td class="file-actions">
-          <button class="file-actions-btn" data-path="${file.path}">
+          <button class="file-actions-btn" data-path="${this.escapeHtml(file.path)}">
             ${this.getIconHtml('more_vert')}
           </button>
         </td>

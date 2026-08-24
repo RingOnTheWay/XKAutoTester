@@ -21,6 +21,9 @@ from main.core.crash_monitor import CrashMonitor
 from main.utils.i18n import t
 from main.utils.test_reporter import TestReporter
 
+# 等待生效时长 (秒): force_stop 应用后等待进程完全结束再启动新会话
+_SLEEP_AFTER_FORCE_STOP = 2
+
 
 @dataclass
 class ADBConfig:
@@ -329,7 +332,7 @@ class TestInitializer:
         start_time = self._time.time()
         _set_appium_session_timeout(AppiumServer.DEFAULT_SESSION_TIMEOUT)
         self.adb_manager.app.force_stop(silent=True)
-        self._time.sleep(2)
+        self._time.sleep(_SLEEP_AFTER_FORCE_STOP)
 
         self.driver = self._driver_factory(self.appium_server.server_url, options=self.options)
 

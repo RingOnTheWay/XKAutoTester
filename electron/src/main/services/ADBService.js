@@ -30,6 +30,10 @@ const DANGEROUS_COMMAND_PATTERNS = [
   /\bwipe\s+/i,                                 // wipe 分区
 ];
 
+// 超时阈值 (模块级常量, 避免魔法数)
+const ADB_DEVICES_TIMEOUT_MS = 5000;    // getConnectedDevices
+const ADB_COMMAND_TIMEOUT_MS = 5000;    // executeAdbCommand
+
 class ADBService {
   /**
    * @param {string} projectRoot
@@ -55,7 +59,6 @@ class ADBService {
 
     this._remoteStat = collaborators.remoteStatService || new RemoteStatService({
       commandExecutor: this._executor,
-      i18nService,
     });
 
     // TarExtractor factory-or-default
@@ -66,12 +69,14 @@ class ADBService {
       remoteStatService: this._remoteStat,
       i18nService,
       tarExtractor: this._tarExtractor,
+      projectRoot,
       spawnFn: this._spawn,
     });
 
     this._apkInstaller = collaborators.apkInstaller || new ApkInstaller({
       commandExecutor: this._executor,
       i18nService,
+      projectRoot,
       spawnFn: this._spawn,
     });
   }
@@ -102,7 +107,7 @@ class ADBService {
    */
   async getConnectedDevices() {
     try {
-      const result = await this._executor.execute(['devices'], { timeoutMs: 5000 });
+      const result = await this._executor.execute(['devices'], { timeoutMs: ADB_DEVICES_TIMEOUT_MS });
       if (!result.success) {
         return [];
       }
@@ -135,8 +140,9 @@ class ADBService {
       // 危险命令黑名单校验: 防 XSS 攻击者执行破坏性 adb 命令
       for (const pattern of DANGEROUS_COMMAND_PATTERNS) {
         if (pattern.test(cmd)) {
-          console.error(`[ADBService] 危险命令被拒绝: ${cmd}`);
-          return { success: false, error: `命令被安全策略拒绝: ${cmd}` };
+          // 无现成 i18n key (locales 只读), 保守改为英文报错 + 英文日志, 不崩即可
+          console.warn(`[ADBService] Dangerous command rejected by security policy: ${cmd}`);
+          return { success: false, error: `Command rejected by security policy: ${cmd}` };
         }
       }
 
@@ -163,9 +169,12 @@ class ADBService {
       let resolved = false;
 
       return new Promise((resolve) => {
+        let timeoutId = null;
         const doResolve = (result) => {
           if (resolved) return;
           resolved = true;
+          // 提前收尾 (close/error/tcpip 成功) 时清理超时定时器, 避免定时器泄漏
+          if (timeoutId) clearTimeout(timeoutId);
           resolve(result);
         };
 
@@ -211,7 +220,7 @@ class ADBService {
           doResolve({ success: false, error: error.message, output: '' });
         });
 
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           if (resolved) return;
           try { adbProcess.kill(); } catch { /* 已退出 */ }
           if (firstCmd === 'tcpip' && stdout.includes('restarting in TCP mode port:')) {
@@ -219,7 +228,7 @@ class ADBService {
           } else {
             doResolve({ success: false, error: this.i18nService.t('main.commandTimeout'), output: stdout });
           }
-        }, 5000);
+        }, ADB_COMMAND_TIMEOUT_MS);
       });
     } catch (error) {
       return { success: false, error: error.message };

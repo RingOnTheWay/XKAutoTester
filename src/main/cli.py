@@ -72,12 +72,14 @@ class Cli:
         )
         self._t: Translator = translator or t
         self._logger_factory: LoggerFactory = logger_factory or get_logger
-        self._stdout_wrapper: IoWrapper = stdout_wrapper or (
-            lambda s: io.TextIOWrapper(s.buffer, encoding="utf-8", line_buffering=True)
-        )
-        self._stderr_wrapper: IoWrapper = stderr_wrapper or (
-            lambda s: io.TextIOWrapper(s.buffer, encoding="utf-8", line_buffering=True)
-        )
+        # 用 if X is None 判空 (而非 `or`): `or` 会短路假值可调用对象
+        # (如自定义 __bool__ 返回 False 的 wrapper), 导致默认值覆盖传入实例
+        self._stdout_wrapper: IoWrapper = stdout_wrapper
+        if self._stdout_wrapper is None:
+            self._stdout_wrapper = lambda s: io.TextIOWrapper(s.buffer, encoding="utf-8", line_buffering=True)
+        self._stderr_wrapper: IoWrapper = stderr_wrapper
+        if self._stderr_wrapper is None:
+            self._stderr_wrapper = lambda s: io.TextIOWrapper(s.buffer, encoding="utf-8", line_buffering=True)
 
     def run(self, argv: list[str] | None = None) -> int:
         """入口。argv=None → sys.argv[1:]。

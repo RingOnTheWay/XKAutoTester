@@ -92,6 +92,22 @@ class ElectronApp {
     
     this.mainWindow.setMenu(null);
 
+    // 主窗口 CSP: 给默认 session 注入 Content-Security-Policy 响应头, 收紧 XSS 面
+    // 注意: allure 窗口使用独立 partition, 其 onHeadersReceived 删除 CSP (见 createAllureWindow),
+    //      两者互不干扰。经 chromium.webRequest.onHeadersReceived 注入, 对 file:// 与 http(s) 均生效。
+    const mainDevServerUrl = process.env.ELECTRON_VITE_DEV_SERVER_URL;
+    // 开发模式 (electron-vite dev) 下 Vite HMR 注入内联脚本, script-src 需放行 'unsafe-inline'
+    // 并放行 dev server 与 HMR websocket
+    const mainConnects = mainDevServerUrl ? `'self' ${mainDevServerUrl} ws: ws://localhost:*` : "'self'";
+    const mainScriptSrc = mainDevServerUrl ? "'self' 'unsafe-inline'" : "'self'";
+    const mainCsp = `default-src 'self'; script-src ${mainScriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${mainConnects}`;
+    const mainSession = this.mainWindow.webContents.session;
+    mainSession.webRequest.onHeadersReceived((details, callback) => {
+      const responseHeaders = { ...details.responseHeaders };
+      responseHeaders['content-security-policy'] = [mainCsp];
+      callback({ responseHeaders });
+    });
+
     // 开发模式 (electron-vite dev): loadURL (dev server + HMR)
     // 生产/旧开发模式: loadFile (源码 renderer/ 或打包后 renderer/)
     const devServerUrl = process.env.ELECTRON_VITE_DEV_SERVER_URL;

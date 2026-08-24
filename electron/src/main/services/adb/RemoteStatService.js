@@ -14,14 +14,12 @@ class RemoteStatService {
   /**
    * @param {object} deps
    * @param {object} deps.commandExecutor - AdbCommandExecutor 实例
-   * @param {object} deps.i18nService - 国际化服务 (预留,目前未使用)
    */
-  constructor({ commandExecutor, i18nService }) {
+  constructor({ commandExecutor }) {
     if (!commandExecutor) {
       throw new Error('RemoteStatService: commandExecutor is required');
     }
     this._executor = commandExecutor;
-    this._i18n = i18nService;
   }
 
   /**

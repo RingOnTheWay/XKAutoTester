@@ -12,6 +12,9 @@ const FILE_SIZE_OFFSET = 124;
 const FILE_SIZE_LENGTH = 12;
 const DIRECTORY_TYPE = '5';
 
+// 内存保护阈值: 超过该大小的 tar 直接拒绝解压 (避免整包入内存导致 OOM)
+const MAX_TAR_BUFFER_BYTES = 1073741824; // 1GB
+
 /**
  * TarExtractor - 解 tar 文件到指定目录
  *
@@ -31,9 +34,15 @@ class TarExtractor {
     const buffer = await this._readTarFile(tarPath);
     const entries = this._parseTarBuffer(buffer);
 
+    const resolvedOutputDir = path.resolve(outputDir);
     const extractedFiles = [];
     for (const entry of entries) {
-      const outputPath = path.join(outputDir, entry.name);
+      const outputPath = path.join(resolvedOutputDir, entry.name);
+      // 二次防御: 解析后的路径必须位于 outputDir 内 (防目录穿越写出)
+      const resolved = path.resolve(outputPath);
+      if (resolved !== resolvedOutputDir && !resolved.startsWith(resolvedOutputDir + path.sep)) {
+        continue;
+      }
       if (entry.isDirectory) {
         await asyncFs.mkdir(outputPath, { recursive: true });
       } else {
@@ -55,6 +64,15 @@ class TarExtractor {
    * @returns {Promise<Buffer>}
    */
   async _readTarFile(tarPath) {
+    // 内存保护: 超过阈值直接拒绝, 避免整包入内存导致 OOM
+    try {
+      const stat = await fsp.stat(tarPath);
+      if (stat.size > MAX_TAR_BUFFER_BYTES) {
+        throw new Error(`Tar 文件过大 (${stat.size} 字节), 超过内存保护阈值 ${MAX_TAR_BUFFER_BYTES} 字节`);
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
     return new Promise((resolve, reject) => {
       const readStream = fs.createReadStream(tarPath);
       let buffer = Buffer.alloc(0);
@@ -104,10 +122,19 @@ class TarExtractor {
   }
 
   /**
-   * 清理文件名: 去除 null 字节 + 替换 Windows 非法字符
+   * 清理文件名: 去除 null 字节 + 替换 Windows 非法字符 + 拒绝目录穿越/绝对路径
+   * @param {string} name - tar entry 原始文件名
+   * @returns {string|null} 安全文件名; 不安全 (穿越/绝对路径) 返 null
    */
   _sanitizeFileName(name) {
-    return name.replace(/\x00/g, '').replace(/[<>:"|?*]/g, '_');
+    let safe = name.replace(/\x00/g, '').replace(/[<>:"|?*]/g, '_');
+    // 规范化分隔符为正斜杠, 便于统一检测 '..' / 前导斜杠 / 盘符
+    safe = safe.replace(/\\/g, '/');
+    // 拒绝: 含 '..' 路径段 / 以 '/' 开头 / 以盘符开头 (如 C:)
+    if (safe.split('/').includes('..')) return null;
+    if (safe.startsWith('/')) return null;
+    if (/^[a-zA-Z]:/.test(safe)) return null;
+    return safe;
   }
 }
 

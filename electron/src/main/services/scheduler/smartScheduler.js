@@ -63,6 +63,9 @@ class SmartScheduler {
       nextCheckTime: null,
       activePlanCount: 0,
     };
+
+    // 刷新串行化链: 文件变更回调与 add/remove/update 并发触发重建队列时, 排队串行执行避免竞态
+    this._refreshChain = Promise.resolve();
   }
 
   setMainWindow(window) {
@@ -297,14 +300,32 @@ class SmartScheduler {
   }
 
   async _handlePlansFileChange() {
-    this.planQueue = this._queueFactory();
-    await this._loadPlansToQueue();
-    await this._refreshSchedule();
+    await this._enqueueRefresh(async () => {
+      this.planQueue = this._queueFactory();
+      await this._loadPlansToQueue();
+      await this._refreshSchedule();
+    });
   }
 
   async _refreshSchedule() {
     this._clearAllTimers();
     await this._startSmartScheduling();
+  }
+
+  /**
+   * 串行化刷新: 所有重建队列的刷新操作排队执行.
+   * 避免文件监听回调与 add/remove/update 并发触发 _refreshSchedule/_loadPlansToQueue 时,
+   * 读取旧队列与重建新队列互相干扰产生的竞态.
+   * @param {Function} refreshFn - async 刷新操作
+   * @returns {Promise<void>}
+   */
+  _enqueueRefresh(refreshFn) {
+    this._refreshChain = this._refreshChain
+      .then(refreshFn)
+      .catch((error) => {
+        this._logger.error('刷新调度计划失败:', error);
+      });
+    return this._refreshChain;
   }
 
   addPlan(plan) {
@@ -313,6 +334,7 @@ class SmartScheduler {
 
     const nextPlan = this.planQueue.peek();
     if (nextPlan && nextPlan.id === plan.id) {
+      // addPlan 是同步原子操作 (同一事件循环 tick), 直接同步刷新; 文件监听回调的并发走 _enqueueRefresh 串行化
       this._refreshSchedule();
     }
   }
@@ -323,6 +345,7 @@ class SmartScheduler {
     this.state.activePlanCount = this.planQueue.size();
 
     if (nextPlan && nextPlan.id === planId) {
+      // 同上: 同步刷新保持 planQueue/state 一致性, 文件监听回调的并发走 _enqueueRefresh 串行化
       this._refreshSchedule();
     }
   }

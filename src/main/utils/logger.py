@@ -24,16 +24,33 @@ _shared_log_dir = None
 _shared_formatter = None
 _root_configured = False
 
+# 内置默认配置 (配置缺失/损坏时回退, 保证首次 get_logger 不因配置崩而抛异常)
+_DEFAULT_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+_DEFAULT_LOG_LEVEL = "INFO"
+_DEFAULT_MAX_BYTES = 10485760
+_DEFAULT_BACKUP_COUNT = 5
+
 
 def _get_shared_file_handler():
-    """获取共享文件 handler（首次调用时创建）"""
+    """获取共享文件 handler（首次调用时创建）。
+
+    配置读取失败回退内置默认; 文件 handler 创建失败时返回 None (仅控制台输出)。
+    """
     global _shared_file_handler, _shared_log_dir, _shared_formatter
 
     if _shared_file_handler is not None:
         return _shared_file_handler
 
-    log_config = get_config_manager().get("LOG_CONFIG", {})
-    log_format = log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    log_format = _DEFAULT_LOG_FORMAT
+    max_bytes = _DEFAULT_MAX_BYTES
+    backup_count = _DEFAULT_BACKUP_COUNT
+    try:
+        log_config = get_config_manager().get("LOG_CONFIG", {})
+        log_format = log_config.get("format", _DEFAULT_LOG_FORMAT)
+        max_bytes = log_config.get("max_bytes", _DEFAULT_MAX_BYTES)
+        backup_count = log_config.get("backup_count", _DEFAULT_BACKUP_COUNT)
+    except Exception as e:
+        logging.warning(f"读取日志配置失败, 使用默认值: {e}")
     _shared_formatter = logging.Formatter(log_format)
 
     _shared_log_dir = get_logs_path("XKAT")
@@ -42,36 +59,52 @@ def _get_shared_file_handler():
     current_time = datetime.datetime.now().strftime(DATETIME_FORMAT)
     log_file_path = _shared_log_dir / f"XKAT-{current_time}.log"
 
-    _shared_file_handler = logging.handlers.RotatingFileHandler(
-        log_file_path,
-        maxBytes=log_config.get("max_bytes", 10485760),
-        backupCount=log_config.get("backup_count", 5),
-        encoding="utf-8",
-    )
-    _shared_file_handler.setFormatter(_shared_formatter)
+    try:
+        _shared_file_handler = logging.handlers.RotatingFileHandler(
+            log_file_path,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding="utf-8",
+        )
+        _shared_file_handler.setFormatter(_shared_formatter)
+    except Exception as e:
+        logging.warning(f"创建文件日志 handler 失败, 仅保留控制台输出: {e}")
+        _shared_file_handler = None
 
     return _shared_file_handler
 
 
 def _setup_root_logger():
-    """配置 root logger（仅执行一次）"""
+    """配置 root logger（仅执行一次）。
+
+    配置读取/级别解析失败时回退默认值, 不抛异常。
+    """
     global _root_configured
     if _root_configured:
         return
 
-    log_config = get_config_manager().get("LOG_CONFIG", {})
-    log_level = log_config.get("level", "INFO")
-    log_format = log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    log_level = _DEFAULT_LOG_LEVEL
+    log_format = _DEFAULT_LOG_FORMAT
+    try:
+        log_config = get_config_manager().get("LOG_CONFIG", {})
+        log_level = log_config.get("level", _DEFAULT_LOG_LEVEL)
+        log_format = log_config.get("format", _DEFAULT_LOG_FORMAT)
+    except Exception as e:
+        logging.warning(f"读取日志级别/格式失败, 使用默认值: {e}")
 
     root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, log_level))
-
+    try:
+        root_logger.setLevel(getattr(logging, log_level))
+    except (AttributeError, ValueError):
+        logging.warning(f"无效的日志级别: {log_level}, 回退 {_DEFAULT_LOG_LEVEL}")
+        root_logger.setLevel(logging.getLevelName(_DEFAULT_LOG_LEVEL))
     # 清除已有 handler（避免重复）
     root_logger.handlers.clear()
 
-    # 文件 handler
+    # 文件 handler (创建失败时 _get_shared_file_handler 返回 None, 跳过)
     file_handler = _get_shared_file_handler()
-    root_logger.addHandler(file_handler)
+    if file_handler is not None:
+        root_logger.addHandler(file_handler)
 
     # 控制台 handler (写 sys.stderr, 实时输出。
     # StreamHandler() 默认捕获 sys.stderr。cli.py _wrap_stdio 包装 stderr 为 utf-8 TextIOWrapper

@@ -15,6 +15,7 @@ Python 国际化模块
 import json
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -89,13 +90,17 @@ class I18n:
 
 # 模块级懒加载实例 (首次 t() 调用时构造, 非 import 时 — 消除导入副作用)
 _i18n_instance: I18n | None = None
+# 懒加载构造锁 (并发首次调用仅构造一次, 避免双实例互相覆盖)
+_i18n_lock = threading.Lock()
 
 
 def _get_i18n() -> I18n:
-    """获取模块级 I18n 实例 (懒加载)。"""
+    """获取模块级 I18n 实例 (懒加载, 加锁 + double-check)。"""
     global _i18n_instance
     if _i18n_instance is None:
-        _i18n_instance = I18n()
+        with _i18n_lock:
+            if _i18n_instance is None:
+                _i18n_instance = I18n()
     return _i18n_instance
 
 
@@ -105,7 +110,8 @@ def set_i18n_instance(instance: I18n) -> None:
     注入后 _get_i18n() 返回此实例, 不再懒加载构造。
     """
     global _i18n_instance
-    _i18n_instance = instance
+    with _i18n_lock:
+        _i18n_instance = instance
 
 
 def t(key: str, **kwargs: Any) -> str:

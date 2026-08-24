@@ -155,9 +155,8 @@ export class TestExecutionView {
 
   escapeHtml(str) {
     if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return String(str).replace(/[&<>"']/g, m => map[m]);
   }
 
   // ═════════════════════════════════════════════════════════════════
@@ -204,8 +203,8 @@ export class TestExecutionView {
       item.className = 'test-file-item';
       item.innerHTML = `
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" value="${file}" ${isChecked}>
-          <span>${file}</span>
+          <input type="checkbox" value="${this.escapeHtml(file)}" ${isChecked}>
+          <span>${this.escapeHtml(file)}</span>
         </label>
       `;
       testFileList.appendChild(item);
@@ -1084,6 +1083,8 @@ export class TestExecutionView {
 
   openScheduledPlanModal() {
     // 初始化执行时间输入框的日期时间选择器
+    // 注: DateTimePicker 无 destroy 方法, 但构造时通过 inputElement.dataset.pickerInitialized 防止重复绑定;
+    //     同一 input 重复 new 不会叠加监听器, 旧实例被 GC 回收, 无资源累积/泄漏。
     const { scheduledPlanTimeInput } = this.els;
     if (scheduledPlanTimeInput) {
       const mountContainer = document.getElementById('scheduled-plan-modal-overlay') || document.body;
