@@ -684,7 +684,7 @@
     </div>
     <!-- ===== END: page-package-modals ===== -->
     
-    <!-- lucide 改为 ES import (renderer/icons.js), 不再使用 UMD 全局脚本 -->
+    <!-- lucide 图标已内联为静态模块 (renderer/icons.js + lucide-icons-data.js), 兼容 npm start 直载与 Vite 打包, 无需外部脚本 -->
     <!-- Phase 4: MVC 清理完成，所有功能由 app.js (ES Module) 管理 -->
     <script type="module" src="app.js"></script>
 </body>
