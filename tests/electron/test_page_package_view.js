@@ -12,6 +12,7 @@ const PP_HTML = `<!DOCTYPE html><html><body>
     <div id="pp-app-select-wrapper">
       <div class="cascade-select" id="pp-app-select">
         <div class="cascade-select__selected">选择应用</div>
+        <div class="cascade-select__options"></div>
       </div>
     </div>
   </div>
@@ -19,6 +20,7 @@ const PP_HTML = `<!DOCTYPE html><html><body>
     <div id="pp-page-select-wrapper">
       <div class="cascade-select open" id="pp-page-select">
         <div class="cascade-select__selected">选择页面</div>
+        <div class="cascade-select__options"></div>
       </div>
     </div>
   </div>
@@ -26,6 +28,7 @@ const PP_HTML = `<!DOCTYPE html><html><body>
     <div id="pp-element-select-wrapper">
       <div class="cascade-select" id="pp-element-select">
         <div class="cascade-select__selected">选择元素</div>
+        <div class="cascade-select__options"></div>
       </div>
     </div>
   </div>
@@ -215,5 +218,60 @@ describe('PagePackageView 表单数据收集', () => {
     assert.strictEqual(data.name, 'username_input');
     assert.strictEqual(data.locator, 'id');
     assert.strictEqual(data.value, 'user_input_id');
+  });
+});
+
+describe('PagePackageView HTML 转义 (防 XSS)', () => {
+  before(async () => {
+    setupJsdm();
+    await loadView();
+  });
+  after(teardownJsdm);
+
+  test('escapeHtml null/undefined 返空串', () => {
+    const v = new ViewClass();
+    assert.strictEqual(v.escapeHtml(null), '');
+    assert.strictEqual(v.escapeHtml(undefined), '');
+  });
+
+  test('escapeHtml 转义 & < > " \'', () => {
+    const v = new ViewClass();
+    assert.strictEqual(v.escapeHtml('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;');
+    assert.strictEqual(v.escapeHtml('a&b'), 'a&amp;b');
+    assert.strictEqual(v.escapeHtml('say "hi"'), 'say &quot;hi&quot;');
+    assert.strictEqual(v.escapeHtml("it's"), 'it&#39;s');
+  });
+
+  test('renderAppOptions 渲染时转义应用名 (不注入原始 HTML)', () => {
+    const v = new ViewClass();
+    v.renderAppOptions([{ id: 'a1', name: '<b>App</b>' }], '');
+    const html = v.els.appSelectWrapper.querySelector('.cascade-select__options').innerHTML;
+    assert.ok(!html.includes('<b>'), '不应渲染原始标签');
+    assert.ok(html.includes('&lt;b&gt;'), '名称被转义');
+  });
+
+  test('renderPageOptions 渲染时转义页面名', () => {
+    const v = new ViewClass();
+    v.renderPageOptions([{ id: 'p1', name: '<img src=x onerror=alert(1)>' }], true, '');
+    const html = v.els.pageSelectWrapper.querySelector('.cascade-select__options').innerHTML;
+    assert.ok(!html.includes('<img'), '不应渲染原始标签');
+    assert.ok(html.includes('&lt;img'), '名称被转义');
+  });
+
+  test('renderElementOptions 渲染时转义元素名', () => {
+    const v = new ViewClass();
+    v.renderElementOptions([{ id: 'e1', name: '"><script>alert(1)</script>' }], true, '');
+    const html = v.els.elementSelectWrapper.querySelector('.cascade-select__options').innerHTML;
+    assert.ok(!html.includes('<script>'), '不应渲染原始标签');
+    assert.ok(html.includes('&lt;script&gt;'), '名称被转义');
+  });
+
+  test('renderFilteredOptions 渲染时转义 id 与名称', () => {
+    const v = new ViewClass();
+    v.renderFilteredOptions('element', [{ id: 'e"2', name: '<i>F</i>' }], '');
+    const html = v.els.elementSelectWrapper.querySelector('.cascade-select__options').innerHTML;
+    assert.ok(!html.includes('<i>'), '不应渲染原始标签');
+    assert.ok(html.includes('&lt;i&gt;'), '名称被转义');
+    assert.ok(html.includes('&quot;'), 'id 被转义');
   });
 });

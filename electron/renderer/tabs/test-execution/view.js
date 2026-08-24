@@ -1196,7 +1196,7 @@ export class TestExecutionView {
     item.setAttribute('data-path', run.reportPath || '');
     item.setAttribute('data-available', run.available);
     if (run.sourcePlanName) item.setAttribute('data-source-plan', run.sourcePlanName);
-    const timeStr = run.timestamp || '-';
+    const timeStr = this.escapeHtml(run.timestamp || '-');
     const statusIcon = run.available
       ? this.getIconHtml('check_circle', 'vertical-align:middle;color:var(--success);margin-right:4px;')
       : this.getIconHtml('cancel', 'vertical-align:middle;color:var(--error);margin-right:4px;');
@@ -1477,8 +1477,8 @@ export class TestExecutionView {
         <div style="display:flex;align-items:center;">
           ${this.getIconHtml('cable', 'margin-right:8px;')}
           <div>
-            <div style="font-weight:500;">${port.deviceId}</div>
-            <div style="font-size:12px;color:var(--text-secondary);">${port.name || ''}</div>
+            <div style="font-weight:500;">${this.escapeHtml(port.deviceId)}</div>
+            <div style="font-size:12px;color:var(--text-secondary);">${this.escapeHtml(port.name || '')}</div>
           </div>
         </div>
       `;

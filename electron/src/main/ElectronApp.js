@@ -238,10 +238,6 @@ class ElectronApp {
       showWindow();
     }, 5000);
 
-    this.allureWindow.webContents.on('did-navigate', async (event, navigateUrl) => {
-      if (!navigateUrl.startsWith('http') || !this.allureWindow || this.allureWindow.isDestroyed()) return;
-    });
-
     this.allureWindow.webContents.on('did-finish-load', () => {
       showWindow();
     });
@@ -331,17 +327,19 @@ class ElectronApp {
     });
 
     app.on('web-contents-created', (event, contents) => {
-      contents.on('new-window', (event, navigationUrl) => {
-        event.preventDefault();
-        // new-window 同样走 urlGuard 校验: 防止页面内链接跳危险协议/任意域
-        const { shell } = require('electron');
-        const { isAllowedExternalUrl } = require('./utils/urlGuard');
-        const { allowed, reason } = isAllowedExternalUrl(navigationUrl);
+      // 统一窗口打开策略 (替代已移除的 new-window 事件):
+      // 每个 webContents 挂 setWindowOpenHandler, 覆盖 splash/main/allure 全部窗口。
+      // mainWindow 在 createWindow 里另有更严的 setWindowOpenHandler(deny) 会覆盖本处 (后设优先)。
+      const { shell } = require('electron');
+      const { isAllowedExternalUrl } = require('./utils/urlGuard');
+      contents.setWindowOpenHandler(({ url }) => {
+        const { allowed, reason } = isAllowedExternalUrl(url);
         if (!allowed) {
-          console.error(`[new-window] 拒绝打开 URL: ${navigationUrl} (${reason})`);
-          return;
+          console.error(`[window-open] 拒绝打开 URL: ${url} (${reason})`);
+          return { action: 'deny' };
         }
-        shell.openExternal(navigationUrl);
+        shell.openExternal(url);
+        return { action: 'deny' };
       });
     });
 

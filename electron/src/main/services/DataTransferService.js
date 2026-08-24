@@ -53,6 +53,26 @@ function isValidManifest(manifest, expectedType) {
     manifest.type === expectedType);
 }
 
+/**
+ * 校验 zip 条目名是否安全 (防 zip-slip 路径穿越, 对称 R10 TarExtractor._sanitizeFileName)
+ * 拒绝: `..` 段 / 绝对路径 (前导 / 或 \\) / Windows 盘符 / 空段
+ * @param {string} entryName
+ * @returns {boolean}
+ */
+function isSafeRelativePath(entryName) {
+  if (!entryName || typeof entryName !== 'string') return false;
+  // 盘符 / UNC / 前导分隔符 → 绝对路径
+  if (/^[a-zA-Z]:[\\/]/.test(entryName) || entryName.startsWith('/') || entryName.startsWith('\\\\')) return false;
+  const normalized = entryName.replace(/\\/g, '/');
+  if (normalized === '' || normalized.startsWith('/')) return false;
+  const segments = normalized.split('/');
+  for (const seg of segments) {
+    // 任一段为 .. 或空 (含尾斜杠/连续分隔符) 拒绝
+    if (seg === '..' || seg === '') return false;
+  }
+  return true;
+}
+
 // ── 3 默认 factory (factory-or-default, 对称 H1 TestPlanService 3 factory) ──
 
 /** 包装 fs 4 方法为 async 接口 (对称 H1 TestCaseService fileSystemFactory) */
@@ -186,7 +206,19 @@ class DataTransferService {
       for (let i = 0; i < entriesToExtract.length; i++) {
         const entry = entriesToExtract[i];
         const current = i + 1;
+        // zip-slip 防线: 拒绝 `..`/绝对路径/盘符 条目名 (对称 TarExtractor._sanitizeFileName)
+        if (!isSafeRelativePath(entry.entryName)) {
+          this._sendProgress(channel,
+            buildProgress('error', 0, 0, entry.entryName, 'Unsafe path in archive: ' + entry.entryName));
+          return { success: false, error: this.i18nService.t('settings.importConfigInvalid') + ': unsafe path in archive' };
+        }
         const targetPath = path.join(configPath, entry.entryName);
+        // path.resolve 二次校验: 防 path.join 语义差异 (Windows 分隔符/盘符) 造成越界
+        if (!path.resolve(targetPath).startsWith(path.resolve(configPath) + path.sep)) {
+          this._sendProgress(channel,
+            buildProgress('error', 0, 0, entry.entryName, 'Unsafe path in archive: ' + entry.entryName));
+          return { success: false, error: this.i18nService.t('settings.importConfigInvalid') + ': unsafe path in archive' };
+        }
         const targetDir = path.dirname(targetPath);
         if (!(await this._fs.exists(targetDir))) {
           await this._fs.mkdir(targetDir);
@@ -305,4 +337,4 @@ class DataTransferService {
   }
 }
 
-module.exports = { DataTransferService, buildManifest, buildProgress, isValidManifest };
+module.exports = { DataTransferService, buildManifest, buildProgress, isValidManifest, isSafeRelativePath };
