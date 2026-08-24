@@ -238,9 +238,6 @@ class FileTransferService {
     tarProcess.stderr.on('data', (data) => {
       errorOutput += data.toString();
     });
-    tarProcess.on('error', (error) => {
-      monitor.emit(100, 'error', this._i18n.t('fileManager.downloadFailed'), error.message);
-    });
 
     return new Promise((resolve) => {
       let settled = false;

@@ -651,7 +651,7 @@ export class AndroidConnectionView {
       hiddenSegments.forEach(seg => {
         const item = document.createElement('div');
         item.className = 'ellipsis-item';
-        item.innerHTML = `${this.getIconHtml('folder')}<span>${seg.displayName}</span>`;
+        item.innerHTML = `${this.getIconHtml('folder')}<span>${this.escapeHtml(seg.displayName)}</span>`;
         item.addEventListener('click', () => {
           onClick?.(seg.path);
           dropdown.classList.remove('show');
