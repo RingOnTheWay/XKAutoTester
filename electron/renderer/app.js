@@ -11,8 +11,6 @@ import { Modal } from './components/modal.js';
 import { InspectorModal } from './components/inspector.js';
 import { ProgressIndicator } from './components/progress-indicator.js';
 import { Toast } from './components/toast.js';
-import { CustomSelect } from './components/custom-select.js';
-import { CascadeSelect } from './components/cascade-select.js';
 import { DeviceCascadeSelect } from './components/device-cascade-select.js';
 import DeviceSelectionModal from './components/device-selection-modal.js';
 import { createTestCaseTab } from './tabs/test-case/index.js';
