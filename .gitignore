@@ -96,3 +96,7 @@ blob-report/
 refactor-rfcs
 /dev-records
 .workbuddy/
+
+# --- 发布脚本运行时产物 ---
+/scripts/xkat-*.json
+/scripts/xkat-*.txt
