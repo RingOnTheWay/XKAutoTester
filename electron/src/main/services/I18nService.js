@@ -9,6 +9,7 @@
 const i18next = require('i18next');
 const path = require('path');
 const asyncFs = require('../utils/asyncFs');
+const pathHelper = require('../utils/pathHelper');
 
 // ── 3 默认 factory (factory-or-default, 对称 test_initializer.py default factories L177-198) ──
 
@@ -65,7 +66,9 @@ class I18nService {
   async init(projectRoot, isPackaged, userConfigPath) {
     if (this.initialized) return;
     try {
-      const localesPath = path.join(__dirname, '..', '..', '..', 'locales');
+      // 走 pathHelper.getLocalesPath (SSOT): 与 PythonTestService._buildSpawnEnv 注入 Python 的路径一致.
+      // 开发模式: projectRoot/electron/locales; 打包模式: resources/locales (extraResources 提取)
+      const localesPath = pathHelper.getLocalesPath(projectRoot, isPackaged);
       const resources = await this._localesLoader(localesPath);  // 步骤 1: 加载 locales
       const savedLanguage = await this._languageResolver(userConfigPath, projectRoot);  // 步骤 2: 解析语言
       await this.i18n.init({  // 步骤 3: 配置 i18next

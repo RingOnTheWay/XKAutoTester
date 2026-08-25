@@ -9,14 +9,15 @@ const { IPC_CHANNELS } = require('../../shared/constants');
  * @param {Object} scheduledPlanService
  * @param {Object} testPlanService
  * @param {string} planId - 定时计划 ID
+ * @param {Function} tr - i18n 翻译函数 (key, fallback)
  * @returns {Promise<{success: boolean, groups?: Array, error?: string}>}
  */
-async function getScheduledPlanRuns(scheduledPlanService, testPlanService, planId) {
+async function getScheduledPlanRuns(scheduledPlanService, testPlanService, planId, tr) {
   try {
     const plans = await scheduledPlanService.getScheduledPlans();
     const plan = plans.find(p => p.id === planId);
     if (!plan) {
-      return { success: false, error: '未找到指定的定时计划', groups: [] };
+      return { success: false, error: tr('errors.scheduledPlanNotFound', '未找到指定的定时计划'), groups: [] };
     }
     const testPlanIds = (plan.testPlans || []).map(p => typeof p === 'string' ? p : p.id);
 
@@ -51,12 +52,17 @@ async function getScheduledPlanRuns(scheduledPlanService, testPlanService, planI
 }
 
 function register(ipcMain, services) {
-  const { scheduledPlanService, schedulerService, testPlanService } = services;
+  const { scheduledPlanService, schedulerService, testPlanService, i18nService } = services;
+
+  // i18n 文案封装: i18nService 不可用时回退默认文案
+  const tr = (key, fallback) => (i18nService && typeof i18nService.t === 'function'
+    ? i18nService.t(key, { defaultValue: fallback })
+    : fallback);
 
   registerHandler(ipcMain, IPC_CHANNELS.GET_SCHEDULED_PLANS, () => scheduledPlanService.getScheduledPlans());
 
   registerHandler(ipcMain, IPC_CHANNELS.GET_SCHEDULED_PLAN_RUNS, (planId) =>
-    getScheduledPlanRuns(scheduledPlanService, testPlanService, planId)
+    getScheduledPlanRuns(scheduledPlanService, testPlanService, planId, tr)
   );
 
   registerHandler(ipcMain, IPC_CHANNELS.SAVE_SCHEDULED_PLAN, async (planData) => {

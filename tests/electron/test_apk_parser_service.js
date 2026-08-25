@@ -118,6 +118,23 @@ test('constructor i18nService 默认 null 不抛', () => {
   assert.strictEqual(svc.aapt2Path, null);
 });
 
+test('constructor collaborators 注入: 3 mock 替代默认 new (对称 ADBService collaborators)', () => {
+  const ApkParserService = require(APK_PARSER_SERVICE_PATH);
+  const invokerMock = makeInvokerMock();
+  const parserMock = makeParserMock();
+  const resolverMock = makeResolverMock();
+
+  const svc = new ApkParserService(PROJECT_ROOT, i18nMock, {
+    invoker: invokerMock,
+    parser: parserMock,
+    labelResolver: resolverMock,
+  });
+
+  assert.strictEqual(svc._invoker, invokerMock, '注入 invoker mock');
+  assert.strictEqual(svc._parser, parserMock, '注入 parser mock');
+  assert.strictEqual(svc._labelResolver, resolverMock, '注入 labelResolver mock');
+});
+
 // ── initialize 测试 ─────────────────────────────────────
 
 test('initialize 委托 invoker.resolvePath + 缓存 aapt2Path', async () => {

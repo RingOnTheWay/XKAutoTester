@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import logging
 import re
 import socket
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 DriverFactory = Callable[[str, UiAutomator2Options], webdriver.Remote]
 ServerFactory = Callable[[str, int], AppiumServer]
 
-# Inspector 专用端口（当 AppiumServer.DEFAULT_PORT 被占用时回退到此端口）
+# Inspector 专用端口 (与 AppiumServer.DEFAULT_PORT=4723 不同, 避免与主 Appium 实例端口冲突)
 INSPECTOR_PORT = 4725
 
 _APPIUM_ERROR_PATTERNS = [
@@ -53,8 +54,10 @@ def _check_port_in_use(port: int) -> bool:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(2)
-            return s.connect_ex(("127.0.0.1", port)) == 0
-    except Exception:
+            return s.connect_ex((AppiumServer.DEFAULT_HOST, port)) == 0
+    except Exception as e:
+        # 加可观测性, 区分"端口未占用"与"检查失败" (socket 异常被当作未占用会触发端口冲突)
+        logger.warning(f"端口 {port} 占用检查失败 (视为未占用): {e}")
         return False
 
 
@@ -188,6 +191,26 @@ def _find_element_by_path(tree: dict, path: str) -> dict | None:
     return current.get("attributes")
 
 
+def _with_session(fn: Callable) -> Callable:
+    """装饰 InspectorService 方法: 统一 driver None 检查 + Exception 兜底 → _map_appium_error。
+
+    消除 get_screenshot/find_locators/refresh 3 处重复的 try/except + error map 模板。
+    start_session/stop_session (driver None 语义不同) / get_page_source (ET.ParseError 特殊处理) 不装饰。
+    """
+
+    @functools.wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        if self.driver is None:
+            return {"success": False, "error": t("inspector.errorNoSession")}
+        try:
+            return fn(self, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Failed in {fn.__name__}: {e}")
+            return {"success": False, "error": _map_appium_error(str(e))}
+
+    return wrapper
+
+
 class InspectorService:
     def __init__(
         self,
@@ -232,6 +255,9 @@ class InspectorService:
             self._notify_progress("appium-starting")
             self.appium_server = self._server_factory(AppiumServer.DEFAULT_HOST, INSPECTOR_PORT)
             if not self.appium_server.start():
+                # 失败分支清理残留实例, 与下方异常分支保持状态一致 (避免实例残留泄漏)
+                self.appium_server.stop()
+                self.appium_server = None
                 return {"success": False, "error": t("inspector.errorAppiumStartFailed")}
 
             self._notify_progress("appium-started")
@@ -253,8 +279,9 @@ class InspectorService:
             # 设置HTTP请求超时，防止息屏后请求挂起
             try:
                 self.driver.command_executor.set_timeout(15)
-            except Exception:
-                pass
+            except Exception as e:
+                # 加可观测性 (与 stdio_protocol._write_frame 的 logger.warning 模式一致)
+                logger.warning(f"set HTTP timeout 15s failed (non-fatal, will use default): {e}")
 
             self._notify_progress("session-created")
 
@@ -273,26 +300,20 @@ class InspectorService:
             if self.driver:
                 try:
                     self.driver.quit()
-                except Exception:
-                    pass
+                except Exception as quit_err:
+                    # 加可观测性 (driver.quit 失败已知, 但记录原因便于排查 session 泄漏)
+                    logger.warning(f"driver.quit on start_session failure failed: {quit_err}")
                 self.driver = None
             if self.appium_server:
                 self.appium_server.stop()
                 self.appium_server = None
             return {"success": False, "error": _map_appium_error(str(e))}
 
+    @_with_session
     def get_screenshot(self) -> dict:
-        try:
-            if self.driver is None:
-                return {"success": False, "error": t("inspector.errorNoSession")}
-
-            screenshot_b64 = self.driver.get_screenshot_as_base64()
-            data_uri = f"data:image/png;base64,{screenshot_b64}"
-            return {"success": True, "screenshot": data_uri}
-
-        except Exception as e:
-            logger.error(f"Failed to get screenshot: {e}")
-            return {"success": False, "error": _map_appium_error(str(e))}
+        screenshot_b64 = self.driver.get_screenshot_as_base64()
+        data_uri = f"data:image/png;base64,{screenshot_b64}"
+        return {"success": True, "screenshot": data_uri}
 
     def get_page_source(self) -> dict:
         try:
@@ -317,54 +338,40 @@ class InspectorService:
             logger.error(f"Failed to get page source: {e}")
             return {"success": False, "error": _map_appium_error(str(e))}
 
+    @_with_session
     def find_locators(self, element_path: str) -> dict:
-        try:
-            if self.driver is None:
-                return {"success": False, "error": t("inspector.errorNoSession")}
+        if self._cached_tree is None:
+            result = self.get_page_source()
+            if not result.get("success"):
+                return result
 
-            if self._cached_tree is None:
-                result = self.get_page_source()
-                if not result.get("success"):
-                    return result
+        element_attrs = _find_element_by_path(self._cached_tree, element_path)
+        if element_attrs is None:
+            return {"success": False, "error": t("inspector.errorElementNotFound")}
 
-            element_attrs = _find_element_by_path(self._cached_tree, element_path)
-            if element_attrs is None:
-                return {"success": False, "error": t("inspector.errorElementNotFound")}
+        locators = _generate_locators(element_attrs)
 
-            locators = _generate_locators(element_attrs)
+        return {"success": True, "locators": locators}
 
-            return {"success": True, "locators": locators}
-
-        except Exception as e:
-            logger.error(f"Failed to find locators: {e}")
-            return {"success": False, "error": _map_appium_error(str(e))}
-
+    @_with_session
     def refresh(self) -> dict:
-        try:
-            if self.driver is None:
-                return {"success": False, "error": t("inspector.errorNoSession")}
+        # 先唤醒设备屏幕，防止息屏后无法截图
+        self._wake_device()
 
-            # 先唤醒设备屏幕，防止息屏后无法截图
-            self._wake_device()
+        screenshot_result = self.get_screenshot()
+        if not screenshot_result.get("success"):
+            return screenshot_result
 
-            screenshot_result = self.get_screenshot()
-            if not screenshot_result.get("success"):
-                return screenshot_result
+        source_result = self.get_page_source()
+        if not source_result.get("success"):
+            return source_result
 
-            source_result = self.get_page_source()
-            if not source_result.get("success"):
-                return source_result
-
-            return {
-                "success": True,
-                "screenshot": screenshot_result["screenshot"],
-                "source": source_result["source"],
-                "elements": source_result["elements"],
-            }
-
-        except Exception as e:
-            logger.error(f"Failed to refresh: {e}")
-            return {"success": False, "error": _map_appium_error(str(e))}
+        return {
+            "success": True,
+            "screenshot": screenshot_result["screenshot"],
+            "source": source_result["source"],
+            "elements": source_result["elements"],
+        }
 
     def stop_session(self) -> dict:
         try:

@@ -37,6 +37,7 @@ class FileTransferService {
     remoteStatService,
     i18nService,
     tarExtractor,
+    projectRoot,
     spawnFn,
     fs: fsDep,
     progressMonitorFactory,
@@ -52,6 +53,8 @@ class FileTransferService {
     this._remoteStat = remoteStatService;
     this._i18n = i18nService;
     this._tarExtractor = tarExtractor;
+    // 统一 adb 路径解析根 (与 ADBService 用同一 projectRoot; 未注入时回退到传统值)
+    this._projectRoot = projectRoot || process.resourcesPath || process.cwd();
     this._spawn = spawnFn || spawn;
     this._fs = fsDep || fs;
     this._monitorFactory = progressMonitorFactory || ((opts) => new AdbProgressMonitor(opts));
@@ -60,12 +63,11 @@ class FileTransferService {
   }
 
   /**
-   * 获取 adb 路径 (通过 pathHelper)
+   * 获取 adb 路径 (通过 pathHelper 统一解析, 与 ADBService 同一入口)
    */
   _getAdbPath() {
-    // 注: projectRoot 由 facade (ADBService) 在创建 executor 时已传入, 此处复用 executor 的路径
-    // FileTransferService 不直接持有 projectRoot, 通过 pathHelper 全局解析
-    return pathHelper.getAdbPath(process.resourcesPath || process.cwd(), true);
+    // 复用 pathHelper.getAdbPath 单一解析入口; projectRoot 由 facade (ADBService) 注入
+    return pathHelper.getAdbPath(this._projectRoot, true);
   }
 
   /**
@@ -80,12 +82,11 @@ class FileTransferService {
     try {
       const stats = this._fs.statSync(localPath);
       const fileSizeInBytes = stats.size;
-      const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2);
 
       const monitor = this._monitorFactory({
         remotePath,
         deviceId,
-        fileStats: { size: fileSizeInBytes, name: path.basename(localPath), sizeInMB: fileSizeInMB },
+        fileStats: { size: fileSizeInBytes, name: path.basename(localPath) },
         eventSender,
         i18nService: this._i18n,
         executeStat: (statArgs) => this._executor.execute(statArgs),
@@ -169,13 +170,12 @@ class FileTransferService {
       const remoteSizeBytes = isDir
         ? await this._remoteStat.getDirSize(remotePath, deviceId)
         : await this._remoteStat.getFileSize(remotePath, deviceId);
-      const remoteSizeInMB = (remoteSizeBytes / (1024 * 1024)).toFixed(2);
 
       if (isDir) {
-        return await this._downloadDir(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, remoteSizeInMB, sanitizeFileName);
+        return await this._downloadDir(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, sanitizeFileName);
       }
 
-      return await this._downloadFile(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, remoteSizeInMB, sanitizeFileName);
+      return await this._downloadFile(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, sanitizeFileName);
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -184,7 +184,7 @@ class FileTransferService {
   /**
    * 下载目录: tar exec-out → TarExtractor → AdmZip
    */
-  async _downloadDir(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, remoteSizeInMB, sanitizeFileName) {
+  async _downloadDir(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, sanitizeFileName) {
     const basePath = localPath.replace(/\\/g, '/').replace(/\/[^/]+$/, '');
     const dirName = path.basename(remotePath);
     const sanitizedDirName = sanitizeFileName(dirName);
@@ -200,7 +200,7 @@ class FileTransferService {
     const monitor = this._monitorFactory({
       remotePath,
       deviceId,
-      fileStats: { size: remoteSizeBytes || 1, name: path.basename(finalLocalPath), sizeInMB: remoteSizeInMB },
+      fileStats: { size: remoteSizeBytes || 1, name: path.basename(finalLocalPath) },
       eventSender,
       i18nService: this._i18n,
       executeStat: () => Promise.resolve({ success: false, output: '' }),
@@ -228,7 +228,9 @@ class FileTransferService {
     tarProcess.stdout.pipe(tarWriteStream);
     tarProcess.stdout.on('data', (data) => {
       transferred += data.length;
-      const percentage = Math.min(95, Math.floor((transferred / (1024 * 1024)) * 10));
+      // 用已知总大小 remoteSizeBytes 计算真实百分比 (远程大小可能为 0, 需除零保护; 保留 95 封顶避免瞬时 100%)
+      const denominator = remoteSizeBytes > 0 ? remoteSizeBytes : transferred || 1;
+      const percentage = Math.min(95, Math.floor((transferred / denominator) * 100));
       monitor.emit(percentage, 'downloading', this._i18n.t('fileManager.downloading'));
     });
     tarProcess.stderr.on('data', (data) => {
@@ -236,34 +238,51 @@ class FileTransferService {
     });
 
     return new Promise((resolve) => {
+      let settled = false;
+      // 统一收口: 确保 error/close 双路径都正确关闭写入流并只 resolve 一次, 避免 Promise 永久 pending
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        if (tarWriteStream.destroy) tarWriteStream.destroy();
+        resolve(result);
+      };
+      const cleanupTemp = async () => {
+        if (await this._asyncFs.exists(tempTarPath)) await this._asyncFs.unlink(tempTarPath);
+        await this._asyncFs.rm(tempDir, { recursive: true, force: true });
+      };
+
+      // spawn 失败 (ENOENT/adb 缺失) 只发 error 不发 close, 必须在此处结束 Promise
+      tarProcess.on('error', async (error) => {
+        await cleanupTemp();
+        monitor.emit(100, 'error', this._i18n.t('fileManager.downloadFailed'), error.message);
+        finish({ success: false, error: this._i18n.t('fileManager.downloadFailed'), output: '' });
+      });
+
       tarProcess.on('close', async (code) => {
         if (code === 0) {
           try {
             await this._processTarAndCreateZip(tempTarPath, tempDir, finalLocalPath, monitor);
 
-            await this._asyncFs.unlink(tempTarPath);
-            await this._asyncFs.rm(tempDir, { recursive: true, force: true });
+            await cleanupTemp();
 
             monitor.emit(100, 'success', this._i18n.t('main.fileDownloaded', { path: finalLocalPath }));
-            resolve({
+            finish({
               success: true,
               output: this._i18n.t('main.fileDownloaded', { path: finalLocalPath }),
               localPath: finalLocalPath,
             });
           } catch (error) {
-            if (await this._asyncFs.exists(tempTarPath)) await this._asyncFs.unlink(tempTarPath);
-            await this._asyncFs.rm(tempDir, { recursive: true, force: true });
+            await cleanupTemp();
 
             monitor.emit(100, 'error', this._i18n.t('main.zipCreationFailed', { error: error.message }), error.message);
-            resolve({ success: false, error: this._i18n.t('main.zipCreationFailed', { error: error.message }) });
+            finish({ success: false, error: this._i18n.t('main.zipCreationFailed', { error: error.message }) });
           }
         } else {
-          if (await this._asyncFs.exists(tempTarPath)) await this._asyncFs.unlink(tempTarPath);
-          await this._asyncFs.rm(tempDir, { recursive: true, force: true });
+          await cleanupTemp();
 
           const errMsg = this._i18n.t('main.tarExecFailed', { code, error: errorOutput.trim() });
           monitor.emit(100, 'error', errMsg, errMsg);
-          resolve({ success: false, error: errMsg });
+          finish({ success: false, error: errMsg });
         }
       });
     });
@@ -272,7 +291,7 @@ class FileTransferService {
   /**
    * 下载单文件: adb pull -p
    */
-  async _downloadFile(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, remoteSizeInMB, sanitizeFileName) {
+  async _downloadFile(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, sanitizeFileName) {
     const basePath = localPath.replace(/\\/g, '/').replace(/\/[^/]+$/, '');
     const fileName = path.basename(localPath);
     const sanitizedFileName = sanitizeFileName(fileName);
@@ -281,7 +300,7 @@ class FileTransferService {
     const monitor = this._monitorFactory({
       remotePath,
       deviceId,
-      fileStats: { size: remoteSizeBytes || 1, name: path.basename(finalLocalPath), sizeInMB: remoteSizeInMB },
+      fileStats: { size: remoteSizeBytes || 1, name: path.basename(finalLocalPath) },
       eventSender,
       i18nService: this._i18n,
       executeStat: () => Promise.resolve({ success: false, output: '' }),
@@ -312,10 +331,23 @@ class FileTransferService {
     });
 
     return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+
+      // spawn 失败 (ENOENT/adb 缺失) 只发 error 不发 close, 必须在此处结束 Promise
+      pullProcess.on('error', (error) => {
+        monitor.emit(100, 'error', this._i18n.t('fileManager.downloadFailed'), error.message);
+        finish({ success: false, error: this._i18n.t('fileManager.downloadFailed'), output: '' });
+      });
+
       pullProcess.on('close', (code) => {
         if (code === 0) {
           monitor.emit(100, 'success', this._i18n.t('main.fileDownloaded', { path: finalLocalPath }));
-          resolve({
+          finish({
             success: true,
             output: this._i18n.t('main.fileDownloaded', { path: finalLocalPath }),
             localPath: finalLocalPath,
@@ -323,7 +355,7 @@ class FileTransferService {
         } else {
           const errMsg = this._i18n.t('main.pullFailed', { code, error: errorOutput.trim() });
           monitor.emit(100, 'error', errMsg, errMsg);
-          resolve({ success: false, error: errMsg });
+          finish({ success: false, error: errMsg });
         }
       });
     });
@@ -355,7 +387,9 @@ class FileTransferService {
           zip.addFile(`${zipFilePath}/`, Buffer.alloc(0));
           await addDirectoryToZip(filePath, zipFilePath);
         } else {
-          zip.addFile(zipFilePath, this._fs.readFileSync(filePath));
+          // 传 null encoding 拿 Buffer (二进制安全, adm-zip addFile 需 Buffer)
+          const buf = await this._asyncFs.readFile(filePath, null);
+          zip.addFile(zipFilePath, buf);
         }
       }
     };

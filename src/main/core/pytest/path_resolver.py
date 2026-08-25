@@ -1,12 +1,12 @@
 """path_resolver: 测试路径解析纯函数。
 
-剥离自 PytestRunner.run_custom_tests 内联 4 策略回退, 消除 logger 副作用。
+剥离自 PytestRunner.run_custom_tests 内联策略回退, 消除 logger 副作用。
 
-4 策略顺序 (与原行为一致):
+策略顺序 (与原行为一致):
 1. 直接路径 (os.path.exists, cwd 相对/绝对)
 2. project_root / path.rstrip("/")  (相对项目根)
-3. project_root / "tests" / path.rstrip("/")
-4. project_root / "tests" / path  (文件名查找)
+3. project_root / "tests" / path.rstrip("/")  (位于 tests 目录; 原策略 3/4 仅差
+   rstrip("/"), 对常规路径等价, 合并为单一规则)
 
 返回路径相对 project_root (越界用绝对路径)。
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 def resolve_test_paths(test_paths: list[str], project_root: Path) -> list[str]:
-    """解析测试路径, 4 策略回退 (纯函数, 无日志副作用)。
+    """解析测试路径, 多策略回退 (纯函数, 无日志副作用)。
 
     Args:
         test_paths: 原始测试路径列表 (相对/绝对/文件名)
@@ -41,15 +41,10 @@ def resolve_test_paths(test_paths: list[str], project_root: Path) -> list[str]:
             if relative_path.exists():
                 full_path = relative_path
             else:
-                # 3. project_root / tests / path (rstrip)
+                # 3. project_root / tests / path (统一 rstrip, 兼容尾斜杠)
                 tests_path = project_root / "tests" / path.rstrip("/")
                 if tests_path.exists():
                     full_path = tests_path
-                else:
-                    # 4. project_root / tests / path (文件名, 不 rstrip)
-                    filename_path = project_root / "tests" / path
-                    if filename_path.exists():
-                        full_path = filename_path
 
         if full_path and full_path.exists():
             try:

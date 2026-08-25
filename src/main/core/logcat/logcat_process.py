@@ -14,16 +14,24 @@
 """
 from __future__ import annotations
 
+import logging
 import subprocess
 
 from main.core.adb.adb_port import AdbCommandPort, AdbResult
+from main.core.subprocess_handle import SubprocessHandle
+
+logger = logging.getLogger(__name__)
 
 
-class LogcatProcess:
+class LogcatProcess(SubprocessHandle):
     """logcat 子进程边界。
 
     持有 adapter + Popen 句柄,封装 clear/start_stream/readline/stop 生命周期。
     """
+
+    _TERMINATE_TIMEOUT = 3.0
+    _KILL_TIMEOUT = 2.0
+    _LABEL = "LogcatProcess"
 
     def __init__(self, adapter: AdbCommandPort, device_name: str) -> None:
         """
@@ -43,7 +51,6 @@ class LogcatProcess:
         """
         return self._adapter.execute(
             ["-s", self._device_name, "logcat", "-c"],
-            timeout=10,
         )
 
     def start_stream(self) -> None:
@@ -85,16 +92,6 @@ class LogcatProcess:
         """停止子进程: terminate → wait(3) → kill → wait(2)。幂等。
 
         异常静默吞掉 (调用方在 stop 路径不期望抛异常)。
+        委托 SubprocessHandle._stop_process (M10 抽取)。
         """
-        if self._process is None:
-            return
-        try:
-            self._process.terminate()
-            try:
-                self._process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                self._process.kill()
-                self._process.wait(timeout=2)
-        except Exception:
-            pass
-        self._process = None
+        self._stop_process()

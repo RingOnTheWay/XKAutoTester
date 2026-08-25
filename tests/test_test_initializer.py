@@ -14,8 +14,14 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
+from appium import webdriver
+from faker import Faker
 
-from main.utils.test_initializer import (
+from main.core.adb_manager import ADBManager
+from main.core.appium_server import AppiumServer
+from main.core.ble_device import BLEDevice
+from main.core.crash_monitor import CrashMonitor
+from main.core.test_initializer import (
     ADBConfig,
     AppiumConfig,
     TestConfig,
@@ -237,29 +243,36 @@ class TestFactoryInjection:
     """
 
     def _make_fake_adb(self, *, check_service: bool = True, connect: tuple[bool, str] = (True, "ok")) -> MagicMock:
-        """构造 fake ADBManager。"""
-        adb = MagicMock()
-        adb.check_adb_service.return_value = check_service
-        adb.connect_device.return_value = connect
-        adb.ensure_bluetooth_enabled.return_value = True
-        adb.force_stop_app_silent.return_value = None
-        adb.get_app_pid.return_value = "1234"
+        """构造 fake ADBManager (P2: spec=ADBManager, 阻止调用漂移)。
+
+        方法名对齐 ADBManager 聚合根实际调用路径：
+        - adb_manager.connection.check_adb_service() / .connect()
+        - adb_manager.bluetooth.ensure_enabled()
+        - adb_manager.app.force_stop(silent=True) / .get_pid() / .get_dumpsys_window() / .ensure_closed(2)
+        - adb_manager.update_logcat_pid(pid)  # 自身方法
+        """
+        adb = MagicMock(spec=ADBManager)
+        adb.connection.check_adb_service.return_value = check_service
+        adb.connection.connect.return_value = connect
+        adb.bluetooth.ensure_enabled.return_value = True
+        adb.app.force_stop.return_value = None
+        adb.app.get_pid.return_value = "1234"
+        adb.app.get_dumpsys_window.return_value = "window_state"
+        adb.app.ensure_closed.return_value = True
         adb.update_logcat_pid.return_value = None
-        adb.ensure_app_closed.return_value = True
-        adb.get_dumpsys_window.return_value = "window_state"
         return adb
 
     def _make_fake_appium_server(self, *, start_ok: bool = True) -> MagicMock:
-        """构造 fake AppiumServer。"""
-        server = MagicMock()
+        """构造 fake AppiumServer (P2: spec=AppiumServer, 阻止调用漂移)。"""
+        server = MagicMock(spec=AppiumServer)
         server.start.return_value = start_ok
         server.stop.return_value = None
         server.server_url = "http://fake:4723"
         return server
 
     def _make_fake_driver(self) -> MagicMock:
-        """构造 fake webdriver.Remote。"""
-        driver = MagicMock()
+        """构造 fake webdriver.Remote (R10: spec=webdriver.Remote, 阻止调用漂移)。"""
+        driver = MagicMock(spec=webdriver.Remote)
         driver.session_id = "fake-sid"
         driver.current_activity = ".MainActivity"
         driver.quit.return_value = None
@@ -270,15 +283,15 @@ class TestFactoryInjection:
         fake_adb = self._make_fake_adb()
         fake_server = self._make_fake_appium_server()
         fake_driver = self._make_fake_driver()
-        fake_crash = MagicMock()
-        fake_faker = MagicMock()
+        fake_crash = MagicMock(spec=CrashMonitor)
+        fake_faker = MagicMock(spec=Faker)
         clock = FakeClock()
 
         init = TestInitializer(
             config=_make_real_config(),
             logger=logging.getLogger("test"),
             adb_manager_factory=lambda d, p: fake_adb,
-            ble_device_factory=lambda cfg: MagicMock(),
+            ble_device_factory=lambda cfg: MagicMock(spec=BLEDevice),
             appium_server_factory=lambda h, p: fake_server,
             driver_factory=lambda url, options: fake_driver,
             crash_monitor_factory=lambda adb, reporter, lg: fake_crash,
@@ -341,7 +354,7 @@ class TestFactoryInjection:
             logger=logging.getLogger("test"),
             adb_manager_factory=lambda d, p: fake_adb,
             appium_server_factory=lambda h, p: fake_server,
-            crash_monitor_factory=lambda *a: MagicMock(),
+            crash_monitor_factory=lambda *a: MagicMock(spec=CrashMonitor),
             time_provider=FakeClock(),
         )
 
@@ -355,7 +368,7 @@ class TestFactoryInjection:
         """appium_init: driver_factory 抛 Activity 错误 → _fail (severity=fail)。"""
         fake_adb = self._make_fake_adb()
         fake_server = self._make_fake_appium_server()
-        fake_crash = MagicMock()
+        fake_crash = MagicMock(spec=CrashMonitor)
 
         def _raise_activity_error(url, options):
             raise RuntimeError("Activity name '.Main' doesn't exist or cannot be launched")
@@ -382,7 +395,7 @@ class TestFactoryInjection:
         """appium_init: driver_factory 抛 SDK 错误 → _fail + dumpsys 兜底。"""
         fake_adb = self._make_fake_adb()
         fake_server = self._make_fake_appium_server()
-        fake_crash = MagicMock()
+        fake_crash = MagicMock(spec=CrashMonitor)
 
         def _raise_sdk_error(url, options):
             raise RuntimeError("Could not start session. Invalid address")
@@ -403,14 +416,14 @@ class TestFactoryInjection:
         assert init._outcome is not None
         assert init._outcome.severity == "fail"
         # dumpsys 兜底应被调
-        fake_adb.get_dumpsys_window.assert_called_once()
+        fake_adb.app.get_dumpsys_window.assert_called_once()
 
     def test_cleanup_calls_quit_stop_close_on_fake_resources(self) -> None:
-        """cleanup: 调 driver.quit + appium_server.stop + adb.ensure_app_closed + crash_monitor.stop。"""
+        """cleanup: 调 driver.quit + appium_server.stop + adb.app.ensure_closed + crash_monitor.stop。"""
         fake_adb = self._make_fake_adb()
         fake_server = self._make_fake_appium_server()
         fake_driver = self._make_fake_driver()
-        fake_crash = MagicMock()
+        fake_crash = MagicMock(spec=CrashMonitor)
 
         init = TestInitializer(
             config=_make_real_config(),
@@ -419,7 +432,7 @@ class TestFactoryInjection:
             appium_server_factory=lambda h, p: fake_server,
             driver_factory=lambda url, options: fake_driver,
             crash_monitor_factory=lambda *a: fake_crash,
-            faker_factory=lambda: MagicMock(),
+            faker_factory=lambda: MagicMock(spec=Faker),
             time_provider=FakeClock(),
         )
         init.init_all()
@@ -429,7 +442,7 @@ class TestFactoryInjection:
 
         fake_crash.stop_and_attach_log.assert_called_once()
         fake_driver.quit.assert_called_once()
-        fake_adb.ensure_app_closed.assert_called_once()
+        fake_adb.app.ensure_closed.assert_called_once_with(2)
         fake_server.stop.assert_called_once()
 
     def test_time_provider_fake_clock_no_real_sleep(self) -> None:
@@ -445,8 +458,8 @@ class TestFactoryInjection:
             adb_manager_factory=lambda d, p: fake_adb,
             appium_server_factory=lambda h, p: fake_server,
             driver_factory=lambda url, options: fake_driver,
-            crash_monitor_factory=lambda *a: MagicMock(),
-            faker_factory=lambda: MagicMock(),
+            crash_monitor_factory=lambda *a: MagicMock(spec=CrashMonitor),
+            faker_factory=lambda: MagicMock(spec=Faker),
             time_provider=clock,
         )
 

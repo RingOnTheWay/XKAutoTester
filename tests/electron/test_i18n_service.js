@@ -166,11 +166,12 @@ test('factory 失败时吞错 + initialized 保持 false', async () => {
 });
 
 test('默认 factory 读真 fs (集成, 临时 locales 目录 + config.json)', async () => {
+  // S5: I18nService.init 走 pathHelper.getLocalesPath(projectRoot) = projectRoot/electron/locales
   // 用真实 I18nService (不传 opts) + 临时目录
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xkat-i18n-test-'));
   try {
-    // 临时 locales/zh-CN/translation.json
-    const localesDir = path.join(tmpDir, 'locales');
+    // 临时 electron/locales/zh-CN/translation.json (S5: 路径对齐 pathHelper.getLocalesPath)
+    const localesDir = path.join(tmpDir, 'electron', 'locales');
     const zhCNDir = path.join(localesDir, 'zh-CN');
     fs.mkdirSync(zhCNDir, { recursive: true });
     fs.writeFileSync(
@@ -199,6 +200,39 @@ test('默认 factory 读真 fs (集成, 临时 locales 目录 + config.json)', a
     // 注: 默认 localesLoader 读 __dirname 算的路径, 可能命中项目实际 locales
     // 验证 initialized 为 true (不抛即成功)
     assert.strictEqual(svc.initialized, true);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('打包模式 (isPackaged=true) init 读 projectRoot/locales (resources 提取路径)', async () => {
+  // 打包模式 i18n 修复: getLocalesPath(projectRoot, true) = projectRoot/locales
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xkat-i18n-packaged-'));
+  try {
+    // 打包布局: resources/locales/zh-CN/translation.json (extraResources 提取)
+    const localesDir = path.join(tmpDir, 'locales');
+    const zhCNDir = path.join(localesDir, 'zh-CN');
+    fs.mkdirSync(zhCNDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(zhCNDir, 'translation.json'),
+      JSON.stringify({ greeting: '打包你好', checkText: '检查中' })
+    );
+
+    const configDir = path.join(tmpDir, 'config');
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(configDir, 'config.json'),
+      JSON.stringify({ APP_SETTINGS: { language: 'zh-CN' } })
+    );
+
+    const svc = new I18nService();
+    await svc.init(tmpDir, true, configDir);
+
+    assert.strictEqual(svc.initialized, true, '打包模式 init 成功');
+    assert.strictEqual(svc.t('greeting'), '打包你好', '读到了打包模式 locales 翻译');
+    assert.strictEqual(svc.t('checkText'), '检查中');
+    // 未加载的 key 原样返回 (i18next 行为), 验证资源确已加载而非空
+    assert.notStrictEqual(svc.t('greeting'), 'greeting');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

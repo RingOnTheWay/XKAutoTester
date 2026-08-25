@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const pathHelper = require('./utils/pathHelper');
+const { IPC_CHANNELS } = require('../shared/constants');
 
 class ElectronApp {
   constructor() {
@@ -38,10 +39,11 @@ class ElectronApp {
         contextIsolation: true,
         sandbox: false,
         preload: pathHelper.getPreloadPath(this.isPackaged, __dirname),
-        webSecurity: false
+        // webSecurity: true — splash 仅加载本地文件; 关闭同源策略有 XSS 风险
+        webSecurity: true
       }
     });
-    
+
     const splashPath = pathHelper.getSplashPath(this.isPackaged, __dirname);
     this.splashWindow.loadFile(splashPath);
     
@@ -73,7 +75,8 @@ class ElectronApp {
         contextIsolation: true,
         sandbox: false,
         preload: pathHelper.getPreloadPath(this.isPackaged, __dirname),
-        webSecurity: false
+        // webSecurity: true — mainWindow 加载本地 renderer/; 关闭同源策略有 XSS 风险
+        webSecurity: true
       },
       frame: false,
       transparent: true,
@@ -88,6 +91,22 @@ class ElectronApp {
     });
     
     this.mainWindow.setMenu(null);
+
+    // 主窗口 CSP: 给默认 session 注入 Content-Security-Policy 响应头, 收紧 XSS 面
+    // 注意: allure 窗口使用独立 partition, 其 onHeadersReceived 删除 CSP (见 createAllureWindow),
+    //      两者互不干扰。经 chromium.webRequest.onHeadersReceived 注入, 对 file:// 与 http(s) 均生效。
+    const mainDevServerUrl = process.env.ELECTRON_VITE_DEV_SERVER_URL;
+    // 开发模式 (electron-vite dev) 下 Vite HMR 注入内联脚本, script-src 需放行 'unsafe-inline'
+    // 并放行 dev server 与 HMR websocket
+    const mainConnects = mainDevServerUrl ? `'self' ${mainDevServerUrl} ws: ws://localhost:*` : "'self'";
+    const mainScriptSrc = mainDevServerUrl ? "'self' 'unsafe-inline'" : "'self'";
+    const mainCsp = `default-src 'self'; script-src ${mainScriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${mainConnects}`;
+    const mainSession = this.mainWindow.webContents.session;
+    mainSession.webRequest.onHeadersReceived((details, callback) => {
+      const responseHeaders = { ...details.responseHeaders };
+      responseHeaders['content-security-policy'] = [mainCsp];
+      callback({ responseHeaders });
+    });
 
     // 开发模式 (electron-vite dev): loadURL (dev server + HMR)
     // 生产/旧开发模式: loadFile (源码 renderer/ 或打包后 renderer/)
@@ -122,15 +141,26 @@ class ElectronApp {
     }
 
     if (this.services.pythonTestService) {
+      // PythonTestService 保留直字段赋值: 消除 setMainWindow 时序耦合, run() lazy 取 this.mainWindow
       this.services.pythonTestService.mainWindow = this.mainWindow;
     }
 
+    // ScrcpyService 需 mainWindow 引用 (notifierFactory lazy 获取)
+    if (this.services.scrcpyService) {
+      this.services.scrcpyService.setMainWindow(this.mainWindow);
+    }
+
+    if (this.services.dataTransferService) {
+      this.services.dataTransferService.setMainWindow(this.mainWindow);
+    }
+
     this.mainWindow.on('maximize', () => {
-      this.mainWindow.webContents.send('window-maximized', true);
+      // 走 IPC_CHANNELS 常量
+      this.mainWindow.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZED, true);
     });
 
     this.mainWindow.on('unmaximize', () => {
-      this.mainWindow.webContents.send('window-maximized', false);
+      this.mainWindow.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZED, false);
     });
 
     this.mainWindow.webContents.setWindowOpenHandler(() => {
@@ -158,7 +188,8 @@ class ElectronApp {
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
-        webSecurity: false,
+        // webSecurity: true — allure 报告与 HTTP server 同源 http://localhost:PORT; 关闭同源策略有 XSS 风险
+        webSecurity: true,
         partition: partitionName
       },
       autoHideMenuBar: true
@@ -175,11 +206,12 @@ class ElectronApp {
 
     ses.webRequest.onHeadersReceived((details, callback) => {
       const responseHeaders = { ...details.responseHeaders };
+      // 删除注入 ACAO:* — 同源场景下无需, * 允许任意网站读取响应, 有数据泄露风险
+      // 仅保留 CSP 删除 (allure 内置 CSP 在 Electron 环境下可能阻断其自身内联脚本, 属已知兼容问题)
       delete responseHeaders['content-security-policy'];
       delete responseHeaders['content-security-policy-report-only'];
       delete responseHeaders['x-content-security-policy'];
       delete responseHeaders['x-webkit-csp'];
-      responseHeaders['access-control-allow-origin'] = ['*'];
       callback({ responseHeaders });
     });
 
@@ -205,10 +237,6 @@ class ElectronApp {
     showTimeout = setTimeout(() => {
       showWindow();
     }, 5000);
-
-    this.allureWindow.webContents.on('did-navigate', async (event, navigateUrl) => {
-      if (!navigateUrl.startsWith('http') || !this.allureWindow || this.allureWindow.isDestroyed()) return;
-    });
 
     this.allureWindow.webContents.on('did-finish-load', () => {
       showWindow();
@@ -292,24 +320,37 @@ class ElectronApp {
       }
 
       if (this.services.schedulerService) {
-        this.services.schedulerService.start();
+        this.services.schedulerService.initialize();
       }
 
       this.restorePreventSleepSetting();
     });
 
     app.on('web-contents-created', (event, contents) => {
-      contents.on('new-window', (event, navigationUrl) => {
-        event.preventDefault();
-        const { shell } = require('electron');
-        shell.openExternal(navigationUrl);
+      // 统一窗口打开策略 (替代已移除的 new-window 事件):
+      // 每个 webContents 挂 setWindowOpenHandler, 覆盖 splash/main/allure 全部窗口。
+      // mainWindow 在 createWindow 里另有更严的 setWindowOpenHandler(deny) 会覆盖本处 (后设优先)。
+      const { shell } = require('electron');
+      const { isAllowedExternalUrl } = require('./utils/urlGuard');
+      contents.setWindowOpenHandler(({ url }) => {
+        const { allowed, reason } = isAllowedExternalUrl(url);
+        if (!allowed) {
+          console.error(`[window-open] 拒绝打开 URL: ${url} (${reason})`);
+          return { action: 'deny' };
+        }
+        shell.openExternal(url);
+        return { action: 'deny' };
       });
     });
 
     app.on('before-quit', () => {
-      if (this.services.schedulerService) {
-        this.services.schedulerService.stop();
-      }
+      // 持有子进程/会话的 service 必须在退出前同步释放, 避免孤儿进程
+      // 对称: schedulerService.destroy() + allureService.cleanupSync() (will-quit)
+      // catch 块加 console.error 可观测性: 静默吞异常致资源泄漏不可排查
+      try { this.services.schedulerService && this.services.schedulerService.destroy(); } catch (e) { console.error('[before-quit] schedulerService.destroy failed:', e); }
+      try { this.services.scrcpyService && this.services.scrcpyService.stopScrcpy(); } catch (e) { console.error('[before-quit] scrcpyService.stopScrcpy failed:', e); }
+      try { this.services.pythonTestService && this.services.pythonTestService.stop(); } catch (e) { console.error('[before-quit] pythonTestService.stop failed:', e); }
+      try { this.services.inspectorService && this.services.inspectorService.dispose(); } catch (e) { console.error('[before-quit] inspectorService.dispose failed:', e); }
     });
 
     app.on('will-quit', () => {

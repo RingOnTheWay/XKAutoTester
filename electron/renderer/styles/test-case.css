@@ -1679,9 +1679,9 @@ body:not(.dark-theme) .btn-spinner {
 
 /* 简化的下拉菜单样式 */
 .ellipsis-dropdown {
-  position: absolute;
-  left: 20px;
-  top: 200px;
+  position: fixed;
+  left: 0;
+  top: 0;
   background-color: white !important;
   border: 1px solid #ccc !important;
   border-radius: 4px !important;
@@ -3198,6 +3198,11 @@ body.dark-theme .marker-badge:hover {
   color: var(--primary);
 }
 
+/* R7 a11y: 键盘导航高亮 (与 hover 一致, 保证键盘用户可见焦点) */
+.custom-select__option.active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 /* 亮色主题下的自定义下拉框样式 */
 body:not(.dark-theme) .custom-select__selected {
   background: rgba(0, 0, 0, 0.03);
@@ -3226,6 +3231,10 @@ body:not(.dark-theme) .custom-select__options {
 }
 
 body:not(.dark-theme) .custom-select__option:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) .custom-select__option.active {
   background: rgba(0, 0, 0, 0.05);
 }
 

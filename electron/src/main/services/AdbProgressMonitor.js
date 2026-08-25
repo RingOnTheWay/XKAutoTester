@@ -17,7 +17,7 @@ class AdbProgressMonitor {
    * @param {Object} options
    * @param {string} options.remotePath - 远程文件路径 (用于 stat 查询)
    * @param {string|null} options.deviceId - 设备 ID (null 表示不指定)
-   * @param {{size: number, name: string, sizeInMB: string}} options.fileStats - 文件元信息
+   * @param {{size: number, name: string}} options.fileStats - 文件元信息
    * @param {Object|null} options.eventSender - IPC 发送器 (需 send 方法), null 时不发送
    * @param {Object} options.i18nService - 国际化服务 (需 t 方法)
    * @param {Function} options.executeStat - async (statArgs) => {success, output, error}
@@ -77,6 +77,20 @@ class AdbProgressMonitor {
   }
 
   /**
+   * 智能文件大小格式化 (B/KB/MB/GB), 避免小文件显示 0.00MB
+   * @param {number} bytes
+   * @returns {string}
+   */
+  formatFileSize(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+    const value = bytes / Math.pow(1024, i);
+    const digits = i === 0 ? 0 : (value >= 100 ? 0 : (value >= 10 ? 1 : 2));
+    return value.toFixed(digits) + ' ' + units[i];
+  }
+
+  /**
    * 主动发送进度事件 (download stdout 解析模式)
    * @param {number} percentage - 0-100
    * @param {string} status - preparing/transferring/downloading/installing/success/error
@@ -90,7 +104,7 @@ class AdbProgressMonitor {
       status,
       message,
       fileName: this.fileStats.name,
-      fileSize: this.fileStats.sizeInMB + ' MB',
+      fileSize: this.formatFileSize(this.fileStats.size),
     };
     if (error) payload.error = error;
     this.eventSender.send(this.channel, payload);

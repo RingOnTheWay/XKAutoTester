@@ -1,9 +1,9 @@
 /**
- * ADBService - facade
+ * ADBService - ADB 聚合根 (collaborator 协调器)
  *
  * 设计:
- * - 深模块架构: facade 持有 4 collaborator (AdbCommandExecutor + RemoteStatService + FileTransferService + ApkInstaller)
- * - 后向兼容 5 公共方法: getConnectedDevices / executeAdbCommand / uploadFile / downloadFile / installApk
+ * - 深模块架构: 聚合根持有 4 collaborator (AdbCommandExecutor + RemoteStatService + FileTransferService + ApkInstaller)
+ * - 公共 API 2 方法: getConnectedDevices / executeAdbCommand (其余通过属性暴露 collaborator)
  * - 消除 shell=True: 全改 spawn(adbPath, args, {}) 形式
  * - 路径解析委托 pathHelper.getAdbPath
  * - 调试 console.log 全删
@@ -19,6 +19,21 @@ const TarExtractor = require('./TarExtractor');
 // 不需要 shell 前缀的 adb 子命令 (直接 adb <cmd>, 不经过 device shell)
 const NO_SHELL_COMMANDS = ['connect', 'disconnect', 'devices', 'kill-server', 'start-server', 'version', 'tcpip'];
 
+// 危险命令黑名单: 阻止 XSS 攻击者通过 executeAdbCommand 执行破坏性操作
+// 命中黑名单的命令直接拒绝, 不执行
+const DANGEROUS_COMMAND_PATTERNS = [
+  /\brm\s+-rf?\s+\/(data|system|sdcard|)/i,  // rm -rf /data 等
+  /\breboot\b/i,                                // 重启设备
+  /\bflash\s+/i,                                // 刷机
+  /\boem\s+unlock\b/i,                          // 解锁 bootloader
+  /\bfactory\s*reset\b/i,                       // 恢复出厂
+  /\bwipe\s+/i,                                 // wipe 分区
+];
+
+// 超时阈值 (模块级常量, 避免魔法数)
+const ADB_DEVICES_TIMEOUT_MS = 5000;    // getConnectedDevices
+const ADB_COMMAND_TIMEOUT_MS = 5000;    // executeAdbCommand
+
 class ADBService {
   /**
    * @param {string} projectRoot
@@ -28,6 +43,7 @@ class ADBService {
    * @param {object} [collaborators.fileTransferService]
    * @param {object} [collaborators.apkInstaller]
    * @param {object} [collaborators.remoteStatService]
+   * @param {object} [collaborators.tarExtractor] - TarExtractor 注入 (默认 new TarExtractor())
    * @param {Function} [collaborators.spawnFn] - spawn 函数 (测试用)
    */
   constructor(projectRoot, i18nService, collaborators = {}) {
@@ -43,24 +59,46 @@ class ADBService {
 
     this._remoteStat = collaborators.remoteStatService || new RemoteStatService({
       commandExecutor: this._executor,
-      i18nService,
     });
 
-    this._tarExtractor = new TarExtractor();
+    // TarExtractor factory-or-default
+    this._tarExtractor = collaborators.tarExtractor || new TarExtractor();
 
     this._fileTransfer = collaborators.fileTransferService || new FileTransferService({
       commandExecutor: this._executor,
       remoteStatService: this._remoteStat,
       i18nService,
       tarExtractor: this._tarExtractor,
+      projectRoot,
       spawnFn: this._spawn,
     });
 
     this._apkInstaller = collaborators.apkInstaller || new ApkInstaller({
       commandExecutor: this._executor,
       i18nService,
+      projectRoot,
       spawnFn: this._spawn,
     });
+  }
+
+  /** collaborator 属性暴露: 调用方直接持属性 */
+  get fileTransfer() {
+    return this._fileTransfer;
+  }
+
+  /** collaborator 属性暴露 */
+  get apkInstaller() {
+    return this._apkInstaller;
+  }
+
+  /** collaborator 属性暴露 */
+  get remoteStat() {
+    return this._remoteStat;
+  }
+
+  /** collaborator 属性暴露 (供测试访问) */
+  get tarExtractor() {
+    return this._tarExtractor;
   }
 
   /**
@@ -69,7 +107,7 @@ class ADBService {
    */
   async getConnectedDevices() {
     try {
-      const result = await this._executor.execute(['devices'], { timeoutMs: 5000 });
+      const result = await this._executor.execute(['devices'], { timeoutMs: ADB_DEVICES_TIMEOUT_MS });
       if (!result.success) {
         return [];
       }
@@ -99,6 +137,15 @@ class ADBService {
    */
   async executeAdbCommand(cmd, deviceId) {
     try {
+      // 危险命令黑名单校验: 防 XSS 攻击者执行破坏性 adb 命令
+      for (const pattern of DANGEROUS_COMMAND_PATTERNS) {
+        if (pattern.test(cmd)) {
+          // 无现成 i18n key (locales 只读), 保守改为英文报错 + 英文日志, 不崩即可
+          console.warn(`[ADBService] Dangerous command rejected by security policy: ${cmd}`);
+          return { success: false, error: `Command rejected by security policy: ${cmd}` };
+        }
+      }
+
       const adbPath = pathHelper.getAdbPath(this.projectRoot, true);
       const cmdParts = cmd.split(/\s+/).filter(part => part.trim() !== '');
 
@@ -122,9 +169,12 @@ class ADBService {
       let resolved = false;
 
       return new Promise((resolve) => {
+        let timeoutId = null;
         const doResolve = (result) => {
           if (resolved) return;
           resolved = true;
+          // 提前收尾 (close/error/tcpip 成功) 时清理超时定时器, 避免定时器泄漏
+          if (timeoutId) clearTimeout(timeoutId);
           resolve(result);
         };
 
@@ -170,7 +220,7 @@ class ADBService {
           doResolve({ success: false, error: error.message, output: '' });
         });
 
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           if (resolved) return;
           try { adbProcess.kill(); } catch { /* 已退出 */ }
           if (firstCmd === 'tcpip' && stdout.includes('restarting in TCP mode port:')) {
@@ -178,32 +228,11 @@ class ADBService {
           } else {
             doResolve({ success: false, error: this.i18nService.t('main.commandTimeout'), output: stdout });
           }
-        }, 5000);
+        }, ADB_COMMAND_TIMEOUT_MS);
       });
     } catch (error) {
       return { success: false, error: error.message };
     }
-  }
-
-  /**
-   * 上传文件
-   */
-  async uploadFile(localPath, remotePath, deviceId, eventSender) {
-    return this._fileTransfer.upload(localPath, remotePath, deviceId, eventSender);
-  }
-
-  /**
-   * 下载文件/目录
-   */
-  async downloadFile(remotePath, localPath, deviceId, eventSender) {
-    return this._fileTransfer.download(remotePath, localPath, deviceId, eventSender);
-  }
-
-  /**
-   * 安装 APK
-   */
-  async installApk(apkPath, deviceId, eventSender) {
-    return this._apkInstaller.install(apkPath, deviceId, eventSender);
   }
 }
 

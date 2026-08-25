@@ -3,6 +3,38 @@
     "title": "XKAutoTester",
     "version": "版本"
   },
+  "windowControls": {
+    "restore": "还原",
+    "maximize": "最大化",
+    "minimize": "最小化",
+    "close": "关闭"
+  },
+  "errors": {
+    "invalidPath": "无效的路径参数",
+    "checkPathFailed": "检查路径失败",
+    "openUrlNotAllowed": "不允许打开此链接",
+    "pathNotExist": "路径不存在",
+    "invalidSaveTestCase": "无效的测试用例保存参数",
+    "saveDirNotAllowed": "保存目录必须在测试用例目录下",
+    "invalidDeleteTestCase": "无效的测试用例删除参数",
+    "deleteNotAllowed": "删除目标必须在测试用例目录下",
+    "fileNotExist": "文件不存在",
+    "invalidConfig": "无效的配置数据",
+    "serviceNotInit": "服务未初始化",
+    "adbServiceNotInit": "ADB 服务未初始化",
+    "invalidApkPath": "无效的 APK 路径",
+    "invalidDeviceId": "无效的设备 ID",
+    "invalidNotification": "无效的通知数据",
+    "updateUrlMissing": "未提供下载地址或文件名",
+    "invalidUpdatePath": "无效的更新文件路径",
+    "apkParserNotInit": "APK 解析服务未初始化",
+    "scheduledPlanNotFound": "未找到指定的定时计划"
+  },
+  "saveConfirm": {
+    "title": "未保存的更改",
+    "message": "当前编辑有未保存的更改，是否保存？",
+    "discard": "不保存"
+  },
   "common": {
     "none": "无",
     "yes": "是",
@@ -121,7 +153,8 @@
       "dns_failed": "DNS 解析失败，请检查网络连接",
       "network_unreachable": "网络不可达，请检查网络连接",
       "unknown": "未知错误",
-      "ssl_failed": "SSL 证书验证失败，请检查系统时间或网络代理"
+      "ssl_failed": "SSL 证书验证失败，请检查系统时间或网络代理",
+      "missing_hash": "更新包缺少 SHA256 校验值，拒绝下载/安装 (安全闭环)"
     },
     "downloadUpdate": "下载更新",
     "downloading": "下载中",
@@ -129,6 +162,8 @@
     "cancelUpdate": "取消",
     "downloadFailed": "下载更新失败",
     "updateChangelog": "更新日志",
+    "insecureReleaseWarning": "⚠ 该版本未提供 SHA256 校验值，无法验证完整性，已禁用下载 (安全闭环)",
+    "updateHashVerified": "✓ SHA256 校验值已就绪，可安全下载安装",
     "run": "运行",
     "preventSleep": "程序运行时禁用睡眠模式"
   },
@@ -681,6 +716,7 @@
     "fileNameRequired": "文件名称不能为空",
     "fileNameInvalid": "文件名称包含非法字符",
     "fileNameInvalidChars": "文件名称只能包含英文、数字和下划线",
+    "fileNameMustStartTestPrefix": "文件名称必须以 test_ 开头",
     "cancelEdit": "取消编辑",
     "confirm": "保存",
     "deleteCase": "删除",

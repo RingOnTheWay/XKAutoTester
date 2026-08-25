@@ -12,7 +12,7 @@
 调用方契约 (__main__.py ElectronTestRunner) 零改动:
 - 7 公共方法签名保持
 - 返回 dict 字段形状保持
-- get_pytest_runner() 单例保留
+- 实例由 Cli factory 注入 (无模块级单例)
 """
 
 from __future__ import annotations
@@ -30,9 +30,8 @@ from main.core.pytest.pytest_process import PytestProcess
 from main.core.pytest.pytest_process_port import PytestProcessPort
 from main.core.pytest.stats_parser import parse_test_stats
 from main.core.pytest.summary_formatter import format_test_summary
-from main.core.test_plan_repository import TestPlanRepository
 from main.utils.i18n import t
-from main.utils.paths import get_config_root, get_logs_path, get_project_root
+from main.utils.paths import get_logs_path, get_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +59,7 @@ class PytestRunner:
         self.allure_results_dir = self.allure_base_dir / "allure-results"
         self.allure_report_base_dir = self.allure_base_dir / "allure-reports"
 
-        # 硬绑 (用户约束: 不注入 TestPlanRepository)
-        test_plans_file = get_config_root() / "test_plans.json"
-        self.plan_repo = TestPlanRepository(test_plans_file)
-
-        self._process: PytestProcessPort = process or PytestProcess()
+        self._process: PytestProcessPort = process or PytestProcess(cwd=str(self.project_root))
         self._pytest_ini = self.project_root / "config" / "pytest.ini"
 
     def run_tests(
@@ -130,8 +125,6 @@ class PytestRunner:
                 logger.warning(t("python.pytestRunner.noAllureResults", exit_code=exit_code))
             else:
                 allure_results_dir = str(self.allure_results_dir)
-                # 输出特殊标记行, 供 Electron 侧解析 allure-results 路径
-                print(f"XKAT_ALLURE_RESULTS_DIR:{allure_results_dir}", flush=True)
 
         if allure_skipped_reason == "no_results":
             logger.warning(t("python.pytestRunner.noTestResults", exit_code=exit_code))
@@ -146,8 +139,8 @@ class PytestRunner:
             else:
                 logger.warning(t("python.pytestRunner.testFailedNoReport", exit_code=exit_code))
 
-        # 记录测试计划运行信息 (报告路径由 Electron 侧生成后更新)
-        self.plan_repo.record_run(test_plan_name, test_paths, markers, None)
+        # 标记行 (XKAT_ALLURE_RESULTS_DIR / XKAT_TEST_PLAN_RUN) 由 Cli 层基于 result dict 写入 stdout,
+        # PytestRunner 保持纯函数 (输入参数 → 输出 dict, 无 stdout 副作用)
 
         return {
             "exit_code": exit_code,
@@ -273,15 +266,3 @@ class PytestRunner:
             generate_allure=generate_allure,
             test_plan_name=test_plan_name,
         )
-
-
-# 模块级懒加载实例 (避免导入时触发文件 I/O, 构造时会读 test_plans.json)
-_pytest_runner_instance: PytestRunner | None = None
-
-
-def get_pytest_runner() -> PytestRunner:
-    """获取 PytestRunner 单例 (首次调用构造, 零配置)。"""
-    global _pytest_runner_instance
-    if _pytest_runner_instance is None:
-        _pytest_runner_instance = PytestRunner()
-    return _pytest_runner_instance

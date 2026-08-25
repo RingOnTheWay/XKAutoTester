@@ -19,6 +19,7 @@ function makeFakeFileSystem(opts = {}) {
     readdir: [],
     readFile: [],
     writeFile: [],
+    writeJson: [],
     access: [],
     unlink: [],
   };
@@ -50,6 +51,12 @@ function makeFakeFileSystem(opts = {}) {
       const np = normalizePath(p);
       calls.writeFile.push({ path: p, content });
       files[np] = content;  // 写后可读
+    },
+    // P2: writeJson 原子写 fake (存 data + 字符串化供 readFile 读回)
+    writeJson: async (p, data) => {
+      const np = normalizePath(p);
+      calls.writeJson.push({ path: p, data });
+      files[np] = JSON.stringify(data, null, 2);
     },
     access: async (p) => {
       const np = normalizePath(p);
@@ -198,7 +205,7 @@ test('getTestCase ENOENT 返 "测试用例不存在"', async () => {
   assert.strictEqual(result.error, '测试用例不存在');
 });
 
-test('saveTestCase 调 idGenerator + fileNameSanitizer + fileSystem.writeFile', async () => {
+test('saveTestCase 调 idGenerator + fileNameSanitizer + fileSystem.writeJson (P2: 原子写)', async () => {
   const { svc, fileSystem, idGeneratorCalls, fileNameSanitizerCalls } = makeFakeApp();
 
   const result = await svc.saveTestCase({ name: 'Test', fileName: 'demo' });
@@ -206,10 +213,30 @@ test('saveTestCase 调 idGenerator + fileNameSanitizer + fileSystem.writeFile', 
   assert.strictEqual(result.success, true);
   assert.strictEqual(idGeneratorCalls.generate, 1, 'idGenerator 调 1 次');
   assert.strictEqual(fileNameSanitizerCalls.sanitize.length, 1, 'fileNameSanitizer 调 1 次');
-  assert.strictEqual(fileSystem.calls.writeFile.length, 1, 'writeFile 调 1 次');
+  // P2: 改用 writeJson 原子写 (替代 writeFile), 防并发写产生半截 JSON 文件
+  assert.strictEqual(fileSystem.calls.writeJson.length, 1, 'writeJson 调 1 次 (P2 原子写)');
+  assert.strictEqual(fileSystem.calls.writeFile.length, 0, 'writeFile 不再调 (P2 改 writeJson)');
   assert.strictEqual(result.data.id, 'tc_fixed_001', 'ID 从 idGenerator 来');
   assert.strictEqual(result.data.fileName, 'test_demo', 'fileName 从 sanitizer 来 (加 test_ 前缀)');
   assert.ok(result.path, '返 path');
+});
+
+// P2: saveTestCase 不 mutation 入参 (副本写入)
+test('P2: saveTestCase 不 mutation 入参 caseData (原对象保持不变)', async () => {
+  const { svc } = makeFakeApp();
+  const originalCase = { name: 'Test', fileName: 'demo' };
+  const originalSnapshot = { ...originalCase };
+
+  const result = await svc.saveTestCase(originalCase);
+
+  assert.strictEqual(result.success, true, '保存成功');
+  assert.strictEqual(originalCase.id, undefined, '原 caseData 不被设 id');
+  assert.strictEqual(originalCase.updated, undefined, '原 caseData 不被设 updated');
+  assert.strictEqual(originalCase.created, undefined, '原 caseData 不被设 created');
+  assert.strictEqual(originalCase.fileName, 'demo', '原 caseData fileName 不被 sanitizer 覆盖');
+  assert.deepStrictEqual(originalCase, originalSnapshot, '原 caseData 完全不变');
+  assert.strictEqual(result.data.id, 'tc_fixed_001', 'result.data 含 id (副本)');
+  assert.strictEqual(result.data.fileName, 'test_demo', 'result.data fileName 从 sanitizer 来 (副本)');
 });
 
 test('saveTestCase pyOutputDir 存在时内化条件生成 (调 codeGenerator.generatePythonFile)', async () => {
@@ -238,6 +265,22 @@ test('saveAndGenerate 强制生成 + 返 {jsonPath, pyPath}', async () => {
   assert.ok(result.jsonPath, '返 jsonPath');
   assert.strictEqual(result.pyPath, '/fake/output/test.py', '返 pyPath');
   assert.strictEqual(result.data.pyOutputDir, '/fake/output', 'data 含 pyOutputDir');
+});
+
+test('A2: saveAndGenerate 不 mutation 入参 caseData (原对象保持不变)', async () => {
+  const { svc } = makeFakeApp();
+  const originalCase = { name: 'Test', fileName: 'demo' };
+  const originalSnapshot = { ...originalCase };
+
+  const result = await svc.saveAndGenerate(originalCase, '/fake/output');
+
+  assert.strictEqual(result.success, true, '保存成功');
+  assert.strictEqual(originalCase.pyOutputDir, undefined, '原 caseData 不被设 pyOutputDir');
+  assert.strictEqual(originalCase.pyFilePath, undefined, '原 caseData 不被设 pyFilePath');
+  assert.strictEqual(originalCase.id, undefined, '原 caseData 不被设 id');
+  assert.strictEqual(originalCase.updated, undefined, '原 caseData 不被设 updated');
+  assert.deepStrictEqual(originalCase, originalSnapshot, '原 caseData 完全不变');
+  assert.strictEqual(result.data.pyOutputDir, '/fake/output', 'result.data 含 pyOutputDir (副本)');
 });
 
 test('deleteTestCase 字符串参数 + 删 json + 删 py', async () => {

@@ -15,7 +15,13 @@ const { spawn } = require('child_process');
 /**
  * @typedef {Object} InspectorResponse
  * @property {boolean} success
- * @property {string} [error]
+ * @property {string} [error] - success=false 时附带, i18n key 或原始错误信息
+ * @property {string} [session_id] - start-session 成功返回, Appium driver.session_id
+ * @property {string} [screenshot] - get-screenshot/refresh 返回, data URI (data:image/png;base64,...)
+ * @property {string} [source] - get-source/refresh 返回, XML page source 字符串
+ * @property {Object} [elements] - get-source/refresh 返回, 解析后的根节点树对象
+ * @property {Array<Object>} [locators] - find-locators 返回, locator dict 数组 (type/value/description)
+ * @property {string} [warning] - start-session 端口冲突等非致命附带信息
  */
 /**
  * @typedef {{type:string, payload?:Object, stage?:string}} InspectorNotification
@@ -138,10 +144,19 @@ class JsonStdioTransport {
       this._readyPromise = new Promise((resolve, reject) => {
         this._readyResolve = resolve;
         this._readyReject = reject;
-        // 握手超时兜底
+        // 握手超时兜底: 超时后杀进程 + dispose, 避免进程泄漏
         const timeout = setTimeout(() => {
           if (this._readyReject) {
             this._readyReject(new Error(`Handshake timeout after ${this._handshakeTimeoutMs}ms`));
+            // 超时后清理进程, 避免泄漏 (与 dispose 一致, 但不设 _disposed 标志, 允许后续重试)
+            if (this._process) {
+              try { this._process.kill(); } catch (e) { /* ignore */ }
+              this._process = null;
+            }
+            this._buffer = '';
+            this._readyPromise = null;
+            this._readyResolve = null;
+            this._readyReject = null;
           }
         }, this._handshakeTimeoutMs);
         this._readyTimeout = timeout;

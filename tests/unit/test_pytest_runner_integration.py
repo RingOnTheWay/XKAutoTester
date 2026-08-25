@@ -1,11 +1,15 @@
-"""PytestRunner 集成测试 - plan_repo 持有 + 旧字段移除验证"""
+"""PytestRunner 集成测试 - 字段改造 + result dict 运行数据验证。
+
+单源化后 PytestRunner 不再持有 plan_repo, 也不再直写 stdout 标记行 (副作用移至 Cli 层)。
+PytestRunner 为纯函数: 输入参数 → 输出 result dict, 供 Cli._write_electron_markers 写标记行。
+Electron 侧 TestPlanService 统一写 test_plans.json (避免双端无锁并发写丢失更新)。
+"""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from main.core.pytest_runner import PytestRunner
-from main.core.test_plan_repository import TestPlanRepository
 
 
 @pytest.fixture
@@ -27,10 +31,9 @@ class TestPytestRunnerFields:
         """应删除 self.test_plans_file 字段"""
         assert not hasattr(runner, "test_plans_file")
 
-    def test_has_plan_repo_field(self, runner):
-        """应有 self.plan_repo 字段"""
-        assert hasattr(runner, "plan_repo")
-        assert isinstance(runner.plan_repo, TestPlanRepository)
+    def test_no_plan_repo_field(self, runner):
+        """应删除 self.plan_repo 字段 (单源化: Electron 侧 TestPlanService 统一写 test_plans.json)"""
+        assert not hasattr(runner, "plan_repo")
 
     def test_no_legacy_methods(self, runner):
         """应删除 5 个旧方法"""
@@ -42,25 +45,14 @@ class TestPytestRunnerFields:
 
 
 @pytest.mark.unit
-class TestPytestRunnerPlanRepoIntegration:
-    """PytestRunner plan_repo 集成测试"""
-
-    def test_plan_repo_uses_user_data_path(self, runner, tmp_path):
-        """plan_repo 存储路径应使用 XKAUTOTESTER_USER_DATA"""
-        expected_path = tmp_path / "config" / "test_plans.json"
-        assert runner.plan_repo._storage_path == expected_path
-
-    def test_record_run_via_plan_repo(self, runner):
-        """通过 plan_repo.record_run 应能写入文件"""
-        runner.plan_repo.record_run("integration_test", ["tests/"], ["smoke"], None)
-        plans = runner.plan_repo.get_plans()
-        assert len(plans) == 1
-        assert plans[0]["name"] == "integration_test"
+class TestPytestRunnerResultData:
+    """PytestRunner result dict 运行数据验证 (标记行副作用已移至 Cli 层, PytestRunner 为纯函数)"""
 
     @patch("subprocess.Popen")
-    def test_run_tests_calls_plan_repo_record_run(self, mock_popen, runner):
-        """run_tests 应调用 plan_repo.record_run"""
-        # mock subprocess 避免真实 pytest 执行
+    def test_run_tests_returns_run_data(self, mock_popen, runner, capsys):
+        """run_tests 应返回含运行数据的 result dict (供 Cli._write_electron_markers 写标记行)"""
+        # R10: 不用 spec=Popen — stdout/stderr 是 Popen __init__ 实例属性, 不在 dir(Popen) 中,
+        # spec 会阻止 mock.stdout 访问。poll/wait 是类方法在 spec 中, 但 stdout 不在。
         mock_process = MagicMock()
         mock_process.stdout.readline.return_value = ""  # 立即结束读取循环
         mock_process.stderr.readline.return_value = ""
@@ -68,17 +60,31 @@ class TestPytestRunnerPlanRepoIntegration:
         mock_process.wait.return_value = 0
         mock_popen.return_value = mock_process
 
-        # mock plan_repo 验证调用
-        runner.plan_repo = MagicMock()
-
-        runner.run_tests(
+        result = runner.run_tests(
             test_paths=["tests/test_fake.py"], markers=None, generate_allure=False, test_plan_name="mocked_test"
         )
 
-        runner.plan_repo.record_run.assert_called_once()
-        # positional args: (test_plan_name, test_paths, markers, report_path)
-        args, kwargs = runner.plan_repo.record_run.call_args
-        assert args[0] == "mocked_test"
-        assert args[1] == ["tests/test_fake.py"]
-        assert args[2] is None
-        assert args[3] is None
+        assert result["test_plan_name"] == "mocked_test"
+        assert result["test_paths"] == ["tests/test_fake.py"]
+        assert result["markers"] is None
+        # PytestRunner 不再输出 stdout 标记行 (副作用移至 Cli)
+        out = capsys.readouterr().out
+        assert "XKAT_TEST_PLAN_RUN:" not in out
+
+    @patch("subprocess.Popen")
+    def test_result_includes_markers_when_provided(self, mock_popen, runner, capsys):
+        """result dict 应包含 markers 字段"""
+        # R10: 不用 spec=Popen — stdout/stderr 是 Popen __init__ 实例属性, 不在 dir(Popen) 中,
+        # spec 会阻止 mock.stdout 访问。poll/wait 是类方法在 spec 中, 但 stdout 不在。
+        mock_process = MagicMock()
+        mock_process.stdout.readline.return_value = ""
+        mock_process.stderr.readline.return_value = ""
+        mock_process.poll.return_value = 0
+        mock_process.wait.return_value = 0
+        mock_popen.return_value = mock_process
+
+        result = runner.run_tests(
+            test_paths=["tests/"], markers=["smoke"], generate_allure=False, test_plan_name="mk"
+        )
+
+        assert result["markers"] == ["smoke"]

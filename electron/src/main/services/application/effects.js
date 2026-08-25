@@ -1,13 +1,14 @@
-// effects — 默认副作用包装 (3 await injector + schedulerInitializer + registerHandlers + errorHandler)。
+// effects — 默认副作用包装 (4 await injector + registerHandlers + errorHandler)。
 //
 // 对称 smartScheduler.js effects.js (globalTimerProvider + defaultWatcherFactory + defaultNotifierFactory)。
-// 5 类副作用经 factory-or-default 注入 ApplicationService。
+// 4 类副作用经 factory-or-default 注入 ApplicationService。
 
-const { I18nService } = require('../I18nService');
-const i18nService = new I18nService();
+const path = require('path');
+const asyncFs = require('../../utils/asyncFs');
 const { registerAllHandlers } = require('../../handlers');
 
-const defaultI18nInitializer = async (projectRoot, isPackaged, userConfigPath) => {
+// i18nService 实例由 applicationService.js 通过 i18nServiceFactory 创建并注入 (构造注入, 删模块级单例)
+const defaultI18nInitializer = async (i18nService, projectRoot, isPackaged, userConfigPath) => {
   await i18nService.init(projectRoot, isPackaged, userConfigPath);
 };
 
@@ -19,8 +20,18 @@ const defaultApkParserInitializer = async (apkParserService) => {
   await apkParserService.initialize();
 };
 
-const defaultSchedulerInitializer = (schedulerService, i18nSvc, scheduledPlanService) => {
-  schedulerService.init(i18nSvc, scheduledPlanService);
+// 读 config.json + 调 updateService.initialize (二段构造)
+// 容错: 读失败保持 constructor 默认 (allowInsecureSSL=false)
+const defaultUpdateServiceInitializer = async (updateService, userConfigPath) => {
+  try {
+    const configPath = path.join(userConfigPath, 'config.json');
+    if (await asyncFs.exists(configPath)) {
+      const config = await asyncFs.readJson(configPath);
+      updateService.initialize(config);
+    }
+  } catch (e) {
+    // 忽略: 保持默认 false
+  }
 };
 
 const defaultRegisterHandlers = registerAllHandlers;
@@ -36,9 +47,7 @@ module.exports = {
   defaultI18nInitializer,
   defaultPythonEnvConfigurer,
   defaultApkParserInitializer,
-  defaultSchedulerInitializer,
+  defaultUpdateServiceInitializer,
   defaultRegisterHandlers,
   defaultErrorHandler,
-  // 暴露 i18n 单例供 applicationService.js 用 (factory 返回 require 实例)
-  i18nService,
 };

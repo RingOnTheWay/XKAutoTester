@@ -130,7 +130,6 @@
                                     <div class="path-display" id="path-display"></div>
                                     <!-- 简化的下拉菜单结构 -->
                                     <span id="ellipsis-button" class="path-ellipsis">...</span>
-                                    <div id="ellipsis-dropdown" class="ellipsis-dropdown"></div>
                                 </div>
                                 
                                 <div class="file-list-container">
@@ -189,6 +188,9 @@
                         </div>
                     </div>
                     
+                    <!-- 省略路径下拉菜单 - 移到卡片外部避免被overflow:hidden裁剪 -->
+                    <div id="ellipsis-dropdown" class="ellipsis-dropdown"></div>
+
                     <!-- 上下文菜单 - 移到卡片外部避免被overflow:hidden裁剪 -->
                     <div id="context-menu" class="context-menu hidden">
                         <div class="context-menu-item" data-action="download">

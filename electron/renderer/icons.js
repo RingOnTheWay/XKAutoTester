@@ -1,3 +1,8 @@
+// lucide 图标数据已内联为静态模块 (lucide-icons-data.js),
+// 避免 renderer 在 npm start (loadFile 直载源码) 下解析裸 import "lucide" 报错;
+// 同时也是 npm run dev 与 Vite 打包。图标来自 lucide v1.8.0。
+import { lucideIcons } from './lucide-icons-data.js';
+
 export const ICON_MAPPING = {
   play_circle: 'CirclePlay',
   devices: 'Smartphone',
@@ -117,7 +122,7 @@ export function lucideToSvg(iconData) {
 export const Icons = {};
 
 Object.entries(ICON_MAPPING).forEach(([oldName, lucideName]) => {
-  const iconData = lucide.icons[lucideName];
+  const iconData = lucideIcons[lucideName];
   if (iconData) {
     Icons[oldName] = lucideToSvg(iconData);
   } else {

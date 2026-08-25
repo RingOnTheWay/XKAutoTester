@@ -62,6 +62,18 @@ export class PagePackageView {
     return `<span class="svg-icon" data-icon="${iconName}" style="${style}">${Icons[iconName]}</span>`;
   }
 
+  // ─── HTML 转义 (对齐 R10 映射表版, 防级联下拉名称 XSS) ──────────
+
+  escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   // ─── Cascade Select Rendering ──────────────────────────────────
 
   renderAppOptions(apps, selectedId) {
@@ -76,7 +88,7 @@ export class PagePackageView {
     }
 
     optionsContainer.innerHTML = apps.map(app => `
-      <div class="cascade-select__option ${selectedId === app.id ? 'selected' : ''}" data-id="${app.id}">${app.name}</div>
+      <div class="cascade-select__option ${selectedId === app.id ? 'selected' : ''}" data-id="${this.escapeHtml(app.id)}">${this.escapeHtml(app.name)}</div>
     `).join('');
   }
 
@@ -99,7 +111,7 @@ export class PagePackageView {
     }
 
     optionsContainer.innerHTML = pages.map(page => `
-      <div class="cascade-select__option ${selectedId === page.id ? 'selected' : ''}" data-id="${page.id}">${page.name}</div>
+      <div class="cascade-select__option ${selectedId === page.id ? 'selected' : ''}" data-id="${this.escapeHtml(page.id)}">${this.escapeHtml(page.name)}</div>
     `).join('');
   }
 
@@ -122,7 +134,7 @@ export class PagePackageView {
     }
 
     optionsContainer.innerHTML = elements.map(element => `
-      <div class="cascade-select__option ${selectedId === element.id ? 'selected' : ''}" data-id="${element.id}">${element.name}</div>
+      <div class="cascade-select__option ${selectedId === element.id ? 'selected' : ''}" data-id="${this.escapeHtml(element.id)}">${this.escapeHtml(element.name)}</div>
     `).join('');
   }
 
@@ -139,7 +151,7 @@ export class PagePackageView {
     }
 
     optionsContainer.innerHTML = items.map(item => `
-      <div class="cascade-select__option ${selectedId === item.id ? 'selected' : ''}" data-id="${item.id}">${item.name}</div>
+      <div class="cascade-select__option ${selectedId === item.id ? 'selected' : ''}" data-id="${this.escapeHtml(item.id)}">${this.escapeHtml(item.name)}</div>
     `).join('');
   }
 

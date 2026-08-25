@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>XKAutoTester</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <style>
         html, body {
@@ -49,17 +48,17 @@
                 </div>
                 <div class="nav-right">
                     <div class="window-controls">
-                        <button class="window-control-btn minimize" id="window-minimize" title="最小化">
+                        <button class="window-control-btn minimize" id="window-minimize" data-i18n-title="windowControls.minimize" title="最小化">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M5 12h14"/>
                             </svg>
                         </button>
-                        <button class="window-control-btn maximize" id="window-maximize" title="最大化">
+                        <button class="window-control-btn maximize" id="window-maximize" data-i18n-title="windowControls.maximize" title="最大化">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <rect x="4" y="4" width="16" height="16" rx="2"/>
                             </svg>
                         </button>
-                        <button class="window-control-btn close" id="window-close" title="关闭">
+                        <button class="window-control-btn close" id="window-close" data-i18n-title="windowControls.close" title="关闭">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M6 6l12 12M6 18L18 6"/>
                             </svg>
@@ -367,15 +366,15 @@
             <div class="modal-container confirm-modal">
                 <div class="modal-header">
                     <span class="svg-icon confirm-icon" data-icon="warning"></span>
-                    <h3 id="save-confirm-modal-title">未保存的更改</h3>
+                    <h3 id="save-confirm-modal-title" data-i18n="saveConfirm.title">未保存的更改</h3>
                 </div>
                 <div class="modal-content">
-                    <p id="save-confirm-modal-message" class="confirm-message">当前编辑有未保存的更改，是否保存？</p>
+                    <p id="save-confirm-modal-message" class="confirm-message" data-i18n="saveConfirm.message">当前编辑有未保存的更改，是否保存？</p>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" id="save-confirm-cancel-btn" class="material-button outlined">取消</button>
-                    <button type="button" id="save-confirm-discard-btn" class="material-button error">不保存</button>
-                    <button type="button" id="save-confirm-save-btn" class="material-button primary">保存</button>
+                    <button type="button" id="save-confirm-cancel-btn" class="material-button outlined" data-i18n="common.cancel">取消</button>
+                    <button type="button" id="save-confirm-discard-btn" class="material-button error" data-i18n="saveConfirm.discard">不保存</button>
+                    <button type="button" id="save-confirm-save-btn" class="material-button primary" data-i18n="common.save">保存</button>
                 </div>
             </div>
         </div>
@@ -685,7 +684,7 @@
     </div>
     <!-- ===== END: page-package-modals ===== -->
     
-    <script src="../node_modules/lucide/dist/umd/lucide.min.js"></script>
+    <!-- lucide 图标已内联为静态模块 (renderer/icons.js + lucide-icons-data.js), 兼容 npm start 直载与 Vite 打包, 无需外部脚本 -->
     <!-- Phase 4: MVC 清理完成，所有功能由 app.js (ES Module) 管理 -->
     <script type="module" src="app.js"></script>
 </body>

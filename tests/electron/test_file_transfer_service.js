@@ -384,3 +384,64 @@ test('_processTarAndCreateZip 调用 tarExtractor.extract + admZip.writeZip', as
   assert.strictEqual(extractCalled, true);
   assert.strictEqual(writeZipCalled, true);
 });
+
+// ── download 目录 spawn error 回归测试 ─────────────────────
+// R12: 移除 _downloadDir 中冗余的 tarProcess error 监听后, spawn error
+//      应只 emit 一次 'error' 进度 (此前双监听会重复 emit)。
+
+test('download 目录 spawn error: monitor emit error 恰一次 + success=false', async () => {
+  const exec = {
+    execute: async () => ({ success: true, output: 'total 0\ndrwxr-xr-x 2 root root 4096 Jan 1 00:00 .', error: '' }),
+  };
+  const remoteStat = { getFileSize: async () => 0, getDirSize: async () => 4096 };
+  const monitorFactory = createMockMonitorFactory();
+
+  let tarProc = null;
+  const spawnFn = (cmd, args, opts) => {
+    const errorCbs = [];
+    const proc = {
+      stdout: { on: () => {}, pipe: () => {} },
+      stderr: { on: () => {} },
+      on: (evt, cb) => { if (evt === 'error') errorCbs.push(cb); },
+      pid: 3,
+    };
+    proc.fireError = () => errorCbs.forEach(cb => cb(new Error('ENOENT: adb not found')));
+    tarProc = proc;
+    return proc;
+  };
+
+  const asyncFsMock = {
+    ensureDir: async () => {},
+    readdir: async () => [],
+    stat: async () => ({ isDirectory: () => false }),
+    unlink: async () => {},
+    rm: async () => {},
+    exists: async () => false,
+    writeFile: async () => {},
+  };
+
+  const svc = new FileTransferService({
+    commandExecutor: exec,
+    remoteStatService: remoteStat,
+    i18nService: i18nMock,
+    tarExtractor: { extract: async () => [] },
+    spawnFn,
+    fs: { statSync: () => ({ size: 100 }), createWriteStream: () => ({ on: () => {}, write: () => {}, end: () => {} }) },
+    progressMonitorFactory: monitorFactory,
+    admZipFactory: () => ({ addFile: () => {}, writeZip: () => {} }),
+    asyncFs: asyncFsMock,
+  });
+
+  const promise = svc.download('/sdcard/dir', '/local/dir', 'dev1', null);
+  // 等待 isDir 判断 + getDirSize 的 await 完成、tar spawn 已调用后触发 error
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setImmediate(r));
+  assert.ok(tarProc, 'tar spawn 应已被调用');
+  tarProc.fireError();
+
+  const result = await promise;
+  assert.strictEqual(result.success, false);
+  assert.ok(result.error);
+  const errorEvents = monitorFactory.instances[0].monitor.events.filter(e => e.status === 'error');
+  assert.strictEqual(errorEvents.length, 1, 'spawn error 应只 emit 一次');
+});

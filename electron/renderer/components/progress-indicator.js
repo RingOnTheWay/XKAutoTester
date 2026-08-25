@@ -74,6 +74,15 @@ export class ProgressIndicator {
     }
     
     hide() {
+        // 立即停止 100% 倒计时 interval 与兜底 timeout，避免隐藏后定时器持续回调
+        if (this.countdownUpdateTimer) {
+            clearInterval(this.countdownUpdateTimer);
+            this.countdownUpdateTimer = null;
+        }
+        if (this.downloadProgressTimer) {
+            clearTimeout(this.downloadProgressTimer);
+            this.downloadProgressTimer = null;
+        }
         const progressContainer = document.getElementById('download-progress-container');
         if (progressContainer) {
             progressContainer.classList.add('hidden');

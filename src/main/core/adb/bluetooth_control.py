@@ -20,6 +20,11 @@ from main.utils.i18n import t
 
 logger = logging.getLogger(__name__)
 
+# 等待生效时长 (秒): svc bluetooth enable 命令发出后需等待系统蓝牙真正开启
+_SLEEP_BLE_ENABLE = 3
+# 等待生效时长 (秒): 复查蓝牙状态前等待状态同步
+_SLEEP_BLE_RECHECK = 2
+
 
 class BluetoothService:
     """蓝牙服务: 状态查询 + 开启 + 确保开启。"""
@@ -46,7 +51,6 @@ class BluetoothService:
         try:
             result = self._executor.execute(
                 ["-s", self._device_name, "shell", "settings", "get", "global", "bluetooth_on"],
-                timeout=10,
             )
             if result.success:
                 if result.stdout.strip() == "1":
@@ -69,11 +73,10 @@ class BluetoothService:
         try:
             result = self._executor.execute(
                 ["-s", self._device_name, "shell", "svc", "bluetooth", "enable"],
-                timeout=10,
             )
             if result.success:
                 logger.info(t("python.adbManager.bluetoothEnableCommandSuccess"))
-                time.sleep(3)
+                time.sleep(_SLEEP_BLE_ENABLE)
                 return True
             logger.warning(t("python.adbManager.bluetoothEnableCommandFailed"))
             return False
@@ -97,7 +100,7 @@ class BluetoothService:
                 logger.warning(t("python.adbManager.bluetoothEnableFailed"))
                 return False
             # 复查
-            time.sleep(2)
+            time.sleep(_SLEEP_BLE_RECHECK)
             bluetooth_enabled, _ = self.check_status()
             if bluetooth_enabled:
                 logger.info(t("python.adbManager.bluetoothEnableSuccess"))

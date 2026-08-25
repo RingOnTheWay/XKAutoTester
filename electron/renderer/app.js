@@ -11,8 +11,6 @@ import { Modal } from './components/modal.js';
 import { InspectorModal } from './components/inspector.js';
 import { ProgressIndicator } from './components/progress-indicator.js';
 import { Toast } from './components/toast.js';
-import { CustomSelect } from './components/custom-select.js';
-import { CascadeSelect } from './components/cascade-select.js';
 import { DeviceCascadeSelect } from './components/device-cascade-select.js';
 import DeviceSelectionModal from './components/device-selection-modal.js';
 import { createTestCaseTab } from './tabs/test-case/index.js';
@@ -124,7 +122,7 @@ export class App {
     try {
       if (window.electronAPI?.i18n) {
         window.i18n = window.electronAPI.i18n;
-        await window.i18n.changeLanguage('zh-CN');
+        // 不强制 changeLanguage('zh-CN')：preload 已根据 config.APP_SETTINGS.language 初始化为用户偏好语言
       }
     } catch (error) {
       console.error('初始化i18next失败:', error);
@@ -151,23 +149,24 @@ export class App {
     }
   }
 
-  updateUIText() {
+  updateUIText(scope = document) {
     if (!window.i18n) return;
-    document.querySelectorAll('[data-i18n]').forEach(el => {
+    const root = scope || document;
+    root.querySelectorAll('[data-i18n]').forEach(el => {
       const key = el.getAttribute('data-i18n');
       if (key) {
         const translation = window.i18n.t(key);
         if (translation) el.textContent = translation;
       }
     });
-    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
       const key = el.getAttribute('data-i18n-placeholder');
       if (key) {
         const translation = window.i18n.t(key);
         if (translation) el.placeholder = translation;
       }
     });
-    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    root.querySelectorAll('[data-i18n-title]').forEach(el => {
       const key = el.getAttribute('data-i18n-title');
       if (key) {
         const translation = window.i18n.t(key);
@@ -177,14 +176,8 @@ export class App {
   }
 
   updateComponentTranslations() {
-    if (!window.i18n) return;
-    document.querySelectorAll('#confirm-modal-container [data-i18n]').forEach(el => {
-      const key = el.getAttribute('data-i18n');
-      if (key) {
-        const translation = window.i18n.t(key);
-        if (translation) el.textContent = translation;
-      }
-    });
+    const container = document.getElementById('confirm-modal-container');
+    if (container) this.updateUIText(container);
   }
 
   // ==================== 组件加载 ====================
@@ -548,7 +541,7 @@ export class App {
               <path d="M4 16V6a2 2 0 0 1 2-2h10"/>
             </svg>
           `;
-          maximizeBtn.title = '还原';
+          maximizeBtn.title = (window.i18n && window.i18n.t('windowControls.restore')) || '还原';
           document.body.classList.add('window-maximized');
         } else {
           maximizeBtn.innerHTML = `
@@ -556,7 +549,7 @@ export class App {
               <rect x="4" y="4" width="16" height="16" rx="2"/>
             </svg>
           `;
-          maximizeBtn.title = '最大化';
+          maximizeBtn.title = (window.i18n && window.i18n.t('windowControls.maximize')) || '最大化';
           document.body.classList.remove('window-maximized');
         }
       }
@@ -586,6 +579,8 @@ export class App {
 
     window.electronAPI.isWindowMaximized().then(isMaximized => {
       updateMaximizeButton(isMaximized);
+    }).catch(error => {
+      console.error('获取窗口最大化状态失败:', error);
     });
 
     window.electronAPI.onWindowMaximized((isMaximized) => {

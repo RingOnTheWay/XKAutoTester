@@ -128,39 +128,8 @@ class TestConfigManagerGet:
 
 
 @pytest.mark.unit
-class TestConfigManagerSaveReload:
-    """ConfigManager save / reload 测试"""
-
-    def test_save_writes_file_with_indent(self, tmp_path):
-        """save() 写入文件 (indent=4, ensure_ascii=False)"""
-        config_file = tmp_path / "config.json"
-        # 先写一个空 dict 让构造通过
-        config_file.write_text("{}", encoding="utf-8")
-        mgr = ConfigManager(config_path=str(config_file))
-        mgr.config = {"APP_SETTINGS": {"language": "zh-CN"}}
-        mgr.save()
-
-        # 验证文件写入且格式正确
-        content = config_file.read_text(encoding="utf-8")
-        assert '"language": "zh-CN"' in content
-        # indent=4 应有缩进
-        assert '    "APP_SETTINGS"' in content
-
-    def test_save_creates_parent_dir(self, tmp_path):
-        """save() 自动创建父目录"""
-        nested_dir = tmp_path / "deep" / "nested"
-        nested_path = nested_dir / "config.json"
-        # 先创建父目录 + 空文件让构造通过
-        nested_dir.mkdir(parents=True)
-        nested_path.write_text("{}", encoding="utf-8")
-        mgr = ConfigManager(config_path=str(nested_path))
-        mgr.config = {"key": "value"}
-        # 删除父目录后再 save,验证自动重建
-        import shutil
-
-        shutil.rmtree(nested_dir)
-        mgr.save()
-        assert nested_path.exists()
+class TestConfigManagerReload:
+    """ConfigManager reload 测试 (save() 已删除, SSOT 由 Electron 维护)"""
 
     def test_reload_re_reads_file(self, tmp_path):
         """reload() 重新读文件,反映外部修改"""
@@ -201,3 +170,46 @@ class TestGetConfigManagerSingleton:
             assert config_module._config_manager_instance is not None
         finally:
             config_module._config_manager_instance = None
+
+
+@pytest.mark.unit
+class TestSetConfigManager:
+    """set_config_manager() 注入点测试"""
+
+    def test_injected_instance_is_returned(self):
+        """注入后 get_config_manager() 返回注入的实例"""
+        from unittest.mock import MagicMock
+
+        fake = MagicMock(spec=ConfigManager)
+        old = config_module._config_manager_instance
+        try:
+            config_module.set_config_manager(fake)
+            assert config_module.get_config_manager() is fake
+        finally:
+            config_module._config_manager_instance = old
+
+    def test_inject_none_restores_lazy_construction(self):
+        """重置为 None 后恢复懒加载构造"""
+        from unittest.mock import MagicMock
+
+        fake = MagicMock(spec=ConfigManager)
+        old = config_module._config_manager_instance
+        try:
+            config_module.set_config_manager(fake)
+            assert config_module.get_config_manager() is fake
+            # 重置
+            config_module._config_manager_instance = None
+            # 再次 get 触发懒加载构造 (需要 config.json 存在)
+            config_module.get_config_manager()
+            assert config_module.get_config_manager() is not fake
+        finally:
+            config_module._config_manager_instance = old
+
+
+@pytest.mark.unit
+class TestSaveRemoved:
+    """save() dead code 删除回归测试"""
+
+    def test_save_method_not_exists(self):
+        """ConfigManager 不再有 save() 方法 (SSOT 由 Electron 维护, Python 端不写 config)"""
+        assert not hasattr(ConfigManager, "save")

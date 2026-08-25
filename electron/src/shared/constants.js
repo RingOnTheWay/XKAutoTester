@@ -1,6 +1,12 @@
 /**
  * IPC 通道常量定义
  * 主进程和渲染进程共享
+ *
+ * 命名规范说明
+ * - 新通道必须用 kebab-case (如 'window-minimize', 'page-package:get-apps')
+ * - 存量 camelCase 通道 (如 'getConnectedDevices', 'uploadFile') 为历史遗留, 重命名需同步改 preload/renderer/handler 三端, 风险大暂保留
+ * - 事件监听通道用 'on-事件名' 前缀 (如 'on-download-progress')
+ * - 命名空间操作用 '命名空间:操作' 格式 (如 'page-package:get-apps', 'inspector:start-session')
  */
 
 const IPC_CHANNELS = {

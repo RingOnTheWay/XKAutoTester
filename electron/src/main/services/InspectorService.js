@@ -3,8 +3,9 @@ const pathHelper = require('../utils/pathHelper');
 const { JsonStdioTransport } = require('./JsonStdioTransport');
 
 class InspectorService {
-    constructor(projectRoot, i18nService, userDataPath) {
+    constructor(projectRoot, i18nService, userDataPath, isPackaged = false) {
         this.projectRoot = projectRoot;
+        this.isPackaged = isPackaged;
         this.i18nService = i18nService;
         this.userDataPath = userDataPath;
         this._transport = null;
@@ -33,7 +34,7 @@ class InspectorService {
                 PYTHONIOENCODING: 'utf-8',
                 PYTHONUTF8: '1',
                 XKAUTOTESTER_LANG: this.i18nService.getLanguage(),
-                XKAUTOTESTER_LOCALES_PATH: pathHelper.getLocalesPath(this.projectRoot),
+                XKAUTOTESTER_LOCALES_PATH: pathHelper.getLocalesPath(this.projectRoot, this.isPackaged),
                 ...(pythonConfig.isEmbedded ? {} : pythonPathEnv),
                 XKAUTOTESTER_USER_DATA: this.userDataPath,
                 XKAUTOTESTER_ADB_PATH: this._adbPath,
@@ -62,11 +63,12 @@ class InspectorService {
             };
         }
 
-        const transport = this._ensureTransport();
-
-        if (transport.isActive()) {
+        // 若已有 transport 活跃, 先 stopSession (其 finally 调 _cleanup 置 null),
+        // 再重新 _ensureTransport 创建新 transport, 避免对已 dispose 的 transport 调 request
+        if (this._transport && this._transport.isActive()) {
             await this.stopSession();
         }
+        const transport = this._ensureTransport();
 
         try {
             const response = await transport.request('start-session', {
@@ -134,6 +136,20 @@ class InspectorService {
             this._transport = null;
         }
         this.activeSessionId = null;
+    }
+
+    /**
+     * 同步释放资源 (供 ElectronApp before-quit 调用).
+     * 与 ScrcpyService.stopScrcpy / PythonTestService.stop 对称, 无需 await.
+     * 不发送 stop-session 命令到 Python (进程将随 stdin EOF 自然退出),
+     * 仅本地 dispose transport + 清空会话状态.
+     */
+    dispose() {
+        try {
+            this._cleanup();
+        } catch {
+            /* 退出时吞错, 避免阻塞应用关闭 */
+        }
     }
 }
 

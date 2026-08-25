@@ -25,7 +25,7 @@ import time
 from collections.abc import Callable
 
 from main.core.adb.adb_port import AdbCommandPort
-from main.core.adb.subprocess_adb_adapter import ADB_CMD, SubprocessAdbAdapter
+from main.core.adb.subprocess_adb_adapter import SubprocessAdbAdapter
 from main.core.logcat.crash_detector import detect_crash_type, is_crash_line
 from main.core.logcat.log_ring_buffer import LogRingBuffer
 from main.core.logcat.logcat_parser import LOG_LEVEL_MAP, format_line
@@ -33,9 +33,6 @@ from main.core.logcat.logcat_process import LogcatProcess
 from main.utils.i18n import t
 
 logger = logging.getLogger(__name__)
-
-# 显式 re-export (向后兼容: 其他模块可能 import logcat_monitor.ADB_CMD)
-__all__ = ["ADB_CMD", "LogcatMonitor"]
 
 # 年份缓存 (避免每行 time.strftime 调用)
 _CURRENT_YEAR = time.strftime("%Y")
@@ -93,8 +90,9 @@ class LogcatMonitor:
 
     @property
     def crash_detected(self) -> bool:
-        """是否检测到崩溃。"""
-        return self._crash_detected
+        """是否检测到崩溃。统一走 _crash_lock 读取 (与 crash_info 对称)。"""
+        with self._crash_lock:
+            return self._crash_detected
 
     @property
     def crash_info(self) -> dict:

@@ -501,7 +501,7 @@ describe('generatePythonFile 端到端', () => {
     if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  test('生成 .py 文件 + 更新 caseData.pyFilePath', async (t) => {
+  test('生成 .py 文件 + 返回 {success, path} (H3: 不返 jsonPath, 不 mutation caseData)', async (t) => {
     if (!gen) return t.skip('模板文件不存在，跳过 e2e');
     const caseData = {
       fileName: 'test_e2e_case',
@@ -519,7 +519,8 @@ describe('generatePythonFile 端到端', () => {
     const result = await gen.generatePythonFile(caseData, outputDir);
     assert.strictEqual(result.success, true);
     assert.ok(result.path.endsWith('test_e2e_case.py'));
-    assert.ok(result.jsonPath.endsWith('test_e2e_case.json'));
+    // H3: generator 不再回写 JSON, 不返 jsonPath (由 TestCaseService 单源写)
+    assert.strictEqual(result.jsonPath, undefined);
 
     const pyContent = await fs.readFile(result.path, 'utf8');
     assert.match(pyContent, /class TestE2eCase/);
@@ -527,9 +528,9 @@ describe('generatePythonFile 端到端', () => {
     assert.match(pyContent, /KEYCODE_BACK/);
     assert.match(pyContent, /APP_LOAD_WAIT_TIME = 15/);
 
-    // caseData 已被更新
-    assert.strictEqual(caseData.pyFilePath, result.path);
-    assert.strictEqual(caseData.pyOutputDir, outputDir);
+    // H3: generator 不再 mutation caseData (pyFilePath/pyOutputDir 由 TestCaseService 设置)
+    assert.strictEqual(caseData.pyFilePath, undefined);
+    assert.strictEqual(caseData.pyOutputDir, undefined);
   });
 
   test('输出目录不存在时返回失败', async (t) => {

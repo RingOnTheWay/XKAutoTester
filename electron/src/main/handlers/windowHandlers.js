@@ -47,25 +47,37 @@ function register(ipcMain, services) {
   });
 
   ipcMain.on(IPC_CHANNELS.WINDOW_DRAG_START, (event, mouseX, mouseY) => {
-    if (electronApp.mainWindow && !electronApp.mainWindow.isMaximized()) {
-      dragStartPos = { x: mouseX, y: mouseY };
-      winStartPos = electronApp.mainWindow.getPosition();
+    try {
+      if (electronApp.mainWindow && !electronApp.mainWindow.isMaximized()) {
+        dragStartPos = { x: mouseX, y: mouseY };
+        winStartPos = electronApp.mainWindow.getPosition();
+      }
+    } catch (error) {
+      console.error(`IPC handler error [${IPC_CHANNELS.WINDOW_DRAG_START}]:`, error);
     }
   });
 
   ipcMain.on(IPC_CHANNELS.WINDOW_DRAG_MOVE, (event, mouseX, mouseY) => {
-    if (electronApp.mainWindow && dragStartPos && winStartPos) {
-      const deltaX = mouseX - dragStartPos.x;
-      const deltaY = mouseY - dragStartPos.y;
-      const newX = winStartPos[0] + deltaX;
-      const newY = winStartPos[1] + deltaY;
-      electronApp.mainWindow.setPosition(newX, newY);
+    try {
+      if (electronApp.mainWindow && dragStartPos && winStartPos) {
+        const deltaX = mouseX - dragStartPos.x;
+        const deltaY = mouseY - dragStartPos.y;
+        const newX = winStartPos[0] + deltaX;
+        const newY = winStartPos[1] + deltaY;
+        electronApp.mainWindow.setPosition(newX, newY);
+      }
+    } catch (error) {
+      console.error(`IPC handler error [${IPC_CHANNELS.WINDOW_DRAG_MOVE}]:`, error);
     }
   });
 
   ipcMain.on(IPC_CHANNELS.WINDOW_DRAG_END, () => {
-    dragStartPos = null;
-    winStartPos = null;
+    try {
+      dragStartPos = null;
+      winStartPos = null;
+    } catch (error) {
+      console.error(`IPC handler error [${IPC_CHANNELS.WINDOW_DRAG_END}]:`, error);
+    }
   });
 }
 

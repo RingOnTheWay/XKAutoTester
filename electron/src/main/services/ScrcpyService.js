@@ -1,12 +1,23 @@
 // ScrcpyService — scrcpy 投屏深模块。
 //
-// 藏 scrcpy 路径解析 (本地优先 + where 兜底) + 6 参数 args 构建 + 平台分支。
-// 3 factory-or-default (processSpawner + pathResolver + logger) + buildScrcpyArgs 纯函数。
+// 藏 scrcpy 路径解析 (本地优先 + where 兜底) + 6 参数 args 构建 + 平台分支 +
+// child process 生命周期 + crash 检测 (SCRCPY_CRASH_WINDOW_MS) + notifier 通知。
+//
+// 4 factory-or-default (processSpawner + pathResolver + logger + notifier) + buildScrcpyArgs 纯函数。
 //
 // 生产: new ScrcpyService(projectRoot, i18nService)  # 2 参
-// 测试: new ScrcpyService(projectRoot, i18nService, { processSpawnerFactory, pathResolverFactory, loggerFactory })
+// 测试: new ScrcpyService(projectRoot, i18nService, { processSpawnerFactory, pathResolverFactory, loggerFactory, notifierFactory })
+//
+// 接口契约:
+//   - notifierFactory (getMainWindow) → { notify(errorInfo) }
+//   - startScrcpy 不再返回 process (消除句柄泄漏, service 内部管理生命周期)
+//   - setMainWindow(mainWindow)
 
 const path = require('path');
+const { IPC_CHANNELS } = require('../../shared/constants');
+
+/** scrcpy 启动后 2 秒内非 0 退出视为 crash */
+const SCRCPY_CRASH_WINDOW_MS = 2000;
 
 /** @typedef {Object} ScrcpyProcessSpawner
  * @property {(cmd: string, args: string[], opts: object) => object} spawn - 返 child process
@@ -17,10 +28,14 @@ const path = require('path');
 /** @typedef {Object} ScrcpyLogger
  * @property {(msg: string) => void} error
  */
+/** @typedef {Object} ScrcpyNotifier
+ * @property {(errorInfo: object) => void} notify - 通知渲染进程 scrcpy 错误/crash
+ */
 /** @typedef {Object} ScrcpyServiceOptions
  * @property {() => ScrcpyProcessSpawner} [processSpawnerFactory]
  * @property {() => ScrcpyPathResolver} [pathResolverFactory]
  * @property {() => ScrcpyLogger} [loggerFactory]
+ * @property {(getMainWindow: () => object|null) => ScrcpyNotifier} [notifierFactory]
  */
 
 /**
@@ -53,25 +68,51 @@ const defaultProcessSpawnerFactory = () => {
 
 const defaultPathResolverFactory = (projectRoot) => {
   const fs = require('fs');
-  const { execSync } = require('child_process');
+  const { execFile } = require('child_process');
+  let cachedPath;  // undefined=未解析, null=解析失败, string=路径
   return {
-    findScrcpyPath() {
+    // 异步化避免阻塞事件循环 + 路径缓存 (避免每次 startScrcpy 都 where scrcpy)
+    async findScrcpyPath() {
+      if (cachedPath !== undefined) return cachedPath;
       const localScrcpy = path.join(projectRoot, 'env', 'scrcpy', 'scrcpy.exe');
-      if (fs.existsSync(localScrcpy)) return localScrcpy;
+      if (fs.existsSync(localScrcpy)) {
+        cachedPath = localScrcpy;
+        return cachedPath;
+      }
       try {
-        const result = execSync('where scrcpy', {
-          encoding: 'utf8', windowsHide: true, timeout: 3000
+        cachedPath = await new Promise((resolve) => {
+          execFile('where', ['scrcpy'], {
+            encoding: 'utf8', windowsHide: true, timeout: 3000
+          }, (err, stdout) => {
+            if (err) { resolve(null); return; }
+            const systemPath = stdout.split('\n').map(p => p.trim())
+              .find(p => p && p.endsWith('.exe'));
+            resolve(systemPath || null);
+          });
         });
-        const systemPath = result.split('\n').map(p => p.trim())
-          .find(p => p && p.endsWith('.exe'));
-        if (systemPath) return systemPath;
-      } catch {}
-      return null;
+      } catch {
+        cachedPath = null;
+      }
+      return cachedPath;
     }
   };
 };
 
 const defaultLoggerFactory = () => ({ error: (msg) => console.error(msg) });
+
+/**
+ * 默认 notifier factory
+ * 接受 getMainWindow 函数 (lazy 获取, 因 mainWindow 在 service 构造后才 setMainWindow).
+ * 返 { notify(errorInfo) } 包装 mainWindow.webContents.send(IPC_CHANNELS.SCRCPY_ERROR, ...)
+ */
+const defaultNotifierFactory = (getMainWindow) => ({
+  notify: (errorInfo) => {
+    const mainWindow = getMainWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_CHANNELS.SCRCPY_ERROR, errorInfo);
+    }
+  }
+});
 
 class ScrcpyService {
   /**
@@ -82,17 +123,45 @@ class ScrcpyService {
   constructor(projectRoot, i18nService, opts = {}) {
     this.projectRoot = projectRoot;
     this.i18nService = i18nService;
+    this._mainWindow = null;  // setMainWindow 后填充
+    this._child = null;  // 持有 child 引用供 stopScrcpy 管理
     this._processSpawnerFactory = opts.processSpawnerFactory || defaultProcessSpawnerFactory;
     this._pathResolverFactory = opts.pathResolverFactory || defaultPathResolverFactory;
     this._loggerFactory = opts.loggerFactory || defaultLoggerFactory;
+    this._notifierFactory = opts.notifierFactory || defaultNotifierFactory;
     this._spawner = this._processSpawnerFactory();
     this._pathResolver = this._pathResolverFactory(projectRoot);
     this._logger = this._loggerFactory();
+    this._notifier = this._notifierFactory(() => this._mainWindow);
+  }
+
+  /**
+   * 注入 mainWindow
+   * ElectronApp.initialize 创建 mainWindow 后调用.
+   * @param {object} mainWindow
+   */
+  setMainWindow(mainWindow) {
+    this._mainWindow = mainWindow;
+  }
+
+  /**
+   * 停止当前 scrcpy 子进程.
+   * startScrcpy 开头自动调此方法停旧进程, 避免累积.
+   */
+  stopScrcpy() {
+    if (this._child) {
+      try { this._child.kill(); } catch { /* 已退出 */ }
+      this._child = null;
+    }
   }
 
   async startScrcpy(deviceId, scrcpyParams) {
     try {
-      const scrcpyPath = this._pathResolver.findScrcpyPath();
+      // 先停旧 scrcpy 进程 (避免多次调用累积)
+      this.stopScrcpy();
+
+      // findScrcpyPath 异步化 (避免阻塞事件循环)
+      const scrcpyPath = await this._pathResolver.findScrcpyPath();
       if (!scrcpyPath) {
         return {
           success: false,
@@ -118,14 +187,38 @@ class ScrcpyService {
         });
       }
 
+      // 持有 child 引用供 stopScrcpy 管理
+      this._child = child;
+
       child.stdout.resume();
       child.stderr.resume();
 
-      return { success: true, process: child };
+      // child process 生命周期管理
+      const startTime = Date.now();
+      child.on('error', (err) => {
+        this._child = null;
+        this._notifier.notify({
+          error: err.message || 'Unknown spawn error'
+        });
+      });
+      child.on('close', (code, signal) => {
+        this._child = null;
+        const elapsed = Date.now() - startTime;
+        if (code !== 0 && elapsed < SCRCPY_CRASH_WINDOW_MS) {
+          this._notifier.notify({
+            error: 'crash',
+            code,
+            signal
+          });
+        }
+      });
+
+      // 不再返回 process (消除句柄泄漏, service 内部管理生命周期)
+      return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 }
 
-module.exports = { ScrcpyService, buildScrcpyArgs };
+module.exports = { ScrcpyService, buildScrcpyArgs, SCRCPY_CRASH_WINDOW_MS };

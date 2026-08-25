@@ -18,30 +18,19 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
 const { app } = require('electron');
 const { spawn } = require('child_process');
 const { ensureDirectoryExists } = require('../utils/pathHelper');
 const { IPC_CHANNELS } = require('../../shared/constants');
+const { compareVersions } = require('../utils/versionCompare');
 
 const GITHUB_OWNER = 'RingOnTheWay';
 const GITHUB_REPO = 'XKAutoTester';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
 
 // ── module-level 纯函数 (对称 I18nService default factory 模式) ──
-
-/** 版本比较纯函数: 返 -1 (v1<v2) / 0 (相等) / 1 (v1>v2) */
-function compareVersions(v1, v2) {
-  const parts1 = v1.replace(/^v/, '').split('.').map(Number);
-  const parts2 = v2.replace(/^v/, '').split('.').map(Number);
-  const maxLen = Math.max(parts1.length, parts2.length);
-  for (let i = 0; i < maxLen; i++) {
-    const p1 = parts1[i] || 0;
-    const p2 = parts2[i] || 0;
-    if (p1 < p2) return -1;
-    if (p1 > p2) return 1;
-  }
-  return 0;
-}
+// (compareVersions 已抽取至 utils/versionCompare, 见文件头部 import)
 
 /** 错误分类纯函数: 将 axios/network error 转 classified error (含 .code + .statusCode) */
 function normalizeUpdateError(error) {
@@ -118,6 +107,60 @@ function normalizeUpdateError(error) {
   return errorObj;
 }
 
+/**
+ * 从 GitHub Release body 解析 SHA256 hash, 按 asset 名匹配。
+ * 约定格式 (多 asset Release notes, 各 asset 独立标注):
+ *   **XKAutoTester Setup v2.0.0.exe**
+ *   SHA256: a3f5b8c1d2e4f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1
+ *
+ *   **XKAutoTester Setup v2.0.0 Lite.exe**
+ *   SHA256: b4c6d9e2f3a5b7c8d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
+ *
+ * 解析顺序:
+ * 1. 若传 fileName, 优先找 `**<fileName>**` 后的 SHA256 (asset 专属 hash)
+ * 2. 回退: 取首个 SHA256 行 (兼容旧格式单 hash Release, 不区分 asset)
+ * 3. 都没找到返 null (向后兼容, 跳过校验)
+ *
+ * @param {string} body - Release notes body
+ * @param {string} [fileName] - asset 文件名 (可选, 多 asset 时按名匹配)
+ * @returns {string|null} 64位小写 hex hash, 未找到返 null
+ */
+function parseSha256FromBody(body, fileName) {
+  if (typeof body !== 'string' || body.length === 0) return null;
+
+  // 优先: 按 fileName 匹配 asset 专属 hash
+  if (fileName) {
+    // 转义 fileName 中的正则特殊字符 (如 . + ( ))
+    const escapedName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // 匹配 `**<fileName>**` 后 (允许任意字符含换行) 的首个 SHA256 行
+    const assetPattern = new RegExp(
+      `\\*\\*${escapedName}\\*\\*[\\s\\S]*?SHA256:\\s*([a-fA-F0-9]{64})\\b`,
+      'i'
+    );
+    const assetMatch = body.match(assetPattern);
+    if (assetMatch) return assetMatch[1].toLowerCase();
+  }
+
+  // 回退: 取首个 SHA256 行 (兼容旧格式单 hash Release)
+  const fallbackMatch = body.match(/SHA256:\s*([a-fA-F0-9]{64})\b/);
+  return fallbackMatch ? fallbackMatch[1].toLowerCase() : null;
+}
+
+/**
+ * 计算文件 SHA256 (流式, 避免大文件 OOM)。
+ * @param {string} filePath - 待校验文件路径
+ * @returns {Promise<string>} 64位小写 hex hash
+ */
+async function computeFileSha256(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex').toLowerCase()));
+    stream.on('error', reject);
+  });
+}
+
 // ── 5 默认 factory (factory-or-default, 对称 I18nService 3-factory + PagePackageService 2-factory) ──
 
 const defaultFileSystemFactory = () => ({
@@ -141,7 +184,12 @@ const defaultUpdateSourceFactory = (httpsAgent) => ({
         ...(httpsAgent ? { httpsAgent } : {})
       });
       const releases = response.data;
-      return releases.find(r => !r.prerelease && !r.draft) || null;
+      if (!Array.isArray(releases) || releases.length === 0) return null;
+      // 本项目仅发布 dev/prerelease, 若过滤 prerelease 会找不到任何候选导致永远"已是最新"。
+      // 故仅排除 draft, 新旧统一交由 compareVersions 按 tag 语义版本判定, 取最高者。
+      const candidates = releases.filter(r => !r.draft && r.tag_name);
+      if (candidates.length === 0) return null;
+      return candidates.sort((a, b) => compareVersions(b.tag_name, a.tag_name))[0];
     } catch (error) {
       throw normalizeUpdateError(error);
     }
@@ -215,6 +263,12 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
 
       writer.on('finish', () => {
         clearInterval(speedInterval);
+        // 下载完整性校验: 防下载不完整的 .exe 被执行; 完整 SHA256 校验需业务决策 hash 存储位置
+        if (totalLength > 0 && downloadedLength !== totalLength) {
+          try { fs.unlinkSync(filePath); } catch (e) {}
+          reject(new Error(`下载不完整: 预期 ${totalLength} 字节, 实际 ${downloadedLength} 字节`));
+          return;
+        }
         resolve({ success: true, filePath, message: 'Download completed' });
       });
 
@@ -235,6 +289,7 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
 
 const defaultInstallStrategyFactory = () => ({
   async install(filePath) {
+    // SHA256 校验已在 UpdateService.installUpdate 层完成, 此处直接 spawn。
     const detached = spawn(filePath, ['--force-run'], {
       detached: true,
       stdio: 'ignore'
@@ -243,6 +298,11 @@ const defaultInstallStrategyFactory = () => ({
     setTimeout(() => { app.quit(); }, 1000);
     return { success: true };
   }
+});
+
+// 默认 hash 计算器 (流式 SHA256), 测试可注入 fake
+const defaultHashCalculatorFactory = () => ({
+  compute: computeFileSha256,
 });
 
 // ── UpdateService 类 ──
@@ -257,6 +317,7 @@ class UpdateService {
    * @param {Function} [opts.installStrategyFactory] - 默认包装 spawn + app.quit
    * @param {Function} [opts.fileSystemFactory] - 默认包装 fs 5 方法 + ensureDirectoryExists
    * @param {Function} [opts.versionComparator] - 默认 module-level compareVersions
+   * @param {Function} [opts.hashCalculatorFactory] - 默认包装 crypto SHA256 流式计算
    */
   constructor(versionService, userDataService, opts = {}) {
     this.versionService = versionService;
@@ -268,6 +329,7 @@ class UpdateService {
     this._installStrategyFactory = opts.installStrategyFactory || defaultInstallStrategyFactory;
     this._fileSystemFactory = opts.fileSystemFactory || defaultFileSystemFactory;
     this._versionComparator = opts.versionComparator || compareVersions;
+    this._hashCalculatorFactory = opts.hashCalculatorFactory || defaultHashCalculatorFactory;
     this._allowInsecureSSL = !!opts.allowInsecureSSL;
     // 预构建 httpsAgent: allowInsecureSSL=true 时跳过证书校验 (用于代理/加速等导致证书异常的场景)
     this._httpsAgent = this._allowInsecureSSL
@@ -277,6 +339,9 @@ class UpdateService {
     this._downloadStrategy = this._downloadStrategyFactory(this._httpsAgent);
     this._installStrategy = this._installStrategyFactory();
     this._fileSystem = this._fileSystemFactory();
+    this._hashCalculator = this._hashCalculatorFactory();
+    // checkForUpdate 解析 Release body 后存此处, 供 download/install 校验
+    this._expectedSha256 = null;
   }
 
   /**
@@ -293,12 +358,37 @@ class UpdateService {
     this._downloadStrategy = this._downloadStrategyFactory(this._httpsAgent);
   }
 
+  /**
+   * 启动期二段构造: 接收 config 对象应用初始配置 (对称 ApkParserService.initialize).
+   * 当前仅应用 allowInsecureSSL; 懒初始化 (_ensureInitialized) 不受影响.
+   * @param {object} config - config.json 解析后的对象
+   */
+  initialize(config) {
+    const allowInsecureSSL = !!(config && config.APP_SETTINGS && config.APP_SETTINGS.allowInsecureSSL);
+    this.setAllowInsecureSSL(allowInsecureSSL);
+  }
+
   // 懒初始化 (消除构造期 I/O, 对称 I18nService.init 幂等模式)
   _ensureInitialized() {
     if (this._initialized) return;
     this._fileSystem.ensureDir(this.updateDir);
     this._cleanupOldUpdates();
     this._initialized = true;
+  }
+
+  /**
+   * 判断当前是否完整版安装 (含 bundled .venv)。
+   * 完整版: 打包模式 process.resourcesPath/.venv 存在 (extraResources 含 .venv)
+   * Lite 版/开发模式: .venv 不存在
+   */
+  _isFullInstall() {
+    try {
+      if (!app.isPackaged) return false;  // 开发模式不作完整版判定
+      const venvPath = path.join(process.resourcesPath, '.venv');
+      return fs.existsSync(venvPath);
+    } catch {
+      return false;
+    }
   }
 
   _cleanupOldUpdates() {
@@ -327,13 +417,16 @@ class UpdateService {
     if (!latestRelease) {
       return {
         hasUpdate: false,
-        currentVersion: this.versionService.getVersion(),
-        latestVersion: this.versionService.getVersion()
+        currentVersion: this.versionService.getFullVersion(),
+        latestVersion: this.versionService.getFullVersion(),
+        secure: false  // 无 release 不存在安装场景, secure=false
       };
     }
 
     const latestVersion = latestRelease.tag_name.replace(/^v/, '');
-    const currentVersion = this.versionService.getVersion();
+    // 用 fullVersion (含 prerelease, 如 0.1.5-dev.2) 与 tag 去 v 后的 latestVersion 比较。
+    // 若用 version (0.1.5), 会把 prerelease 段解析成数字段导致同版本误判为有更新。
+    const currentVersion = this.versionService.getFullVersion();
     const hasUpdate = this._versionComparator(currentVersion, latestVersion) < 0;
 
     let downloadUrl = null;
@@ -341,9 +434,23 @@ class UpdateService {
     let fileSize = 0;
 
     if (hasUpdate && latestRelease.assets && latestRelease.assets.length > 0) {
-      let exeAsset = latestRelease.assets.find(a =>
-        a.name.endsWith('.exe') && a.name.includes('Lite')
-      );
+      // 按当前安装类型选 asset, 避免完整版用户被降级更新为 Lite
+      // 完整版: process.resourcesPath/.venv 存在 (extraResources 含 .venv)
+      // Lite 版: .venv 未打包
+      const isLiteInstall = !this._isFullInstall();
+      let exeAsset;
+      if (isLiteInstall) {
+        // Lite 版: 优先选 Lite asset
+        exeAsset = latestRelease.assets.find(a =>
+          a.name.endsWith('.exe') && a.name.includes('Lite')
+        );
+      } else {
+        // 完整版: 优先选非 Lite 的 .exe
+        exeAsset = latestRelease.assets.find(a =>
+          a.name.endsWith('.exe') && !a.name.includes('Lite')
+        );
+      }
+      // 回退: 任意 .exe
       if (!exeAsset) {
         exeAsset = latestRelease.assets.find(a => a.name.endsWith('.exe'));
       }
@@ -354,6 +461,11 @@ class UpdateService {
       }
     }
 
+    // 解析 Release body 中的 SHA256, 按 fileName 匹配 asset 专属 hash
+    // 完整版用户匹配完整包 hash, Lite 版用户匹配 Lite 包 hash, 互不干扰
+    const sha256 = parseSha256FromBody(latestRelease.body || '', fileName);
+    this._expectedSha256 = sha256;
+
     return {
       hasUpdate,
       currentVersion,
@@ -363,6 +475,8 @@ class UpdateService {
       downloadUrl,
       fileName,
       fileSize,
+      sha256,  // 透出给 UI 显示校验状态 (null 表示 Release 未预埋 hash)
+      secure: sha256 !== null,  // 是否可安全安装 (有 hash 才能 download/install)
       htmlUrl: latestRelease.html_url
     };
   }
@@ -371,20 +485,48 @@ class UpdateService {
     try {
       this._ensureInitialized();  // 懒初始化触发
 
+      // 严格拒绝无 hash 版本, 防供应链攻击。
+      // _expectedSha256 为 null 表示 checkForUpdate 未调 或 Release 未预埋 hash, 一律拒绝下载。
+      if (!this._expectedSha256) {
+        const err = new Error('Release 缺少 SHA256 hash, 拒绝下载 (安全闭环)');
+        err.code = 'missing_hash';
+        throw err;
+      }
+
       const filePath = path.join(this.updateDir, fileName);
 
       if (this._fileSystem.exists(filePath)) {
-        return {
-          success: true,
-          filePath,
-          message: 'File already downloaded'
-        };
+        // 快路径也校验 SHA256: 防止已被篡改/损坏的缓存文件被直接安装
+        const verifyError = await this._verifySha256IfExists(filePath);
+        if (verifyError) {
+          // 校验失败 → 删除缓存文件, 走全量下载
+          console.error(`[UpdateService] 缓存文件 SHA256 校验失败, 重新下载: ${verifyError}`);
+          try { this._fileSystem.unlink(filePath); } catch (e) { /* ignore */ }
+        } else {
+          return {
+            success: true,
+            filePath,
+            message: 'File already downloaded'
+          };
+        }
       }
 
-      return await this._downloadStrategy.download(downloadUrl, filePath, eventSender);
+      const result = await this._downloadStrategy.download(downloadUrl, filePath, eventSender);
+
+      // 下载完成后校验 SHA256: 防止下载不完整/中间人篡改
+      const postDownloadError = await this._verifySha256IfExists(filePath);
+      if (postDownloadError) {
+        try { this._fileSystem.unlink(filePath); } catch (e) { /* ignore */ }
+        throw new Error(`下载文件 SHA256 校验失败: ${postDownloadError}`);
+      }
+
+      return result;
     } catch (error) {
       console.error('[UpdateService] Download update failed:', error.message);
-      throw new Error(`Failed to download update: ${error.message}`);
+      // 保留 missing_hash code 透出给 UI 区分 (而非统一 unknown)
+      const wrapped = new Error(`Failed to download update: ${error.message}`);
+      if (error.code) wrapped.code = error.code;
+      throw wrapped;
     }
   }
 
@@ -393,11 +535,45 @@ class UpdateService {
       if (!this._fileSystem.exists(filePath)) {
         throw new Error('Update file not found');
       }
+      // 严格拒绝无 hash 版本安装。
+      if (!this._expectedSha256) {
+        const err = new Error('Release 缺少 SHA256 hash, 拒绝安装 (安全闭环)');
+        err.code = 'missing_hash';
+        throw err;
+      }
+      // 安装前重新校验 SHA256: 防止下载后被替换/篡改 (TOCTOU)
+      const verifyError = await this._verifySha256IfExists(filePath);
+      if (verifyError) {
+        throw new Error(`安装前 SHA256 校验失败: ${verifyError}`);
+      }
       return await this._installStrategy.install(filePath);
     } catch (error) {
       console.error('[UpdateService] Install update failed:', error.message);
-      throw new Error(`Failed to install update: ${error.message}`);
+      const wrapped = new Error(`Failed to install update: ${error.message}`);
+      if (error.code) wrapped.code = error.code;
+      throw wrapped;
     }
+  }
+
+  /**
+   * 校验文件 SHA256, 仅当 _expectedSha256 非空时执行。
+   * downloadUpdate/installUpdate 入口已严格拒绝 _expectedSha256=null,
+   * 此处保留 null 跳过分支仅作防御性兜底 (例如直接调 _verifySha256IfExists 的内部测试)。
+   * @param {string} filePath - 待校验文件路径
+   * @returns {Promise<string|null>} null=通过/跳过; string=失败原因
+   */
+  async _verifySha256IfExists(filePath) {
+    if (!this._expectedSha256) return null;  // 防御性兜底 (入口已拒绝)
+    let actualHash;
+    try {
+      actualHash = await this._hashCalculator.compute(filePath);
+    } catch (e) {
+      return `计算 hash 失败: ${e.message}`;
+    }
+    if (actualHash !== this._expectedSha256) {
+      return `预期 ${this._expectedSha256}, 实际 ${actualHash}`;
+    }
+    return null;
   }
 
   async deleteUpdateFile(filePath) {
@@ -413,4 +589,4 @@ class UpdateService {
   }
 }
 
-module.exports = { UpdateService, normalizeUpdateError };
+module.exports = { UpdateService, normalizeUpdateError, parseSha256FromBody, computeFileSha256 };

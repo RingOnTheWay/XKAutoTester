@@ -75,7 +75,7 @@ test('buildSignedUrl 返正确格式 URL', () => {
 test('constructor 收 2 factory + 2 实例建', () => {
   const http = makeFakeHttpClient();
   const logger = makeFakeLogger();
-  const svc = new NotificationService({ t: () => '' }, {
+  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
     httpClientFactory: () => http,
     loggerFactory: () => logger,
   });
@@ -87,7 +87,7 @@ test('constructor 收 2 factory + 2 实例建', () => {
 // ── sendDingTalkNotification ───────────────────────────
 
 test('sendDingTalkNotification accessToken/secret 缺失返 {success:false, error}', async () => {
-  const svc = new NotificationService({ t: () => '' }, {
+  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
     httpClientFactory: () => makeFakeHttpClient(),
     loggerFactory: () => makeFakeLogger(),
   });
@@ -113,7 +113,7 @@ test('sendDingTalkNotification accessToken/secret 缺失返 {success:false, erro
 
 test('sendDingTalkNotification 调 httpClient.post + 返 {success:true, data}', async () => {
   const http = makeFakeHttpClient();
-  const svc = new NotificationService({ t: () => '' }, {
+  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
     httpClientFactory: () => http,
     loggerFactory: () => makeFakeLogger(),
   });
@@ -143,7 +143,7 @@ test('sendDingTalkNotification httpClient.post 抛错 catch 返 {success:false, 
   const http = {
     post: async () => { throw new Error('network timeout'); },
   };
-  const svc = new NotificationService({ t: () => '' }, {
+  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
     httpClientFactory: () => http,
     loggerFactory: () => makeFakeLogger(),
   });
@@ -160,7 +160,7 @@ test('sendDingTalkNotification httpClient.post 抛错 catch 返 {success:false, 
 
 test('sendDingTalkNotification 集成验证: 调 buildSignString + buildRequestBody + buildSignedUrl', async () => {
   const http = makeFakeHttpClient();
-  const svc = new NotificationService({ t: () => '' }, {
+  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
     httpClientFactory: () => http,
     loggerFactory: () => makeFakeLogger(),
   });

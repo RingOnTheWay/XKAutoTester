@@ -1,4 +1,48 @@
 const fs = require('fs').promises;
+const pathLib = require('path');
+
+// 简单互斥锁, 保护 read-modify-write 序列避免并发丢更新
+class Mutex {
+  constructor() {
+    this._queue = [];
+    this._locked = false;
+  }
+  async acquire() {
+    if (!this._locked) {
+      this._locked = true;
+      return;
+    }
+    return new Promise((resolve) => {
+      this._queue.push(resolve);
+    });
+  }
+  release() {
+    const next = this._queue.shift();
+    if (next) {
+      next();
+    } else {
+      this._locked = false;
+    }
+  }
+  async withLock(fn) {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
+}
+
+// per-path 锁注册表, 同路径的 read-modify-write 串行化
+const _pathLocks = new Map();
+function getLock(filePath) {
+  const resolved = pathLib.resolve(filePath);
+  if (!_pathLocks.has(resolved)) {
+    _pathLocks.set(resolved, new Mutex());
+  }
+  return _pathLocks.get(resolved);
+}
 
 async function exists(path) {
   try {
@@ -14,8 +58,17 @@ async function readJson(path) {
   return JSON.parse(data);
 }
 
+// 原子写 - 先写临时文件再 rename, 防止并发写产生半截文件
 async function writeJson(path, data, spaces = 2) {
-  await fs.writeFile(path, JSON.stringify(data, null, spaces), 'utf8');
+  const tmpPath = path + '.tmp.' + process.pid + '.' + Date.now();
+  await fs.writeFile(tmpPath, JSON.stringify(data, null, spaces), 'utf8');
+  try {
+    await fs.rename(tmpPath, path);
+  } catch (e) {
+    // rename 失败时清理临时文件
+    try { await fs.unlink(tmpPath); } catch { /* ignore */ }
+    throw e;
+  }
 }
 
 async function ensureDir(dirPath) {
@@ -82,5 +135,8 @@ module.exports = {
   readdir,
   mkdir,
   appendFile,
-  readConfigIfExists
+  readConfigIfExists,
+  Mutex,
+  getLock,
+  withLock: (filePath, fn) => getLock(filePath).withLock(fn),
 };

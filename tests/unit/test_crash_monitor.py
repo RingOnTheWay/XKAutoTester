@@ -5,13 +5,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from main.core.adb_manager import ADBManager
 from main.core.crash_monitor import CrashMonitor
+from main.utils.test_reporter import TestReporter
 
 
 @pytest.fixture
 def mock_adb():
-    """Mock ADBManager"""
-    adb = MagicMock()
+    """Mock ADBManager (P2: spec=ADBManager, 阻止调用漂移)"""
+    adb = MagicMock(spec=ADBManager)
     adb.start_logcat_monitor.return_value = True
     adb.is_crash_detected.return_value = False
     adb.get_logcat_full_log.return_value = ""
@@ -22,8 +24,8 @@ def mock_adb():
 
 @pytest.fixture
 def mock_reporter():
-    """Mock TestReporter"""
-    return MagicMock()
+    """Mock TestReporter (P2: spec=TestReporter, 阻止调用漂移)"""
+    return MagicMock(spec=TestReporter)
 
 
 @pytest.fixture

@@ -5,7 +5,35 @@ const asyncFs = require('../utils/asyncFs');
 const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
-  const { electronApp, i18nService, versionService, userDataService, updateService } = services;
+  const {
+    electronApp, i18nService, versionService, userDataService, updateService,
+    // changeDataPath 后需通知各 service 更新内部 filePath
+    scheduledPlanService, testPlanService, pagePackageService, testCaseService,
+  } = services;
+
+  // i18n 文案封装: i18nService 不可用时回退默认文案
+  const t = (key, fallback) => (i18nService && typeof i18nService.t === 'function'
+    ? i18nService.t(key, { defaultValue: fallback })
+    : fallback);
+
+  /**
+   * changeDataPath/resetDataPath 后通知各 service 更新内部 filePath
+   * 避免 service 持有旧路径导致数据写错位置 (原仅靠 relaunchApp 兜底)
+   */
+  function _notifyServicesPathChange(newConfigPath) {
+    const servicesToUpdate = [
+      scheduledPlanService, testPlanService, pagePackageService, testCaseService,
+    ];
+    for (const svc of servicesToUpdate) {
+      if (svc && typeof svc.updateConfigPath === 'function') {
+        try {
+          svc.updateConfigPath(newConfigPath);
+        } catch (e) {
+          console.error(`[configHandlers] updateConfigPath failed for ${svc.constructor?.name}:`, e);
+        }
+      }
+    }
+  }
 
   registerHandler(ipcMain, IPC_CHANNELS.GET_CONFIG, async () => {
     const configPath = path.join(electronApp.userConfigPath, 'config.json');
@@ -16,28 +44,35 @@ function register(ipcMain, services) {
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.SAVE_CONFIG, async (newConfig) => {
+    if (!newConfig || typeof newConfig !== 'object' || Array.isArray(newConfig)) {
+      return { success: false, error: t('errors.invalidConfig', '无效的配置数据') };
+    }
     const configPath = path.join(electronApp.userConfigPath, 'config.json');
-    let currentConfig = {};
 
-    if (await asyncFs.exists(configPath)) {
-      currentConfig = await asyncFs.readJson(configPath);
-    }
+    // 串行化 read-merge-write, 防止多 handler 并发写丢字段
+    return asyncFs.withLock(configPath, async () => {
+      let currentConfig = {};
 
-    const updatedConfig = { ...currentConfig, ...newConfig };
+      if (await asyncFs.exists(configPath)) {
+        currentConfig = await asyncFs.readJson(configPath);
+      }
 
-    await asyncFs.writeJson(configPath, updatedConfig);
+      const updatedConfig = { ...currentConfig, ...newConfig };
 
-    // 同步后端 i18nService 的语言设置
-    if (newConfig.APP_SETTINGS?.language && i18nService) {
-      i18nService.changeLanguage(newConfig.APP_SETTINGS.language);
-    }
+      await asyncFs.writeJson(configPath, updatedConfig);
 
-    // 同步 UpdateService 的 allowInsecureSSL (运行时切换, 立即生效)
-    if (Object.prototype.hasOwnProperty.call(newConfig.APP_SETTINGS || {}, 'allowInsecureSSL') && updateService) {
-      updateService.setAllowInsecureSSL(!!newConfig.APP_SETTINGS.allowInsecureSSL);
-    }
+      // 同步后端 i18nService 的语言设置
+      if (newConfig.APP_SETTINGS?.language && i18nService) {
+        i18nService.changeLanguage(newConfig.APP_SETTINGS.language);
+      }
 
-    return { success: true };
+      // 同步 UpdateService 的 allowInsecureSSL (运行时切换, 立即生效)
+      if (Object.prototype.hasOwnProperty.call(newConfig.APP_SETTINGS || {}, 'allowInsecureSSL') && updateService) {
+        updateService.setAllowInsecureSSL(!!newConfig.APP_SETTINGS.allowInsecureSSL);
+      }
+
+      return { success: true };
+    });
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.GET_PROJECT_INFO, () => {
@@ -58,7 +93,7 @@ function register(ipcMain, services) {
 
   registerHandler(ipcMain, IPC_CHANNELS.SHOW_DIALOG, async (options) => {
     const { dialog } = require('electron');
-    const { type, title, message, buttons } = options;
+    const { type, title, message, buttons } = (options && typeof options === 'object' && !Array.isArray(options)) ? options : {};
     const browserWindow = electronApp.mainWindow || null;
     return await dialog.showMessageBox(browserWindow, {
       type: type || 'info',
@@ -79,21 +114,25 @@ function register(ipcMain, services) {
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.CHANGE_DATA_PATH, async (newPath) => {
-    if (!userDataService) return { success: false, error: '服务未初始化' };
+    if (!userDataService) return { success: false, error: t('errors.serviceNotInit', '服务未初始化') };
     const result = await userDataService.changeDataPath(newPath);
     if (result.success) {
       electronApp.userConfigPath = userDataService.getUserConfigPath();
       electronApp.userDataPath = userDataService.getUserDataPath();
+      // 通知各 service 更新内部 filePath, 避免写旧路径
+      _notifyServicesPathChange(electronApp.userConfigPath);
     }
     return result;
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.RESET_DATA_PATH, async () => {
-    if (!userDataService) return { success: false, error: '服务未初始化' };
+    if (!userDataService) return { success: false, error: t('errors.serviceNotInit', '服务未初始化') };
     const result = await userDataService.resetToDefaultPath();
     if (result.success) {
       electronApp.userConfigPath = userDataService.getUserConfigPath();
       electronApp.userDataPath = userDataService.getUserDataPath();
+      // 通知各 service 更新内部 filePath
+      _notifyServicesPathChange(electronApp.userConfigPath);
     }
     return result;
   });

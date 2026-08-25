@@ -1,6 +1,6 @@
 {
   "name": "xkautotester-electron",
-  "version": "0.1.4-dev.2",
+  "version": "0.1.5-dev.2",
   "description": "XKAutoTester - 基于Electron+Python的自动化测试平台",
   "main": "src/main/index.js",
   "scripts": {
@@ -42,8 +42,7 @@
     "allure": "^3.9.0",
     "axios": "^1.6.0",
     "i18next": "^25.8.0",
-    "i18next-browser-languagedetector": "^8.2.0",
-    "lucide": "^1.8.0"
+    "i18next-browser-languagedetector": "^8.2.0"
   },
   "build": {
     "appId": "com.ring.xkautotester",
@@ -57,13 +56,12 @@
       "splash.html",
       "renderer/**/*",
       "assets/**/*",
-      "locales/**/*",
-      "templates/**/*",
-      "node_modules/**/*"
+      "templates/**/*"
     ],
     "asar": true,
     "asarUnpack": [
-      "src/preload/**/*"
+      "src/preload/**/*",
+      "node_modules/**/*"
     ],
     "extraResources": [
       {
@@ -107,6 +105,10 @@
       {
         "from": "../version.json",
         "to": "version.json"
+      },
+      {
+        "from": "locales",
+        "to": "locales"
       }
     ],
     "win": {

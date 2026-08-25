@@ -8,7 +8,7 @@
 5 崩溃模式:
 - FATAL EXCEPTION (Java 异常)
 - Process ... has died (进程死亡)
-- Killing ... (进程被杀,暂未在 is_crash_line 使用,保留)
+- Killing ... (进程被杀)
 - signal N (SIGxxx) (Native 崩溃)
 - ANR in ... / Application Not Responding (ANR)
 
@@ -39,6 +39,7 @@ def is_crash_line(line: str) -> bool:
     return bool(
         FATAL_EXCEPTION_PATTERN.search(line)
         or PROCESS_DIED_PATTERN.search(line)
+        or PROCESS_KILL_PATTERN.search(line)
         or NATIVE_SIGNAL_PATTERN.search(line)
         or ANR_PATTERN.search(line)
     )

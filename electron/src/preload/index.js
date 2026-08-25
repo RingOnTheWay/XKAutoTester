@@ -6,11 +6,22 @@ const { IPC_CHANNELS } = require('../shared/constants');
 // 加载i18next模块
 const i18next = require('i18next');
 
+// 解析 locales 根目录 (对齐 pathHelper.getLocalesPath)
+// 打包模式: locales 经 extraResources 提取至 process.resourcesPath/locales (普通 fs 路径, preload 可直接读)
+// 开发模式: electron/locales (__dirname = electron/src/preload)
+function resolveLocalesPath() {
+  const packagedPath = path.join(process.resourcesPath, 'locales');
+  if (fs.existsSync(path.join(packagedPath, 'zh-CN', 'translation.json'))) {
+    return packagedPath;
+  }
+  return path.join(__dirname, '..', '..', 'locales');
+}
+
 // 初始化i18next
 async function initializeI18next() {
   try {
-    // 构建语言文件路径 - locales 在 electron/ 目录下
-    const localesPath = path.join(__dirname, '..', '..', 'locales');
+    // 构建语言文件路径 - locales 在 electron/ 目录下 (打包模式在 resources/locales)
+    const localesPath = resolveLocalesPath();
 
     // 加载语言文件
     const resources = {};
@@ -84,7 +95,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximizeWindow: () => invokeWithCheck(IPC_CHANNELS.WINDOW_MAXIMIZE),
   closeWindow: () => invokeWithCheck(IPC_CHANNELS.WINDOW_CLOSE),
   isWindowMaximized: () => invokeWithCheck(IPC_CHANNELS.WINDOW_IS_MAXIMIZED),
-  onWindowMaximized: (callback) => ipcRenderer.on(IPC_CHANNELS.WINDOW_MAXIMIZED, (event, isMaximized) => callback(isMaximized)),
+  onWindowMaximized: (callback) => {
+    const listener = (event, isMaximized) => callback(isMaximized);
+    ipcRenderer.on(IPC_CHANNELS.WINDOW_MAXIMIZED, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_MAXIMIZED, listener);
+  },
   setIgnoreMouseEvents: (ignore, options, windowType) => invokeWithCheck(IPC_CHANNELS.WINDOW_SET_IGNORE_MOUSE_EVENTS, ignore, options, windowType),
 
   // 窗口拖拽
@@ -222,7 +237,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // 文件管理器相关
-  executeAdbCommand: (cmd, deviceId) => invokeWithCheck(IPC_CHANNELS.EXECUTE_ADB_COMMAND, cmd, deviceId),
+  // executeAdbCommand 最小约束 (保守, 不破坏现有 getConnectedDevices / connect 单参 / tcpip 等调用):
+  //  - cmd 必须是非空字符串
+  //  - deviceId 若提供则须为非空字符串 (connect 等命令可省略 deviceId)
+  //  - 拒绝以 shell 元字符开头的命令 (防注入; 主进程 ADBService 另有危险子命令黑名单兜底)
+  executeAdbCommand: (cmd, deviceId) => {
+    if (typeof cmd !== 'string' || cmd.trim() === '') {
+      return Promise.reject(new Error('Invalid adb command'));
+    }
+    if (deviceId !== undefined && (typeof deviceId !== 'string' || deviceId.trim() === '')) {
+      return Promise.reject(new Error('Invalid device id'));
+    }
+    const firstChar = cmd.trim().charAt(0);
+    if (';&|<>`$\n\t'.includes(firstChar)) {
+      return Promise.reject(new Error('Insecure adb command'));
+    }
+    return invokeWithCheck(IPC_CHANNELS.EXECUTE_ADB_COMMAND, cmd, deviceId);
+  },
   selectFiles: () => invokeWithCheck(IPC_CHANNELS.SELECT_FILES),
   uploadFile: (localPath, remotePath, deviceId) => invokeWithCheck(IPC_CHANNELS.UPLOAD_FILE, localPath, remotePath, deviceId),
   onUploadProgress: (callback) => {
@@ -253,20 +284,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 定时计划测试完成
   scheduledTestComplete: (planId) => invokeWithCheck(IPC_CHANNELS.SCHEDULED_TEST_COMPLETE, planId),
 
-  // 移除监听器
-  removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
-
-  // 发送事件
-  send: (channel, ...args) => {
-    ipcRenderer.send(channel, ...args);
-  },
-
-  // 监听事件
-  on: (channel, callback) => {
-    const listener = (event, ...args) => callback(...args);
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.removeListener(channel, listener);
-  },
+  // 删除通用 send/on/removeAllListeners 入口 (renderer 0 处使用, 已有 10 个专门 onXxx 方法)
+  // 原通用入口绕过 IPC_CHANNELS 白名单, 被 XSS 后可调任意通道 (含 changeDataPath/installUpdate/sendDingTalk)
 
   // i18next相关
   i18n: {
@@ -354,6 +373,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   startChecks: () => invokeWithCheck(IPC_CHANNELS.START_CHECKS),
   splashReady: () => invokeWithCheck(IPC_CHANNELS.SPLASH_READY),
+
+  // 启动检查事件 (splash.html 监听)
+  onCheckProgress: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.CHECK_PROGRESS, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CHECK_PROGRESS, listener);
+  },
+  onCheckResult: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.CHECK_RESULT, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CHECK_RESULT, listener);
+  },
+  onCheckComplete: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.CHECK_COMPLETE, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CHECK_COMPLETE, listener);
+  },
 
   setPreventSleep: (enable) => invokeWithCheck(IPC_CHANNELS.SET_PREVENT_SLEEP, enable),
 

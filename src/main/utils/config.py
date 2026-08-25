@@ -8,6 +8,7 @@
 """
 
 import json
+import threading
 from pathlib import Path
 
 from main.utils.paths import get_config_file
@@ -81,20 +82,32 @@ class ConfigManager:
         """重新加载配置文件"""
         self.config = self._load_config()
 
-    def save(self):
-        """保存配置文件"""
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.config_path, "w", encoding="utf-8") as f:
-            json.dump(self.config, f, indent=4, ensure_ascii=False)
-
 
 # 模块级懒加载实例（避免导入时触发文件 I/O）
-_config_manager_instance = None
+_config_manager_instance: ConfigManager | None = None
+# 懒加载构造锁 (并发首次调用仅构造一次, 避免双实例互相覆盖)
+_config_lock = threading.Lock()
 
 
 def get_config_manager() -> "ConfigManager":
-    """获取 ConfigManager 单例（首次调用时构造）"""
+    """获取 ConfigManager 懒加载共享实例（首次调用时构造）。
+
+    保留懒加载以兼容 logger.py 等深度依赖; 可通过 set_config_manager() 注入测试实例。
+    加锁 + double-check: 并发首次调用只构造一个实例。
+    """
     global _config_manager_instance
     if _config_manager_instance is None:
-        _config_manager_instance = ConfigManager()
+        with _config_lock:
+            if _config_manager_instance is None:
+                _config_manager_instance = ConfigManager()
     return _config_manager_instance
+
+
+def set_config_manager(instance: "ConfigManager") -> None:
+    """注入 ConfigManager 实例 (Cli 入口/测试用, 消除模块级单例不可测问题)。
+
+    注入后 get_config_manager() 返回此实例, 不再懒加载构造。
+    """
+    global _config_manager_instance
+    with _config_lock:
+        _config_manager_instance = instance

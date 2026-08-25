@@ -9,6 +9,7 @@ import json
 
 import pytest
 
+from main.core.inspector_constants import STOP_SESSION
 from main.core.stdio_protocol import StdioProtocol
 
 
@@ -20,7 +21,7 @@ class TestStdioProtocolRun:
         """run 入口发 ready notification,路由命令,写 response,EOF 退出"""
         stdin = io.StringIO(json.dumps({"kind": "request", "id": 1, "command": "get-screenshot", "params": {}}) + "\n")
         stdout = io.StringIO()
-        proto = StdioProtocol(stdin=stdin, stdout=stdout)
+        proto = StdioProtocol(exit_command=STOP_SESSION, stdin=stdin, stdout=stdout)
 
         @proto.command("get-screenshot")
         def _handler(**params):

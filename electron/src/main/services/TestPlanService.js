@@ -170,77 +170,126 @@ class TestPlanService extends JsonFileCrudService {
   }
 
   async updateRunReportPath(testPlanName, reportPath) {
-    try {
-      const plans = await this.getData();
-      const plan = plans.find(p => p.name === testPlanName);
-      if (!plan || !plan.runs || plan.runs.length === 0) {
-        return { success: false, error: '未找到测试计划或运行记录' };
+    // read-modify-write 包进 withLock, 防并发丢更新
+    return this.withLock(async () => {
+      try {
+        const plans = await this.getData();
+        const plan = plans.find(p => p.name === testPlanName);
+        if (!plan || !plan.runs || plan.runs.length === 0) {
+          return { success: false, error: '未找到测试计划或运行记录' };
+        }
+        plan.runs[plan.runs.length - 1].report_path = reportPath;
+        await this.saveData(plans);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
       }
-      plan.runs[plan.runs.length - 1].report_path = reportPath;
-      await this.saveData(plans);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
+    });
+  }
+
+  /**
+   * 单源化: 记录一次测试运行 (追加 run + 更新 last_run)。
+   * Python 端不再直写 test_plans.json, 改为通过 stdout 标记行通知 Electron 由本方法统一写。
+   * 不创建新 plan (用户必须先在 UI 创建 plan, 消除 Python 创建无 id plan 的死代码路径)。
+   * @param {string} testPlanName
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async recordRun(testPlanName) {
+    this._ensureInitialized();
+    // read-modify-write 包进 withLock, 防并发丢更新
+    return this.withLock(async () => {
+      try {
+        const plans = await this.getData();
+        const plan = plans.find(p => p.name === testPlanName);
+        if (!plan) {
+          this._logger.error(`recordRun: 测试计划 '${testPlanName}' 不存在, 跳过运行记录`);
+          return { success: false, error: '未找到测试计划' };
+        }
+        if (!Array.isArray(plan.runs)) plan.runs = [];
+        // 本地时间, 格式对齐 Python %Y-%m-%d %H:%M:%S
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} `
+          + `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        plan.runs.push({ report_path: null, timestamp });
+        // 截断至 100 条 (对称 Python Caps.max_runs_per_plan)
+        if (plan.runs.length > 100) plan.runs = plan.runs.slice(-100);
+        plan.last_run = timestamp;
+        await this.saveData(plans);
+        return { success: true };
+      } catch (error) {
+        this._logger.error('记录测试计划运行失败:', error);
+        return { success: false, error: error.message };
+      }
+    });
   }
 
   async saveTestPlan(planData) {
     this._ensureInitialized();
-    try {
-      let existingPlans = await this.getData();
-      const index = existingPlans.findIndex(p => p.name === planData.name);
-      if (index >= 0) {
-        planData.id = existingPlans[index].id || this._generateId();
-        existingPlans[index] = planData;
-      } else {
-        planData.id = planData.id || this._generateId();
-        existingPlans.push(planData);
+    // read-modify-write 包进 withLock, 防并发丢更新
+    return this.withLock(async () => {
+      try {
+        let existingPlans = await this.getData();
+        const index = existingPlans.findIndex(p => p.name === planData.name);
+        if (index >= 0) {
+          planData.id = existingPlans[index].id || this._generateId();
+          existingPlans[index] = planData;
+        } else {
+          planData.id = planData.id || this._generateId();
+          existingPlans.push(planData);
+        }
+        await this.saveData(existingPlans);
+        return { success: true };
+      } catch (error) {
+        this._logger.error('保存测试计划失败:', error);
+        return { success: false, error: error.message };
       }
-      await this.saveData(existingPlans);
-      return { success: true };
-    } catch (error) {
-      this._logger.error('保存测试计划失败:', error);
-      return { success: false, error: error.message };
-    }
+    });
   }
 
   async updateTestPlan(planData) {
     this._ensureInitialized();
-    try {
-      let existingPlans = await this.getData();
-      const index = existingPlans.findIndex(p => p.id === planData.id);
-      if (index >= 0) {
-        const originalPlan = existingPlans[index];
-        planData.created = originalPlan.created || planData.created;
-        planData.id = originalPlan.id;
-        existingPlans[index] = planData;
-        await this.saveData(existingPlans);
-        return { success: true };
-      } else {
-        return { success: false, error: '未找到测试计划' };
+    // read-modify-write 包进 withLock, 防并发丢更新
+    return this.withLock(async () => {
+      try {
+        let existingPlans = await this.getData();
+        const index = existingPlans.findIndex(p => p.id === planData.id);
+        if (index >= 0) {
+          const originalPlan = existingPlans[index];
+          planData.created = originalPlan.created || planData.created;
+          planData.id = originalPlan.id;
+          existingPlans[index] = planData;
+          await this.saveData(existingPlans);
+          return { success: true };
+        } else {
+          return { success: false, error: '未找到测试计划' };
+        }
+      } catch (error) {
+        this._logger.error('更新测试计划失败:', error);
+        return { success: false, error: error.message };
       }
-    } catch (error) {
-      this._logger.error('更新测试计划失败:', error);
-      return { success: false, error: error.message };
-    }
+    });
   }
 
   async deleteTestPlan(planId) {
     this._ensureInitialized();
-    try {
-      let existingPlans = await this.getData();
-      const index = existingPlans.findIndex(p => p.id === planId);
-      if (index >= 0) {
-        existingPlans.splice(index, 1);
-        await this.saveData(existingPlans);
-        return { success: true };
-      } else {
-        return { success: false, error: '未找到测试计划' };
+    // read-modify-write 包进 withLock, 防并发丢更新
+    return this.withLock(async () => {
+      try {
+        let existingPlans = await this.getData();
+        const index = existingPlans.findIndex(p => p.id === planId);
+        if (index >= 0) {
+          existingPlans.splice(index, 1);
+          await this.saveData(existingPlans);
+          return { success: true };
+        } else {
+          return { success: false, error: '未找到测试计划' };
+        }
+      } catch (error) {
+        this._logger.error('删除测试计划失败:', error);
+        return { success: false, error: error.message };
       }
-    } catch (error) {
-      this._logger.error('删除测试计划失败:', error);
-      return { success: false, error: error.message };
-    }
+    });
   }
 
   async getTestPlanRuns(testPlanName) {
@@ -282,39 +331,42 @@ class TestPlanService extends JsonFileCrudService {
    * @returns {Promise<{success: boolean, error?: string}>}
    */
   async deleteReportRun(testPlanName, identifier) {
-    try {
-      const plans = await this.getData();
-      const plan = plans.find(p => p.name === testPlanName);
-      if (!plan) {
-        return { success: false, error: '未找到指定测试计划' };
-      }
-      const runs = plan.runs || [];
-      // 优先用 report_path 匹配, 其次用 timestamp (报告已删除的记录 report_path 可能为 null)
-      const targetRun = runs.find(r => (r.report_path && r.report_path === identifier) || r.timestamp === identifier);
-      if (!targetRun) {
-        return { success: false, error: '未找到指定的运行记录' };
-      }
-
-      // 删除 Allure 报告目录 (文件系统, 若存在)
-      if (targetRun.report_path) {
-        try {
-          if (await this._fs.exists(targetRun.report_path)) {
-            await this._fs.rm(targetRun.report_path, { recursive: true, force: true });
-          }
-        } catch (e) {
-          this._logger.error(`删除报告目录失败: ${targetRun.report_path}: ${e.message}`);
+    // read-modify-write 包进 withLock, 防并发丢更新 (deleteReportRun 含 fs 副作用 + saveData)
+    return this.withLock(async () => {
+      try {
+        const plans = await this.getData();
+        const plan = plans.find(p => p.name === testPlanName);
+        if (!plan) {
+          return { success: false, error: '未找到指定测试计划' };
         }
-      }
+        const runs = plan.runs || [];
+        // 优先用 report_path 匹配, 其次用 timestamp (报告已删除的记录 report_path 可能为 null)
+        const targetRun = runs.find(r => (r.report_path && r.report_path === identifier) || r.timestamp === identifier);
+        if (!targetRun) {
+          return { success: false, error: '未找到指定的运行记录' };
+        }
 
-      // 从 runs 数组中移除该记录 (用 timestamp 唯一匹配, 避免 report_path=null 误删多条)
-      plan.runs = runs.filter(r => r.timestamp !== targetRun.timestamp);
-      await this.saveData(plans);
-      console.log(`[TestPlanService] 已删除测试计划 '${testPlanName}' 的运行记录: ${targetRun.timestamp}`);
-      return { success: true };
-    } catch (error) {
-      this._logger.error('删除测试计划运行记录失败:', error);
-      return { success: false, error: error.message };
-    }
+        // 删除 Allure 报告目录 (文件系统, 若存在)
+        if (targetRun.report_path) {
+          try {
+            if (await this._fs.exists(targetRun.report_path)) {
+              await this._fs.rm(targetRun.report_path, { recursive: true, force: true });
+            }
+          } catch (e) {
+            this._logger.error(`删除报告目录失败: ${targetRun.report_path}: ${e.message}`);
+          }
+        }
+
+        // 从 runs 数组中移除该记录 (用 timestamp 唯一匹配, 避免 report_path=null 误删多条)
+        plan.runs = runs.filter(r => r.timestamp !== targetRun.timestamp);
+        await this.saveData(plans);
+        console.log(`[TestPlanService] 已删除测试计划 '${testPlanName}' 的运行记录: ${targetRun.timestamp}`);
+        return { success: true };
+      } catch (error) {
+        this._logger.error('删除测试计划运行记录失败:', error);
+        return { success: false, error: error.message };
+      }
+    });
   }
 
   async scanTestFiles(directoryPath) {

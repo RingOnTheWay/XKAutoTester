@@ -261,6 +261,8 @@ export class SettingsModel extends EventEmitter {
           fileName: data.fileName,
           fileSize: data.fileSize,
           htmlUrl: data.htmlUrl,
+          sha256: data.sha256,        // R10: 透出 hash 供 UI 显示
+          secure: data.secure !== false && !!data.sha256,  // R10: 无 hash 标记不可安装
         }, 'update-available');
       } else {
         this.emit('update-not-available', data);

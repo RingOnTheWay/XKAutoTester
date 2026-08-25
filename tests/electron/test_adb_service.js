@@ -1,6 +1,7 @@
 // ADBService facade 集成测试
 // 验证: 1) getConnectedDevices 解析 2) executeAdbCommand 命令路由 (connect/tcpip/devices)
-//      3) uploadFile/downloadFile/installApk 委托 collaborator 4) pathHelper 委托
+//      3) M4: fileTransfer/apkInstaller/remoteStat 属性暴露 + collaborator 直调 4) pathHelper 委托
+// M4: 删 3 pass-through wrapper (uploadFile/downloadFile/installApk), 调用方持属性
 // 策略: 构造注入 mock collaborator + spawn mock
 const test = require('node:test');
 const assert = require('node:assert');
@@ -322,7 +323,7 @@ test('executeAdbCommand tcpip 命令成功触发端口切换', async () => {
 
 // ── collaborator 委托测试 ──────────────────────────────────
 
-test('uploadFile 委托 fileTransferService.upload', async () => {
+test('M4: fileTransfer 属性暴露 collaborator + 直调 upload', async () => {
   let calledArgs = null;
   const fileTransferMock = {
     upload: async (...args) => {
@@ -335,10 +336,13 @@ test('uploadFile 委托 fileTransferService.upload', async () => {
     const ADBService = loadAdbService();
     const svc = new ADBService(PROJECT_ROOT, i18nMock, { fileTransferService: fileTransferMock });
 
-    const result = await svc.uploadFile('/local/f', '/sdcard/f', 'dev1', { send: () => {} });
+    // M4: 调用方直接持 .fileTransfer (无 uploadFile wrapper)
+    assert.strictEqual(typeof svc.uploadFile, 'undefined', 'M4: uploadFile wrapper 应已删除');
+    assert.strictEqual(svc.fileTransfer, fileTransferMock, 'M4: fileTransfer 属性应暴露注入的 collaborator');
+
+    const result = await svc.fileTransfer.upload('/local/f', '/sdcard/f', 'dev1', { send: () => {} });
 
     assert.strictEqual(result.success, true);
-    // deepStrictEqual 比函数引用必不等,改拆分断言
     assert.strictEqual(calledArgs.length, 4);
     assert.strictEqual(calledArgs[0], '/local/f');
     assert.strictEqual(calledArgs[1], '/sdcard/f');
@@ -349,7 +353,7 @@ test('uploadFile 委托 fileTransferService.upload', async () => {
   }
 });
 
-test('downloadFile 委托 fileTransferService.download', async () => {
+test('M4: fileTransfer 属性直调 download', async () => {
   let calledArgs = null;
   const fileTransferMock = {
     download: async (...args) => {
@@ -362,7 +366,10 @@ test('downloadFile 委托 fileTransferService.download', async () => {
     const ADBService = loadAdbService();
     const svc = new ADBService(PROJECT_ROOT, i18nMock, { fileTransferService: fileTransferMock });
 
-    const result = await svc.downloadFile('/sdcard/f', '/local/f', null, null);
+    // M4: 调用方直接持 .fileTransfer (无 downloadFile wrapper)
+    assert.strictEqual(typeof svc.downloadFile, 'undefined', 'M4: downloadFile wrapper 应已删除');
+
+    const result = await svc.fileTransfer.download('/sdcard/f', '/local/f', null, null);
 
     assert.strictEqual(result.success, true);
     assert.deepStrictEqual(calledArgs, ['/sdcard/f', '/local/f', null, null]);
@@ -371,7 +378,7 @@ test('downloadFile 委托 fileTransferService.download', async () => {
   }
 });
 
-test('installApk 委托 apkInstaller.install', async () => {
+test('M4: apkInstaller 属性暴露 collaborator + 直调 install', async () => {
   let calledArgs = null;
   const apkInstallerMock = {
     install: async (...args) => {
@@ -384,10 +391,47 @@ test('installApk 委托 apkInstaller.install', async () => {
     const ADBService = loadAdbService();
     const svc = new ADBService(PROJECT_ROOT, i18nMock, { apkInstaller: apkInstallerMock });
 
-    const result = await svc.installApk('/local/app.apk', 'dev1', null);
+    // M4: 调用方直接持 .apkInstaller (无 installApk wrapper)
+    assert.strictEqual(typeof svc.installApk, 'undefined', 'M4: installApk wrapper 应已删除');
+    assert.strictEqual(svc.apkInstaller, apkInstallerMock, 'M4: apkInstaller 属性应暴露注入的 collaborator');
+
+    const result = await svc.apkInstaller.install('/local/app.apk', 'dev1', null);
 
     assert.strictEqual(result.success, true);
     assert.deepStrictEqual(calledArgs, ['/local/app.apk', 'dev1', null]);
+  } finally {
+    restoreElectron();
+  }
+});
+
+test('M4: remoteStat 属性暴露 collaborator', async () => {
+  const remoteStatMock = { stat: async () => ({ success: true }) };
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { remoteStatService: remoteStatMock });
+
+    // M4: remoteStat 属性应暴露注入的 collaborator
+    assert.strictEqual(svc.remoteStat, remoteStatMock);
+  } finally {
+    restoreElectron();
+  }
+});
+
+test('M4: tarExtractor factory-or-default 注入', async () => {
+  const fakeTarExtractor = { extract: async () => [] };
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+
+    // 默认构造 → 内部 new TarExtractor()
+    const svc1 = new ADBService(PROJECT_ROOT, i18nMock);
+    assert.ok(svc1.tarExtractor, '默认构造应有 tarExtractor');
+    assert.strictEqual(typeof svc1.tarExtractor.extract, 'function');
+
+    // 注入 fake → 用 fake
+    const svc2 = new ADBService(PROJECT_ROOT, i18nMock, { tarExtractor: fakeTarExtractor });
+    assert.strictEqual(svc2.tarExtractor, fakeTarExtractor, '注入的 tarExtractor 应被使用');
   } finally {
     restoreElectron();
   }

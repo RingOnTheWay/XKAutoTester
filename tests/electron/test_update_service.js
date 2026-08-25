@@ -9,17 +9,25 @@ const path = require('path');
 const UPDATE_SERVICE_PATH = path.join(
   __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'UpdateService.js'
 );
-const { UpdateService, normalizeUpdateError } = require(UPDATE_SERVICE_PATH);
+const { UpdateService, normalizeUpdateError, parseSha256FromBody, computeFileSha256 } = require(UPDATE_SERVICE_PATH);
+const VERSION_COMPARE_PATH = path.join(
+  __dirname, '..', '..', 'electron', 'src', 'main', 'utils', 'versionCompare.js'
+);
+const { compareVersions } = require(VERSION_COMPARE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
 
-function makeFakeVersionService(version = '1.0.0') {
-  const calls = { getVersion: 0 };
+function makeFakeVersionService(version = '1.0.0', fullVersion = null) {
+  const calls = { getVersion: 0, getFullVersion: 0 };
   return {
     calls,
     getVersion() {
       calls.getVersion++;
       return version;
+    },
+    getFullVersion() {
+      calls.getFullVersion++;
+      return fullVersion !== null ? fullVersion : version;
     }
   };
 }
@@ -99,7 +107,7 @@ function makeFakeInstallStrategy(result = null, error = null) {
 }
 
 function makeFakeApp(opts = {}) {
-  const versionService = makeFakeVersionService(opts.version || '1.0.0');
+  const versionService = makeFakeVersionService(opts.version || '1.0.0', opts.fullVersion);
   const userDataService = makeFakeUserDataService(opts.configPath || '/fake/config');
   const fileSystem = makeFakeFileSystem(opts.fileSystem || {});
   const updateSource = makeFakeUpdateSource(opts.release || null, opts.updateSourceError || null);
@@ -121,6 +129,14 @@ function makeFakeApp(opts = {}) {
     fileSystemFactory: () => fileSystem,
     versionComparator,
   });
+
+  // R10: 测试可注入 expectedSha256 + matching hashCalculator, 跳过 checkForUpdate 直接验证 download/install
+  if (opts.expectedSha256) {
+    svc._expectedSha256 = opts.expectedSha256;
+    svc._hashCalculator = {
+      compute: async () => opts.expectedSha256,
+    };
+  }
 
   return {
     svc,
@@ -167,6 +183,7 @@ test('constructor 收 5 factory + 5 实例建 + _initialized=false', () => {
 test('懒初始化: constructor 不触发 fs, 首次 downloadUpdate 触发 ensureDir + cleanupOldUpdates', async () => {
   // defaultExists=true 让 cleanupOldUpdates 的 exists(updateDir) 返 true, 触发 readdir
   const { svc, fileSystem } = makeFakeApp({
+    expectedSha256: 'a'.repeat(64),  // R10: 注入 hash 避免 missing_hash 拒绝
     fileSystem: {
       defaultExists: true,
       readdirResult: ['old-installer.exe', 'readme.txt'],
@@ -190,6 +207,7 @@ test('懒初始化: constructor 不触发 fs, 首次 downloadUpdate 触发 ensur
 
 test('懒初始化幂等: 重复 downloadUpdate 仅初始化一次', async () => {
   const { svc, fileSystem } = makeFakeApp({
+    expectedSha256: 'a'.repeat(64),  // R10: 注入 hash 避免 missing_hash 拒绝
     fileSystem: { defaultExists: false, readdirResult: [] }
   });
 
@@ -258,9 +276,55 @@ test('checkForUpdate 错误分类透传 (updateSource 抛 classified error)', as
   );
 });
 
+test('checkForUpdate 同版本不误报: 本地 fullVersion 与 tag 相同 → hasUpdate=false', async () => {
+  const release = makeRelease({ tag_name: 'v1.0.5-dev.2' });
+  const { svc } = makeFakeApp({
+    version: '1.0.5',           // version.json 的 version 字段 (不含 prerelease)
+    fullVersion: '1.0.5-dev.2', // fullVersion 含 prerelease
+    release,
+    versionComparator: compareVersions,
+  });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.hasUpdate, false, '同版本 (fullVersion==tag) → hasUpdate=false');
+  assert.strictEqual(result.currentVersion, '1.0.5-dev.2');
+  assert.strictEqual(result.latestVersion, '1.0.5-dev.2');
+});
+
+test('checkForUpdate versionComparator 收到 fullVersion 而非 version', async () => {
+  const release = makeRelease({ tag_name: 'v1.0.5-dev.2' });
+  const { svc, versionComparatorCalls } = makeFakeApp({
+    version: '1.0.5',
+    fullVersion: '1.0.5-dev.2',
+    release,
+  });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.hasUpdate, false);
+  assert.deepEqual(versionComparatorCalls.compare[0], { v1: '1.0.5-dev.2', v2: '1.0.5-dev.2' },
+    'versionComparator 应收到 fullVersion 而非 version');
+});
+
+test('checkForUpdate 更高 pre-release 版本仍检测到更新', async () => {
+  const release = makeRelease({ tag_name: 'v1.0.6-dev.1' });
+  const { svc } = makeFakeApp({
+    version: '1.0.5',
+    fullVersion: '1.0.5-dev.2',
+    release,
+    versionComparator: compareVersions,
+  });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.hasUpdate, true, '1.0.5-dev.2 < 1.0.6-dev.1 → hasUpdate=true');
+});
+
 test('downloadUpdate 已存在文件返快路径 {success, filePath, message}', async () => {
   const { svc, fileSystem, downloadStrategy } = makeFakeApp({
     configPath: '/fake/config',
+    expectedSha256: 'a'.repeat(64),  // R10: 注入 hash 避免 missing_hash 拒绝
     fileSystem: {
       defaultExists: true,  // updateDir 和 filePath 都返 true
       readdirResult: [],
@@ -282,6 +346,7 @@ test('downloadUpdate 已存在文件返快路径 {success, filePath, message}', 
 test('downloadUpdate 不存在调 downloadStrategy.download', async () => {
   const { svc, downloadStrategy } = makeFakeApp({
     configPath: '/fake/config',
+    expectedSha256: 'a'.repeat(64),  // R10: 注入 hash 避免 missing_hash 拒绝
     fileSystem: {
       defaultExists: false,  // 文件不存在
       readdirResult: [],
@@ -308,6 +373,7 @@ test('downloadUpdate 不存在调 downloadStrategy.download', async () => {
 test('installUpdate 调 installStrategy.install (fileSystem.exists=true)', async () => {
   const filePath = '/fake/config/updates/setup.exe';
   const { svc, installStrategy, fileSystem } = makeFakeApp({
+    expectedSha256: 'a'.repeat(64),  // R10: 注入 hash 避免 missing_hash 拒绝
     fileSystem: {
       existsResults: { [filePath]: true },
       readdirResult: [],
@@ -532,48 +598,444 @@ test('setAllowInsecureSSL 同步重建 downloadStrategy factory', () => {
   assert.strictEqual(downloadCalls[1], svc._httpsAgent, 'download factory 收新 agent');
 });
 
-// ── defaultUpdateServiceFactory 启动期读 config.json ──
+// ── defaultUpdateServiceFactory 纯构造 (M4: 副作用外移至 updateServiceInitializer) ──
 
 const os = require('os');
 const fsReal = require('fs');
 const { defaultUpdateServiceFactory } = require('../../electron/src/main/services/application/factories');
 
-test('defaultUpdateServiceFactory 读 config.json allowInsecureSSL=true 传入构造', () => {
-  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-factory-'));
+test('defaultUpdateServiceFactory 纯构造: 不读 config, allowInsecureSSL=false (M4)', () => {
+  const userDataService = { getUserConfigPath: () => '/nonexistent/path' };
+  const svc = defaultUpdateServiceFactory({ __tag: 'version' }, userDataService);
+  assert.strictEqual(svc._allowInsecureSSL, false, '纯构造默认 false');
+  assert.strictEqual(svc._httpsAgent, undefined, '无 agent');
+});
+
+// ── UpdateService.initialize(config) 二段构造 (M4) ──
+
+test('initialize(config) allowInsecureSSL=true: 调 setAllowInsecureSSL 重建 agent', () => {
+  const spy = makeSpyUpdateSourceFactory();
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService(), {
+    updateSourceFactory: spy,
+  });
+  assert.strictEqual(svc._allowInsecureSSL, false, '初始 false');
+
+  svc.initialize({ APP_SETTINGS: { allowInsecureSSL: true } });
+
+  assert.strictEqual(svc._allowInsecureSSL, true, 'config apply 后 true');
+  assert.ok(svc._httpsAgent instanceof https.Agent, '构建 agent');
+  assert.strictEqual(spy.calls.length, 2, 'factory 重新调');
+});
+
+test('initialize(config) allowInsecureSSL 缺失: 保持 false, 不重建 agent', () => {
+  const spy = makeSpyUpdateSourceFactory();
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService(), {
+    updateSourceFactory: spy,
+  });
+
+  svc.initialize({ APP_SETTINGS: { autoCheckUpdate: true } });
+
+  assert.strictEqual(svc._allowInsecureSSL, false, '无 key 保持 false');
+  assert.strictEqual(svc._httpsAgent, undefined, '无 agent');
+  assert.strictEqual(spy.calls.length, 1, 'factory 不重新调 (同值幂等)');
+});
+
+test('initialize(config) null config: 保持 false, 不抛', () => {
+  const svc = new UpdateService(makeFakeVersionService(), makeFakeUserDataService());
+  svc.initialize(null);
+  assert.strictEqual(svc._allowInsecureSSL, false, 'null config 保持 false');
+});
+
+// ── defaultUpdateServiceInitializer 读 config.json (M4: 副作用外移) ──
+
+const { defaultUpdateServiceInitializer } = require('../../electron/src/main/services/application/effects');
+
+test('defaultUpdateServiceInitializer 读 config.json allowInsecureSSL=true → 调 initialize', async () => {
+  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-init-'));
   try {
     fsReal.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
       APP_SETTINGS: { allowInsecureSSL: true }
     }));
-    const userDataService = { getUserConfigPath: () => tmpDir };
-    const svc = defaultUpdateServiceFactory({ __tag: 'version' }, userDataService);
-    assert.strictEqual(svc._allowInsecureSSL, true, '从 config 读 true');
+    const spy = makeSpyUpdateSourceFactory();
+    const svc = new UpdateService(makeFakeVersionService(), { getUserConfigPath: () => tmpDir }, {
+      updateSourceFactory: spy,
+    });
+    assert.strictEqual(svc._allowInsecureSSL, false, 'initializer 前默认 false');
+
+    await defaultUpdateServiceInitializer(svc, tmpDir);
+
+    assert.strictEqual(svc._allowInsecureSSL, true, 'initializer 后 true');
     assert.ok(svc._httpsAgent instanceof https.Agent, '构建 agent');
   } finally {
     fsReal.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 
-test('defaultUpdateServiceFactory 无 config.json 时默认 false', () => {
-  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-factory-'));
+test('defaultUpdateServiceInitializer 无 config.json → 不调 initialize (保持默认)', async () => {
+  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-init-'));
   try {
-    const userDataService = { getUserConfigPath: () => tmpDir };
-    const svc = defaultUpdateServiceFactory({ __tag: 'version' }, userDataService);
-    assert.strictEqual(svc._allowInsecureSSL, false, '无 config 默认 false');
-    assert.strictEqual(svc._httpsAgent, undefined, '无 agent');
+    const spy = makeSpyUpdateSourceFactory();
+    const svc = new UpdateService(makeFakeVersionService(), { getUserConfigPath: () => tmpDir }, {
+      updateSourceFactory: spy,
+    });
+
+    await defaultUpdateServiceInitializer(svc, tmpDir);
+
+    assert.strictEqual(svc._allowInsecureSSL, false, '无 config 保持 false');
+    assert.strictEqual(spy.calls.length, 1, 'factory 不重新调');
   } finally {
     fsReal.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 
-test('defaultUpdateServiceFactory config 无 allowInsecureSSL key 时默认 false', () => {
-  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-factory-'));
+test('defaultUpdateServiceInitializer config 无 allowInsecureSSL key → 保持 false', async () => {
+  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-init-'));
   try {
     fsReal.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
       APP_SETTINGS: { autoCheckUpdate: true }
     }));
-    const userDataService = { getUserConfigPath: () => tmpDir };
-    const svc = defaultUpdateServiceFactory({ __tag: 'version' }, userDataService);
-    assert.strictEqual(svc._allowInsecureSSL, false, '无 key 默认 false');
+    const svc = new UpdateService(makeFakeVersionService(), { getUserConfigPath: () => tmpDir });
+
+    await defaultUpdateServiceInitializer(svc, tmpDir);
+
+    assert.strictEqual(svc._allowInsecureSSL, false, '无 key 保持 false');
+  } finally {
+    fsReal.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// ── P1 SHA256 校验 ───────────────────────────────────────
+
+// fake hashCalculator: 返回可配置的 hash
+function makeFakeHashCalculator(hashToReturn) {
+  const calls = [];
+  return {
+    calls,
+    compute: async (filePath) => {
+      calls.push(filePath);
+      return hashToReturn;
+    },
+  };
+}
+
+// 构造带 SHA256 校验的 service (checkForUpdate 已调, _expectedSha256 已设)
+function makeAppWithSha256(opts = {}) {
+  const expectedHash = opts.expectedHash || 'a'.repeat(64);
+  const actualHash = opts.actualHash !== undefined ? opts.actualHash : expectedHash;
+  const hashCalculator = makeFakeHashCalculator(actualHash);
+  const release = makeRelease({
+    body: opts.body !== undefined ? opts.body : `Release notes\nSHA256: ${expectedHash}\nMore notes`,
+  });
+  const app = makeFakeApp({
+    release,
+    fileSystem: { defaultExists: false, readdirResult: [], existsResults: opts.existsResults || {} },
+  });
+  // 注入 hashCalculator (makeFakeApp 不支持, 手动替换)
+  app.svc._hashCalculator = hashCalculator;
+  return { ...app, expectedHash, hashCalculator };
+}
+
+test('parseSha256FromBody 解析 SHA256 行 (64位 hex)', () => {
+  const hash = 'a3f5b8c1d2e4f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1';
+  const body = `# Release v2.0.0\n\nSHA256: ${hash}\n\n- feature A\n- feature B`;
+  assert.strictEqual(parseSha256FromBody(body), hash);
+});
+
+test('parseSha256FromBody 大写 hex 转小写', () => {
+  const hashUpper = 'A3F5B8C1D2E4F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2E3F4A5B6C7D8E9F0A1';
+  const hashLower = hashUpper.toLowerCase();
+  assert.strictEqual(parseSha256FromBody(`SHA256: ${hashUpper}`), hashLower);
+});
+
+test('parseSha256FromBody 无 SHA256 行返 null', () => {
+  assert.strictEqual(parseSha256FromBody('Release notes without hash'), null);
+  assert.strictEqual(parseSha256FromBody(''), null);
+  assert.strictEqual(parseSha256FromBody(null), null);
+  assert.strictEqual(parseSha256FromBody(undefined), null);
+});
+
+test('parseSha256FromBody 短 hash 不匹配 (需 64 位)', () => {
+  assert.strictEqual(parseSha256FromBody('SHA256: abc123'), null);
+});
+
+test('parseSha256FromBody 容忍前后空格 + 多种分隔', () => {
+  const hash = 'b'.repeat(64);
+  assert.strictEqual(parseSha256FromBody(`SHA256:  ${hash}`), hash);
+  assert.strictEqual(parseSha256FromBody(`SHA256:${hash}`), hash);
+  assert.strictEqual(parseSha256FromBody(`  SHA256:   ${hash}  `), hash);
+});
+
+// ── P1 扩展: parseSha256FromBody 按 fileName 匹配 asset 专属 hash ──
+
+test('parseSha256FromBody 按 fileName 匹配 asset 专属 hash (完整包)', () => {
+  const fullHash = 'a'.repeat(64);
+  const liteHash = 'b'.repeat(64);
+  const fullFileName = 'XKAutoTester Setup v2.0.0.exe';
+  const liteFileName = 'XKAutoTester Setup v2.0.0 Lite.exe';
+  const body = `## v2.0.0\n\n**${fullFileName}**\nSHA256: ${fullHash}\n\n**${liteFileName}**\nSHA256: ${liteHash}\n`;
+
+  assert.strictEqual(parseSha256FromBody(body, fullFileName), fullHash, '完整包 fileName 匹配完整包 hash');
+  assert.strictEqual(parseSha256FromBody(body, liteFileName), liteHash, 'Lite 包 fileName 匹配 Lite 包 hash');
+});
+
+test('parseSha256FromBody 按 fileName 匹配 Lite 包 hash (Lite 包)', () => {
+  const fullHash = 'c'.repeat(64);
+  const liteHash = 'd'.repeat(64);
+  const fullFileName = 'XKAutoTester Setup v2.0.0.exe';
+  const liteFileName = 'XKAutoTester Setup v2.0.0 Lite.exe';
+  // Lite 在前, 完整在后, 验证按名匹配不取首个
+  const body = `**${liteFileName}**\nSHA256: ${liteHash}\n\n**${fullFileName}**\nSHA256: ${fullHash}\n`;
+
+  assert.strictEqual(parseSha256FromBody(body, liteFileName), liteHash, 'Lite 在前仍按名匹配');
+  assert.strictEqual(parseSha256FromBody(body, fullFileName), fullHash, '完整在后仍按名匹配');
+});
+
+test('parseSha256FromBody fileName 不匹配回退首个 SHA256', () => {
+  const hash = 'e'.repeat(64);
+  const body = `Release notes\nSHA256: ${hash}\n`;
+  // fileName 在 body 中无对应 **fileName** 块
+  assert.strictEqual(parseSha256FromBody(body, 'nonexistent.exe'), hash, 'fileName 不匹配回退首个');
+});
+
+test('parseSha256FromBody fileName 含正则特殊字符 (.exe 的 .) 正确转义', () => {
+  const hash = 'f'.repeat(64);
+  // fileName 含 . 和空格, 需正确转义否则正则匹配失败
+  const fileName = 'XKAutoTester Setup v2.0.0.exe';
+  const body = `**${fileName}**\nSHA256: ${hash}\n`;
+  assert.strictEqual(parseSha256FromBody(body, fileName), hash, '. 正确转义, 按名匹配');
+});
+
+test('parseSha256FromBody fileName 匹配但块内无 SHA256 回退首个', () => {
+  const hash = '1'.repeat(64);
+  const fileName = 'XKAutoTester Setup v2.0.0.exe';
+  // fileName 块存在但块内无 SHA256 行, 应回退到 body 首个 SHA256
+  const body = `**${fileName}**\nno hash here\n\nOther section\nSHA256: ${hash}\n`;
+  assert.strictEqual(parseSha256FromBody(body, fileName), hash, '块内无 hash 回退首个');
+});
+
+test('parseSha256FromBody 无 fileName 回退首个 (向后兼容)', () => {
+  const hash = '2'.repeat(64);
+  const body = `SHA256: ${hash}\n`;
+  assert.strictEqual(parseSha256FromBody(body), hash, '不传 fileName 取首个');
+  assert.strictEqual(parseSha256FromBody(body, undefined), hash, 'fileName=undefined 取首个');
+  assert.strictEqual(parseSha256FromBody(body, ''), hash, 'fileName=空串取首个');
+});
+
+test('checkForUpdate 解析 Release body 存 _expectedSha256 + 透出 sha256 字段', async () => {
+  const expectedHash = 'c'.repeat(64);
+  const release = makeRelease({ body: `Release notes\nSHA256: ${expectedHash}` });
+  const { svc } = makeFakeApp({ release });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.sha256, expectedHash, '结果含 sha256 字段');
+  assert.strictEqual(svc._expectedSha256, expectedHash, '_expectedSha256 已存');
+});
+
+test('checkForUpdate Release body 无 hash → sha256=null + _expectedSha256=null (R10: download/install 将拒绝)', async () => {
+  const release = makeRelease({ body: 'Release notes without hash' });
+  const { svc } = makeFakeApp({ release });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.sha256, null);
+  assert.strictEqual(svc._expectedSha256, null);
+  assert.strictEqual(result.secure, false, 'R10: 无 hash → secure=false');
+});
+
+test('downloadUpdate 下载后 SHA256 匹配 → 成功', async () => {
+  const { svc, hashCalculator } = makeAppWithSha256({ expectedHash: 'd'.repeat(64) });
+  await svc.checkForUpdate();  // 设置 _expectedSha256
+
+  const result = await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+
+  assert.strictEqual(result.success, true);
+  assert.strictEqual(hashCalculator.calls.length, 1, '下载后调 1 次 hash 计算');
+});
+
+test('downloadUpdate 下载后 SHA256 不匹配 → 删除文件 + 抛错', async () => {
+  const { svc, fileSystem } = makeAppWithSha256({
+    expectedHash: 'e'.repeat(64),
+    actualHash: 'f'.repeat(64),  // 不匹配
+  });
+  await svc.checkForUpdate();
+
+  await assert.rejects(
+    svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null),
+    /SHA256 校验失败/
+  );
+  // 文件应被删除
+  assert.ok(fileSystem.calls.unlink.length >= 1, '校验失败应删除文件');
+});
+
+test('downloadUpdate 快路径文件已存在 + SHA256 匹配 → 直接返回', async () => {
+  const filePath = path.join('/fake/config', 'updates', 'setup.exe');
+  const { svc, hashCalculator } = makeAppWithSha256({
+    expectedHash: '1'.repeat(64),
+    existsResults: { [filePath]: true },
+  });
+  await svc.checkForUpdate();
+
+  const result = await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+
+  assert.strictEqual(result.success, true);
+  assert.strictEqual(result.message, 'File already downloaded');
+  assert.strictEqual(hashCalculator.calls.length, 1, '快路径也调 hash 计算');
+});
+
+test('downloadUpdate 快路径文件已存在 + SHA256 不匹配 → 删除 + 重新下载', async () => {
+  const filePath = path.join('/fake/config', 'updates', 'setup.exe');
+  let currentHash = 'wrong-hash';
+  const { svc, fileSystem, downloadStrategy } = makeAppWithSha256({
+    expectedHash: '2'.repeat(64),
+    existsResults: { [filePath]: true },
+  });
+  // 第一次 compute 返错 hash (快路径校验), 第二次返正确 hash (下载后校验)
+  svc._hashCalculator = {
+    compute: async () => {
+      const r = currentHash;
+      currentHash = '2'.repeat(64);  // 后续调用返正确 hash
+      return r;
+    },
+  };
+  await svc.checkForUpdate();
+
+  const result = await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+
+  assert.strictEqual(result.success, true, '重下载后应成功');
+  assert.ok(fileSystem.calls.unlink.length >= 1, '缓存文件应被删除');
+  assert.strictEqual(downloadStrategy.calls.download.length, 1, '应触发重新下载');
+});
+
+test('installUpdate 安装前 SHA256 匹配 → 调 installStrategy', async () => {
+  const filePath = '/fake/config/updates/setup.exe';
+  const { svc, installStrategy } = makeAppWithSha256({
+    expectedHash: '3'.repeat(64),
+    existsResults: { [filePath]: true },
+  });
+  await svc.checkForUpdate();
+
+  await svc.installUpdate(filePath);
+
+  assert.strictEqual(installStrategy.calls.install.length, 1, '应调 install');
+});
+
+test('installUpdate 安装前 SHA256 不匹配 → 抛错 + 不调 installStrategy', async () => {
+  const filePath = '/fake/config/updates/setup.exe';
+  const { svc, installStrategy } = makeAppWithSha256({
+    expectedHash: '4'.repeat(64),
+    actualHash: '5'.repeat(64),
+    existsResults: { [filePath]: true },
+  });
+  await svc.checkForUpdate();
+
+  await assert.rejects(
+    svc.installUpdate(filePath),
+    /SHA256 校验失败/
+  );
+  assert.strictEqual(installStrategy.calls.install.length, 0, '不应调 install');
+});
+
+// R10: 严格拒绝无 hash 版本 (安全闭环) ─────────────────────────
+
+test('R10 downloadUpdate 无 _expectedSha256 (checkForUpdate 未调) → 拒绝下载 + missing_hash code', async () => {
+  const { svc, downloadStrategy } = makeFakeApp({
+    fileSystem: { defaultExists: false, readdirResult: [] },
+  });
+
+  await assert.rejects(
+    svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null),
+    (err) => {
+      assert.match(err.message, /缺少 SHA256 hash/, '错误消息含"缺少 SHA256 hash"');
+      assert.strictEqual(err.code, 'missing_hash', 'errorCode=missing_hash');
+      return true;
+    }
+  );
+  assert.strictEqual(downloadStrategy.calls.download.length, 0, '不应触发下载');
+});
+
+test('R10 downloadUpdate checkForUpdate 调了但 Release 无 hash → 拒绝下载 + missing_hash code', async () => {
+  const release = makeRelease({ body: 'Release notes without hash' });
+  const { svc, downloadStrategy } = makeFakeApp({
+    release,
+    fileSystem: { defaultExists: false, readdirResult: [] },
+  });
+  await svc.checkForUpdate();  // _expectedSha256=null (body 无 hash)
+
+  await assert.rejects(
+    svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null),
+    (err) => {
+      assert.strictEqual(err.code, 'missing_hash');
+      return true;
+    }
+  );
+  assert.strictEqual(downloadStrategy.calls.download.length, 0, '不应触发下载');
+});
+
+test('R10 installUpdate 无 _expectedSha256 → 拒绝安装 + missing_hash code', async () => {
+  const filePath = '/fake/config/updates/setup.exe';
+  const { svc, installStrategy } = makeFakeApp({
+    fileSystem: {
+      existsResults: { [filePath]: true },
+      readdirResult: [],
+    }
+  });
+  // 不调 checkForUpdate, _expectedSha256=null
+
+  await assert.rejects(
+    svc.installUpdate(filePath),
+    (err) => {
+      assert.match(err.message, /缺少 SHA256 hash/);
+      assert.strictEqual(err.code, 'missing_hash');
+      return true;
+    }
+  );
+  assert.strictEqual(installStrategy.calls.install.length, 0, '不应调 install');
+});
+
+test('R10 checkForUpdate Release 有 hash → result.secure=true', async () => {
+  const expectedHash = 'a'.repeat(64);
+  const release = makeRelease({ body: `Release notes\nSHA256: ${expectedHash}` });
+  const { svc } = makeFakeApp({ release });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.secure, true, '有 hash → secure=true');
+  assert.strictEqual(result.sha256, expectedHash);
+});
+
+test('R10 checkForUpdate Release 无 hash → result.secure=false (UI 可警告)', async () => {
+  const release = makeRelease({ body: 'Release notes without hash' });
+  const { svc } = makeFakeApp({ release });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.secure, false, '无 hash → secure=false');
+  assert.strictEqual(result.sha256, null);
+});
+
+test('R10 checkForUpdate 无 release → result.secure=false (无更新场景)', async () => {
+  const { svc } = makeFakeApp({ release: null });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.secure, false, '无 release 时 secure=false (无更新不安装)');
+});
+
+test('computeFileSha256 真实文件计算 (集成)', async () => {
+  const os = require('os');
+  const fsReal = require('fs');
+  const tmpDir = fsReal.mkdtempSync(path.join(os.tmpdir(), 'xkat-sha-'));
+  try {
+    const filePath = path.join(tmpDir, 'test.bin');
+    const content = 'hello world';
+    fsReal.writeFileSync(filePath, content);
+    const hash = await computeFileSha256(filePath);
+    // 已知 'hello world' 的 SHA256
+    const crypto = require('crypto');
+    const expected = crypto.createHash('sha256').update(content).digest('hex');
+    assert.strictEqual(hash, expected);
+    assert.strictEqual(hash.length, 64);
   } finally {
     fsReal.rmSync(tmpDir, { recursive: true, force: true });
   }

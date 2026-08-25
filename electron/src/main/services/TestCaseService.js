@@ -19,6 +19,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const asyncFs = require('../utils/asyncFs');
 const TestCaseCodeGenerator = require('./TestCaseCodeGenerator');
 
 // ── module-level 纯函数 (对称 UpdateService compareVersions/normalizeUpdateError) ──
@@ -39,6 +40,8 @@ const defaultFileSystemFactory = () => ({
   readdir: (dir) => fs.readdir(dir),
   readFile: (p) => fs.readFile(p, 'utf8'),
   writeFile: (p, content) => fs.writeFile(p, content, 'utf8'),
+  // 原子写 (temp+rename): 防并发写产生半截 JSON 文件
+  writeJson: (p, data) => asyncFs.writeJson(p, data),
   access: (p) => fs.access(p),
   unlink: (p) => fs.unlink(p),
 });
@@ -69,6 +72,18 @@ class TestCaseService {
     this._fileNameSanitizer = opts.fileNameSanitizer || defaultFileNameSanitizer;
     this._fileSystem = this._fileSystemFactory();
     this._codeGenerator = this._codeGeneratorFactory(userConfigPath, projectRoot);
+  }
+
+  /**
+   * 切换 userConfigPath 后更新 testCasesDir + 重建 codeGenerator
+   * (TestCaseService 未继承 JsonFileCrudService, 自管理 filePath, 故不调 super)
+   */
+  updateConfigPath(userConfigPath) {
+    this.userConfigPath = userConfigPath;
+    this.testCasesDir = path.join(userConfigPath, 'test_cases');
+    this._codeGenerator = this._codeGeneratorFactory(userConfigPath, this.projectRoot);
+    // 懒初始化标志重置, 下次操作会重新 ensureDir
+    this._initialized = false;
   }
 
   // 懒初始化 (消除构造期 I/O, 对称 UpdateService._ensureInitialized)
@@ -105,7 +120,9 @@ class TestCaseService {
 
   async _writeJsonFile(filePath, data) {
     try {
-      await this._fileSystem.writeFile(filePath, JSON.stringify(data, null, 2));
+      // 用 writeJson 原子写 (temp+rename), 替代 writeFile + JSON.stringify
+      // 防并发写产生半截 JSON 文件
+      await this._fileSystem.writeJson(filePath, data);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -185,29 +202,35 @@ class TestCaseService {
   /**
    * 保存测试用例 (仅写 JSON, 不生成 .py)
    * 内化条件生成在 saveTestCase 中触发: 若 caseData.pyOutputDir 存在则调 generatePythonFile (失败吞错)
+   * 由 service 自己 set caseData.pyFilePath (generator 不 mutation)
    * (吸收 testCaseHandlers L11-27 双委托)
    */
   async saveTestCase(caseData) {
     try {
-      const saveResult = await this._saveOnly(caseData);
-      if (!saveResult.success) {
-        return saveResult;
-      }
-
+      // 用副本操作, 不 mutation 调用方传入的 caseData
+      const enriched = { ...caseData };
       // 内化条件生成 (吸收 testCaseHandlers L11-27 双委托)
       let pyPath = null;
-      if (caseData.pyOutputDir) {
+      if (enriched.pyOutputDir) {
         try {
-          const genResult = await this._codeGenerator.generatePythonFile(caseData, caseData.pyOutputDir);
+          const genResult = await this._codeGenerator.generatePythonFile(enriched, enriched.pyOutputDir);
           if (genResult.success) {
             pyPath = genResult.path || null;
+            // 由 service 负责 set pyFilePath (generator 不 mutation)
+            enriched.pyFilePath = pyPath;
           }
         } catch (e) {
           console.error('同步更新Python文件失败:', e);
         }
       }
 
-      return { success: true, data: caseData, path: saveResult.path, pyPath };
+      // 生成后再保存 JSON (单源写入, 含 pyFilePath)
+      const saveResult = await this._saveOnly(enriched);
+      if (!saveResult.success) {
+        return saveResult;
+      }
+
+      return { success: true, data: saveResult.data, path: saveResult.path, pyPath };
     } catch (error) {
       console.error('保存测试用例失败:', error);
       return { success: false, error: error.message };
@@ -222,45 +245,53 @@ class TestCaseService {
   async _saveOnly(caseData) {
     await this._ensureInitialized();
 
+    // 用副本操作, 不 mutation 入参
+    const data = { ...caseData };
+
     // ID + 时间戳
-    if (!caseData.id) {
-      caseData.id = this._idGenerator();
+    if (!data.id) {
+      data.id = this._idGenerator();
     }
-    caseData.updated = new Date().toISOString();
-    if (!caseData.created) {
-      caseData.created = caseData.updated;
+    data.updated = new Date().toISOString();
+    if (!data.created) {
+      data.created = data.updated;
     }
 
     // 文件名清理
-    caseData.fileName = this._fileNameSanitizer(caseData.fileName);
+    data.fileName = this._fileNameSanitizer(data.fileName);
 
-    // 写 JSON
-    const jsonPath = path.join(this.testCasesDir, `${caseData.fileName}.json`);
-    const writeResult = await this._writeJsonFile(jsonPath, caseData);
+    // 写 JSON (writeJson 原子写)
+    const jsonPath = path.join(this.testCasesDir, `${data.fileName}.json`);
+    const writeResult = await this._writeJsonFile(jsonPath, data);
     if (!writeResult.success) {
       return writeResult;
     }
 
-    return { success: true, data: caseData, path: jsonPath };
+    return { success: true, data, path: jsonPath };
   }
 
   /**
    * 保存 + 强制生成 (吸收 testCaseHandlers L45-62 双委托)
+   * 生成在前, 保存 JSON 在后 (单源写入, 含 pyFilePath)
+   * 不 mutation 入参 caseData, 内部用副本 enriched 操作 (原对象保持不变)
    * @param {Object} caseData
    * @param {string} outputDir
    * @returns {Promise<{success, data?, jsonPath?, pyPath?, error?}>}
    */
   async saveAndGenerate(caseData, outputDir) {
     try {
-      // 设 pyOutputDir 让 JSON 记录生成路径, 但用 _saveOnly 避免触发条件生成 (本方法自己调 generate)
-      const saveResult = await this._saveOnly({ ...caseData, pyOutputDir: outputDir });
-      if (!saveResult.success) {
-        return saveResult;
-      }
-
-      const genResult = await this._codeGenerator.generatePythonFile(saveResult.data, outputDir);
+      // 用副本操作, 不 mutation 调用方传入的 caseData
+      const enriched = { ...caseData, pyOutputDir: outputDir };
+      const genResult = await this._codeGenerator.generatePythonFile(enriched, outputDir);
       if (!genResult.success) {
         return genResult;
+      }
+      enriched.pyFilePath = genResult.path;
+
+      // 后保存 JSON (单源写入, 含 pyOutputDir + pyFilePath)
+      const saveResult = await this._saveOnly(enriched);
+      if (!saveResult.success) {
+        return saveResult;
       }
 
       return {
@@ -320,8 +351,14 @@ class TestCaseService {
   }
 
   /**
-   * 生成 Python 测试文件
-   * 委托给 TestCaseCodeGenerator
+   * 生成 Python 测试文件 (仅生成 .py, 不写 JSON)。
+   * 委托给 TestCaseCodeGenerator。
+   *
+   * 保留此 1-liner 委托 (非死代码, 未删中间人):
+   * - 唯一调用方: testCaseHandlers.js 的 TEST_CASE_GENERATE_PYTHON handler (generate-only 语义)。
+   * - 不改调 saveAndGenerate: 语义不同 (saveAndGenerate 会写 JSON, 此处仅需生成)。
+   * - 不让 handler 直接持 _codeGenerator: 破坏 factory-or-default 封装, 且 handler 仅持有
+   *   testCaseService 引用, 直接访问私有字段属反模式。
    */
   async generatePythonFile(caseData, outputDir) {
     return this._codeGenerator.generatePythonFile(caseData, outputDir);

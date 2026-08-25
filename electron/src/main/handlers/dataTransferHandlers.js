@@ -39,17 +39,15 @@ function register(ipcMain, services) {
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.EXPORT_CONFIG, async (outputPath) => {
-    dataTransferService.setMainWindow(electronApp.mainWindow);
+    // mainWindow 由 ElectronApp.createWindow 集中注入, handler 不再重复 setMainWindow
     return await dataTransferService.exportConfig(outputPath);
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.EXPORT_LOGS, async (outputPath) => {
-    dataTransferService.setMainWindow(electronApp.mainWindow);
     return await dataTransferService.exportLogs(outputPath);
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.IMPORT_CONFIG, async (zipPath) => {
-    dataTransferService.setMainWindow(electronApp.mainWindow);
     return await dataTransferService.importConfig(zipPath);
   });
 }

@@ -1,17 +1,12 @@
-"""ADB 设备管理器 (facade) — 委托 3 collaborator + LogcatMonitor lazy 持有。
-
-职责:
-- 委托 DeviceConnectionService: 设备连接 + ADB 服务检查 + 设备列表
-- 委托 AppLifecycleService: APP 状态/强停/PID/dumpsys/确保关闭
-- 委托 BluetoothService: 蓝牙状态/开启/确保开启
-- 保留 LogcatMonitor lazy 持有 + check_crash_logs 双路径 (monitor 优先 + logcat -d 回退)
+"""ADB 设备管理器 (聚合根) — 持有 3 collaborator + LogcatMonitor lazy 持有。
 
 设计:
 - ADBManager(device_name, app_package) 公共签名保持后向兼容
 - collaborators kwarg 注入 (测试可注 FakeAdapter)
-- 16+ 公共方法名 + 返回类型保持
+- 聚合属性化: 调用方通过 .connection / .app / .bluetooth 直接访问 collaborator,
+  消除 11 个 pass-through 方法 (Middle Man)
+- 保留 LogcatMonitor lazy 持有 + check_crash_logs 双路径 (monitor 优先 + logcat -d 回退)
 - 模块级 get_connected_devices() + create_adb_manager() 保持
-- ADB_CMD 模块级常量保持 (从 SubprocessAdbAdapter re-export)
 """
 from __future__ import annotations
 
@@ -21,14 +16,19 @@ from main.core.adb.adb_port import AdbCommandPort
 from main.core.adb.app_lifecycle import AppLifecycleService
 from main.core.adb.bluetooth_control import BluetoothService
 from main.core.adb.device_connection import DeviceConnectionService
-from main.core.adb.subprocess_adb_adapter import ADB_CMD, SubprocessAdbAdapter
+from main.core.adb.subprocess_adb_adapter import SubprocessAdbAdapter
+from main.core.logcat.crash_detector import is_crash_line
 from main.utils.i18n import t
 
 logger = logging.getLogger(__name__)
 
 
 class ADBManager:
-    """ADB 设备管理器 (facade)。"""
+    """ADB 设备管理器 (聚合根)。
+
+    聚合 3 collaborator (connection/app/bluetooth) + LogcatMonitor lazy 持有。
+    调用方通过属性访问 collaborator, 不再经由 pass-through 方法。
+    """
 
     def __init__(
         self,
@@ -61,59 +61,24 @@ class ADBManager:
             self._adb, device_name
         )
 
-    # === ADB 服务 ===
+    # === 聚合属性 (调用方直接访问 collaborator, 消除 pass-through) ===
 
-    def check_adb_service(self) -> bool:
-        """检查 ADB 服务是否正常运行。"""
-        return self._connection.check_adb_service()
+    @property
+    def connection(self) -> DeviceConnectionService:
+        """设备连接服务 (ADB 服务检查 / 设备连接 / 设备列表)。"""
+        return self._connection
 
-    # === 设备连接 ===
+    @property
+    def app(self) -> AppLifecycleService:
+        """APP 生命周期服务 (状态/强停/PID/dumpsys/确保关闭)。"""
+        return self._app
 
-    def connect_device(self) -> tuple[bool, str]:
-        """连接 ADB 设备 (USB/TCP 自动路由)。"""
-        return self._connection.connect()
+    @property
+    def bluetooth(self) -> BluetoothService:
+        """蓝牙服务 (状态/开启/确保开启)。"""
+        return self._bluetooth
 
-    # === APP 生命周期 ===
-
-    def check_app_status(self) -> tuple[bool, str | None]:
-        """检查 APP 是否在前台运行。"""
-        return self._app.check_status()
-
-    def force_stop_app(self) -> bool:
-        """强制停止 APP (打日志)。"""
-        return self._app.force_stop(silent=False)
-
-    def force_stop_app_silent(self) -> bool:
-        """静默强制停止 APP (不打日志,供 test_initializer 清场)。"""
-        return self._app.force_stop(silent=True)
-
-    def get_dumpsys_window(self) -> str:
-        """获取 dumpsys window windows 输出。"""
-        return self._app.get_dumpsys_window()
-
-    def ensure_app_closed(self, wait_time: int = 2) -> bool:
-        """确保 APP 关闭 (在前台则强停 + 等待)。"""
-        return self._app.ensure_closed(wait_time)
-
-    def get_app_pid(self) -> int | None:
-        """获取 APP PID (未运行返回 None)。"""
-        return self._app.get_pid()
-
-    # === 蓝牙 ===
-
-    def check_bluetooth_status(self) -> tuple[bool, str | None]:
-        """检查蓝牙是否开启。"""
-        return self._bluetooth.check_status()
-
-    def enable_bluetooth(self) -> bool:
-        """开启蓝牙。"""
-        return self._bluetooth.enable()
-
-    def ensure_bluetooth_enabled(self) -> bool:
-        """确保蓝牙已开启 (未开启则尝试开启并复查)。"""
-        return self._bluetooth.ensure_enabled()
-
-    # === Logcat 监控 (lazy 持有 LogcatMonitor) ===
+    # === Logcat 监控 (lazy 持有 LogcatMonitor, 真实 deep 逻辑) ===
 
     def check_crash_logs(self, pid: int | None = None) -> list:
         """检查崩溃日志 (兼容旧接口: monitor 优先 + logcat -d 回退)。
@@ -147,11 +112,13 @@ class ADBManager:
                 for line in result.stdout.strip().split("\n"):
                     if not line.strip():
                         continue
-                    if pid and f"{pid}" in line and "E" in line and "AndroidRuntime" in line:
+                    # 崩溃判定 SSOT: is_crash_line 覆盖 FATAL EXCEPTION/PROCESS_DIED/NATIVE_SIGNAL/ANR
+                    if is_crash_line(line):
+                        crash_logs.append(line.strip())
+                    # 补充上下文捕获: pid/package 过滤的 AndroidRuntime 相关行 (非崩溃模式但有调试价值)
+                    elif pid and f"{pid}" in line and "E" in line and "AndroidRuntime" in line:
                         crash_logs.append(line.strip())
                     elif not pid and self.app_package in line and "AndroidRuntime" in line:
-                        crash_logs.append(line.strip())
-                    elif "FATAL EXCEPTION" in line:
                         crash_logs.append(line.strip())
             logger.info(t("python.adbManager.crashLogsFound", count=len(crash_logs)))
             return crash_logs

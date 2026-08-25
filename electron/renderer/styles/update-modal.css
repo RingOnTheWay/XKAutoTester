@@ -161,6 +161,39 @@ body:not(.dark-theme) .update-changelog {
     font-weight: 600;
 }
 
+/* R10 安全闭环: hash 校验状态横幅 */
+.update-insecure-warning {
+    margin: 0 0 10px 0;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(244, 67, 54, 0.12);
+    color: #d32f2f;
+    border: 1px solid rgba(244, 67, 54, 0.4);
+}
+
+.update-hash-verified {
+    margin: 0 0 10px 0;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(76, 175, 80, 0.12);
+    color: #2e7d32;
+    border: 1px solid rgba(76, 175, 80, 0.4);
+}
+
+body.dark-theme .update-insecure-warning {
+    background: rgba(244, 67, 54, 0.18);
+    color: #ff6b6b;
+}
+
+body.dark-theme .update-hash-verified {
+    background: rgba(76, 175, 80, 0.18);
+    color: #81c784;
+}
+
 .update-progress-container {
     width: 100%;
     display: flex;
@@ -248,11 +281,13 @@ body:not(.dark-theme) .update-progress-bar {
     flex: 1;
     min-height: 0;
     gap: 0;
+    overflow: hidden;
 }
 
 .inspector-tree-panel {
     width: 30%;
     min-width: 260px;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     border-right: 1px solid rgba(255, 255, 255, 0.1);
@@ -492,6 +527,7 @@ body:not(.dark-theme) .inspector-search-hint {
     flex-direction: column;
     position: relative;
     min-width: 0;
+    min-height: 0;
 }
 
 .inspector-canvas-container {

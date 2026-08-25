@@ -1,4 +1,4 @@
-// AllureService — Allure 报告服务 facade 深模块。
+// AllureService — Allure 报告服务聚合根。
 //
 // 藏 HTTP 服务器托管 + CLI 调用 + 路径查找/清理 + 报告生成/打开。
 // 4 factory-or-default (logger + httpServer + cliInvoker + asyncFs) (对称 8 参照)。
@@ -21,7 +21,7 @@ const AllureCliInvoker = require('./allure/AllureCliInvoker');
  */
 
 /**
- * Allure 报告服务（Facade）
+ * Allure 报告服务（聚合根）
  * 协调 AllureHttpServer（HTTP 托管）+ AllureCliInvoker（CLI 调用）
  * 保留路径查找/清理/生成入口/打开入口职责
  */
@@ -114,6 +114,48 @@ class AllureService {
     }
   }
 
+  /**
+   * 查找测试计划下最新的报告目录 (含 index.html)。
+   * 报告目录结构: allure-reports/testPlanName/timestamp/index.html
+   * 兼容旧格式: index.html 直接在 testPlanDir 下 → 返回 testPlanDir。
+   *
+   * Precondition: testPlanName 对应的 testPlanDir 已存在 (调用方负责 exists 校验)。
+   * 共享给 openAllureReport (取最新) 与 checkReportExists (判存在), 消除两处遍历重复。
+   *
+   * @param {string} testPlanName
+   * @returns {Promise<string|null>} 报告目录路径; 无含 index.html 的报告时返 null
+   * @private
+   */
+  async _findLatestReportDir(testPlanName) {
+    const testPlanDir = this._getLogsPath('Allure', 'allure-reports', testPlanName);
+    const subItems = await this._asyncFs.readdir(testPlanDir);
+    const timestampDirs = [];
+
+    for (const item of subItems) {
+      const itemPath = path.join(testPlanDir, item);
+      const stat = await this._asyncFs.stat(itemPath);
+      if (stat.isDirectory()) {
+        const indexHtml = path.join(itemPath, 'index.html');
+        if (await this._asyncFs.exists(indexHtml)) {
+          timestampDirs.push({ name: item, path: itemPath, mtime: stat.mtimeMs });
+        }
+      }
+    }
+
+    if (timestampDirs.length === 0) {
+      // 兼容旧格式: index.html 直接在 testPlanDir 下
+      const directIndexHtml = path.join(testPlanDir, 'index.html');
+      if (await this._asyncFs.exists(directIndexHtml)) {
+        return testPlanDir;
+      }
+      return null;
+    }
+
+    // 按修改时间排序，取最新的
+    timestampDirs.sort((a, b) => b.mtime - a.mtime);
+    return timestampDirs[0].path;
+  }
+
   async openAllureReport(testPlanName = null, options = {}) {
     try {
       if (!testPlanName) {
@@ -146,35 +188,10 @@ class AllureService {
         return { success: false, error: `测试计划 '${testPlanName}' 的Allure报告不存在` };
       }
 
-      // 报告目录结构: allure-reports/testPlanName/timestamp/
-      // 查找最新的timestamp子目录
-      let allureReportDir = null;
-      const subItems = await this._asyncFs.readdir(testPlanDir);
-      const timestampDirs = [];
+      const allureReportDir = await this._findLatestReportDir(testPlanName);
 
-      for (const item of subItems) {
-        const itemPath = path.join(testPlanDir, item);
-        const stat = await this._asyncFs.stat(itemPath);
-        if (stat.isDirectory()) {
-          const indexHtml = path.join(itemPath, 'index.html');
-          if (await this._asyncFs.exists(indexHtml)) {
-            timestampDirs.push({ name: item, path: itemPath, mtime: stat.mtimeMs });
-          }
-        }
-      }
-
-      if (timestampDirs.length === 0) {
-        // 兼容旧格式: index.html 直接在 testPlanDir 下
-        const directIndexHtml = path.join(testPlanDir, 'index.html');
-        if (await this._asyncFs.exists(directIndexHtml)) {
-          allureReportDir = testPlanDir;
-        } else {
-          return { success: false, error: `测试计划 '${testPlanName}' 的报告文件不完整` };
-        }
-      } else {
-        // 按修改时间排序，取最新的
-        timestampDirs.sort((a, b) => b.mtime - a.mtime);
-        allureReportDir = timestampDirs[0].path;
+      if (!allureReportDir) {
+        return { success: false, error: `测试计划 '${testPlanName}' 的报告文件不完整` };
       }
 
       await this.httpServer.stop();
@@ -232,7 +249,7 @@ class AllureService {
     }
   }
 
-  async cleanup() {
+  cleanup() {
     this.httpServer.cleanupSync();
   }
 
@@ -343,22 +360,8 @@ class AllureService {
       const dirExists = await this._asyncFs.exists(testPlanDir);
       if (!dirExists) return { exists: false };
 
-      // 检查是否有任何timestamp子目录包含index.html
-      const items = await this._asyncFs.readdir(testPlanDir);
-      for (const item of items) {
-        const itemPath = path.join(testPlanDir, item);
-        const stat = await this._asyncFs.stat(itemPath);
-        if (stat.isDirectory()) {
-          const indexHtml = path.join(itemPath, 'index.html');
-          if (await this._asyncFs.exists(indexHtml)) {
-            return { exists: true };
-          }
-        }
-      }
-
-      // 兼容旧格式: index.html 直接在 testPlanDir 下
-      const directIndexHtml = path.join(testPlanDir, 'index.html');
-      return { exists: await this._asyncFs.exists(directIndexHtml) };
+      const latestReportDir = await this._findLatestReportDir(testPlanName);
+      return { exists: !!latestReportDir };
     } catch (error) {
       await this.logger.error(`检查报告存在性失败: ${error.message}`);
       return { exists: false };

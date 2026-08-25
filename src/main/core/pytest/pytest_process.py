@@ -22,15 +22,22 @@ from collections.abc import Callable
 from threading import Thread
 
 from main.core.pytest.pytest_process_port import PytestRunResult
+from main.core.subprocess_handle import SubprocessHandle
 from main.utils.text import clean_ansi_escape
 
 logger = logging.getLogger(__name__)
 
 
-def _default_popen(command: list[str]) -> subprocess.Popen:
-    """默认 popen 工厂: subprocess.Popen + text + 行缓冲。"""
+def _default_popen(command: list[str], cwd: str | None = None) -> subprocess.Popen:
+    """默认 popen 工厂: subprocess.Popen + text + 行缓冲。
+
+    Args:
+        command: 待执行命令
+        cwd: 子进程工作目录 (None 时继承父进程 CWD)
+    """
     return subprocess.Popen(
         command,
+        cwd=cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -39,19 +46,42 @@ def _default_popen(command: list[str]) -> subprocess.Popen:
     )
 
 
-class PytestProcess:
+class PytestProcess(SubprocessHandle):
     """pytest 子进程边界封装。"""
+
+    _TERMINATE_TIMEOUT = 2.0
+    _KILL_TIMEOUT = 2.0
+    _LABEL = "PytestProcess"
 
     def __init__(
         self,
         *,
+        cwd: str | None = None,
         popen_factory: Callable[[list[str]], subprocess.Popen] | None = None,
     ) -> None:
         """
         Args:
-            popen_factory: Popen 工厂 (默认 subprocess.Popen, 测试用 FakePopen)
+            cwd: pytest 子进程工作目录。传 project_root 可避免 Windows 相对路径
+                在错误 CWD 下执行 (测试路径按 project_root 相对解析后须以
+                project_root 为基准执行)。
+            popen_factory: Popen 工厂 (默认 subprocess.Popen, 测试用 FakePopen)。
+                Pop 工厂签名保持 [command] -> Popen; 默认工厂通过 self._cwd 捕获 cwd。
         """
-        self._popen_factory = popen_factory or _default_popen
+        self._cwd = cwd
+        if popen_factory is None:
+            self._popen_factory = lambda command: _default_popen(command, cwd=self._cwd)
+        else:
+            self._popen_factory = popen_factory
+        # 持有 process 引用供 stop() 终止 (mirror LogcatProcess.stop 幂等模式)
+        self._process: subprocess.Popen | None = None
+
+    def stop(self) -> None:
+        """终止 pytest 子进程 (幂等, 委托 SubprocessHandle._stop_process).
+
+        由 cli KeyboardInterrupt 处理或外部中断调用.
+        terminate→wait(2s)→kill→wait(2s) 兜底, 不抛异常.
+        """
+        self._stop_process()
 
     def run(self, command: list[str]) -> PytestRunResult:
         """执行 pytest 命令, 阻塞至结束, 返回 PytestRunResult。
@@ -71,7 +101,9 @@ class PytestProcess:
         """
         logger.info(f"Execute: {' '.join(command)}")
 
-        process = self._popen_factory(command)
+        # 存 self._process 供 stop() 终止
+        self._process = self._popen_factory(command)
+        process = self._process
 
         # 后台线程并行读取 stderr, 避免 stderr 缓冲区填满导致死锁
         stderr_lines: list[str] = []
@@ -109,8 +141,15 @@ class PytestProcess:
                     sys.stdout.flush()
 
         # 获取退出码 + 等 stderr 线程结束 (管道关闭后线程自然退出, 加 5s 超时保险)
-        exit_code = process.wait()
-        stderr_thread.join(timeout=5)
+        # KeyboardInterrupt 显式 stop() 终止子进程, 避免孤儿
+        try:
+            exit_code = process.wait()
+        except KeyboardInterrupt:
+            self.stop()
+            raise
+        finally:
+            stderr_thread.join(timeout=5)
+            self._process = None
 
         return PytestRunResult(
             exit_code=exit_code,

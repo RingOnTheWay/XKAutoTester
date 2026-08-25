@@ -7,6 +7,9 @@ import re
 # ANSI 转义序列正则（编译一次复用）
 _ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
+# 日志文件名时间戳格式 (logger.py XKAT-*.log + appium_server.py Appium-*.log 共用)
+DATETIME_FORMAT = "%Y-%m-%d-%H-%M-%S"
+
 
 def clean_ansi_escape(text: str) -> str:
     """

@@ -19,28 +19,34 @@
     {
       "type": "object",
       "title": "Response",
-      "description": "Python → JS。id 匹配 Request。success=false 时带 error。",
+      "description": "Python → JS。id 匹配 Request。success=false 时带 error。异构字段按命令返回: start-session→session_id/warning, get-screenshot→screenshot, get-source→source/elements, find-locators→locators, refresh→screenshot/source/elements。字段契约以 Python inspector_service.py 各方法 return dict 为准。",
       "properties": {
         "kind": { "const": "response" },
         "id": { "type": "integer", "minimum": 1 },
         "success": { "type": "boolean" },
-        "error": { "type": "string" },
-        "warning": { "type": "string" }
+        "error": { "type": "string", "description": "success=false 时附带, i18n key 或原始错误信息" },
+        "session_id": { "type": "string", "description": "start-session 成功返回, Appium driver.session_id" },
+        "screenshot": { "type": "string", "description": "get-screenshot/refresh 返回, data URI (data:image/png;base64,...)" },
+        "source": { "type": "string", "description": "get-source/refresh 返回, XML page source 字符串" },
+        "elements": { "type": "object", "description": "get-source/refresh 返回, 解析后的根节点树对象 (含 tagName/attributes/children/path)" },
+        "locators": { "type": "array", "description": "find-locators 返回, locator dict 数组 (type/value/description)", "items": { "type": "object" } },
+        "warning": { "type": "string", "description": "start-session 端口冲突等非致命附带信息" }
       },
       "required": ["kind", "id", "success"],
-      "additionalProperties": true
+      "additionalProperties": false
     },
     {
       "type": "object",
       "title": "Notification",
-      "description": "Python → JS。无 id,fire-and-forget。type=ready 握手,type=progress 进度。",
+      "description": "Python → JS。无 id,fire-and-forget。type=ready 握手,type=progress 进度。R10: additionalProperties 收紧为 false, 新增 payload 字段需先在此登记。",
       "properties": {
         "kind": { "const": "notification" },
         "type": { "enum": ["ready", "progress"] },
-        "stage": { "type": "string" }
+        "stage": { "type": "string", "description": "progress 通知的当前阶段标识 (如 appium-starting/screenshot-capturing)" },
+        "payload": { "type": "object", "description": "R10: 扩展 payload 容器, 未来新增字段统一放此 (避免每次扩 schema)", "additionalProperties": true }
       },
       "required": ["kind", "type"],
-      "additionalProperties": true
+      "additionalProperties": false
     }
   ]
 }

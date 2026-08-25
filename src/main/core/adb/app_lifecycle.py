@@ -51,7 +51,6 @@ class AppLifecycleService:
         try:
             result = self._executor.execute(
                 ["-s", self._device_name, "shell", "dumpsys", "window", "windows"],
-                timeout=10,
             )
             if result.success:
                 if self._app_package in result.stdout:
@@ -77,7 +76,6 @@ class AppLifecycleService:
         try:
             result = self._executor.execute(
                 ["-s", self._device_name, "shell", "am", "force-stop", self._app_package],
-                timeout=10,
             )
             if silent:
                 return result.success
@@ -100,7 +98,6 @@ class AppLifecycleService:
         try:
             result = self._executor.execute(
                 ["-s", self._device_name, "shell", "pidof", self._app_package],
-                timeout=10,
             )
             if result.success and result.stdout.strip():
                 try:
@@ -129,7 +126,6 @@ class AppLifecycleService:
         try:
             result = self._executor.execute(
                 ["-s", self._device_name, "shell", "dumpsys", "window", "windows"],
-                timeout=10,
             )
             return result.stdout or ""
         except Exception as e:

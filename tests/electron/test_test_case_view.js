@@ -442,3 +442,86 @@ describe('TestCaseView 步骤拖拽', () => {
     unbind();
   });
 });
+
+// R14: HTML 转义（防 XSS）回归测试
+describe('TestCaseView HTML 转义（防 XSS）', () => {
+  before(async () => {
+    setupJsdm();
+    await loadView();
+  });
+  after(teardownJsdm);
+
+  test('escapeHtml null/undefined 应返回空串', () => {
+    const v = new ViewClass();
+    assert.strictEqual(v.escapeHtml(null), '');
+    assert.strictEqual(v.escapeHtml(undefined), '');
+  });
+
+  test('renderTestFiles 恶意文件名不注入原始 HTML', () => {
+    const v = new ViewClass();
+    const malicious = '<img src=x onerror=alert(1)>.py';
+    v.renderTestFiles([{ name: malicious, path: '/tmp/a.py' }], {}, '');
+    const container = document.getElementById('tc-test-files-list');
+    // DOM 结构断言：不应产生任何 img/script 元素（属性序列化回显原文属 parse5 正常行为，非注入）
+    assert.strictEqual(container.querySelectorAll('img').length, 0, '不应产生 img 元素');
+    assert.strictEqual(container.querySelectorAll('script').length, 0, '不应产生 script 元素');
+    // 文本节点断言：恶意名应作为纯文本呈现
+    assert.ok(container.textContent.includes('<img src=x onerror=alert(1)>.py'), '文件名应作为纯文本保留原文');
+  });
+
+  test('renderAppOptions 恶意应用名/ID不注入原始 HTML', () => {
+    const v = new ViewClass();
+    v.renderAppOptions([{ id: 'a" onclick="evil()', name: '<script>evil()</script>' }], null);
+    const container = document.getElementById('tc-app-options');
+    assert.strictEqual(container.querySelectorAll('script').length, 0, '不应产生 script 元素');
+    assert.strictEqual(container.querySelectorAll('img').length, 0, '不应产生 img 元素');
+    const options = container.querySelectorAll('.custom-select__option');
+    assert.strictEqual(options.length, 1, '双引号不应逃逸 data-value 属性产生多余节点');
+    assert.strictEqual(options[0].textContent.trim(), '<script>evil()</script>', '应用名应作为纯文本保留原文');
+    assert.strictEqual(options[0].getAttribute('data-name'), '<script>evil()</script>', 'data-name 属性应完整保留原值');
+  });
+
+  test('renderMarkersOptions 恶意 marker 名/描述不注入原始 HTML', () => {
+    const v = new ViewClass();
+    v.renderMarkersOptions([{ name: '<img src=x>', description: '"><svg onload=alert(1)>' }], []);
+    const container = document.getElementById('tc-markers-options');
+    assert.strictEqual(container.querySelectorAll('img').length, 0, '不应产生 img 元素');
+    assert.strictEqual(container.querySelectorAll('svg').length, 0, '不应产生 svg 元素');
+    const options = container.querySelectorAll('.custom-select__option');
+    assert.strictEqual(options.length, 1, '属性不应逃逸产生多余节点');
+    assert.strictEqual(options[0].textContent.trim(), '<img src=x>', 'marker 名应作为纯文本保留原文');
+    assert.strictEqual(options[0].getAttribute('data-description'), '"><svg onload=alert(1)>', 'data-description 应完整保留原值');
+  });
+
+  test('generateCustomSelect 恶意选项值/标签/选中文本不注入原始 HTML', () => {
+    const v = new ViewClass();
+    const html = v.generateCustomSelect('tc-xss-select', [
+      { value: '"><img src=x onerror=alert(1)>', label: '<script>evil()</script>', selected: true }
+    ], 'placeholder');
+    assert.ok(!html.includes('<script'), '不应含原始 <script 标签');
+    assert.ok(!html.includes('<img'), '不应含原始 <img 标签');
+    assert.ok(!html.includes('" onerror='), '属性值中的双引号应转义');
+    assert.ok(html.includes('&lt;script&gt;'), '应转义 script 标签');
+  });
+
+  test('generateStepCard 恶意步骤名不逃逸 value 属性', () => {
+    const v = new ViewClass();
+    const malicious = '"><img src=x onerror=alert(1)>';
+    const card = v.generateStepCard({ id: 's1', order: 1, name: malicious, type: 'unknown' }, 1);
+    const input = card.querySelector('.tc-step-name-input');
+    assert.ok(input, '应有步骤名输入框');
+    assert.strictEqual(input.getAttribute('value'), malicious, 'value 属性应保留原文（实体转义后解码一致）');
+    assert.strictEqual(card.querySelectorAll('img').length, 0, '不应产生 img 元素（属性未逃逸）');
+    assert.strictEqual(card.querySelectorAll('.tc-step-name-input').length, 1, '不应因属性逃逸产生多余输入框');
+  });
+
+  test('renderDeviceParams 恶意参数标签/值/占位符不注入原始 HTML', () => {
+    const v = new ViewClass();
+    const html = v.renderDeviceParams([
+      { key: 'k1', type: 'text', label: '<script>l()</script>', placeholder: '"><svg onload=e()>' }
+    ], { k1: '"><img src=x onerror=e()>' }, 's1');
+    assert.ok(!html.includes('<script'), '不应含原始 <script 标签');
+    assert.ok(!html.includes('<svg'), '不应含原始 <svg 标签');
+    assert.ok(!html.includes('<img'), '不应含原始 <img 标签');
+  });
+});

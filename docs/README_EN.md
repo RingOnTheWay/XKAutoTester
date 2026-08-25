@@ -10,7 +10,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12-3c873a?style=flat-square)](https://www.python.org)
 [![Electron](https://img.shields.io/badge/Electron-38-47848f?style=flat-square)](https://www.electronjs.org)
 [![Vite](https://img.shields.io/badge/Vite-5-646cff?style=flat-square)](https://vitejs.dev)
-[![Version](https://img.shields.io/badge/Version-0.1.4--dev.2-9cf?style=flat-square)](https://github.com/RingOnTheWay/XKAutoTester)
+[![Version](https://img.shields.io/badge/Version-0.1.5--dev.2-9cf?style=flat-square)](https://github.com/RingOnTheWay/XKAutoTester)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078d7?style=flat-square)](https://www.microsoft.com/windows)
 
 **[简体中文](../README.md) | English**
@@ -93,11 +93,11 @@ flowchart TB
         HDL[Handlers Layer<br/>19 IPC handlers]
         subgraph Services["Services Business Layer"]
             APP[application/<br/>ElectronApp lifecycle]
-            SCH[scheduler/<br/>SchedulerService · smartScheduler · strategies]
+            SCH[scheduler/<br/>smartScheduler · strategies · planQueue]
             ADB[adb/<br/>AdbCommandExecutor · ApkInstaller ·<br/>FileTransferService · RemoteStatService]
             ALL[allure/<br/>AllureHttpServer · AllureCliInvoker]
             APK[apk/<br/>Aapt2Invoker · Aapt2OutputParser ·<br/>LocaleLabelResolver]
-            GEN[mixins/<br/>TestCaseCodeGenerator split]
+            GEN[TestCaseCodeGenerator.js<br/>single-file case code gen]
             TOP[Top-level services<br/>InspectorService · BleDeviceDiscoveryService ·<br/>DataTransferService · UpdateService · ...]
         end
         HDL --> Services
@@ -304,7 +304,6 @@ XKAutoTester/
 │   │   │   │   ├── apk/            # APK parsing submodules (aapt2/output parse/locale labels)
 │   │   │   │   ├── application/    # ElectronApp lifecycle (factories/effects/index)
 │   │   │   │   ├── base/           # JsonFileCrudService base
-│   │   │   │   ├── mixins/         # TestCaseCodeGenerator Mixins (5)
 │   │   │   │   ├── scheduler/      # Scheduler submodules (planQueue/smartScheduler/strategies)
 │   │   │   │   ├── ADBService.js
 │   │   │   │   ├── AdbProgressMonitor.js     # ADB progress monitor
@@ -323,7 +322,6 @@ XKAutoTester/
 │   │   │   │   ├── PagePackageService.js
 │   │   │   │   ├── PythonTestService.js
 │   │   │   │   ├── ScheduledPlanService.js
-│   │   │   │   ├── SchedulerService.js
 │   │   │   │   ├── ScrcpyService.js
 │   │   │   │   ├── SerialPortEnumerator.js       # Serial port enumeration
 │   │   │   │   ├── TarExtractor.js               # tar extraction
@@ -349,11 +347,11 @@ XKAutoTester/
 │   ├── renderer/                    # Renderer process (MVC architecture)
 │   │   ├── core/                    # Core base classes (Action/ApiBridge/AppState/EventEmitter)
 │   │   ├── tabs/                    # 5 Tabs (MVC split)
-│   │   │   ├── android-connection/  # with mixins/ (10)
+│   │   │   ├── android-connection/
 │   │   │   ├── page-package/
-│   │   │   ├── settings/            # with mixins/ (5)
-│   │   │   ├── test-case/           # with mixins/ (25)
-│   │   │   └── test-execution/      # with mixins/ (16)
+│   │   │   ├── settings/
+│   │   │   ├── test-case/           # with modules/ (4 domain deep modules)
+│   │   │   └── test-execution/
 │   │   ├── components/              # UI components
 │   │   │   ├── mixins/              # Component Mixins (11)
 │   │   │   ├── inspector.js         # Appium Inspector modal
@@ -390,8 +388,7 @@ XKAutoTester/
 │   │   ├── inspector_service.py     # Appium Inspector service
 │   │   ├── logcat_monitor.py        # Logcat monitor
 │   │   ├── pytest_runner.py         # Pytest runner
-│   │   ├── stdio_protocol.py        # stdio JSON protocol
-│   │   └── test_plan_repository.py
+│   │   └── stdio_protocol.py        # stdio JSON protocol
 │   ├── device/
 │   │   └── bioland/
 │   │       ├── E127B.json           # Thermometer data config (externalized)

@@ -1,16 +1,18 @@
-"""AppiumServer 单元测试 - 深模块重构 (subprocess_module 注入 + _LogPump + _PortProcessKiller)"""
+"""AppiumServer 单元测试 - 深模块重构 (subprocess_module 注入 + _LogPump + 模块级端口清理函数)"""
 
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from main.core.appium_server import (
     AppiumServer,
     _LogPump,
-    _PortProcessKiller,
-    _UnixPortKiller,
-    _WindowsPortKiller,
+    _extract_listening_pids,
+    _kill_port_process,
+    _kill_port_unix,
+    _kill_port_windows,
 )
 
 # ── Fake 对象 ─────────────────────────────────────────────────
@@ -164,11 +166,11 @@ class TestLogPump:
         pump.stop()
 
 
-# ── _WindowsPortKiller 测试 ───────────────────────────────────
+# ── _kill_port_windows 测试 ───────────────────────────────────
 
 
 @pytest.mark.unit
-class TestWindowsPortKiller:
+class TestKillPortWindows:
     """Windows 端口清理: netstat + Python 过滤 + taskkill"""
 
     def test_no_match_skips_taskkill(self, tmp_path):
@@ -176,8 +178,7 @@ class TestWindowsPortKiller:
         fake_sub = FakeSubprocessModule(
             run_results=[FakeCompletedProcess(0, " Proto  Local Address  Foreign Address  State  PID\n", "")]
         )
-        killer = _WindowsPortKiller(port=4723, subprocess_module=fake_sub)
-        killer.kill()
+        _kill_port_windows(4723, fake_sub)
         # 仅 netstat 调用, 无 taskkill
         assert len(fake_sub.run_calls) >= 1
         for cmd in fake_sub.run_calls:
@@ -192,8 +193,7 @@ class TestWindowsPortKiller:
                 FakeCompletedProcess(0, "", ""),
             ]
         )
-        killer = _WindowsPortKiller(port=4723, subprocess_module=fake_sub)
-        killer.kill()
+        _kill_port_windows(4723, fake_sub)
         # 应有 taskkill 调用
         taskkill_calls = [c for c in fake_sub.run_calls if "taskkill" in " ".join(c)]
         assert len(taskkill_calls) == 1
@@ -203,8 +203,7 @@ class TestWindowsPortKiller:
         """PID 非数字 -> 跳过"""
         netstat_output = "  TCP    127.0.0.1:4723         0.0.0.0:0              LISTENING       abcde\n"
         fake_sub = FakeSubprocessModule(run_results=[FakeCompletedProcess(0, netstat_output, "")])
-        killer = _WindowsPortKiller(port=4723, subprocess_module=fake_sub)
-        killer.kill()
+        _kill_port_windows(4723, fake_sub)
         for cmd in fake_sub.run_calls:
             assert "taskkill" not in " ".join(cmd)
 
@@ -212,24 +211,21 @@ class TestWindowsPortKiller:
         """行分割后长度不足 -> 跳过"""
         netstat_output = "  short line\n"
         fake_sub = FakeSubprocessModule(run_results=[FakeCompletedProcess(0, netstat_output, "")])
-        killer = _WindowsPortKiller(port=4723, subprocess_module=fake_sub)
-        killer.kill()
+        _kill_port_windows(4723, fake_sub)
         for cmd in fake_sub.run_calls:
             assert "taskkill" not in " ".join(cmd)
 
     def test_idempotent(self, tmp_path):
-        """kill() 多次调用应安全"""
+        """多次调用应安全"""
         fake_sub = FakeSubprocessModule(run_results=[FakeCompletedProcess(0, "", "")])
-        killer = _WindowsPortKiller(port=4723, subprocess_module=fake_sub)
-        killer.kill()
-        killer.kill()
-        killer.kill()
+        _kill_port_windows(4723, fake_sub)
+        _kill_port_windows(4723, fake_sub)
+        _kill_port_windows(4723, fake_sub)
 
     def test_no_shell_true(self, tmp_path):
         """命令应为 list 形式, 无 shell=True"""
         fake_sub = FakeSubprocessModule(run_results=[FakeCompletedProcess(0, "", "")])
-        killer = _WindowsPortKiller(port=4723, subprocess_module=fake_sub)
-        killer.kill()
+        _kill_port_windows(4723, fake_sub)
         for cmd in fake_sub.run_calls:
             assert isinstance(cmd, list), f"cmd 应为 list, 实为 {type(cmd)}"
 
@@ -237,25 +233,23 @@ class TestWindowsPortKiller:
         """端口 4723 不应误匹配 47230"""
         netstat_output = "  TCP    0.0.0.0:47230        0.0.0.0:0              LISTENING       99999\n"
         fake_sub = FakeSubprocessModule(run_results=[FakeCompletedProcess(0, netstat_output, "")])
-        killer = _WindowsPortKiller(port=4723, subprocess_module=fake_sub)
-        killer.kill()
+        _kill_port_windows(4723, fake_sub)
         # 47230 不应触发 taskkill (实现用 endswith(':4723') 精确匹配, :47230 不匹配)
         taskkill_calls = [c for c in fake_sub.run_calls if "taskkill" in " ".join(c)]
         assert len(taskkill_calls) == 0
 
 
-# ── _UnixPortKiller 测试 ──────────────────────────────────────
+# ── _kill_port_unix 测试 ──────────────────────────────────────
 
 
 @pytest.mark.unit
-class TestUnixPortKiller:
+class TestKillPortUnix:
     """Unix 端口清理: fuser -k"""
 
     def test_kill_calls_fuser(self, tmp_path):
-        """kill() 应调 fuser -k {port}/tcp"""
+        """应调 fuser -k {port}/tcp"""
         fake_sub = FakeSubprocessModule(run_results=[FakeCompletedProcess(0, "", "")])
-        killer = _UnixPortKiller(port=4725, subprocess_module=fake_sub)
-        killer.kill()
+        _kill_port_unix(4725, fake_sub)
         assert len(fake_sub.run_calls) == 1
         cmd = fake_sub.run_calls[0]
         assert "fuser" in cmd
@@ -265,44 +259,50 @@ class TestUnixPortKiller:
     def test_kill_no_shell_true(self, tmp_path):
         """命令应为 list 形式"""
         fake_sub = FakeSubprocessModule(run_results=[FakeCompletedProcess(0, "", "")])
-        killer = _UnixPortKiller(port=4725, subprocess_module=fake_sub)
-        killer.kill()
+        _kill_port_unix(4725, fake_sub)
         assert isinstance(fake_sub.run_calls[0], list)
 
 
-# ── _PortProcessKiller.factory 测试 ───────────────────────────
+# ── _kill_port_process 分发测试 ───────────────────────────────
 
 
 @pytest.mark.unit
-class TestPortProcessKillerFactory:
-    """factory 按 platform.system() 选具体子类"""
+class TestKillPortProcessDispatch:
+    """_kill_port_process 按 platform.system() 分发到平台函数"""
 
-    def test_factory_windows_returns_windows_killer(self):
-        """platform.system() == 'Windows' -> _WindowsPortKiller"""
+    def test_dispatch_windows_calls_windows_func(self):
+        """platform.system() == 'Windows' -> _kill_port_windows"""
+        with patch("main.core.appium_server.platform") as mock_platform, patch(
+            "main.core.appium_server._kill_port_windows"
+        ) as mock_win:
+            mock_platform.system.return_value = "Windows"
+            _kill_port_process(4723)
+            mock_win.assert_called_once()
+
+    def test_dispatch_linux_calls_unix_func(self):
+        """platform.system() == 'Linux' -> _kill_port_unix"""
+        with patch("main.core.appium_server.platform") as mock_platform, patch(
+            "main.core.appium_server._kill_port_unix"
+        ) as mock_unix:
+            mock_platform.system.return_value = "Linux"
+            _kill_port_process(4723)
+            mock_unix.assert_called_once()
+
+    def test_dispatch_darwin_calls_unix_func(self):
+        """platform.system() == 'Darwin' -> _kill_port_unix"""
+        with patch("main.core.appium_server.platform") as mock_platform, patch(
+            "main.core.appium_server._kill_port_unix"
+        ) as mock_unix:
+            mock_platform.system.return_value = "Darwin"
+            _kill_port_process(4723)
+            mock_unix.assert_called_once()
+
+    def test_dispatch_injects_subprocess_module(self):
+        """应支持 subprocess_module 注入"""
+        fake_sub = FakeSubprocessModule()
         with patch("main.core.appium_server.platform") as mock_platform:
             mock_platform.system.return_value = "Windows"
-            killer = _PortProcessKiller.factory(port=4723)
-            assert isinstance(killer, _WindowsPortKiller)
-
-    def test_factory_linux_returns_unix_killer(self):
-        """platform.system() == 'Linux' -> _UnixPortKiller"""
-        with patch("main.core.appium_server.platform") as mock_platform:
-            mock_platform.system.return_value = "Linux"
-            killer = _PortProcessKiller.factory(port=4723)
-            assert isinstance(killer, _UnixPortKiller)
-
-    def test_factory_darwin_returns_unix_killer(self):
-        """platform.system() == 'Darwin' -> _UnixPortKiller"""
-        with patch("main.core.appium_server.platform") as mock_platform:
-            mock_platform.system.return_value = "Darwin"
-            killer = _PortProcessKiller.factory(port=4723)
-            assert isinstance(killer, _UnixPortKiller)
-
-    def test_factory_injects_subprocess_module(self):
-        """factory 应支持 subprocess_module 注入"""
-        fake_sub = FakeSubprocessModule()
-        killer = _PortProcessKiller.factory(port=4723, subprocess_module=fake_sub)
-        assert killer._subprocess is fake_sub
+            _kill_port_process(4723, fake_sub)
 
 
 # ── AppiumServer 构造测试 ─────────────────────────────────────
@@ -398,6 +398,8 @@ class TestApplyDefaultCapabilities:
 
     def test_sets_six_fields(self):
         """应设置 6 个 capability 字段"""
+        # R10: 不用 spec=UiAutomator2Options — camelCase setter (ensureWebviewsHavePages 等)
+        # 不在 spec dir() 中, spec 会阻止 set。此处需灵活 mock 接受任意 attr set。
         options = MagicMock()
         AppiumServer.apply_default_capabilities(options)
         assert options.automation_name == AppiumServer.DEFAULT_AUTOMATION_NAME
@@ -410,6 +412,7 @@ class TestApplyDefaultCapabilities:
 
     def test_returns_options(self):
         """应返回 options 对象本身"""
+        # R10: 同 test_sets_six_fields, camelCase setter 不兼容 spec
         options = MagicMock()
         result = AppiumServer.apply_default_capabilities(options)
         assert result is options
@@ -536,7 +539,7 @@ class TestAppiumServerIsRunning:
         """200 -> True"""
         server = AppiumServer()
         with patch("main.core.appium_server.requests") as mock_req:
-            mock_resp = MagicMock()
+            mock_resp = MagicMock(spec=requests.Response)
             mock_resp.status_code = 200
             mock_req.get.return_value = mock_resp
             assert server.is_server_running() is True
@@ -545,7 +548,7 @@ class TestAppiumServerIsRunning:
         """非 200 -> False"""
         server = AppiumServer()
         with patch("main.core.appium_server.requests") as mock_req:
-            mock_resp = MagicMock()
+            mock_resp = MagicMock(spec=requests.Response)
             mock_resp.status_code = 500
             mock_req.get.return_value = mock_resp
             assert server.is_server_running() is False

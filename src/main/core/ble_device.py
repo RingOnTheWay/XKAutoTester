@@ -158,41 +158,49 @@ class BLEDevice:
             # 检查串口是否成功打开
             if not self.ser or not self.ser.is_open:
                 logger.error("串口打开失败")
+                self.close()
                 return False
                 # 通过AT指令设置蓝牙名称，并检查响应
             if self.ble_name:
                 if not self.set_ble_name(self.ble_name):
                     logger.error("蓝牙名称设置失败")
+                    self.close()
                     return False
 
             # 通过AT指令设置自定义广播数据，并检查响应
             if self.adv_data:
                 if not self.set_adv_data(self.adv_data):
                     logger.error("广播数据设置失败")
+                    self.close()
                     return False
 
             # 如果有UUID参数，则通过AT指令设置，并检查响应
             if self.uuids:
                 if not self.set_uuid("UUIDS", self.uuids):
                     logger.error("主服务UUID设置失败")
+                    self.close()
                     return False
             if self.uuidn:
                 if not self.set_uuid("UUIDN", self.uuidn):
                     logger.error("读服务UUID设置失败")
+                    self.close()
                     return False
             if self.uuidw:
                 if not self.set_uuid("UUIDW", self.uuidw):
                     logger.error("写服务UUID设置失败")
+                    self.close()
                     return False
 
             # 设置完毕后重启设备，确保配置生效
             if not self.reboot_device():
                 logger.error("设备重启失败")
+                self.close()
                 return False
 
             # 开启广播
             if not self.enable_advertising():
                 logger.error("广播开启失败")
+                self.close()
                 return False
 
             self.is_initialized = True

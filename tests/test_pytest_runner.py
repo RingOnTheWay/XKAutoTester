@@ -7,7 +7,6 @@
 - run_custom_tests 路径解析
 - get_test_summary 委托 format_test_summary
 - discover_test_directories 行为
-- get_pytest_runner 单例
 - L82 破口回归: pytest_runner.py 不含 import subprocess / threading.Thread / re
 
 通过 monkeypatch XKAUTOTESTER_USER_DATA 隔离 fs, FakePytestProcess 隔离子进程。
@@ -19,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from main.core.pytest.pytest_process_port import PytestRunResult
-from main.core.pytest_runner import PytestRunner, get_pytest_runner
+from main.core.pytest_runner import PytestRunner
 
 
 class FakePytestProcess:
@@ -55,7 +54,7 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """隔离 user data env, 返回 tmp_path 作为 user_data_root。
 
     - 设 XKAUTOTESTER_USER_DATA=tmp_path
-    - 创建 config/ 目录 (TestPlanRepository 需要)
+    - 创建 config/ 目录 (config.json / pytest.ini 读取需要)
     """
     monkeypatch.setenv("XKAUTOTESTER_USER_DATA", str(tmp_path))
     (tmp_path / "config").mkdir(parents=True, exist_ok=True)
@@ -124,19 +123,24 @@ class TestRunTests:
         assert "python" in cmd[0].lower()
         assert "tests/x.py" in cmd
 
-    def test_records_run_via_plan_repo(self, runner: PytestRunner) -> None:
-        """run_tests 调 plan_repo.record_run (positional args)。"""
-        from unittest.mock import MagicMock
+    def test_returns_run_data_in_result(self, runner: PytestRunner, capsys: pytest.CaptureFixture[str]) -> None:
+        """run_tests 返回 result dict 含运行数据 (纯函数: 标记行副作用已移至 Cli 层)。
 
-        runner.plan_repo = MagicMock()
-        runner.run_tests(test_paths=["tests/a.py"], markers=["smoke"], test_plan_name="p1", generate_allure=False)
+        单源化: Electron 解析 Cli 写的 XKAT_TEST_PLAN_RUN 标记行后由 TestPlanService 统一写 test_plans.json。
+        PytestRunner 不再直写 stdout 标记行, 仅返回 dict 供 Cli 写入。
+        """
+        result = runner.run_tests(
+            test_paths=["tests/a.py"], markers=["smoke"], test_plan_name="p1", generate_allure=False
+        )
 
-        runner.plan_repo.record_run.assert_called_once()
-        args, _ = runner.plan_repo.record_run.call_args
-        assert args[0] == "p1"
-        assert args[1] == ["tests/a.py"]
-        assert args[2] == ["smoke"]
-        assert args[3] is None
+        # result dict 含运行数据 (供 Cli._write_electron_markers 写标记行)
+        assert result["test_plan_name"] == "p1"
+        assert result["test_paths"] == ["tests/a.py"]
+        assert result["markers"] == ["smoke"]
+        # PytestRunner 不再输出 stdout 标记行 (副作用移至 Cli)
+        out = capsys.readouterr().out
+        assert "XKAT_TEST_PLAN_RUN:" not in out
+        assert "XKAT_ALLURE_RESULTS_DIR:" not in out
 
 
 class TestConvenienceMethods:
@@ -250,25 +254,6 @@ class TestDiscoverTestDirectories:
 
         assert "tests/" in dirs
         assert "spec_tests/" in dirs
-
-
-class TestGetPytestRunner:
-    """get_pytest_runner 模块级单例。"""
-
-    def test_singleton_returns_same_instance(self, isolated_env: Path) -> None:
-        """get_pytest_runner 两次调用返回同一实例。"""
-        # 重置模块级单例
-        import main.core.pytest_runner as pr_module
-
-        pr_module._pytest_runner_instance = None
-
-        r1 = get_pytest_runner()
-        r2 = get_pytest_runner()
-
-        assert r1 is r2
-
-        # 清理, 避免污染其他测试
-        pr_module._pytest_runner_instance = None
 
 
 class TestNoSubprocessLeak:

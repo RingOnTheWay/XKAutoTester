@@ -4,8 +4,11 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
+from appium import webdriver
 
-from main.utils.test_initializer import TestInitializer
+from main.core.adb_manager import ADBManager
+from main.core.crash_monitor import CrashMonitor
+from main.core.test_initializer import TestInitializer
 from main.utils.test_reporter import TestReporter
 
 
@@ -44,7 +47,7 @@ class TestTestInitializerFields:
         # 通过检查模块源码确认
         import inspect
 
-        import main.utils.test_initializer as mod
+        import main.core.test_initializer as mod
 
         source = inspect.getsource(mod)
         # import 行不应有 allure 或 pytest
@@ -82,7 +85,7 @@ class TestTestInitializerCrashMonitorGuard:
     def test_cleanup_with_mocked_crash_monitor(self):
         """cleanup 应调用 crash_monitor.stop_and_attach_log"""
         init = TestInitializer(config=None, logger=logging.getLogger("test"))
-        mock_monitor = MagicMock()
+        mock_monitor = MagicMock(spec=CrashMonitor)
         init.crash_monitor = mock_monitor
         init.cleanup()
         mock_monitor.stop_and_attach_log.assert_called_once()
@@ -161,7 +164,7 @@ class TestTestInitializerFailurePath:
     def test_cleanup_idempotent(self):
         """cleanup 多次调用安全（_cleaned 幂等）"""
         init = self._make_init()
-        mock_monitor = MagicMock()
+        mock_monitor = MagicMock(spec=CrashMonitor)
         init.crash_monitor = mock_monitor
         init.cleanup()
         init.cleanup()
@@ -171,16 +174,17 @@ class TestTestInitializerFailurePath:
     def test_cleanup_per_resource_failure_isolation(self):
         """cleanup 单资源失败不阻塞后续"""
         init = self._make_init()
-        mock_driver = MagicMock()
+        mock_driver = MagicMock(spec=webdriver.Remote)
         mock_driver.quit.side_effect = Exception("driver quit failed")
         init.driver = mock_driver
-        mock_adb = MagicMock()
+        mock_adb = MagicMock(spec=ADBManager)
         init.adb_manager = mock_adb
 
         init.cleanup()
 
         mock_driver.quit.assert_called_once()
-        mock_adb.ensure_app_closed.assert_called_once_with(2)
+        # P3 修复漏网: ensure_app_closed 已从 adb_manager 删除, 改调 adb_manager.app.ensure_closed
+        mock_adb.app.ensure_closed.assert_called_once_with(2)
 
     def test_enter_exit_context_manager(self):
         """__enter__/__exit__ 上下文管理器"""

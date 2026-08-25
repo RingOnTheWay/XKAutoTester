@@ -274,3 +274,55 @@ test('默认 factory 集成: 真实 fs + 临时 page_package.json', async () => 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+// ── 9. P0 并发回归: Promise.all 并发 addApp 不丢更新 ────
+
+test('P0 并发回归: 20 个并发 addApp 全部持久化 (withLock 串行化 read-modify-write)', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xkat-pp-conc-'));
+  try {
+    const svc = new PagePackageService(tmpDir);
+
+    // 20 个并发 addApp, 每个 push 一个新 app
+    const N = 20;
+    const results = await Promise.all(
+      Array.from({ length: N }, (_, i) => svc.addApp({ name: `App${i}`, platform: 'android' }))
+    );
+
+    // 全部成功
+    assert.ok(results.every(r => r.success === true), '所有 addApp 应成功');
+
+    // 持久化数量 = N (无丢更新)
+    const fileContent = fs.readFileSync(path.join(tmpDir, 'page_package.json'), 'utf8');
+    const persisted = JSON.parse(fileContent);
+    assert.strictEqual(persisted.apps.length, N, `应持久化 ${N} 个 app (withLock 防丢更新)`);
+
+    // 名称集合完整 (无覆盖)
+    const names = new Set(persisted.apps.map(a => a.name));
+    assert.strictEqual(names.size, N, 'app 名称应无重复');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('P0 并发回归: 10 个并发 addPage 到同一 app 全部持久化', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xkat-pp-conc2-'));
+  try {
+    const svc = new PagePackageService(tmpDir);
+    const appResult = await svc.addApp({ name: 'ConcurrentApp', platform: 'android' });
+    const appId = appResult.data.id;
+
+    // 10 个并发 addPage 到同一 app
+    const N = 10;
+    const results = await Promise.all(
+      Array.from({ length: N }, (_, i) => svc.addPage(appId, `Page${i}`))
+    );
+
+    assert.ok(results.every(r => r.success === true));
+
+    const fileContent = fs.readFileSync(path.join(tmpDir, 'page_package.json'), 'utf8');
+    const persisted = JSON.parse(fileContent);
+    assert.strictEqual(persisted.apps[0].pages.length, N, `应持久化 ${N} 个 page`);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

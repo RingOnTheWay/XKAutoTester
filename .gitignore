@@ -29,6 +29,7 @@ dist-electron/
 # Electron-builder
 /electron/dist/
 /electron/build/
+/electron/out/
 
 # --- Environments ---
 .venv/
@@ -91,6 +92,11 @@ blob-report/
 /config/test_cases/
 
 # --- AI Agent 上下文 ---
-AGENTS.md
 /trae-backup
 refactor-rfcs
+/dev-records
+.workbuddy/
+
+# --- 发布脚本运行时产物 ---
+/scripts/xkat-*.json
+/scripts/xkat-*.txt

@@ -4,35 +4,40 @@ Python 国际化模块
 默认语言: zh-CN
 翻译文件位置: XKAUTOTESTER_LOCALES_PATH 环境变量指定（打包模式由 Electron 注入），
               开发模式回退到 electron/locales/{lang}/translation.json
+
+设计:
+- I18n 为普通类 (可多实例), 消除 __new__ 单例 + _initialized 守护
+- 模块级 t()/get_language()/reload_i18n() 通过懒加载实例 (首次调用时构造, 非 import 时)
+- set_i18n_instance() 注入点: Cli 入口/测试可注入, 消除 Service Locator 不可测问题
+- 导入零副作用 (不再 _i18n = I18n() 在 import 时触发文件 IO)
 """
 
 import json
+import logging
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
-from main.utils.logger import get_logger
 from main.utils.paths import get_locales_root
 
-logger = get_logger(__name__)
+# S4: 改用 logging.getLogger (与 adb_manager/appium_server 等一致), 不在 import 时触发 root logger 配置.
+# root 配置由 Cli 入口 (logger_factory=get_logger) 首次创建 logger 时显式触发, 消除"导入即 IO"副作用.
+logger = logging.getLogger(__name__)
 
 
 class I18n:
-    _instance = None
+    """国际化实例 (普通类, 可多实例)。"""
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+    def __init__(self, language: str | None = None):
+        """构造 I18n 实例。
 
-    def __init__(self):
-        # _initialized 守护：防止 __init__ 在单例已存在时重复执行
-        if getattr(self, "_initialized", False):
-            return
-        self._language = os.environ.get("XKAUTOTESTER_LANG", "zh-CN")
+        Args:
+            language: 语言代码 (None 则读 XKAUTOTESTER_LANG 环境变量, 默认 zh-CN)
+        """
+        self._language = language or os.environ.get("XKAUTOTESTER_LANG", "zh-CN")
         self._translations = {}
         self._load_translations()
-        self._initialized = True
 
     def _get_locales_root(self) -> Path:
         """获取 locales 根目录。通过 paths.get_locales_root() 统一解析。"""
@@ -83,16 +88,39 @@ class I18n:
         self._load_translations()
 
 
-_i18n = I18n()
+# 模块级懒加载实例 (首次 t() 调用时构造, 非 import 时 — 消除导入副作用)
+_i18n_instance: I18n | None = None
+# 懒加载构造锁 (并发首次调用仅构造一次, 避免双实例互相覆盖)
+_i18n_lock = threading.Lock()
+
+
+def _get_i18n() -> I18n:
+    """获取模块级 I18n 实例 (懒加载, 加锁 + double-check)。"""
+    global _i18n_instance
+    if _i18n_instance is None:
+        with _i18n_lock:
+            if _i18n_instance is None:
+                _i18n_instance = I18n()
+    return _i18n_instance
+
+
+def set_i18n_instance(instance: I18n) -> None:
+    """注入 I18n 实例 (Cli 入口/测试用, 消除模块级单例不可测问题)。
+
+    注入后 _get_i18n() 返回此实例, 不再懒加载构造。
+    """
+    global _i18n_instance
+    with _i18n_lock:
+        _i18n_instance = instance
 
 
 def t(key: str, **kwargs: Any) -> str:
-    return _i18n.t(key, **kwargs)
+    return _get_i18n().t(key, **kwargs)
 
 
 def get_language() -> str:
-    return _i18n.language
+    return _get_i18n().language
 
 
 def reload_i18n():
-    _i18n.reload()
+    _get_i18n().reload()

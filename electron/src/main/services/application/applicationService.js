@@ -1,8 +1,7 @@
 // ApplicationService — 应用入口深模块。
 //
 // 藏 20 服务依赖图编排 + 3 await 顺序 + electronApp 副作用 + 错误兜底。
-// 27 factory-or-default (对称 test_initializer.py L146-198 7-factory + cli.py L46-71 7-factory +
-// smartScheduler.js L46-71 7-factory options bag)。
+// 26 factory-or-default (20 服务 factory + 3 await injector + registerHandlers + errorHandler)。
 //
 // 生产: new ApplicationService().run()  # 一行
 // 测试: new ApplicationService({ electronApp: mock, versionServiceFactory: fake, ... }).run()
@@ -10,6 +9,7 @@
 const ElectronApp = require('../../ElectronApp');
 const {
   defaultVersionServiceFactory,
+  defaultI18nServiceFactory,
   defaultUserDataServiceFactory,
   defaultScheduledPlanServiceFactory,
   defaultTestPlanServiceFactory,
@@ -33,10 +33,9 @@ const {
   defaultI18nInitializer,
   defaultPythonEnvConfigurer,
   defaultApkParserInitializer,
-  defaultSchedulerInitializer,
+  defaultUpdateServiceInitializer,
   defaultRegisterHandlers,
   defaultErrorHandler,
-  i18nService,
 } = require('./effects');
 
 class ApplicationService {
@@ -48,6 +47,7 @@ class ApplicationService {
 
     // 20 服务 factory-or-default
     this._versionServiceFactory = opts.versionServiceFactory || defaultVersionServiceFactory;
+    this._i18nServiceFactory = opts.i18nServiceFactory || defaultI18nServiceFactory;
     this._userDataServiceFactory = opts.userDataServiceFactory || defaultUserDataServiceFactory;
     this._scheduledPlanServiceFactory = opts.scheduledPlanServiceFactory || defaultScheduledPlanServiceFactory;
     this._testPlanServiceFactory = opts.testPlanServiceFactory || defaultTestPlanServiceFactory;
@@ -67,11 +67,11 @@ class ApplicationService {
     this._schedulerServiceFactory = opts.schedulerServiceFactory || defaultSchedulerServiceFactory;
     this._environmentStartupServiceFactory = opts.environmentStartupServiceFactory || defaultEnvironmentStartupServiceFactory;
 
-    // 3 await injector + schedulerInitializer + registerHandlers + errorHandler
+    // 4 await injector + registerHandlers + errorHandler
     this._i18nInitializer = opts.i18nInitializer || defaultI18nInitializer;
     this._pythonEnvConfigurer = opts.pythonEnvConfigurer || defaultPythonEnvConfigurer;
     this._apkParserInitializer = opts.apkParserInitializer || defaultApkParserInitializer;
-    this._schedulerInitializer = opts.schedulerInitializer || defaultSchedulerInitializer;
+    this._updateServiceInitializer = opts.updateServiceInitializer || defaultUpdateServiceInitializer;
     this._registerHandlers = opts.registerHandlers || defaultRegisterHandlers;
     this._errorHandler = opts.errorHandler || defaultErrorHandler;
   }
@@ -98,8 +98,9 @@ class ApplicationService {
     const isPackaged = electronApp.isPackaged;
     const projectRoot = electronApp.projectRoot;
 
-    // INIT phase: version + userData (派生 userConfigPath/userDataPath)
+    // INIT phase: version + i18n + userData (派生 userConfigPath/userDataPath)
     const versionService = this._versionServiceFactory(projectRoot);
+    const i18nService = this._i18nServiceFactory();
     const userDataService = this._userDataServiceFactory(projectRoot, versionService);
 
     const userConfigPath = userDataService.getUserConfigPath();
@@ -109,7 +110,7 @@ class ApplicationService {
     electronApp.userDataPath = userDataPath;
 
     // ENV phase: await #1 i18n.init (i18n 必先于其他服务)
-    await this._i18nInitializer(projectRoot, isPackaged, userConfigPath);
+    await this._i18nInitializer(i18nService, projectRoot, isPackaged, userConfigPath);
 
     // 构造依赖 i18n 的服务
     const scheduledPlanService = this._scheduledPlanServiceFactory(userConfigPath);
@@ -117,13 +118,14 @@ class ApplicationService {
     const allureService = this._allureServiceFactory(projectRoot, i18nService, userDataPath);
     const pythonTestService = this._pythonTestServiceFactory({
       projectRoot,
+      isPackaged,
       i18nService,
       userDataPath,
       mainWindow: null,
       allureService,
       testPlanService,
     });
-    const environmentService = this._environmentServiceFactory(i18nService, projectRoot);
+    const environmentService = this._environmentServiceFactory(projectRoot, i18nService);
 
     // ENV phase: await #2 configurePythonEnvironment (Python env 必先于 ADBService 用)
     await this._pythonEnvConfigurer(environmentService);
@@ -137,15 +139,16 @@ class ApplicationService {
     const testCaseService = this._testCaseServiceFactory(userConfigPath, projectRoot);
     const apkParserService = this._apkParserServiceFactory(projectRoot, i18nService);
     const updateService = this._updateServiceFactory(versionService, userDataService);
-    const inspectorService = this._inspectorServiceFactory(projectRoot, i18nService, userDataPath);
+    const inspectorService = this._inspectorServiceFactory(projectRoot, i18nService, userDataPath, isPackaged);
     const dataTransferService = this._dataTransferServiceFactory(userDataService, i18nService, versionService);
 
     // CONFIGURE phase: await #3 apkParser.initialize (二段构造)
     await this._apkParserInitializer(apkParserService);
 
-    // scheduler 2-step (factory + init)
-    const schedulerService = this._schedulerServiceFactory();
-    this._schedulerInitializer(schedulerService, i18nService, scheduledPlanService);
+    // CONFIGURE phase: await #4 updateService.initialize (读 config + apply allowInsecureSSL)
+    await this._updateServiceInitializer(updateService, userConfigPath);
+
+    const schedulerService = this._schedulerServiceFactory(scheduledPlanService, i18nService);
 
     // EnvironmentStartupService: 启动期编排 (3 服务 + driver install + app lifecycle)
     // 依赖 environmentService + testCaseService + userDataService + i18nService + electronApp

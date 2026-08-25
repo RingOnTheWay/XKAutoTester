@@ -189,3 +189,26 @@ test('No this.getAdbPath() calls in ADBService and EnvironmentService', () => {
   assert.ok(!/this\.getAdbPath\(\)/.test(adbServiceSource), 'ADBService should not call this.getAdbPath()');
   assert.ok(!/this\.getAdbPath\(\)/.test(envServiceSource), 'EnvironmentService should not call this.getAdbPath()');
 });
+
+// ── getLocalesPath (打包模式 i18n 修复) ─────────────────────────
+
+test('getLocalesPath 开发模式 (isPackaged=false) → projectRoot/electron/locales', () => {
+  assert.strictEqual(
+    pathHelper.getLocalesPath('/fake/root', false),
+    path.join('/fake/root', 'electron', 'locales')
+  );
+});
+
+test('getLocalesPath 打包模式 (isPackaged=true) → projectRoot/locales (resources 提取)', () => {
+  assert.strictEqual(
+    pathHelper.getLocalesPath('/fake/root', true),
+    path.join('/fake/root', 'locales')
+  );
+});
+
+test('getLocalesPath 默认 (不传 isPackaged) 保持开发模式路径 (向后兼容)', () => {
+  assert.strictEqual(
+    pathHelper.getLocalesPath('/fake/root'),
+    path.join('/fake/root', 'electron', 'locales')
+  );
+});

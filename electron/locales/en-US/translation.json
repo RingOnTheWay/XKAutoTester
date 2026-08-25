@@ -3,6 +3,38 @@
     "title": "XKAutoTester",
     "version": "Version"
   },
+  "windowControls": {
+    "restore": "Restore",
+    "maximize": "Maximize",
+    "minimize": "Minimize",
+    "close": "Close"
+  },
+  "errors": {
+    "invalidPath": "Invalid path parameter",
+    "checkPathFailed": "Failed to check path",
+    "openUrlNotAllowed": "URL is not allowed to open",
+    "pathNotExist": "Path does not exist",
+    "invalidSaveTestCase": "Invalid test case save parameters",
+    "saveDirNotAllowed": "Save directory must be within the test case directory",
+    "invalidDeleteTestCase": "Invalid test case delete parameters",
+    "deleteNotAllowed": "Delete target must be within the test case directory",
+    "fileNotExist": "File does not exist",
+    "invalidConfig": "Invalid config data",
+    "serviceNotInit": "Service is not initialized",
+    "adbServiceNotInit": "ADB service is not initialized",
+    "invalidApkPath": "Invalid APK path",
+    "invalidDeviceId": "Invalid device ID",
+    "invalidNotification": "Invalid notification data",
+    "updateUrlMissing": "Download URL or file name not provided",
+    "invalidUpdatePath": "Invalid update file path",
+    "apkParserNotInit": "APK parser service is not initialized",
+    "scheduledPlanNotFound": "Specified scheduled plan not found"
+  },
+  "saveConfirm": {
+    "title": "Unsaved Changes",
+    "message": "You have unsaved changes. Save them?",
+    "discard": "Don't Save"
+  },
   "common": {
     "none": "None",
     "yes": "Yes",
@@ -121,7 +153,8 @@
       "dns_failed": "DNS resolution failed, please check your network connection",
       "network_unreachable": "Network unreachable, please check your network connection",
       "unknown": "Unknown error",
-      "ssl_failed": "SSL certificate verification failed, please check system time or network proxy"
+      "ssl_failed": "SSL certificate verification failed, please check system time or network proxy",
+      "missing_hash": "Update package missing SHA256 hash, download/install refused (security closure)"
     },
     "downloadUpdate": "Download Update",
     "downloading": "Downloading",
@@ -129,6 +162,8 @@
     "cancelUpdate": "Cancel",
     "downloadFailed": "Failed to download update",
     "updateChangelog": "Release Notes",
+    "insecureReleaseWarning": "⚠ This release has no SHA256 hash; integrity cannot be verified. Download disabled (security closure).",
+    "updateHashVerified": "✓ SHA256 hash present; safe to download and install.",
     "run": "Run",
     "preventSleep": "Prevent sleep mode while running"
   },
@@ -681,6 +716,7 @@
     "fileNameRequired": "File name is required",
     "fileNameInvalid": "File name contains invalid characters",
     "fileNameInvalidChars": "File name can only contain letters, numbers and underscores",
+    "fileNameMustStartTestPrefix": "File name must start with test_",
     "cancelEdit": "Cancel Edit",
     "confirm": "Save",
     "deleteCase": "Delete",

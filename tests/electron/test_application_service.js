@@ -1,6 +1,7 @@
-// ApplicationService 单测 — 27 factory 注入 + 20 服务依赖图 + 3 await 顺序 + run + catch + shape + mutation。
+// ApplicationService 单测 — 26 factory 注入 + 20 服务依赖图 + 3 await 顺序 + run + catch + shape + mutation。
 // 验证: factory 收到正确 deps + 3 await 顺序固定 + run 调 setServices+initialize + catch 调 errorHandler +
-//      initializeServices 返 20 字段 shape + electronApp.userConfigPath/userDataPath mutation + schedulerInitializer 调用。
+//      initializeServices 返 20 字段 shape + electronApp.userConfigPath/userDataPath mutation。
+// M1: 删 schedulerInitializer (factory 直接 2 参构造 SmartScheduler)。
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
@@ -36,7 +37,6 @@ function makeFakeApp(opts = {}) {
   const calls = {
     factories: {},
     awaitOrder: [],
-    schedulerInit: null,
     errorHandler: null,
   };
 
@@ -51,8 +51,8 @@ function makeFakeApp(opts = {}) {
     apkParserInitializer: async () => {
       calls.awaitOrder.push('apkInit');
     },
-    schedulerInitializer: (sched, i18n, plan) => {
-      calls.schedulerInit = { sched: sched.__tag, i18n: typeof i18n, plan: plan.__tag };
+    updateServiceInitializer: async () => {
+      calls.awaitOrder.push('updateInit');
     },
     registerHandlers: () => {},
     errorHandler: {
@@ -89,8 +89,8 @@ function makeFakeApp(opts = {}) {
       calls.factories.pythonTest = opts;
       return { __tag: 'pythonTest' };
     },
-    environmentServiceFactory: (i18n, pr) => {
-      calls.factories.environment = { i18n: typeof i18n, pr };
+    environmentServiceFactory: (pr, i18n) => {
+      calls.factories.environment = { pr, i18n: typeof i18n };
       return { __tag: 'environment' };
     },
     adbServiceFactory: (pr, i18n) => {
@@ -133,8 +133,9 @@ function makeFakeApp(opts = {}) {
       calls.factories.dataTransfer = { userData: u.__tag, i18n: typeof i18n, version: v.__tag };
       return { __tag: 'dataTransfer' };
     },
-    schedulerServiceFactory: () => {
-      calls.factories.scheduler = {};
+    schedulerServiceFactory: (plan, i18n) => {
+      // M4: factory 收 (scheduledPlanService, i18nService) 2 参, 对齐 SmartScheduler 构造器
+      calls.factories.scheduler = { i18n: typeof i18n, plan: plan.__tag };
       return { __tag: 'scheduler' };
     },
     environmentStartupServiceFactory: (opts) => {
@@ -183,12 +184,12 @@ test('_buildServices 20 服务构造 + factory 收到正确 deps', async () => {
   assert.strictEqual(calls.factories.dataTransfer.version, 'version');
 });
 
-test('3 await 顺序: i18n → pythonEnv → apkInit', async () => {
+test('4 await 顺序: i18n → pythonEnv → apkInit → updateInit', async () => {
   const { app, calls } = makeFakeApp();
 
   await app.initializeServices();
 
-  assert.deepStrictEqual(calls.awaitOrder, ['i18n', 'pythonEnv', 'apkInit']);
+  assert.deepStrictEqual(calls.awaitOrder, ['i18n', 'pythonEnv', 'apkInit', 'updateInit']);
 });
 
 test('run() 调 setServices + initialize', async () => {
@@ -238,13 +239,13 @@ test('electronApp.userConfigPath/userDataPath 被 mutation', async () => {
   assert.strictEqual(electronApp.userDataPath, '/fake/data');
 });
 
-test('schedulerInitializer 收 scheduler + i18n + scheduledPlan', async () => {
+test('schedulerServiceFactory 收 scheduledPlan + i18n (M4: 参数顺序对齐 SmartScheduler 构造器)', async () => {
   const { app, calls } = makeFakeApp();
 
   await app.initializeServices();
 
-  assert.deepStrictEqual(calls.schedulerInit, {
-    sched: 'scheduler',
+  // M4: factory 收 (scheduledPlanService, i18nService), 对齐 SmartScheduler 构造器
+  assert.deepStrictEqual(calls.factories.scheduler, {
     i18n: 'object',
     plan: 'scheduledPlan',
   });

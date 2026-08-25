@@ -9,7 +9,7 @@ const path = require('path');
 const SERVICE_PATH = path.join(
   __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'DataTransferService.js'
 );
-const { DataTransferService, buildManifest, buildProgress, isValidManifest } = require(SERVICE_PATH);
+const { DataTransferService, buildManifest, buildProgress, isValidManifest, isSafeRelativePath } = require(SERVICE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
 
@@ -134,6 +134,27 @@ test('isValidManifest 非法 manifest 返 false', () => {
   assert.strictEqual(isValidManifest(null, 'config'), false, 'null 返 false');
   assert.strictEqual(isValidManifest({ app: 'Other', type: 'config' }, 'config'), false, 'app 不符');
   assert.strictEqual(isValidManifest({ app: 'XKAutoTester', type: 'logs' }, 'config'), false, 'type 不符');
+});
+
+// ── isSafeRelativePath (zip-slip 防线) ─────────────────────────
+
+test('isSafeRelativePath 合法相对路径返 true', () => {
+  assert.strictEqual(isSafeRelativePath('config.json'), true);
+  assert.strictEqual(isSafeRelativePath('sub/dir/file.json'), true);
+  assert.strictEqual(isSafeRelativePath('sub\\dir\\file.json'), true, '反斜杠路径也视为合法');
+});
+
+test('isSafeRelativePath 非法路径返 false', () => {
+  assert.strictEqual(isSafeRelativePath(null), false, 'null 返 false');
+  assert.strictEqual(isSafeRelativePath(''), false, '空串返 false');
+  assert.strictEqual(isSafeRelativePath('../config.json'), false, '.. 段拒绝');
+  assert.strictEqual(isSafeRelativePath('a/../../etc/passwd'), false, '深层 .. 拒绝');
+  assert.strictEqual(isSafeRelativePath('/etc/passwd'), false, '前导 / 拒绝');
+  assert.strictEqual(isSafeRelativePath('C:/Windows/win.ini'), false, 'Windows 盘符拒绝');
+  assert.strictEqual(isSafeRelativePath('C:\\Windows\\win.ini'), false, '反斜杠盘符拒绝');
+  assert.strictEqual(isSafeRelativePath('\\\\server\\share'), false, 'UNC 拒绝');
+  assert.strictEqual(isSafeRelativePath('sub//file.json'), false, '连续分隔符拒绝');
+  assert.strictEqual(isSafeRelativePath('sub/file.json/'), false, '尾斜杠拒绝');
 });
 
 // ── constructor + 懒初始化 ────────────────────────────────
@@ -313,6 +334,53 @@ test('importConfig 正常解压: 调 fs.writeFile + 返 needRestart', async () =
   assert.ok(fileSystem.calls.writeFile[0].path.includes('config.json'));
   assert.ok(mainWindow.sent.length > 0, 'mainWindow 收到进度');
   assert.strictEqual(mainWindow.sent[0].channel, 'on-import-progress');
+});
+
+test('importConfig zip-slip: ../ 条目名拒绝且不落盘', async () => {
+  const manifest = Buffer.from(JSON.stringify({ app: 'XKAutoTester', type: 'config' }));
+  const { svc, fileSystem, mainWindow } = makeFakeApp({
+    fileSystem: {
+      dirs: { '/fake/config': [] },
+      files: { '/test.zip': 'fake-zip' },
+    },
+    zip: {
+      entries: [
+        { entryName: 'manifest.json', isDirectory: false, getData: () => manifest },
+        { entryName: '../evil.json', isDirectory: false, getData: () => Buffer.from('{}') },
+      ],
+    },
+    mainWindow: makeFakeMainWindow(),
+  });
+
+  const result = await svc.importConfig('/test.zip');
+
+  assert.strictEqual(result.success, false);
+  assert.ok(result.error.includes('unsafe path'), '返 unsafe path 错误');
+  assert.strictEqual(fileSystem.calls.writeFile.length, 0, '未落盘任何文件');
+  const errorEvents = mainWindow.sent.filter(s => s.data.phase === 'error');
+  assert.ok(errorEvents.length > 0, '发了 error phase 进度');
+  assert.ok(errorEvents[0].data.message.includes('Unsafe path'), '进度消息含 unsafe path');
+});
+
+test('importConfig zip-slip: 绝对路径条目名拒绝', async () => {
+  const manifest = Buffer.from(JSON.stringify({ app: 'XKAutoTester', type: 'config' }));
+  const { svc, fileSystem } = makeFakeApp({
+    fileSystem: {
+      dirs: { '/fake/config': [] },
+      files: { '/test.zip': 'fake-zip' },
+    },
+    zip: {
+      entries: [
+        { entryName: 'manifest.json', isDirectory: false, getData: () => manifest },
+        { entryName: 'C:/Windows/evil.json', isDirectory: false, getData: () => Buffer.from('{}') },
+      ],
+    },
+  });
+
+  const result = await svc.importConfig('/test.zip');
+  assert.strictEqual(result.success, false);
+  assert.ok(result.error.includes('unsafe path'), '返 unsafe path 错误');
+  assert.strictEqual(fileSystem.calls.writeFile.length, 0, '未落盘任何文件');
 });
 
 // ── mainWindow 双路径 ───────────────────────────────────────

@@ -10,7 +10,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12-3c873a?style=flat-square)](https://www.python.org)
 [![Electron](https://img.shields.io/badge/Electron-38-47848f?style=flat-square)](https://www.electronjs.org)
 [![Vite](https://img.shields.io/badge/Vite-5-646cff?style=flat-square)](https://vitejs.dev)
-[![Version](https://img.shields.io/badge/Version-0.1.4--dev.2-9cf?style=flat-square)](https://github.com/RingOnTheWay/XKAutoTester)
+[![Version](https://img.shields.io/badge/Version-0.1.5--dev.2-9cf?style=flat-square)](https://github.com/RingOnTheWay/XKAutoTester)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078d7?style=flat-square)](https://www.microsoft.com/windows)
 
 **简体中文 | [English](docs/README_EN.md)**
@@ -93,11 +93,11 @@ flowchart TB
         HDL[Handlers Layer<br/>19 个 IPC 处理器]
         subgraph Services["Services 业务服务层"]
             APP[application/<br/>ElectronApp 生命周期]
-            SCH[scheduler/<br/>SchedulerService · smartScheduler · strategies]
+            SCH[scheduler/<br/>smartScheduler · strategies · planQueue]
             ADB[adb/<br/>AdbCommandExecutor · ApkInstaller ·<br/>FileTransferService · RemoteStatService]
             ALL[allure/<br/>AllureHttpServer · AllureCliInvoker]
             APK[apk/<br/>Aapt2Invoker · Aapt2OutputParser ·<br/>LocaleLabelResolver]
-            GEN[mixins/<br/>TestCaseCodeGenerator 拆分]
+            GEN[TestCaseCodeGenerator.js<br/>单文件用例代码生成]
             TOP[顶层服务<br/>InspectorService · BleDeviceDiscoveryService ·<br/>DataTransferService · UpdateService · ...]
         end
         HDL --> Services
@@ -304,7 +304,6 @@ XKAutoTester/
 │   │   │   │   ├── apk/            # APK 解析子模块（aapt2/输出解析/多语言标签）
 │   │   │   │   ├── application/    # ElectronApp 生命周期（factories/effects/index）
 │   │   │   │   ├── base/           # JsonFileCrudService 基类
-│   │   │   │   ├── mixins/         # TestCaseCodeGenerator Mixin（5 个）
 │   │   │   │   ├── scheduler/      # 调度器子模块（planQueue/smartScheduler/strategies）
 │   │   │   │   ├── ADBService.js
 │   │   │   │   ├── AdbProgressMonitor.js     # ADB 进度监控
@@ -323,7 +322,6 @@ XKAutoTester/
 │   │   │   │   ├── PagePackageService.js
 │   │   │   │   ├── PythonTestService.js
 │   │   │   │   ├── ScheduledPlanService.js
-│   │   │   │   ├── SchedulerService.js
 │   │   │   │   ├── ScrcpyService.js
 │   │   │   │   ├── SerialPortEnumerator.js       # 串口枚举
 │   │   │   │   ├── TarExtractor.js               # tar 解压
@@ -349,11 +347,11 @@ XKAutoTester/
 │   ├── renderer/                    # 渲染进程（MVC 架构）
 │   │   ├── core/                    # 核心基类（Action/ApiBridge/AppState/EventEmitter）
 │   │   ├── tabs/                    # 5 个 Tab（MVC 拆分）
-│   │   │   ├── android-connection/  # 含 mixins/（10 个）
+│   │   │   ├── android-connection/
 │   │   │   ├── page-package/
-│   │   │   ├── settings/            # 含 mixins/（5 个）
-│   │   │   ├── test-case/           # 含 mixins/（25 个）
-│   │   │   └── test-execution/      # 含 mixins/（16 个）
+│   │   │   ├── settings/
+│   │   │   ├── test-case/           # 含 modules/（4 个领域深模块）
+│   │   │   └── test-execution/
 │   │   ├── components/              # UI 组件
 │   │   │   ├── mixins/              # 组件 Mixin（11 个）
 │   │   │   ├── inspector.js         # Appium Inspector 弹窗
@@ -390,8 +388,7 @@ XKAutoTester/
 │   │   ├── inspector_service.py     # Appium Inspector 服务
 │   │   ├── logcat_monitor.py        # Logcat 监控
 │   │   ├── pytest_runner.py         # Pytest 运行器
-│   │   ├── stdio_protocol.py        # stdio JSON 协议
-│   │   └── test_plan_repository.py
+│   │   └── stdio_protocol.py        # stdio JSON 协议
 │   ├── device/
 │   │   └── bioland/
 │   │       ├── E127B.json           # 体温计数据配置（外置）
