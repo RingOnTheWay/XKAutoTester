@@ -128,7 +128,7 @@ export class TestCaseView {
             fileElement.setAttribute('data-py-file-path', file.path);
             fileElement.innerHTML = `
                 ${jsonMissing ? this.getIconHtml('alert_triangle') : this.getIconHtml('description')}
-                <span>${file.name}</span>
+                <span>${this.escapeHtml(file.name)}</span>
                 ${jsonMissing ? '<span class="tc-json-missing-badge" data-i18n="testCase.jsonMissing">' + window.i18n.t('testCase.jsonMissing') + '</span>' : ''}
             `;
             fragment.appendChild(fileElement);
@@ -364,11 +364,14 @@ export class TestCaseView {
             return;
         }
 
-        optionsContainer.innerHTML = apps.map(app => `
-            <div class="custom-select__option${selectedAppId?.id === app.id ? ' selected' : ''}" data-value="${app.id}" data-name="${app.name}">
-                <span>${app.name}</span>
+        optionsContainer.innerHTML = apps.map(app => {
+            const safeName = this.escapeHtml(app.name);
+            const safeId = this.escapeHtml(app.id);
+            return `
+            <div class="custom-select__option${selectedAppId?.id === app.id ? ' selected' : ''}" data-value="${safeId}" data-name="${safeName}">
+                <span>${safeName}</span>
             </div>
-        `).join('');
+        `;}).join('');
     }
 
     renderPlatformOptions(platforms, selectedPlatform) {
@@ -392,11 +395,14 @@ export class TestCaseView {
             return;
         }
 
-        optionsContainer.innerHTML = markers.map(marker => `
-            <div class="custom-select__option${selectedMarkers.includes(marker.name) ? ' selected' : ''}" data-value="${marker.name}" data-description="${marker.description || ''}">
-                <span>${marker.name}</span>
+        optionsContainer.innerHTML = markers.map(marker => {
+            const safeName = this.escapeHtml(marker.name);
+            const safeDescription = this.escapeHtml(marker.description || '');
+            return `
+            <div class="custom-select__option${selectedMarkers.includes(marker.name) ? ' selected' : ''}" data-value="${safeName}" data-description="${safeDescription}">
+                <span>${safeName}</span>
             </div>
-        `).join('');
+        `;}).join('');
     }
 
     // R10: 转义用户可控文本，防止 XSS（marker 名称来自用户配置）
@@ -454,14 +460,14 @@ export class TestCaseView {
 
         let optionsHtml = '';
         options.forEach(opt => {
-            optionsHtml += `<div class="custom-select__option${opt.selected ? ' selected' : ''}" data-value="${opt.value}"><span>${opt.label}</span></div>`;
+            optionsHtml += `<div class="custom-select__option${opt.selected ? ' selected' : ''}" data-value="${this.escapeHtml(opt.value)}"><span>${this.escapeHtml(opt.label)}</span></div>`;
         });
 
         return `
             <div class="custom-select-wrapper tc-step-select-wrapper" data-step-id="${stepId}" data-index="${index}">
                 <div class="custom-select" id="${uniqueId}" data-select-id="${selectId}" data-step-id="${stepId}" data-index="${index}">
                     <div class="custom-select__selected" id="${uniqueId}-selected">
-                        <span class="custom-select__text">${selectedText}</span>
+                        <span class="custom-select__text">${this.escapeHtml(selectedText)}</span>
                     </div>
                     <div class="custom-select__options" id="${uniqueId}-options">
                         ${optionsHtml}
@@ -571,7 +577,7 @@ export class TestCaseView {
                 <div class="tc-step-number">${order}</div>
                 <div class="tc-step-name">
                     <input type="text" class="glass-input tc-step-name-input"
-                           value="${step.name}" data-step-id="${step.id}">
+                           value="${this.escapeHtml(step.name)}" data-step-id="${step.id}">
                 </div>
                 <div class="tc-step-actions">
                     <button type="button" class="tc-step-btn tc-step-copy-btn" data-step-id="${step.id}" title="${window.i18n.t('common.copy')}">
@@ -1267,7 +1273,7 @@ export class TestCaseView {
                 }));
                 return `
                     <div class="form-group">
-                        <label>${param.label}</label>
+                        <label>${this.escapeHtml(param.label)}</label>
                         ${this.generateCustomSelect(`tc-ble-param-${param.key}`, options, param.placeholder || window.i18n.t('common.pleaseSelect'), stepId)}
                     </div>
                 `;
@@ -1276,17 +1282,17 @@ export class TestCaseView {
                 const precisionAttr = param.precision !== undefined ? ` data-precision="${param.precision}"` : '';
                 return `
                     <div class="form-group">
-                        <label>${param.label}</label>
+                        <label>${this.escapeHtml(param.label)}</label>
                         <input type="number" class="glass-input tc-ble-param-input" data-step-id="${stepId}" data-param-key="${param.key}"
-                               value="${value}" step="${step}" placeholder="${param.placeholder || ''}"${precisionAttr}>
+                               value="${this.escapeHtml(value)}" step="${step}" placeholder="${this.escapeHtml(param.placeholder || '')}"${precisionAttr}>
                     </div>
                 `;
             } else {
                 return `
                     <div class="form-group">
-                        <label>${param.label}</label>
+                        <label>${this.escapeHtml(param.label)}</label>
                         <input type="text" class="glass-input tc-ble-param-input" data-step-id="${stepId}" data-param-key="${param.key}"
-                               value="${value}" placeholder="${param.placeholder || ''}">
+                               value="${this.escapeHtml(value)}" placeholder="${this.escapeHtml(param.placeholder || '')}">
                     </div>
                 `;
             }
