@@ -146,3 +146,152 @@ describe('deviceModalRenderMixin XSS 转义（deviceId）', () => {
     assert.strictEqual(el.getAttribute('data-device-id'), 'device-abc', '字符串形态应取原值');
   });
 });
+
+// R15: DeviceCascadeSelect 三级选项渲染转义（BLE 设备数据）+ showJsonMissingWarning fileName 转义
+describe('DeviceCascadeSelect XSS 转义（BLE 设备数据）', () => {
+  let DeviceCascadeSelectClass;
+
+  function createCascadeHost() {
+    return {
+      manufacturerOptionsEl: global.document.createElement('div'),
+      typeOptionsEl: global.document.createElement('div'),
+      modelOptionsEl: global.document.createElement('div'),
+      selectedManufacturer: 'm1',
+      selectedType: 't1',
+      selectedDevice: null,
+      labelKey: 'name',
+      valueKey: 'deviceId',
+      devices: [],
+      // _renderXxx 渲染后会对 option 绑 click，绑定用到的字段
+      _renderManufacturerOptions() {},
+      _renderTypeOptions() {},
+      _renderModelOptions() {},
+      _updateLevelVisibility() {},
+    };
+  }
+
+  before(async () => {
+    setupJsdom();
+    const mod = await import('../../electron/renderer/components/device-cascade-select.js');
+    DeviceCascadeSelectClass = mod.DeviceCascadeSelect;
+  });
+  after(teardownJsdom);
+
+  test('_renderManufacturerOptions 恶意厂商名/ID不注入原始 HTML', () => {
+    const host = createCascadeHost();
+    host.groupedDevices = {
+      '"><img src=x onerror=alert(1)>': {
+        manufacturerId: '"><img src=x onerror=alert(1)>',
+        manufacturer: '<script>evil()</script>',
+        types: { t1: { type: 't1', category: '体温计', devices: [{ deviceId: 'd1', name: 'n1' }] } },
+      },
+    };
+    DeviceCascadeSelectClass.prototype._renderManufacturerOptions.call(host);
+
+    const container = host.manufacturerOptionsEl;
+    assert.strictEqual(container.querySelectorAll('script').length, 0, '不应产生 script 元素');
+    assert.strictEqual(container.querySelectorAll('img').length, 0, '不应产生 img 元素');
+    const opts = container.querySelectorAll('.device-cascade-select__option');
+    assert.strictEqual(opts.length, 1, '属性不应逃逸产生额外节点');
+    assert.ok(opts[0].textContent.includes('<script>evil()</script>'), '厂商名应作为纯文本保留原文');
+  });
+
+  test('_renderTypeOptions 恶意类型/分类不注入原始 HTML', () => {
+    const host = createCascadeHost();
+    host.groupedDevices = {
+      m1: {
+        manufacturerId: 'm1',
+        manufacturer: 'M',
+        types: {
+          '"><svg onload=e()>': { type: '"><svg onload=e()>', category: '<img src=x onerror=alert(1)>', devices: [{ deviceId: 'd1', name: 'n1' }] },
+        },
+      },
+    };
+    DeviceCascadeSelectClass.prototype._renderTypeOptions.call(host);
+
+    const container = host.typeOptionsEl;
+    assert.strictEqual(container.querySelectorAll('svg').length, 0, '不应产生 svg 元素');
+    assert.strictEqual(container.querySelectorAll('img').length, 0, '不应产生 img 元素');
+    const opts = container.querySelectorAll('.device-cascade-select__option');
+    assert.strictEqual(opts.length, 1, '属性不应逃逸产生额外节点');
+    assert.ok(opts[0].textContent.includes('<img src=x onerror=alert(1)>'), '分类名应作为纯文本保留原文');
+  });
+
+  test('_renderModelOptions 恶意设备名/ID不注入原始 HTML', () => {
+    const host = createCascadeHost();
+    host.groupedDevices = {
+      m1: {
+        manufacturerId: 'm1',
+        manufacturer: 'M',
+        types: { t1: { type: 't1', category: '体温计', devices: [
+          { deviceId: '"><img src=x onerror=alert(1)>', name: '<script>evil()</script>' },
+        ] } },
+      },
+    };
+    DeviceCascadeSelectClass.prototype._renderModelOptions.call(host);
+
+    const container = host.modelOptionsEl;
+    assert.strictEqual(container.querySelectorAll('img').length, 0, '不应产生 img 元素');
+    assert.strictEqual(container.querySelectorAll('script').length, 0, '不应产生 script 元素');
+    const opts = container.querySelectorAll('.device-cascade-select__option');
+    assert.strictEqual(opts.length, 1, '属性不应逃逸产生额外节点');
+    assert.ok(opts[0].textContent.includes('<script>evil()</script>'), '设备名应作为纯文本保留原文');
+    assert.strictEqual(opts[0].getAttribute('data-id'), '"><img src=x onerror=alert(1)>', 'data-id 属性应完整保留原值');
+  });
+
+  test('正常 BLE 设备三级选项渲染不受影响', () => {
+    const host = createCascadeHost();
+    host.selectedManufacturer = 'bioland';
+    host.selectedType = 'thermometer';
+    host.groupedDevices = {
+      bioland: {
+        manufacturerId: 'bioland',
+        manufacturer: 'Bioland',
+        types: { thermometer: { type: 'thermometer', category: '体温计', devices: [{ deviceId: 'MB026A-01', name: '体温计 01' }] } },
+      },
+    };
+    DeviceCascadeSelectClass.prototype._renderManufacturerOptions.call(host);
+    assert.ok(host.manufacturerOptionsEl.textContent.includes('Bioland'), '厂商名应正常渲染');
+    DeviceCascadeSelectClass.prototype._renderTypeOptions.call(host);
+    assert.ok(host.typeOptionsEl.textContent.includes('体温计'), '分类应正常渲染');
+    DeviceCascadeSelectClass.prototype._renderModelOptions.call(host);
+    assert.ok(host.modelOptionsEl.textContent.includes('体温计 01'), '设备名应正常渲染');
+  });
+});
+
+describe('TestCaseView showJsonMissingWarning 转义（i18next 插值）', () => {
+  let ViewClass;
+
+  before(async () => {
+    setupJsdom();
+    // 动态插入 showJsonMissingWarning 所需容器
+    const editorContent = global.document.createElement('div');
+    editorContent.className = 'tc-editor-content';
+    global.document.body.appendChild(editorContent);
+    // i18n mock: 模拟 i18next v25 escapeValue=false 行为（插值原样输出不转义）
+    global.window.i18n = { t: (key, opts) => {
+      if (key === 'testCase.jsonMissingWarning' && opts) return `JSON 文件缺失: ${opts.fileName}`;
+      return key;
+    } };
+    const mod = await import('../../electron/renderer/tabs/test-case/view.js');
+    ViewClass = mod.TestCaseView;
+  });
+  after(teardownJsdom);
+
+  test('恶意文件名经 i18n 插值后不注入原始 HTML', () => {
+    const v = new ViewClass();
+    v.showJsonMissingWarning('<img src=x onerror=alert(1)>.py');
+    const warning = global.document.getElementById('tc-json-missing-warning');
+    assert.ok(warning, '应有警告节点');
+    assert.strictEqual(warning.querySelectorAll('img').length, 0, '不应产生 img 元素');
+    assert.ok(warning.textContent.includes('<img src=x onerror=alert(1)>.py'), '文件名应作为纯文本保留原文');
+  });
+
+  test('正常文件名警告显示不受影响', () => {
+    const v = new ViewClass();
+    v.showJsonMissingWarning('test_login.py');
+    const warning = global.document.getElementById('tc-json-missing-warning');
+    assert.ok(warning.textContent.includes('test_login.py'), '正常文件名应显示');
+    assert.ok(warning.textContent.includes('JSON'), '警告文案应显示');
+  });
+});

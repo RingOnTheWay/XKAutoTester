@@ -4,6 +4,13 @@
 // 文档点击外部关闭/static closeAll 等; 多级 _handleKeydown/_setActive/open/close 因签名差异自行覆盖。
 import { BaseSelect } from './base-select.js';
 
+// R15: 转义 BLE 设备数据（manufacturer/category/type/model 来自设备扫描与用户配置），防止 XSS
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  return String(str).replace(/[&<>"']/g, (ch) => map[ch]);
+}
+
 export class DeviceCascadeSelect extends BaseSelect {
   static instances = {};
 
@@ -468,8 +475,8 @@ export class DeviceCascadeSelect extends BaseSelect {
         : group.manufacturer;
       const isSelected = this.selectedManufacturer === group.manufacturerId;
       return `
-        <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-manufacturer="${group.manufacturerId}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
-          <span class="device-cascade-select__option-text">${displayManufacturer}</span>
+        <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-manufacturer="${escapeHtml(group.manufacturerId)}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
+          <span class="device-cascade-select__option-text">${escapeHtml(displayManufacturer)}</span>
           <span class="device-cascade-select__option-count">${totalDevices}</span>
         </div>
       `;
@@ -510,8 +517,8 @@ export class DeviceCascadeSelect extends BaseSelect {
     this.typeOptionsEl.innerHTML = types.map(group => {
       const isSelected = this.selectedType === group.type;
       return `
-      <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-type="${group.type}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
-        <span class="device-cascade-select__option-text">${group.category}</span>
+      <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-type="${escapeHtml(group.type)}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
+        <span class="device-cascade-select__option-text">${escapeHtml(group.category)}</span>
         <span class="device-cascade-select__option-count">${group.devices.length}</span>
       </div>
     `;
@@ -549,8 +556,8 @@ export class DeviceCascadeSelect extends BaseSelect {
     this.modelOptionsEl.innerHTML = typeGroup.devices.map(device => {
       const isSelected = this.selectedDevice && device[this.valueKey] === this.selectedDevice[this.valueKey];
       return `
-      <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-id="${device[this.valueKey]}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
-        <span class="device-cascade-select__option-text">${device[this.labelKey]}</span>
+      <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-id="${escapeHtml(device[this.valueKey])}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
+        <span class="device-cascade-select__option-text">${escapeHtml(device[this.labelKey])}</span>
       </div>
     `;
     }).join('');

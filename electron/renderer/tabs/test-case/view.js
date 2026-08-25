@@ -1637,7 +1637,7 @@ export class TestCaseView {
         warningDiv.className = 'tc-json-missing-warning';
         warningDiv.innerHTML = `
             ${this.getIconHtml('warning')}
-            <span>${window.i18n.t('testCase.jsonMissingWarning', { fileName })}</span>
+            <span>${window.i18n.t('testCase.jsonMissingWarning', { fileName: this.escapeHtml(fileName) })}</span>
         `;
         editorContent.insertBefore(warningDiv, editorContent.firstChild);
     }
