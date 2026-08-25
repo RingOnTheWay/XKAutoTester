@@ -82,12 +82,11 @@ class FileTransferService {
     try {
       const stats = this._fs.statSync(localPath);
       const fileSizeInBytes = stats.size;
-      const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2);
 
       const monitor = this._monitorFactory({
         remotePath,
         deviceId,
-        fileStats: { size: fileSizeInBytes, name: path.basename(localPath), sizeInMB: fileSizeInMB },
+        fileStats: { size: fileSizeInBytes, name: path.basename(localPath) },
         eventSender,
         i18nService: this._i18n,
         executeStat: (statArgs) => this._executor.execute(statArgs),
@@ -171,13 +170,12 @@ class FileTransferService {
       const remoteSizeBytes = isDir
         ? await this._remoteStat.getDirSize(remotePath, deviceId)
         : await this._remoteStat.getFileSize(remotePath, deviceId);
-      const remoteSizeInMB = (remoteSizeBytes / (1024 * 1024)).toFixed(2);
 
       if (isDir) {
-        return await this._downloadDir(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, remoteSizeInMB, sanitizeFileName);
+        return await this._downloadDir(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, sanitizeFileName);
       }
 
-      return await this._downloadFile(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, remoteSizeInMB, sanitizeFileName);
+      return await this._downloadFile(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, sanitizeFileName);
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -186,7 +184,7 @@ class FileTransferService {
   /**
    * 下载目录: tar exec-out → TarExtractor → AdmZip
    */
-  async _downloadDir(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, remoteSizeInMB, sanitizeFileName) {
+  async _downloadDir(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, sanitizeFileName) {
     const basePath = localPath.replace(/\\/g, '/').replace(/\/[^/]+$/, '');
     const dirName = path.basename(remotePath);
     const sanitizedDirName = sanitizeFileName(dirName);
@@ -202,7 +200,7 @@ class FileTransferService {
     const monitor = this._monitorFactory({
       remotePath,
       deviceId,
-      fileStats: { size: remoteSizeBytes || 1, name: path.basename(finalLocalPath), sizeInMB: remoteSizeInMB },
+      fileStats: { size: remoteSizeBytes || 1, name: path.basename(finalLocalPath) },
       eventSender,
       i18nService: this._i18n,
       executeStat: () => Promise.resolve({ success: false, output: '' }),
@@ -293,7 +291,7 @@ class FileTransferService {
   /**
    * 下载单文件: adb pull -p
    */
-  async _downloadFile(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, remoteSizeInMB, sanitizeFileName) {
+  async _downloadFile(remotePath, localPath, deviceId, eventSender, remoteSizeBytes, sanitizeFileName) {
     const basePath = localPath.replace(/\\/g, '/').replace(/\/[^/]+$/, '');
     const fileName = path.basename(localPath);
     const sanitizedFileName = sanitizeFileName(fileName);
@@ -302,7 +300,7 @@ class FileTransferService {
     const monitor = this._monitorFactory({
       remotePath,
       deviceId,
-      fileStats: { size: remoteSizeBytes || 1, name: path.basename(finalLocalPath), sizeInMB: remoteSizeInMB },
+      fileStats: { size: remoteSizeBytes || 1, name: path.basename(finalLocalPath) },
       eventSender,
       i18nService: this._i18n,
       executeStat: () => Promise.resolve({ success: false, output: '' }),

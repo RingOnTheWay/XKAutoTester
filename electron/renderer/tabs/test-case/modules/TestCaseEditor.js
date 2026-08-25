@@ -203,6 +203,10 @@ export class TestCaseEditor extends EventEmitter {
       this.emit('error', { source: 'saveCase', message: 'fileNameInvalidChars' });
       return;
     }
+    if (!/^test_/.test(caseData.fileName)) {
+      this.emit('error', { source: 'saveCase', message: 'fileNameMustStartTestPrefix' });
+      return;
+    }
     if (!this.#fileBrowser.selectedDirectory) {
       this.emit('error', { source: 'saveCase', message: 'selectCaseFirst' });
       return;

@@ -716,6 +716,7 @@
     "fileNameRequired": "文件名称不能为空",
     "fileNameInvalid": "文件名称包含非法字符",
     "fileNameInvalidChars": "文件名称只能包含英文、数字和下划线",
+    "fileNameMustStartTestPrefix": "文件名称必须以 test_ 开头",
     "cancelEdit": "取消编辑",
     "confirm": "保存",
     "deleteCase": "删除",

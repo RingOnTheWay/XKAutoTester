@@ -59,7 +59,6 @@ class ApkInstaller {
     try {
       const stats = this._fs.statSync(apkPath);
       const fileSizeInBytes = stats.size;
-      const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2);
 
       const tempFileName = `temp_${Date.now()}.apk`;
       const tempRemotePath = `/data/local/tmp/${tempFileName}`;
@@ -67,7 +66,7 @@ class ApkInstaller {
       const monitor = this._monitorFactory({
         remotePath: tempRemotePath,
         deviceId,
-        fileStats: { size: fileSizeInBytes, name: path.basename(apkPath), sizeInMB: fileSizeInMB },
+        fileStats: { size: fileSizeInBytes, name: path.basename(apkPath) },
         eventSender,
         i18nService: this._i18n,
         executeStat: (statArgs) => this._executor.execute(statArgs),

@@ -716,6 +716,7 @@
     "fileNameRequired": "File name is required",
     "fileNameInvalid": "File name contains invalid characters",
     "fileNameInvalidChars": "File name can only contain letters, numbers and underscores",
+    "fileNameMustStartTestPrefix": "File name must start with test_",
     "cancelEdit": "Cancel Edit",
     "confirm": "Save",
     "deleteCase": "Delete",

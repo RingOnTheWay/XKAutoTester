@@ -400,7 +400,8 @@ class AppiumServer(SubprocessHandle):
             return response.status_code == 200
         except Exception as e:
             # 加可观测性, 区分"未运行"与"检查失败" (HTTP 异常被当作未运行会触发重复 start 或端口冲突)
-            logger.warning(f"Appium server 状态检查失败 (视为未运行): {e}")
+            # 轮询期间"状态检查失败"属启动预期, 不刷控制台; 仅最终启动失败(超时)走 ERROR 上报
+            logger.debug(f"Appium server 状态检查失败 (视为未运行): {e}")
             return False
 
     def __enter__(self) -> "AppiumServer":

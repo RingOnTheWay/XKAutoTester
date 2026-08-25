@@ -17,6 +17,7 @@ asar: true
 
 asarUnpack:
   - src/preload/**/*
+  - node_modules/**/*
 
 extraResources:
   - from: ../src
