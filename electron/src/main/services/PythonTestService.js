@@ -120,6 +120,7 @@ class PythonTestService {
   constructor(deps) {
     // ── 公共属性 (测试 L55-60 直接断言, 必须保留) ──
     this.projectRoot = deps.projectRoot;
+    this.isPackaged = !!deps.isPackaged;
     this.i18nService = deps.i18nService;
     this.userDataPath = deps.userDataPath;
     this.mainWindow = deps.mainWindow;
@@ -305,7 +306,7 @@ class PythonTestService {
       PYTHONIOENCODING: 'utf-8',
       PYTHONUTF8: '1',
       XKAUTOTESTER_LANG: this.i18nService.getLanguage(),
-      XKAUTOTESTER_LOCALES_PATH: pathHelper.getLocalesPath(this.projectRoot),
+      XKAUTOTESTER_LOCALES_PATH: pathHelper.getLocalesPath(this.projectRoot, this.isPackaged),
       // 注入 adb 路径供 Python subprocess_adb_adapter 使用 (打包模式 PATH 无 adb 时必需,
       // inspector_service._wake_device 等依赖此 env 找到 adb.exe)
       XKAUTOTESTER_ADB_PATH: pathHelper.getAdbPath(this.projectRoot),

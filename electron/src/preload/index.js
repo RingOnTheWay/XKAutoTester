@@ -6,11 +6,22 @@ const { IPC_CHANNELS } = require('../shared/constants');
 // 加载i18next模块
 const i18next = require('i18next');
 
+// 解析 locales 根目录 (对齐 pathHelper.getLocalesPath)
+// 打包模式: locales 经 extraResources 提取至 process.resourcesPath/locales (普通 fs 路径, preload 可直接读)
+// 开发模式: electron/locales (__dirname = electron/src/preload)
+function resolveLocalesPath() {
+  const packagedPath = path.join(process.resourcesPath, 'locales');
+  if (fs.existsSync(path.join(packagedPath, 'zh-CN', 'translation.json'))) {
+    return packagedPath;
+  }
+  return path.join(__dirname, '..', '..', 'locales');
+}
+
 // 初始化i18next
 async function initializeI18next() {
   try {
-    // 构建语言文件路径 - locales 在 electron/ 目录下
-    const localesPath = path.join(__dirname, '..', '..', 'locales');
+    // 构建语言文件路径 - locales 在 electron/ 目录下 (打包模式在 resources/locales)
+    const localesPath = resolveLocalesPath();
 
     // 加载语言文件
     const resources = {};

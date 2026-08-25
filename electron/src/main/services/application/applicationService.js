@@ -118,6 +118,7 @@ class ApplicationService {
     const allureService = this._allureServiceFactory(projectRoot, i18nService, userDataPath);
     const pythonTestService = this._pythonTestServiceFactory({
       projectRoot,
+      isPackaged,
       i18nService,
       userDataPath,
       mainWindow: null,
@@ -138,7 +139,7 @@ class ApplicationService {
     const testCaseService = this._testCaseServiceFactory(userConfigPath, projectRoot);
     const apkParserService = this._apkParserServiceFactory(projectRoot, i18nService);
     const updateService = this._updateServiceFactory(versionService, userDataService);
-    const inspectorService = this._inspectorServiceFactory(projectRoot, i18nService, userDataPath);
+    const inspectorService = this._inspectorServiceFactory(projectRoot, i18nService, userDataPath, isPackaged);
     const dataTransferService = this._dataTransferServiceFactory(userDataService, i18nService, versionService);
 
     // CONFIGURE phase: await #3 apkParser.initialize (二段构造)

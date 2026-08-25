@@ -41,7 +41,8 @@ const defaultTestCaseServiceFactory = (userConfigPath, projectRoot) => new TestC
 const defaultApkParserServiceFactory = (projectRoot, i18nService) => new ApkParserService(projectRoot, i18nService);
 const defaultUpdateServiceFactory = (versionService, userDataService) =>
   new UpdateService(versionService, userDataService);
-const defaultInspectorServiceFactory = (projectRoot, i18nService, userDataPath) => new InspectorService(projectRoot, i18nService, userDataPath);
+const defaultInspectorServiceFactory = (projectRoot, i18nService, userDataPath, isPackaged = false) =>
+  new InspectorService(projectRoot, i18nService, userDataPath, isPackaged);
 const defaultDataTransferServiceFactory = (userDataService, i18nService, versionService) => new DataTransferService(userDataService, i18nService, versionService);
 const defaultSchedulerServiceFactory = (scheduledPlanService, i18nService) =>
   new SmartScheduler(scheduledPlanService, i18nService);

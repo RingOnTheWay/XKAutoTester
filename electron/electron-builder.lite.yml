@@ -10,7 +10,6 @@ files:
   - splash.html
   - renderer/**/*
   - assets/**/*
-  - locales/**/*
   - templates/**/*
   - node_modules/**/*
 
@@ -33,6 +32,8 @@ extraResources:
     to: uv.lock
   - from: ../version.json
     to: version.json
+  - from: locales
+    to: locales
 
 win:
   target: nsis

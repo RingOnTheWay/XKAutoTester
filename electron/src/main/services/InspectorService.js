@@ -3,8 +3,9 @@ const pathHelper = require('../utils/pathHelper');
 const { JsonStdioTransport } = require('./JsonStdioTransport');
 
 class InspectorService {
-    constructor(projectRoot, i18nService, userDataPath) {
+    constructor(projectRoot, i18nService, userDataPath, isPackaged = false) {
         this.projectRoot = projectRoot;
+        this.isPackaged = isPackaged;
         this.i18nService = i18nService;
         this.userDataPath = userDataPath;
         this._transport = null;
@@ -33,7 +34,7 @@ class InspectorService {
                 PYTHONIOENCODING: 'utf-8',
                 PYTHONUTF8: '1',
                 XKAUTOTESTER_LANG: this.i18nService.getLanguage(),
-                XKAUTOTESTER_LOCALES_PATH: pathHelper.getLocalesPath(this.projectRoot),
+                XKAUTOTESTER_LOCALES_PATH: pathHelper.getLocalesPath(this.projectRoot, this.isPackaged),
                 ...(pythonConfig.isEmbedded ? {} : pythonPathEnv),
                 XKAUTOTESTER_USER_DATA: this.userDataPath,
                 XKAUTOTESTER_ADB_PATH: this._adbPath,

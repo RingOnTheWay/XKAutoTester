@@ -111,10 +111,13 @@ function clearAapt2PathCache() {
   aapt2PathCache = null;
 }
 
-function getLocalesPath(projectRoot) {
-  // 开发模式: projectRoot/electron/locales
-  // 打包模式: projectRoot === process.resourcesPath，locales 在 asar 内 (app.asar/electron/locales)
-  //          Node.js fs 能读 asar 内文件，但 Python 子进程读不到，将走 i18n.py 的 logger.warning 降级路径
+function getLocalesPath(projectRoot, isPackaged = false) {
+  // 开发模式: projectRoot/electron/locales (仓库根)
+  // 打包模式: projectRoot === process.resourcesPath，locales 经 extraResources 提取至 resources/locales
+  //          (Node 主进程/preload/Python 子进程均可直接读普通 fs 路径, 不依赖 asar 读取)
+  if (isPackaged) {
+    return path.join(projectRoot, 'locales');
+  }
   return path.join(projectRoot, 'electron', 'locales');
 }
 
