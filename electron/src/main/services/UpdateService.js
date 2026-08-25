@@ -417,14 +417,16 @@ class UpdateService {
     if (!latestRelease) {
       return {
         hasUpdate: false,
-        currentVersion: this.versionService.getVersion(),
-        latestVersion: this.versionService.getVersion(),
+        currentVersion: this.versionService.getFullVersion(),
+        latestVersion: this.versionService.getFullVersion(),
         secure: false  // 无 release 不存在安装场景, secure=false
       };
     }
 
     const latestVersion = latestRelease.tag_name.replace(/^v/, '');
-    const currentVersion = this.versionService.getVersion();
+    // 用 fullVersion (含 prerelease, 如 0.1.5-dev.2) 与 tag 去 v 后的 latestVersion 比较。
+    // 若用 version (0.1.5), 会把 prerelease 段解析成数字段导致同版本误判为有更新。
+    const currentVersion = this.versionService.getFullVersion();
     const hasUpdate = this._versionComparator(currentVersion, latestVersion) < 0;
 
     let downloadUrl = null;

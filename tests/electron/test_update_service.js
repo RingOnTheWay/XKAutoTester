@@ -10,16 +10,24 @@ const UPDATE_SERVICE_PATH = path.join(
   __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'UpdateService.js'
 );
 const { UpdateService, normalizeUpdateError, parseSha256FromBody, computeFileSha256 } = require(UPDATE_SERVICE_PATH);
+const VERSION_COMPARE_PATH = path.join(
+  __dirname, '..', '..', 'electron', 'src', 'main', 'utils', 'versionCompare.js'
+);
+const { compareVersions } = require(VERSION_COMPARE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
 
-function makeFakeVersionService(version = '1.0.0') {
-  const calls = { getVersion: 0 };
+function makeFakeVersionService(version = '1.0.0', fullVersion = null) {
+  const calls = { getVersion: 0, getFullVersion: 0 };
   return {
     calls,
     getVersion() {
       calls.getVersion++;
       return version;
+    },
+    getFullVersion() {
+      calls.getFullVersion++;
+      return fullVersion !== null ? fullVersion : version;
     }
   };
 }
@@ -99,7 +107,7 @@ function makeFakeInstallStrategy(result = null, error = null) {
 }
 
 function makeFakeApp(opts = {}) {
-  const versionService = makeFakeVersionService(opts.version || '1.0.0');
+  const versionService = makeFakeVersionService(opts.version || '1.0.0', opts.fullVersion);
   const userDataService = makeFakeUserDataService(opts.configPath || '/fake/config');
   const fileSystem = makeFakeFileSystem(opts.fileSystem || {});
   const updateSource = makeFakeUpdateSource(opts.release || null, opts.updateSourceError || null);
@@ -266,6 +274,51 @@ test('checkForUpdate 错误分类透传 (updateSource 抛 classified error)', as
       return true;
     }
   );
+});
+
+test('checkForUpdate 同版本不误报: 本地 fullVersion 与 tag 相同 → hasUpdate=false', async () => {
+  const release = makeRelease({ tag_name: 'v1.0.5-dev.2' });
+  const { svc } = makeFakeApp({
+    version: '1.0.5',           // version.json 的 version 字段 (不含 prerelease)
+    fullVersion: '1.0.5-dev.2', // fullVersion 含 prerelease
+    release,
+    versionComparator: compareVersions,
+  });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.hasUpdate, false, '同版本 (fullVersion==tag) → hasUpdate=false');
+  assert.strictEqual(result.currentVersion, '1.0.5-dev.2');
+  assert.strictEqual(result.latestVersion, '1.0.5-dev.2');
+});
+
+test('checkForUpdate versionComparator 收到 fullVersion 而非 version', async () => {
+  const release = makeRelease({ tag_name: 'v1.0.5-dev.2' });
+  const { svc, versionComparatorCalls } = makeFakeApp({
+    version: '1.0.5',
+    fullVersion: '1.0.5-dev.2',
+    release,
+  });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.hasUpdate, false);
+  assert.deepEqual(versionComparatorCalls.compare[0], { v1: '1.0.5-dev.2', v2: '1.0.5-dev.2' },
+    'versionComparator 应收到 fullVersion 而非 version');
+});
+
+test('checkForUpdate 更高 pre-release 版本仍检测到更新', async () => {
+  const release = makeRelease({ tag_name: 'v1.0.6-dev.1' });
+  const { svc } = makeFakeApp({
+    version: '1.0.5',
+    fullVersion: '1.0.5-dev.2',
+    release,
+    versionComparator: compareVersions,
+  });
+
+  const result = await svc.checkForUpdate();
+
+  assert.strictEqual(result.hasUpdate, true, '1.0.5-dev.2 < 1.0.6-dev.1 → hasUpdate=true');
 });
 
 test('downloadUpdate 已存在文件返快路径 {success, filePath, message}', async () => {
