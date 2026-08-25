@@ -5,6 +5,14 @@
  * NOTE: original private fields (#xxx) were converted to public (_xxx) so
  * mixin methods (defined outside the class body) can access them.
  */
+
+// R15: 转义 Appium page source 属性（text/content-desc/class 等被测应用可控），防止 XSS
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return String(str).replace(/[&<>"']/g, (ch) => map[ch]);
+}
+
 export const TreeMixin = {
     renderElementTree(elements) {
         if (!this._treeContainer) return;
@@ -44,9 +52,9 @@ export const TreeMixin = {
         const descAttr = element.attributes?.['content-desc'] || '';
 
         let html = '';
-        if (shortClass) html += `<span class="tree-class-name">${shortClass}</span>`;
-        if (textAttr) html += `<span class="tree-text-content"> text="${textAttr}"</span>`;
-        if (descAttr && descAttr !== textAttr) html += `<span class="tree-desc-content"> desc="${descAttr}"</span>`;
+        if (shortClass) html += `<span class="tree-class-name">${escapeHtml(shortClass)}</span>`;
+        if (textAttr) html += `<span class="tree-text-content"> text="${escapeHtml(textAttr)}"</span>`;
+        if (descAttr && descAttr !== textAttr) html += `<span class="tree-desc-content"> desc="${escapeHtml(descAttr)}"</span>`;
         label.innerHTML = html;
         label.title = [
             className && `class: ${className}`,

@@ -7,6 +7,13 @@
  * class body; accessors (get/set) are added for cross-mixin read/write.
  */
 
+// R15: 转义 deviceId（与 R10 android-connection/view.js 同类防线）
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return String(str).replace(/[&<>"']/g, (ch) => map[ch]);
+}
+
 export const deviceModalRenderMixin = {
     // ==================== 设备列表渲染 ====================
 
@@ -110,7 +117,7 @@ export const deviceModalRenderMixin = {
 
         deviceElement.innerHTML = `
             ${iconHtml ? iconHtml(icon, 'vertical-align:top;margin-right:8px;flex-shrink:0;margin-top:2px;') : ''}
-            <span style="vertical-align:top;flex:1;min-width:0;word-wrap:break-word;overflow-wrap:break-word;white-space:normal;">${deviceId}</span>
+            <span style="vertical-align:top;flex:1;min-width:0;word-wrap:break-word;overflow-wrap:break-word;white-space:normal;">${escapeHtml(deviceId)}</span>
         `;
 
         // 悬停效果
