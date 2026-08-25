@@ -93,11 +93,11 @@ flowchart TB
         HDL[Handlers Layer<br/>19 IPC handlers]
         subgraph Services["Services Business Layer"]
             APP[application/<br/>ElectronApp lifecycle]
-            SCH[scheduler/<br/>SchedulerService · smartScheduler · strategies]
+            SCH[scheduler/<br/>smartScheduler · strategies · planQueue]
             ADB[adb/<br/>AdbCommandExecutor · ApkInstaller ·<br/>FileTransferService · RemoteStatService]
             ALL[allure/<br/>AllureHttpServer · AllureCliInvoker]
             APK[apk/<br/>Aapt2Invoker · Aapt2OutputParser ·<br/>LocaleLabelResolver]
-            GEN[mixins/<br/>TestCaseCodeGenerator split]
+            GEN[TestCaseCodeGenerator.js<br/>single-file case code gen]
             TOP[Top-level services<br/>InspectorService · BleDeviceDiscoveryService ·<br/>DataTransferService · UpdateService · ...]
         end
         HDL --> Services
@@ -304,7 +304,6 @@ XKAutoTester/
 │   │   │   │   ├── apk/            # APK parsing submodules (aapt2/output parse/locale labels)
 │   │   │   │   ├── application/    # ElectronApp lifecycle (factories/effects/index)
 │   │   │   │   ├── base/           # JsonFileCrudService base
-│   │   │   │   ├── mixins/         # TestCaseCodeGenerator Mixins (5)
 │   │   │   │   ├── scheduler/      # Scheduler submodules (planQueue/smartScheduler/strategies)
 │   │   │   │   ├── ADBService.js
 │   │   │   │   ├── AdbProgressMonitor.js     # ADB progress monitor
@@ -323,7 +322,6 @@ XKAutoTester/
 │   │   │   │   ├── PagePackageService.js
 │   │   │   │   ├── PythonTestService.js
 │   │   │   │   ├── ScheduledPlanService.js
-│   │   │   │   ├── SchedulerService.js
 │   │   │   │   ├── ScrcpyService.js
 │   │   │   │   ├── SerialPortEnumerator.js       # Serial port enumeration
 │   │   │   │   ├── TarExtractor.js               # tar extraction
@@ -349,11 +347,11 @@ XKAutoTester/
 │   ├── renderer/                    # Renderer process (MVC architecture)
 │   │   ├── core/                    # Core base classes (Action/ApiBridge/AppState/EventEmitter)
 │   │   ├── tabs/                    # 5 Tabs (MVC split)
-│   │   │   ├── android-connection/  # with mixins/ (10)
+│   │   │   ├── android-connection/
 │   │   │   ├── page-package/
-│   │   │   ├── settings/            # with mixins/ (5)
-│   │   │   ├── test-case/           # with mixins/ (25)
-│   │   │   └── test-execution/      # with mixins/ (16)
+│   │   │   ├── settings/
+│   │   │   ├── test-case/           # with modules/ (4 domain deep modules)
+│   │   │   └── test-execution/
 │   │   ├── components/              # UI components
 │   │   │   ├── mixins/              # Component Mixins (11)
 │   │   │   ├── inspector.js         # Appium Inspector modal

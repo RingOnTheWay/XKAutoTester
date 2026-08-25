@@ -93,11 +93,11 @@ flowchart TB
         HDL[Handlers Layer<br/>19 个 IPC 处理器]
         subgraph Services["Services 业务服务层"]
             APP[application/<br/>ElectronApp 生命周期]
-            SCH[scheduler/<br/>SchedulerService · smartScheduler · strategies]
+            SCH[scheduler/<br/>smartScheduler · strategies · planQueue]
             ADB[adb/<br/>AdbCommandExecutor · ApkInstaller ·<br/>FileTransferService · RemoteStatService]
             ALL[allure/<br/>AllureHttpServer · AllureCliInvoker]
             APK[apk/<br/>Aapt2Invoker · Aapt2OutputParser ·<br/>LocaleLabelResolver]
-            GEN[mixins/<br/>TestCaseCodeGenerator 拆分]
+            GEN[TestCaseCodeGenerator.js<br/>单文件用例代码生成]
             TOP[顶层服务<br/>InspectorService · BleDeviceDiscoveryService ·<br/>DataTransferService · UpdateService · ...]
         end
         HDL --> Services
@@ -304,7 +304,6 @@ XKAutoTester/
 │   │   │   │   ├── apk/            # APK 解析子模块（aapt2/输出解析/多语言标签）
 │   │   │   │   ├── application/    # ElectronApp 生命周期（factories/effects/index）
 │   │   │   │   ├── base/           # JsonFileCrudService 基类
-│   │   │   │   ├── mixins/         # TestCaseCodeGenerator Mixin（5 个）
 │   │   │   │   ├── scheduler/      # 调度器子模块（planQueue/smartScheduler/strategies）
 │   │   │   │   ├── ADBService.js
 │   │   │   │   ├── AdbProgressMonitor.js     # ADB 进度监控
@@ -323,7 +322,6 @@ XKAutoTester/
 │   │   │   │   ├── PagePackageService.js
 │   │   │   │   ├── PythonTestService.js
 │   │   │   │   ├── ScheduledPlanService.js
-│   │   │   │   ├── SchedulerService.js
 │   │   │   │   ├── ScrcpyService.js
 │   │   │   │   ├── SerialPortEnumerator.js       # 串口枚举
 │   │   │   │   ├── TarExtractor.js               # tar 解压
@@ -349,11 +347,11 @@ XKAutoTester/
 │   ├── renderer/                    # 渲染进程（MVC 架构）
 │   │   ├── core/                    # 核心基类（Action/ApiBridge/AppState/EventEmitter）
 │   │   ├── tabs/                    # 5 个 Tab（MVC 拆分）
-│   │   │   ├── android-connection/  # 含 mixins/（10 个）
+│   │   │   ├── android-connection/
 │   │   │   ├── page-package/
-│   │   │   ├── settings/            # 含 mixins/（5 个）
-│   │   │   ├── test-case/           # 含 mixins/（25 个）
-│   │   │   └── test-execution/      # 含 mixins/（16 个）
+│   │   │   ├── settings/
+│   │   │   ├── test-case/           # 含 modules/（4 个领域深模块）
+│   │   │   └── test-execution/
 │   │   ├── components/              # UI 组件
 │   │   │   ├── mixins/              # 组件 Mixin（11 个）
 │   │   │   ├── inspector.js         # Appium Inspector 弹窗
