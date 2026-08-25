@@ -184,7 +184,12 @@ const defaultUpdateSourceFactory = (httpsAgent) => ({
         ...(httpsAgent ? { httpsAgent } : {})
       });
       const releases = response.data;
-      return releases.find(r => !r.prerelease && !r.draft) || null;
+      if (!Array.isArray(releases) || releases.length === 0) return null;
+      // 本项目仅发布 dev/prerelease, 若过滤 prerelease 会找不到任何候选导致永远"已是最新"。
+      // 故仅排除 draft, 新旧统一交由 compareVersions 按 tag 语义版本判定, 取最高者。
+      const candidates = releases.filter(r => !r.draft && r.tag_name);
+      if (candidates.length === 0) return null;
+      return candidates.sort((a, b) => compareVersions(b.tag_name, a.tag_name))[0];
     } catch (error) {
       throw normalizeUpdateError(error);
     }
