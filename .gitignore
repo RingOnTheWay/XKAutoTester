@@ -100,3 +100,5 @@ refactor-rfcs
 # --- 发布脚本运行时产物 ---
 /scripts/xkat-*.json
 /scripts/xkat-*.txt
+# electron-vite 构建产物
+/electron/out/
