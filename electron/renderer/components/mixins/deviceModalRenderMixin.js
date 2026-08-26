@@ -8,11 +8,8 @@
  */
 
 // R15: 转义 deviceId（与 R10 android-connection/view.js 同类防线）
-function escapeHtml(str) {
-    if (str === null || str === undefined) return '';
-    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-    return String(str).replace(/[&<>"']/g, (ch) => map[ch]);
-}
+
+import { escapeHtml } from '../../core/utils/html.js';
 
 export const deviceModalRenderMixin = {
     // ==================== 设备列表渲染 ====================

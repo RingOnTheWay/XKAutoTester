@@ -288,9 +288,12 @@ class AppiumServer(SubprocessHandle):
         Returns:
             Appium可执行文件完整路径
         """
+        # P3-5: Windows 用 appium.cmd (cmd 脚本), 其余平台用无后缀 appium,
+        # 原实现硬编码 appium.cmd 导致非 Windows PATH 扫描必然落空
+        appium_name = "appium.cmd" if platform.system() == "Windows" else "appium"
         # 检查PATH环境变量中的appium
         for path in os.environ.get("PATH", "").split(os.pathsep):
-            appium_path = os.path.join(path, "appium.cmd")
+            appium_path = os.path.join(path, appium_name)
             if os.path.exists(appium_path):
                 return appium_path
 

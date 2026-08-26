@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const asyncFs = require('./asyncFs');
 
@@ -6,6 +7,7 @@ class Logger {
     this.baseLogDir = baseLogDir;
     this.serviceName = serviceName;
     this.currentLogPath = null;
+    this._stream = null;  // P2-6: 持久 WriteStream
   }
 
   async ensureLogDir() {
@@ -23,12 +25,28 @@ class Logger {
     return this.currentLogPath;
   }
 
+  /**
+   * P2-6: 懒创建持久 WriteStream — 原实现每次 log 调 asyncFs.appendFile
+   * (open/write/close 三连), PythonTestService 对每个 stdout chunk 调 logger,
+   * 高频输出时文件句柄抖动严重。持久流 + error 兜底 (目录缺失/权限错误不 crash)。
+   */
+  _getStream() {
+    if (!this._stream) {
+      const logPath = this._resolveLogPath();
+      this._stream = fs.createWriteStream(logPath, { flags: 'a' });
+      this._stream.on('error', (err) => {
+        console.error('日志流错误:', err);
+        this._stream = null;  // 下次 log 重建
+      });
+    }
+    return this._stream;
+  }
+
   async log(message, level = 'INFO') {
     try {
       const timestamp = new Date().toISOString();
       const logEntry = `[${timestamp}] [${this.serviceName}] [${level}] ${message}\n`;
-      const logPath = this._resolveLogPath();
-      await asyncFs.appendFile(logPath, logEntry);
+      this._getStream().write(logEntry);
     } catch (err) {
       console.error('写入日志失败:', err);
     }
@@ -56,6 +74,19 @@ class Logger {
 
   resetLogPath() {
     this.currentLogPath = null;
+    // 路径重置时关闭旧流, 下次 log 写新文件
+    if (this._stream) {
+      this._stream.end();
+      this._stream = null;
+    }
+  }
+
+  /** 关闭持久流 (应用退出时调用) */
+  close() {
+    if (this._stream) {
+      this._stream.end();
+      this._stream = null;
+    }
   }
 }
 

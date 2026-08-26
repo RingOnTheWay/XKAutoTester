@@ -23,12 +23,17 @@ export class AppState extends EventEmitter {
   };
 
   /**
-   * 获取状态值
+   * 获取状态值 (P2-8: 对象/数组返回浅拷贝, 防跨 Tab 拿到内部引用后原地修改,
+   * 绕过 set/batchUpdate 的变更检测。文档约定: 返回值只读, 修改请走 set)
    * @param {string} key - 状态键名
    * @returns {*} 状态值
    */
   get(key) {
-    return this.#state[key];
+    const value = this.#state[key];
+    if (value !== null && typeof value === 'object') {
+      return Array.isArray(value) ? [...value] : { ...value };
+    }
+    return value;
   }
 
   /**

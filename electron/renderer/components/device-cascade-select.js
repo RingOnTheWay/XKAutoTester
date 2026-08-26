@@ -3,13 +3,9 @@
 // 重构: 继承 BaseSelect, 复用 toggle/_showDropdown/_setAriaExpanded/_registerActiveDropdown/_lockMainContentScroll/
 // 文档点击外部关闭/static closeAll 等; 多级 _handleKeydown/_setActive/open/close 因签名差异自行覆盖。
 import { BaseSelect } from './base-select.js';
+import { escapeHtml } from '../core/utils/html.js';
 
 // R15: 转义 BLE 设备数据（manufacturer/category/type/model 来自设备扫描与用户配置），防止 XSS
-function escapeHtml(str) {
-  if (str === null || str === undefined) return '';
-  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-  return String(str).replace(/[&<>"']/g, (ch) => map[ch]);
-}
 
 export class DeviceCascadeSelect extends BaseSelect {
   static instances = {};

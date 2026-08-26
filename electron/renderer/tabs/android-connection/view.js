@@ -11,6 +11,7 @@
  *      (call sites 用 this.formatFileSize/this.checkAndApplyEllipsis)。
  */
 import { Icons } from '../../icons.js';
+import { escapeHtml as escapeHtmlUtil } from '../../core/utils/html.js';
 
 export class AndroidConnectionView {
   constructor() {
@@ -131,9 +132,8 @@ export class AndroidConnectionView {
    * @returns {string}
    */
   escapeHtml(str) {
-    if (str === undefined || str === null) return '';
-    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-    return String(str).replace(/[&<>"']/g, m => map[m]);
+    // P2-5: 统一实现 (renderer/core/utils/html.js)
+    return escapeHtmlUtil(str);
   }
 
   /**

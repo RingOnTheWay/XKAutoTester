@@ -10,6 +10,7 @@
  * 方法体保持不变，this 引用不变 (mixin 中 this 指实例，内联到 class 后仍指实例)。
  */
 import { Icons } from '../../icons.js';
+import { escapeHtml as escapeHtmlUtil } from '../../core/utils/html.js';
 import { DeviceCascadeSelect } from '../../components/device-cascade-select.js';
 
 export class TestCaseView {
@@ -407,9 +408,8 @@ export class TestCaseView {
 
     // R10: 转义用户可控文本，防止 XSS（marker 名称来自用户配置）
     escapeHtml(str) {
-        if (str === null || str === undefined) return '';
-        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-        return String(str).replace(/[&<>"']/g, (ch) => map[ch]);
+        // P2-5: 统一实现 (renderer/core/utils/html.js)
+        return escapeHtmlUtil(str);
     }
 
     updateMarkersDisplay(selectedMarkers) {

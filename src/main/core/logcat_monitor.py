@@ -32,6 +32,9 @@ from main.core.logcat.logcat_parser import LOG_LEVEL_MAP, format_line
 from main.core.logcat.logcat_process import LogcatProcess
 from main.utils.i18n import t
 
+
+# P3-2: 崩溃堆栈续行捕获行数 (原魔法数字 100)
+_CRASH_STACK_TAIL_LINES = 100
 logger = logging.getLogger(__name__)
 
 # 年份缓存 (避免每行 time.strftime 调用)
@@ -212,7 +215,7 @@ class LogcatMonitor:
                         self._crash_type = crash_type
                         self._crash_line = formatted
 
-                    self._crash_capture_remaining = 100
+                    self._crash_capture_remaining = _CRASH_STACK_TAIL_LINES  # P3-2: 崩溃堆栈续行捕获行数
 
                     logger.error(
                         t("python.logcatMonitor.crashDetected",

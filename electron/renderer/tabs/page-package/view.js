@@ -4,6 +4,7 @@
  * 通过 window.i18n / Toast 访问全局资源
  */
 import { Icons } from '../../icons.js';
+import { escapeHtml as escapeHtmlUtil } from '../../core/utils/html.js';
 export class PagePackageView {
   constructor() {
     this.els = {
@@ -65,13 +66,8 @@ export class PagePackageView {
   // ─── HTML 转义 (对齐 R10 映射表版, 防级联下拉名称 XSS) ──────────
 
   escapeHtml(str) {
-    if (str === null || str === undefined) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    // P2-5: 统一实现 (renderer/core/utils/html.js)
+    return escapeHtmlUtil(str);
   }
 
   // ─── Cascade Select Rendering ──────────────────────────────────

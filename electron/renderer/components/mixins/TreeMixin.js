@@ -7,11 +7,8 @@
  */
 
 // R15: 转义 Appium page source 属性（text/content-desc/class 等被测应用可控），防止 XSS
-function escapeHtml(str) {
-    if (str === null || str === undefined) return '';
-    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-    return String(str).replace(/[&<>"']/g, (ch) => map[ch]);
-}
+
+import { escapeHtml } from '../../core/utils/html.js';
 
 export const TreeMixin = {
     renderElementTree(elements) {

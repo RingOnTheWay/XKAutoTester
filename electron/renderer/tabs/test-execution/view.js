@@ -10,6 +10,7 @@
  *      均通过实例属性/方法或静态方法访问，行为一致。
  */
 import { Icons } from '../../icons.js';
+import { escapeHtml as escapeHtmlUtil } from '../../core/utils/html.js';
 import DeviceSelectionModal from '../../components/device-selection-modal.js';
 import DateTimePicker from '../../components/datetime-picker.js';
 
@@ -154,9 +155,8 @@ export class TestExecutionView {
   // ─── 私有方法（公共化供内联方法调用） ──────────────────────────
 
   escapeHtml(str) {
-    if (!str) return '';
-    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-    return String(str).replace(/[&<>"']/g, m => map[m]);
+    // P2-5: 统一实现 (renderer/core/utils/html.js)
+    return escapeHtmlUtil(str);
   }
 
   // ═════════════════════════════════════════════════════════════════

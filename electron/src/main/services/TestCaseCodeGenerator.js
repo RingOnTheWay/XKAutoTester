@@ -171,7 +171,10 @@ class TestCaseCodeGenerator {
     async loadPagePackageData() {
         try {
             const content = await this._fileSystem.readFile(this.pagePackagePath, 'utf8');
-            return JSON.parse(content);
+            const data = JSON.parse(content);
+            // P3-6: 加载时构建元素索引, findElementByIdFromPackage 走 Map O(1) 查找
+            this._buildElementIndex(data);
+            return data;
         } catch (error) {
             console.error('加载页面封装数据失败:', error);
             return { apps: [] };
@@ -179,10 +182,33 @@ class TestCaseCodeGenerator {
     }
 
     /**
+     * P3-6: 构建元素 id → element 索引 (page_package 数据量大时消除每次生成的全量线性扫描)
+     * @param {Object|null} pagePackageData
+     */
+    _buildElementIndex(pagePackageData) {
+        this._elementIndex = new Map();
+        const apps = pagePackageData && pagePackageData.apps ? pagePackageData.apps : [];
+        for (const app of apps) {
+            if (!app.pages) continue;
+            for (const page of app.pages) {
+                if (!page.elements) continue;
+                for (const el of page.elements) {
+                    if (el && el.id) this._elementIndex.set(el.id, el);
+                }
+            }
+        }
+    }
+
+    /**
      * 从最新的页面封装数据中查找元素
+     * (P3-6: 优先走索引 Map, 无索引时回退线性查找兼容直接调用路径)
      */
     findElementByIdFromPackage(elementId, pagePackageData) {
         if (!pagePackageData || !pagePackageData.apps) return null;
+
+        if (this._elementIndex && this._elementIndex.size > 0) {
+            return this._elementIndex.get(elementId) || null;
+        }
 
         for (const app of pagePackageData.apps) {
             if (app.pages) {
