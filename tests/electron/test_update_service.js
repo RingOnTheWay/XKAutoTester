@@ -32,6 +32,14 @@ function makeFakeVersionService(version = '1.0.0', fullVersion = null) {
   };
 }
 
+// ⚠️ 防复发警示 (2026-08-26):
+// UpdateService 默认 fileSystemFactory 使用真实 fs, 构造时 updateDir =
+// getUserConfigPath()/updates。若测试未注入 fileSystemFactory 且调用
+// downloadUpdate/installUpdate (触发 _ensureInitialized → ensureDir),
+// 假路径 /fake/... 会在 Windows 被解析为真实盘符路径 (如 D://fake//user//config//updates)
+// 并被真实创建。历史上 R16 初版测试曾因此留下 D://fake 残留目录。
+// 规则: 一切触发 _ensureInitialized 的测试必须注入 fileSystemFactory (makeFakeFileSystem)
+// 或使用真实 tmpDir (如 L660 起的用例), 禁止直接使用 /fake 假路径。
 function makeFakeUserDataService(configPath = '/fake/config') {
   return {
     getUserConfigPath() { return configPath; }
