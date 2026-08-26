@@ -330,26 +330,34 @@ class TestInitializer:
         """
         self.logger.info(t("python.testInitializer.creatingAppiumSession"))
         start_time = self._time.time()
+        # P2-10: socket.setdefaulttimeout 是进程级全局副作用。
+        # 会话创建期间临时设置 60s 超时保护, finally 恢复原值,
+        # 避免整个进程后续所有 socket 操作继承 60s 超时。
+        # (Appium Client 底层走 requests, 有独立超时控制, 不受其影响)
+        _original_timeout = socket.getdefaulttimeout()
         _set_appium_session_timeout(AppiumServer.DEFAULT_SESSION_TIMEOUT)
-        self.adb_manager.app.force_stop(silent=True)
-        self._time.sleep(_SLEEP_AFTER_FORCE_STOP)
+        try:
+            self.adb_manager.app.force_stop(silent=True)
+            self._time.sleep(_SLEEP_AFTER_FORCE_STOP)
 
-        self.driver = self._driver_factory(self.appium_server.server_url, options=self.options)
+            self.driver = self._driver_factory(self.appium_server.server_url, options=self.options)
 
-        elapsed_time = self._time.time() - start_time
-        self.logger.info(t("python.testInitializer.appiumSessionCreated", time=f"{elapsed_time:.2f}"))
-        self.logger.info(t("python.testInitializer.deviceInfo", info=self.options.capabilities))
-        self.logger.info(t("python.testInitializer.sessionId", id=self.driver.session_id))
+            elapsed_time = self._time.time() - start_time
+            self.logger.info(t("python.testInitializer.appiumSessionCreated", time=f"{elapsed_time:.2f}"))
+            self.logger.info(t("python.testInitializer.deviceInfo", info=self.options.capabilities))
+            self.logger.info(t("python.testInitializer.sessionId", id=self.driver.session_id))
 
-        self.reporter.attach(
-            t(
-                "python.testInitializer.appiumSessionAttachInfo",
-                info=self.options.capabilities,
-                session_id=self.driver.session_id,
-                time=f"{elapsed_time:.2f}",
-            ),
-            name=t("python.testInitializer.deviceConfigAttachName"),
-        )
+            self.reporter.attach(
+                t(
+                    "python.testInitializer.appiumSessionAttachInfo",
+                    info=self.options.capabilities,
+                    session_id=self.driver.session_id,
+                    time=f"{elapsed_time:.2f}",
+                ),
+                name=t("python.testInitializer.deviceConfigAttachName"),
+            )
+        finally:
+            socket.setdefaulttimeout(_original_timeout)
 
     def _track_app_pid(self) -> None:
         """私有: PID 首次获取 + logcat pid 更新。

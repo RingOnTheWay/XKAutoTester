@@ -358,11 +358,20 @@ export class AndroidConnectionController {
       const caseResult = await this.#model.getTestCase(fileName);
       if (caseResult?.success && caseResult?.data) {
         const caseData = caseResult.data;
-        caseData.deviceName = deviceName;
-        caseData.platformVersion = platformVersion;
-        if (blePort) {
-          caseData.blePort = blePort;
-        }
+        // P1-2: 修复数据模型分叉 — 写入 deviceConfig 嵌套结构,
+        // 与 test-execution/model.js (deviceConfig?.deviceName) 和
+        // test-case/TestCaseEditor.js (deviceConfig) 读取侧对齐。
+        // 此前写入顶层 deviceName/platformVersion/blePort, 其他 tab 读不到。
+        caseData.deviceConfig = {
+          ...(caseData.deviceConfig || {}),
+          deviceName,
+          platformVersion,
+          ...(blePort ? { blePort } : {}),
+        };
+        // 兼容旧数据结构: 清理顶层残留, 避免后续读取分叉
+        delete caseData.deviceName;
+        delete caseData.platformVersion;
+        delete caseData.blePort;
 
         const dataPathResult = await this.#model.getDataPath();
         const outputDir = dataPathResult?.currentPath || '';

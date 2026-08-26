@@ -124,8 +124,10 @@ class AllureHttpServer {
         let filePath = path.join(resolvedReportDir, urlPath === '/' ? 'index.html' : urlPath);
         const resolvedPath = path.resolve(filePath);
 
-        // 路径穿越防护
-        if (!resolvedPath.startsWith(resolvedReportDir)) {
+        // 路径穿越防护 (P1-12): 用 path.relative 规范化判定,
+        // 修复此前 startsWith 缺 path.sep 边界 — 前缀目录(如 report1evil)可被误放行。
+        const rel = path.relative(resolvedReportDir, resolvedPath);
+        if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
           res.writeHead(403);
           res.end('Forbidden');
           return;

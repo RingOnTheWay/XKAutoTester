@@ -780,6 +780,19 @@ export class TestExecutionController {
       created: currentPlan.created,
     };
 
+    // P1-3: 编辑路径此前完全绕过冲突检测, 可静默保存与已有计划同分钟的冲突计划。
+    // 补充检测并排除自身 (excludeId = currentPlan.id), 与新建路径行为对齐。
+    if (newScheduledTime) {
+      const conflictResult = await this.model.checkTimeConflict(planData.scheduledTime, currentPlan.id);
+      if (conflictResult?.hasConflict) {
+        const override = await this.showConfirmDialog(
+          window.i18n.t('scheduledPlan.timeConflict'),
+          window.i18n.t('scheduledPlan.timeConflictMessage'),
+        );
+        if (!override) return;
+      }
+    }
+
     await this.model.updateScheduledPlan(currentPlan.id, planData);
     this.view.closeScheduledPlanModal();
     await this.model.loadScheduledPlans();

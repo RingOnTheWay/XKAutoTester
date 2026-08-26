@@ -230,6 +230,9 @@ class AppiumServer(SubprocessHandle):
         self._process: subprocess.Popen | None = None
         self._subprocess = subprocess_module
         self._log_pump: _LogPump | None = None
+        # P1-6: 标记 Appium 进程是否由本对象创建。
+        # start() 检测到端口已被外部 Appium 占用时会复用, stop() 不得杀外部实例。
+        self._started_by_us: bool = False
 
         # 查找Appium可执行文件路径
         self.appium_executable = self._find_appium_executable()
@@ -308,6 +311,8 @@ class AppiumServer(SubprocessHandle):
             # 检查是否已经在运行
             if self.is_server_running():
                 logger.info(f"Appium服务器已在运行: {self.server_url}")
+                # P1-6: 复用外部实例, 标记非本对象创建 (stop() 不得杀它)
+                self._started_by_us = False
                 return True
 
             # 构建启动命令 - Appium 3.x需要使用server子命令
@@ -332,6 +337,8 @@ class AppiumServer(SubprocessHandle):
                 errors="replace",
                 bufsize=1,  # 设置行缓冲
             )
+            # P1-6: 进程由本对象创建 → stop() 时允许端口清理
+            self._started_by_us = True
 
             # 启动日志泵 (全权管理文件 + 线程)
             self._log_pump = _LogPump(self.log_file, self.process)
@@ -382,12 +389,16 @@ class AppiumServer(SubprocessHandle):
                 logger.error(f"停止日志泵时出错: {e}")
             self._log_pump = None
 
-        # 3. 端口清理兜底 (不管是否有 process, 都扫一遍端口)
-        try:
-            _kill_port_process(self.port, self._subprocess)
-            logger.info("Appium服务器端口清理完成")
-        except Exception as e:
-            logger.error(f"端口清理时出错: {e}")
+        # 3. 端口清理兜底 (P1-6: 仅当进程由本对象创建时才扫端口,
+        #    复用外部 Appium 实例时跳过, 避免 taskkill /F 误杀用户自启服务)
+        if self._started_by_us:
+            try:
+                _kill_port_process(self.port, self._subprocess)
+                logger.info("Appium服务器端口清理完成")
+            except Exception as e:
+                logger.error(f"端口清理时出错: {e}")
+        else:
+            logger.info("Appium进程非本对象创建, 跳过端口清理 (保护外部实例)")
 
     def is_server_running(self):
         """检查Appium服务器是否在运行.

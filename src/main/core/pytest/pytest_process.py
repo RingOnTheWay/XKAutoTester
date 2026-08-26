@@ -83,18 +83,30 @@ class PytestProcess(SubprocessHandle):
         """
         self._stop_process()
 
-    def run(self, command: list[str]) -> PytestRunResult:
+    def run(self, command: list[str], timeout: float | None = None) -> PytestRunResult:
         """执行 pytest 命令, 阻塞至结束, 返回 PytestRunResult。
 
         stdout 行直接写父进程 sys.stdout (Electron TEST_OUTPUT 黑字),
         stderr 行直接写父进程 sys.stderr (Electron TEST_ERROR 红字), 实时无缓冲。
-        cli.py _wrap_stdio 已包装 sys.stdout/stderr 为 utf-8 TextIOWrapper(line_buffering=True)。
 
-        不用 logger 转发: 避免 stdout/stderr 都汇入 console_handler (父 stderr) 导致全红字重复。
-        PytestProcess 自身日志 (如 Execute 命令) 仍用 logger, 记录到文件 + 父 stderr。
+        P1-9: 支持 timeout 看门狗 — 超过 timeout 秒未结束则强制终止子进程并返回
+        exit_code=-1 的超时结果, 防止被测用例死锁时整条链路永久阻塞。
+
+        设计 (mirror LogcatProcess):
+        - 不 catch 异常, 冒泡到 facade
+        - 不持锁, 管道 EOF 自然同步
+        - run() 阻塞至子进程结束 (timeout 非 None 时受看门狗约束)
+        - popen_factory kwarg 注入 (测试用 FakePopen, 生产用 subprocess.Popen)
+
+        日志分流说明:
+        - stdout 行直接写父进程 sys.stdout (Electron TEST_OUTPUT 黑字)
+        - stderr 行直接写父进程 sys.stderr (Electron TEST_ERROR 红字), 实时无缓冲
+        - 不用 logger 转发: 避免 stdout/stderr 都汇入 console_handler (父 stderr) 导致全红字重复
+        - PytestProcess 自身日志 (如 Execute 命令) 仍用 logger, 记录到文件 + 父 stderr
 
         Args:
             command: 完整命令 (如 [sys.executable, '-m', 'pytest', '-v', ...])
+            timeout: 看门狗秒数 (None=不超时)
 
         Returns:
             PytestRunResult (exit_code + stdout + stderr, ANSI 已清理)
@@ -142,8 +154,21 @@ class PytestProcess(SubprocessHandle):
 
         # 获取退出码 + 等 stderr 线程结束 (管道关闭后线程自然退出, 加 5s 超时保险)
         # KeyboardInterrupt 显式 stop() 终止子进程, 避免孤儿
+        # P1-9: timeout 看门狗, 超时强制终止 (死锁用例不再永久阻塞)
         try:
-            exit_code = process.wait()
+            if timeout is not None:
+                exit_code = process.wait(timeout=timeout)
+            else:
+                exit_code = process.wait()
+        except subprocess.TimeoutExpired:
+            self.stop()
+            stderr_thread.join(timeout=5)
+            self._process = None
+            return PytestRunResult(
+                exit_code=-1,
+                stdout="\n".join(stdout_lines),
+                stderr="\n".join(stderr_lines) + f"\n[pytest 执行超时 ({timeout}s), 已强制终止]",
+            )
         except KeyboardInterrupt:
             self.stop()
             raise

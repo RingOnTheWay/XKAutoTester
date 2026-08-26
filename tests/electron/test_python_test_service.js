@@ -443,3 +443,52 @@ describe('PythonTestService._findAllureResultsDir', () => {
     assert.strictEqual(result, null);
   });
 });
+
+
+// ── P1-5 回归: 并发守卫 + 输出缓冲上限 ─────────────────────────
+
+test('P1-5 run 并发守卫: 运行中再次 run 返回失败 (不产生孤儿进程)', async () => {
+  const spawn = createMockSpawn();
+  const pathHelper = require('../../electron/src/main/utils/pathHelper');
+  const orig = pathHelper.getPythonConfig;
+  pathHelper.getPythonConfig = () => ({ pythonPath: '/fake/python', isEmbedded: false, isSystem: false });
+  try {
+    const svc = new PythonTestService(createMockDeps(spawn));
+    const firstRun = svc.run({ testPaths: ['tests/'] });
+    // 第一次 run 尚未结束 (未 emit close) 时, 第二次必须被拒绝
+    const secondResult = await svc.run({ testPaths: ['tests/'] });
+    assert.strictEqual(secondResult.success, false, '并发 run 应被拒绝');
+    assert.ok(secondResult.error.includes('执行中'), '错误信息应说明已有测试在执行');
+    // 只 spawn 一次
+    assert.strictEqual(spawn._calls.length, 1, '只应启动一个子进程');
+    // 清理第一次
+    setImmediate(() => spawn._lastProc.emit('close', 0));
+    await firstRun;
+  } finally {
+    pathHelper.getPythonConfig = orig;
+  }
+});
+
+test('P1-5 输出缓冲上限: 超限截断保留尾部 + 标记', async () => {
+  const spawn = createMockSpawn();
+  const pathHelper = require('../../electron/src/main/utils/pathHelper');
+  const orig = pathHelper.getPythonConfig;
+  pathHelper.getPythonConfig = () => ({ pythonPath: '/fake/python', isEmbedded: false, isSystem: false });
+  try {
+    const svc = new PythonTestService(createMockDeps(spawn));
+    const runPromise = svc.run({ testPaths: ['tests/'] });
+    // 注入 6MB 输出 (超 5MB 上限)
+    const big = Buffer.alloc(6 * 1024 * 1024, 'x');
+    setImmediate(() => {
+      spawn._lastProc.stdout.emit('data', big);
+      spawn._lastProc.stdout.emit('data', Buffer.from('TAIL-LINE\n', 'utf8'));
+      spawn._lastProc.emit('close', 0);
+    });
+    const result = await runPromise;
+    assert.ok(result.output.includes('[输出过长已截断]'), '应含截断标记');
+    assert.ok(result.output.endsWith('TAIL-LINE\n'), '应保留尾部最新输出');
+    assert.ok(result.output.length <= 5 * 1024 * 1024 + 64, '缓冲应受上限约束');
+  } finally {
+    pathHelper.getPythonConfig = orig;
+  }
+});

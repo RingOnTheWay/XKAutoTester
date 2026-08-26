@@ -6,6 +6,12 @@ const Logger = require('../utils/logger');
 const FileBasedDialogMonitor = require('./FileBasedDialogMonitor');
 const { IPC_CHANNELS } = require('../../shared/constants');
 
+// ── module-level 常量 (对称 TestPlanService DEFAULT_TEST_TYPE 等) ──
+
+/** P1-5: 输出缓冲上限 5MB, 超限保留尾部并标记截断 (防死循环输出 OOM) */
+const MAX_OUTPUT_BUFFER = 5 * 1024 * 1024;
+const OUTPUT_TRUNCATED_MARKER = '\n...[输出过长已截断]...\n';
+
 // ── module-level 纯函数 (对称 H1 TestPlanService parsePytestIni/extractMarkersFromContent/inferTestType) ──
 
 /**
@@ -191,6 +197,13 @@ class PythonTestService {
       // 主体包进 async IIFE: 使 Step 2.5 的 await 语法校验可用, 同时保留 Promise 契约
       (async () => {
       const { testPlanName } = testConfig;
+
+      // P1-5: 并发守卫 — run 进行中/停止中/出错时拒绝重复启动。
+      // 此前无状态检查, 连续调用会覆盖 currentPythonProcess 引用 → 孤儿进程 + 双路输出。
+      if (this._state !== 'idle') {
+        resolve(this._buildFailureResult(testPlanName, '已有测试在执行中, 请先停止或等待完成'));
+        return;
+      }
 
       // run 时刷新 _progressSender: 构造时 mainWindow 可能为 null (applicationService L121),
       // ElectronApp.initialize L124-125 后续才赋值 this.mainWindow。
@@ -399,13 +412,27 @@ class PythonTestService {
   _wireOutputStreams(pythonProcess, buffers) {
     pythonProcess.stdout.on('data', (data) => {
       const decoded = data.toString('utf8');
+      // P1-5: 缓冲设上限 (防死循环打印 OOM), 始终保留最新 MAX 字节 (stats 从末尾解析),
+      // 截断标记置于头部且不重复。
       buffers.output += decoded;
+      if (buffers.output.length > MAX_OUTPUT_BUFFER) {
+        buffers.output = buffers.output.slice(-MAX_OUTPUT_BUFFER);
+        if (!buffers.output.startsWith(OUTPUT_TRUNCATED_MARKER)) {
+          buffers.output = OUTPUT_TRUNCATED_MARKER + buffers.output;
+        }
+      }
       this.logger.stdout(decoded.trimEnd());
       this._progressSender.send(IPC_CHANNELS.TEST_OUTPUT, decoded);
     });
     pythonProcess.stderr.on('data', (data) => {
       const decoded = data.toString('utf8');
       buffers.errorOutput += decoded;
+      if (buffers.errorOutput.length > MAX_OUTPUT_BUFFER) {
+        buffers.errorOutput = buffers.errorOutput.slice(-MAX_OUTPUT_BUFFER);
+        if (!buffers.errorOutput.startsWith(OUTPUT_TRUNCATED_MARKER)) {
+          buffers.errorOutput = OUTPUT_TRUNCATED_MARKER + buffers.errorOutput;
+        }
+      }
       this.logger.stderr(decoded.trimEnd());
       this._progressSender.send(IPC_CHANNELS.TEST_ERROR, decoded);
     });

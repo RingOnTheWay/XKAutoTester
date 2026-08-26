@@ -417,7 +417,9 @@ export class TestCaseController {
     const clickCountInput = card.querySelector('.tc-nav-click-count');
     if (clickCountInput) {
       const clickCountHandler = (e) => {
-        this.handleSelectChange('tc-system-operation-type', stepId, e.target.value, -1);
+        // P1-1: 修复参数错位 (此前 stepId 传给 value, e.target.value 传给 stepId,
+        // 导致 operationType 被污染为步骤 ID, 点击次数被丢弃)
+        this.handleSelectChange('tc-system-operation-type', e.target.value, stepId, -1);
       };
       clickCountInput.addEventListener('change', clickCountHandler);
       this.stepCardUnbinds.push(() => clickCountInput.removeEventListener('change', clickCountHandler));

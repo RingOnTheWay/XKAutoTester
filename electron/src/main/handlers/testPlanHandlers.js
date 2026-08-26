@@ -1,4 +1,4 @@
-const { registerHandler } = require('./base/handlerUtils');
+const { registerHandler, assertTrustedSender } = require('./base/handlerUtils');
 const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
@@ -17,6 +17,7 @@ function register(ipcMain, services) {
 
   ipcMain.on(IPC_CHANNELS.LOG_TEST_OUTPUT, (event, text, isError) => {
     try {
+      assertTrustedSender(event);  // P0-3 补全: on 通道同样校验 sender
       if (pythonTestService.logger) {
         const trimmed = typeof text === 'string' ? text.trimEnd() : '';
         if (trimmed) {

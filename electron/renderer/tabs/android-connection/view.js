@@ -522,9 +522,10 @@ export class AndroidConnectionView {
   displayFileError(message) {
     const { fileList } = this.els;
     if (fileList) {
+      // P2-1 XSS 修复: message 为 adb 错误输出 (可含文件名等用户可控内容), 必须转义
       fileList.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;"><div style="display:flex;align-items:center;justify-content:center;gap:8px;">'
         + this.getIconHtml('error', 'vertical-align:middle;color:var(--error);')
-        + `<span style="vertical-align:middle;color:var(--error);">${message}</span></div></td></tr>`;
+        + `<span style="vertical-align:middle;color:var(--error);">${this.escapeHtml(message)}</span></div></td></tr>`;
     }
   }
 

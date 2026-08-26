@@ -5,6 +5,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
+const os = require('node:os');
 const Module = require('module');
 
 const HTTP_SERVER_PATH = path.join(
@@ -155,5 +156,54 @@ test('cleanupSync 启动后应清空状态', async () => {
     assert.equal(server.getStatus().port, null);
   } finally {
     mock.restore();
+  }
+});
+
+// ─── P1-12 路径穿越防护 (startsWith 边界修复回归) ─────────────────────────
+
+test('P1-12 请求 ../report1evil/x.js (前缀目录) 应返回 403', async () => {
+  // 劫持 http.createServer 捕获请求 handler, 模拟真实请求路径
+  const { Module } = require('node:module');
+  const origLoad = Module._load;
+  let capturedHandler = null;
+  const fakeServer = {
+    listen: (port, host, cb) => { if (cb) cb(); },
+    on: (event, handler) => {},
+    close: (cb) => { if (cb) cb(); },
+    address: () => ({ port: 99999 })
+  };
+  Module._load = function (request, parent, isMain) {
+    if (request === 'http') {
+      return { createServer: (handler) => { capturedHandler = handler; return fakeServer; } };
+    }
+    if (request === '../../utils/asyncFs') {
+      return { exists: async () => true, readFile: async () => '{"theme":"default"}' };
+    }
+    return origLoad.call(this, request, parent, isMain);
+  };
+  try {
+    const AllureHttpServer = loadHttpServer();
+    const server = new AllureHttpServer({ info: () => {}, error: () => {} });
+    // 报告目录: /tmp/reports/plan1 (让 /tmp/reports/plan1evil 成为其前缀目录)
+    await server.start(path.join(os.tmpdir(), 'reports', 'plan1'));
+
+    const statuses = [];
+    const fakeRes = {
+      writeHead: (code) => statuses.push(code),
+      end: () => {},
+    };
+
+    // 1) 前缀目录穿越: /../plan1evil/secret.js 必须 403 (修复前 startsWith 会放行)
+    const evilUrl = '/../plan1evil/secret.js';
+    capturedHandler({ url: evilUrl, split: (c) => evilUrl.split(c) }, fakeRes);
+    assert.strictEqual(statuses[0], 403, `前缀目录穿越应 403 (URL: ${evilUrl})`);
+
+    // 2) 标准穿越: /../../outside 必须 403
+    statuses.length = 0;
+    const evilUrl2 = '/../../outside.js';
+    capturedHandler({ url: evilUrl2, split: (c) => evilUrl2.split(c) }, fakeRes);
+    assert.strictEqual(statuses[0], 403, '标准穿越应 403');
+  } finally {
+    Module._load = origLoad;
   }
 });

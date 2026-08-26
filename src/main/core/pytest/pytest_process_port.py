@@ -42,11 +42,13 @@ class PytestProcessPort(Protocol):
     测试: FakePytestProcess (鸭子类型, 不起子进程)
     """
 
-    def run(self, command: list[str]) -> PytestRunResult:
+    def run(self, command: list[str], timeout: float | None = None) -> PytestRunResult:
         """执行 pytest 命令, 阻塞至结束, 返回 PytestRunResult。
 
         Args:
             command: 完整命令 (如 [sys.executable, '-m', 'pytest', '-v', ...])
+            timeout: 可选看门狗秒数 (P1-9)。超时强制终止子进程并返回
+                exit_code=-1 的超时结果; None 表示不超时。
 
         Returns:
             PytestRunResult (exit_code/stdout/stderr)

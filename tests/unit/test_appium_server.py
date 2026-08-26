@@ -495,12 +495,26 @@ class TestAppiumServerStop:
         server.stop()
         assert fake_process._terminated is True
 
-    def test_stop_no_process_still_port_cleanup(self, tmp_user_data):
-        """无 process (用别人 server) -> 仍调 port killer"""
+    def test_stop_no_process_not_owned_skip_port_cleanup(self, tmp_user_data):
+        """P1-6: 无 process 且非本对象创建 (复用外部 server) -> 不调 port killer (防误杀)"""
         fake_sub = FakeSubprocessModule(run_results=[FakeCompletedProcess(0, "", "")])
         server = AppiumServer(subprocess_module=fake_sub)
         server.process = None
         server._log_pump = None
+        server._started_by_us = False  # 复用外部实例场景
+        with patch("main.core.appium_server.platform") as mock_platform:
+            mock_platform.system.return_value = "Windows"
+            server.stop()
+        # 外部实例不得被强杀 (taskkill /F 兜底必须跳过)
+        assert len(fake_sub.run_calls) == 0
+
+    def test_stop_owned_process_still_port_cleanup(self, tmp_user_data):
+        """P1-6: 本对象创建的进程 -> stop 仍做端口清理兜底"""
+        fake_sub = FakeSubprocessModule(run_results=[FakeCompletedProcess(0, "", "")])
+        server = AppiumServer(subprocess_module=fake_sub)
+        server.process = FakePopen()
+        server._log_pump = None
+        server._started_by_us = True  # start() Popen 成功后置位
         with patch("main.core.appium_server.platform") as mock_platform:
             mock_platform.system.return_value = "Windows"
             server.stop()

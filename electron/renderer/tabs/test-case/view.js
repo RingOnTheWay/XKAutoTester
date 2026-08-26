@@ -864,7 +864,7 @@ export class TestCaseView {
             case 'custom':
                 return `
                     <input type="text" class="glass-input ${prefix}-custom-input" data-step-id="${step.id}"${dataIndexAttr}
-                           value="${opValue.inputValue || ''}" placeholder="${window.i18n.t('testCase.inputTextContent')}">
+                           value="${this.escapeHtml(opValue.inputValue || '')}" placeholder="${window.i18n.t('testCase.inputTextContent')}">
                 `;
 
             case 'random':
@@ -883,12 +883,12 @@ export class TestCaseView {
                             <div class="form-group">
                                 <label>${window.i18n.t('testCase.minValue')}</label>
                                 <input type="number" class="glass-input ${prefix}-random-min" data-step-id="${step.id}"${dataIndexAttr}
-                                       value="${randomConfig.minValue || 0}" step="0.1">
+                                       value="${this.escapeHtml(randomConfig.minValue || 0)}" step="0.1">
                             </div>
                             <div class="form-group">
                                 <label>${window.i18n.t('testCase.maxValue')}</label>
                                 <input type="number" class="glass-input ${prefix}-random-max" data-step-id="${step.id}"${dataIndexAttr}
-                                       value="${randomConfig.maxValue || 100}" step="0.1">
+                                       value="${this.escapeHtml(randomConfig.maxValue || 100)}" step="0.1">
                             </div>
                             <div class="form-group">
                                 <label>${window.i18n.t('testCase.precision')}</label>
@@ -1087,7 +1087,7 @@ export class TestCaseView {
                             <div class="form-group tc-custom-target-value-group ${showCustomInput ? '' : 'hidden'}">
                                 <label>${window.i18n.t('testCase.targetValue')}</label>
                                 <input type="text" class="glass-input tc-compare-target-value" data-step-id="${step.id}"
-                                       value="${compareConfig.targetValue || ''}" placeholder="${window.i18n.t('testCase.enterTargetValue')}">
+                                       value="${this.escapeHtml(compareConfig.targetValue || '')}" placeholder="${window.i18n.t('testCase.enterTargetValue')}">
                             </div>
                         </div>
                         <div class="form-row tc-ble-step-select-group ${showBleStepSelect ? '' : 'hidden'}">
@@ -1145,7 +1145,7 @@ export class TestCaseView {
                             <div class="form-group">
                                 <label>${window.i18n.t('testCase.searchTextValue')}</label>
                                 <input type="text" class="glass-input tc-search-text-value" data-step-id="${step.id}"
-                                       value="${searchConfig.textValue || ''}" placeholder="${window.i18n.t('testCase.enterSearchText')}">
+                                       value="${this.escapeHtml(searchConfig.textValue || '')}" placeholder="${window.i18n.t('testCase.enterSearchText')}">
                             </div>
                         </div>
                         <div class="form-row tc-search-match-type-row">

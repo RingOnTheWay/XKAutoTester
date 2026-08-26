@@ -266,7 +266,8 @@ export class ProgressIndicator {
                 }
             }
             
-            const formattedError = simpleError.replace(/\n/g, '<br>');
+            // P2-1 XSS 修复: 先转义 HTML 再替换换行 (错误文本含用户可控内容, 此前直插 innerHTML)
+            const formattedError = this.escapeHtml(simpleError).replace(/\n/g, '<br>');
             errorMessageElement.innerHTML = formattedError;
             errorContainer.classList.remove('hidden');
             

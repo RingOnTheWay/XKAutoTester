@@ -47,11 +47,14 @@ class PytestRunner:
         project_root: Path | None = None,
         *,
         process: PytestProcessPort | None = None,
+        test_timeout: float | None = 1800.0,
     ) -> None:
         """
         Args:
             project_root: 项目根 (默认 get_project_root())
             process: PytestProcessPort 注入 (默认 PytestProcess, 测试用 FakePytestProcess)
+            test_timeout: pytest 看门狗超时秒数 (P1-9, 默认 1800s=30min,
+                被测用例死锁时强制终止, 防整链路永久阻塞)
         """
         self.project_root = project_root or get_project_root()
 
@@ -60,6 +63,7 @@ class PytestRunner:
         self.allure_report_base_dir = self.allure_base_dir / "allure-reports"
 
         self._process: PytestProcessPort = process or PytestProcess(cwd=str(self.project_root))
+        self._test_timeout = test_timeout
         self._pytest_ini = self.project_root / "config" / "pytest.ini"
 
     def run_tests(
@@ -89,9 +93,20 @@ class PytestRunner:
         if not test_plan_name:
             test_plan_name = f"test_plan_{int(time.time())}"
 
-        # 清理之前的 allure-results 目录
+        # 清理之前的 allure-results 目录 (P1-9: Windows 下文件被锁/权限异常不致命,
+        # 失败时改名兜底避免下次清理再次失败, 不冒泡中断本次运行)
         if self.allure_results_dir.exists():
-            shutil.rmtree(self.allure_results_dir)
+            try:
+                shutil.rmtree(self.allure_results_dir)
+            except OSError as e:
+                logger.warning(f"清理 allure-results 失败, 尝试改名兜底: {e}")
+                try:
+                    stale = self.allure_results_dir.with_name("allure-results-stale")
+                    if stale.exists():
+                        shutil.rmtree(stale, ignore_errors=True)
+                    self.allure_results_dir.rename(stale)
+                except OSError:
+                    logger.error(f"allure-results 清理失败且改名兜底也失败: {e}")
         self.allure_results_dir.mkdir(parents=True, exist_ok=True)
 
         # 构建参数 (纯函数)
@@ -110,7 +125,8 @@ class PytestRunner:
         logger.info(t("python.pytestRunner.executeCommand", command=" ".join(pytest_command)))
 
         # 执行 (PytestProcess 封 Popen + 双线程, 替代原 L82-128)
-        run_result = self._process.run(pytest_command)
+        # P1-9: 传入看门狗超时, 死锁用例强制终止
+        run_result = self._process.run(pytest_command, timeout=self._test_timeout)
 
         # 解析统计 (纯函数)
         test_stats = parse_test_stats(run_result.stdout)
