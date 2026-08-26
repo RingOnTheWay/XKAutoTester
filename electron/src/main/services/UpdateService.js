@@ -32,6 +32,42 @@ const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_RE
 // ── module-level 纯函数 (对称 I18nService default factory 模式) ──
 // (compareVersions 已抽取至 utils/versionCompare, 见文件头部 import)
 
+/** GitHub release 下载可信 host 白名单 (P0-4: 防下载任意 URL) */
+const TRUSTED_DOWNLOAD_HOSTS = ['github.com', 'objects.githubusercontent.com'];
+
+/** 更新包扩展名白名单 (P0-4: 防写入任意文件类型) */
+const UPDATE_FILE_EXTENSIONS = ['.exe', '.zip'];
+
+/**
+ * 清洗更新文件名 (P0-4: 防路径穿越)。
+ * 仅保留 basename + 白名单扩展名, 非法时返回 null。
+ * @param {string} rawFileName
+ * @returns {string|null}
+ */
+function sanitizeUpdateFileName(rawFileName) {
+  if (typeof rawFileName !== 'string' || !rawFileName.trim()) return null;
+  const fileName = path.basename(rawFileName);  // 剥离一切路径成分
+  const ext = path.extname(fileName).toLowerCase();
+  if (!UPDATE_FILE_EXTENSIONS.includes(ext)) return null;
+  // 防控制字符/隐藏文件残留 (basename 已保证无路径分隔符, 扩展名已白名单)
+  if (!/^[^\x00-\x1f]+$/.test(fileName)) return null;
+  return fileName;
+}
+
+/**
+ * 校验下载 URL 是否属于本项目 GitHub release 域 (P0-4: 防下载任意 URL 落盘)。
+ * @param {string} url
+ * @returns {boolean}
+ */
+function isTrustedDownloadUrl(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return TRUSTED_DOWNLOAD_HOSTS.includes(host);
+  } catch {
+    return false;
+  }
+}
+
 /** 错误分类纯函数: 将 axios/network error 转 classified error (含 .code + .statusCode) */
 function normalizeUpdateError(error) {
   let errorCode = 'unknown';
@@ -493,7 +529,21 @@ class UpdateService {
         throw err;
       }
 
-      const filePath = path.join(this.updateDir, fileName);
+      // P0-4: 文件名清洗 + 下载 URL 域名校验, 防路径穿越/任意文件删除写入。
+      // 渲染进程可传任意 fileName/downloadUrl, 此处做最后一次强制校验。
+      const safeFileName = sanitizeUpdateFileName(fileName);
+      if (!safeFileName) {
+        const err = new Error('非法更新文件名, 拒绝下载');
+        err.code = 'invalid_file_name';
+        throw err;
+      }
+      if (!isTrustedDownloadUrl(downloadUrl)) {
+        const err = new Error('非法下载地址, 拒绝下载');
+        err.code = 'invalid_download_url';
+        throw err;
+      }
+
+      const filePath = path.join(this.updateDir, safeFileName);
 
       if (this._fileSystem.exists(filePath)) {
         // 快路径也校验 SHA256: 防止已被篡改/损坏的缓存文件被直接安装
@@ -589,4 +639,11 @@ class UpdateService {
   }
 }
 
-module.exports = { UpdateService, normalizeUpdateError, parseSha256FromBody, computeFileSha256 };
+module.exports = {
+  UpdateService,
+  normalizeUpdateError,
+  parseSha256FromBody,
+  computeFileSha256,
+  sanitizeUpdateFileName,
+  isTrustedDownloadUrl
+};

@@ -188,6 +188,8 @@ class PythonTestService {
    */
   run(testConfig) {
     return new Promise((resolve, reject) => {
+      // 主体包进 async IIFE: 使 Step 2.5 的 await 语法校验可用, 同时保留 Promise 契约
+      (async () => {
       const { testPlanName } = testConfig;
 
       // run 时刷新 _progressSender: 构造时 mainWindow 可能为 null (applicationService L121),
@@ -207,6 +209,17 @@ class PythonTestService {
 
       // 进入 running 状态
       this._state = 'running';
+
+      // Step 2.5: P0-1 纵深防御 — 执行前对测试文件做 py_compile 语法校验。
+      // 即使代码生成端转义有遗漏, 语法非法的注入文件也会在此被拒绝, 不会被执行。
+      // 注意: 异步校验期间保持 _state = 'running' 防止重复触发 (stop() 仍可终止)。
+      const compileError = await this._verifyTestFilesCompile(pythonCmd, testConfig.testPaths);
+      if (compileError) {
+        this._state = 'idle';
+        this._dialogMonitor.stop();
+        resolve(this._buildFailureResult(testPlanName, compileError.message));
+        return;
+      }
 
       // Step 3: 组装 args + env + spawn
       const args = this._buildPythonArgs(testConfig);
@@ -238,6 +251,10 @@ class PythonTestService {
       });
 
       pythonProcess.on('error', (err) => {
+        this._state = 'error';
+        reject(err);
+      });
+      })().catch((err) => {
         this._state = 'error';
         reject(err);
       });
@@ -297,6 +314,55 @@ class PythonTestService {
       args.push('--test-plan', testPlanName);
     }
     return args;
+  }
+
+  /**
+   * P0-1 纵深防御: 执行前对存在的 .py 测试文件做 python -m py_compile 语法校验。
+   * 语法非法的文件 (被注入的坏代码) 在此被拒绝, 不会进入 pytest 执行。
+   * @param {{command: string}} pythonCmd
+   * @param {string[]|undefined} testPaths
+   * @returns {Promise<Error|null>} null=全部通过; Error=存在语法错误/校验超时
+   */
+  async _verifyTestFilesCompile(pythonCmd, testPaths) {
+    if (!pythonCmd || !pythonCmd.command) return null;
+    if (!Array.isArray(testPaths) || testPaths.length === 0) return null;
+    const files = testPaths.filter(
+      (p) => typeof p === 'string' && p.endsWith('.py') && this._fs.existsSync(p)
+    );
+    if (files.length === 0) return null;
+
+    const results = await Promise.all(files.map((file) => new Promise((resolve) => {
+      const child = this._spawn(pythonCmd.command, ['-m', 'py_compile', file], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let errOut = '';
+      if (child.stderr) {
+        child.stderr.on('data', (d) => { errOut += d; });
+      }
+      const timer = setTimeout(() => {
+        child.kill();
+        resolve({ file, ok: false, error: '语法校验超时' });
+      }, 30000);
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({
+          file,
+          ok: code === 0,
+          error: code === 0 ? '' : (errOut.trim() || '语法错误'),
+        });
+      });
+      child.on('error', (e) => {
+        clearTimeout(timer);
+        resolve({ file, ok: false, error: e.message });
+      });
+    })));
+
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length > 0) {
+      const detail = failed.map((f) => `${f.file}: ${f.error}`).join(' | ');
+      return new Error(`测试文件语法校验失败: ${detail}`);
+    }
+    return null;
   }
 
   /** 构建 spawn env (L118-126 提取) */

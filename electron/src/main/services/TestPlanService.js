@@ -15,6 +15,40 @@ const MARKER_DESCRIPTIONS = {
 
 const DEFAULT_TEST_TYPE = 'unit';
 
+// ── P0-2 安全常量: 渲染进程可写字段白名单 + 报告目录校验 ──
+
+// 仅允许渲染进程通过 saveTestPlan/updateTestPlan 写入的业务字段。
+// runs/last_run/report_path 等运行期字段由服务端维护, 渲染进程无权写入
+// (此前 planData 整体替换, 可注入 report_path 触发任意目录递归删除)。
+const PLAN_EDITABLE_FIELDS = [
+  'id', 'name', 'description', 'loopCount', 'continueOnFailure', 'testFiles', 'testTypes'
+];
+
+/**
+ * 按白名单拷贝计划数据 (P0-2: 剥离所有运行期/未知字段)
+ * @param {Object|null} planData
+ * @returns {Object}
+ */
+function sanitizePlanData(planData) {
+  const clean = {};
+  if (!planData || typeof planData !== 'object') return clean;
+  for (const field of PLAN_EDITABLE_FIELDS) {
+    if (planData[field] !== undefined) clean[field] = planData[field];
+  }
+  return clean;
+}
+
+/**
+ * 校验 targetPath 是否严格位于 baseDir 内 (P0-2: 防目录穿越删除)
+ * @param {string} baseDir
+ * @param {string} targetPath
+ * @returns {boolean}
+ */
+function isPathInside(baseDir, targetPath) {
+  const rel = path.relative(baseDir, targetPath);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
 // ── module-level 纯函数 (对称 EnvironmentService parsePyprojectDependencies/extractPackageName/checkMissingPackages/buildPythonConfig) ──
 
 /**
@@ -147,6 +181,7 @@ class TestPlanService extends JsonFileCrudService {
   constructor(userConfigPath, projectRoot, opts = {}) {
     const testPlansPath = path.join(userConfigPath, 'test_plans.json');
     super(testPlansPath, [], opts);  // 透传 opts.asyncFsFactory + opts.idGenerator 给 base
+    this.userConfigPath = userConfigPath;
     this.projectRoot = projectRoot;
     this._initialized = false;  // 懒初始化 flag (对称 TestCaseService/EnvironmentService)
     this._fileSystemFactory = opts.fileSystemFactory || defaultFileSystemFactory;
@@ -229,14 +264,22 @@ class TestPlanService extends JsonFileCrudService {
     // read-modify-write 包进 withLock, 防并发丢更新
     return this.withLock(async () => {
       try {
+        // P0-2: 白名单化入参 (剥离 runs/last_run 等运行期字段, 防注入 report_path)
+        const clean = sanitizePlanData(planData);
+        if (!clean.name) {
+          return { success: false, error: '测试计划名称不能为空' };
+        }
         let existingPlans = await this.getData();
-        const index = existingPlans.findIndex(p => p.name === planData.name);
+        const index = existingPlans.findIndex(p => p.name === clean.name);
         if (index >= 0) {
-          planData.id = existingPlans[index].id || this._generateId();
-          existingPlans[index] = planData;
+          clean.id = existingPlans[index].id || this._generateId();
+          // 保留服务端维护的运行期字段 (runs/last_run), 避免编辑后历史记录丢失
+          clean.runs = existingPlans[index].runs || [];
+          clean.last_run = existingPlans[index].last_run;
+          existingPlans[index] = clean;
         } else {
-          planData.id = planData.id || this._generateId();
-          existingPlans.push(planData);
+          clean.id = clean.id || this._generateId();
+          existingPlans.push(clean);
         }
         await this.saveData(existingPlans);
         return { success: true };
@@ -252,13 +295,21 @@ class TestPlanService extends JsonFileCrudService {
     // read-modify-write 包进 withLock, 防并发丢更新
     return this.withLock(async () => {
       try {
+        // P0-2: 白名单化入参 (同 saveTestPlan)
+        const clean = sanitizePlanData(planData);
+        if (!clean.id) {
+          return { success: false, error: '缺少测试计划 ID' };
+        }
         let existingPlans = await this.getData();
-        const index = existingPlans.findIndex(p => p.id === planData.id);
+        const index = existingPlans.findIndex(p => p.id === clean.id);
         if (index >= 0) {
           const originalPlan = existingPlans[index];
-          planData.created = originalPlan.created || planData.created;
-          planData.id = originalPlan.id;
-          existingPlans[index] = planData;
+          clean.created = originalPlan.created || clean.created;
+          clean.id = originalPlan.id;
+          // 保留服务端维护的运行期字段
+          clean.runs = originalPlan.runs || [];
+          clean.last_run = originalPlan.last_run;
+          existingPlans[index] = clean;
           await this.saveData(existingPlans);
           return { success: true };
         } else {
@@ -344,6 +395,16 @@ class TestPlanService extends JsonFileCrudService {
         const targetRun = runs.find(r => (r.report_path && r.report_path === identifier) || r.timestamp === identifier);
         if (!targetRun) {
           return { success: false, error: '未找到指定的运行记录' };
+        }
+
+        // P0-2: 删除前校验 report_path 必须位于 Allure 报告根目录内,
+        // 防止渲染进程注入任意路径触发递归删除 (如 C:\Windows\System32)。
+        if (targetRun.report_path) {
+          const reportsRoot = this._getAllureReportsRoot();
+          if (!isPathInside(reportsRoot, targetRun.report_path)) {
+            this._logger.error(`拒绝删除非法报告路径: ${targetRun.report_path} (root: ${reportsRoot})`);
+            return { success: false, error: '非法报告路径, 已拒绝删除' };
+          }
         }
 
         // 删除 Allure 报告目录 (文件系统, 若存在)
@@ -450,6 +511,16 @@ class TestPlanService extends JsonFileCrudService {
   parseMarkersLine(line, markers) {
     parseMarkersLine(line, markers);
   }
+
+  /**
+   * Allure 报告根目录 (P0-2 删除校验基准)。
+   * userConfigPath = <userDataPath>/config → userDataPath = dirname(userConfigPath);
+   * 报告根 = userDataPath/logs/Allure/allure-reports (对齐 AllureService._getLogsPath)。
+   * @returns {string}
+   */
+  _getAllureReportsRoot() {
+    return path.join(path.dirname(this.userConfigPath), 'logs', 'Allure', 'allure-reports');
+  }
 }
 
 module.exports = {
@@ -458,5 +529,8 @@ module.exports = {
   extractMarkersFromContent,
   inferTestType,
   parseMarkersLine,
-  MARKER_DESCRIPTIONS
+  MARKER_DESCRIPTIONS,
+  sanitizePlanData,
+  isPathInside,
+  PLAN_EDITABLE_FIELDS
 };

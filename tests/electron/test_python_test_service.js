@@ -131,7 +131,7 @@ describe('PythonTestService.run', () => {
       const svc = new PythonTestService(createMockDeps(spawn));
       const runPromise = svc.run({ testPaths: ['tests/test_a.py'], testPlanName: 'plan1' });
       // 触发子进程 close 事件
-      process.nextTick(() => {
+      setImmediate(() => {
         spawn._lastProc.emit('close', 0);
       });
       await runPromise;
@@ -152,7 +152,7 @@ describe('PythonTestService.run', () => {
     try {
       const svc = new PythonTestService(createMockDeps(spawn));
       const runPromise = svc.run({ testPaths: ['tests/'] });
-      process.nextTick(() => spawn._lastProc.emit('close', 0));
+      setImmediate(() => spawn._lastProc.emit('close', 0));
       const result = await runPromise;
       assert.strictEqual(result.success, true);
       assert.strictEqual(result.exitCode, 0);
@@ -169,7 +169,7 @@ describe('PythonTestService.run', () => {
     try {
       const svc = new PythonTestService(createMockDeps(spawn));
       const runPromise = svc.run({ testPaths: ['tests/'] });
-      process.nextTick(() => spawn._lastProc.emit('close', 1));
+      setImmediate(() => spawn._lastProc.emit('close', 1));
       const result = await runPromise;
       assert.strictEqual(result.success, false);
       assert.strictEqual(result.exitCode, 1);
@@ -186,7 +186,7 @@ describe('PythonTestService.run', () => {
     try {
       const svc = new PythonTestService(createMockDeps(spawn));
       const runPromise = svc.run({ testPaths: ['tests/'] });
-      process.nextTick(() => {
+      setImmediate(() => {
         spawn._lastProc.stdout.emit('data', Buffer.from('line1\n', 'utf8'));
         spawn._lastProc.stdout.emit('data', Buffer.from('line2\n', 'utf8'));
         spawn._lastProc.emit('close', 0);
@@ -210,7 +210,7 @@ describe('PythonTestService.run', () => {
     try {
       const svc = new PythonTestService(createMockDeps(spawn, { mainWindow: spyMainWindow }));
       const runPromise = svc.run({ testPaths: ['tests/'] });
-      process.nextTick(() => {
+      setImmediate(() => {
         spawn._lastProc.stderr.emit('data', Buffer.from('error line\n', 'utf8'));
         spawn._lastProc.emit('close', 1);
       });
@@ -243,7 +243,7 @@ describe('PythonTestService.run', () => {
       const svc = new PythonTestService(deps);
       const runPromise = svc.run({ testPaths: ['tests/'], testPlanName: 'plan1' });
       // 输出包含 allure-results-dir 标记
-      process.nextTick(() => {
+      setImmediate(() => {
         spawn._lastProc.stdout.emit('data', Buffer.from('XKAT_ALLURE_RESULTS_DIR:/fake/results\n', 'utf8'));
         spawn._lastProc.emit('close', 0);
       });
@@ -269,7 +269,7 @@ describe('PythonTestService.run', () => {
       });
       const svc = new PythonTestService(deps);
       const runPromise = svc.run({ testPaths: ['tests/'], testPlanName: 'plan1' });
-      process.nextTick(() => {
+      setImmediate(() => {
         spawn._lastProc.stdout.emit('data', Buffer.from('XKAT_ALLURE_RESULTS_DIR:/fake/results\n', 'utf8'));
         spawn._lastProc.emit('close', 0);
       });
@@ -288,7 +288,7 @@ describe('PythonTestService.run', () => {
     try {
       const svc = new PythonTestService(createMockDeps(spawn));
       const runPromise = svc.run({ testPaths: ['tests/'] });
-      process.nextTick(() => {
+      setImmediate(() => {
         spawn._lastProc.stdout.emit('data', Buffer.from('5 passed, 2 failed, 1 skipped in 10.5s\n', 'utf8'));
         spawn._lastProc.emit('close', 1);
       });
@@ -314,7 +314,7 @@ describe('PythonTestService.run', () => {
       monitor.stop = () => { stopped = true; };
       const svc = new PythonTestService(createMockDeps(spawn, { dialogMonitor: monitor }));
       const runPromise = svc.run({ testPaths: ['tests/'] });
-      process.nextTick(() => spawn._lastProc.emit('close', 0));
+      setImmediate(() => spawn._lastProc.emit('close', 0));
       await runPromise;
       assert.strictEqual(started, true);
       assert.strictEqual(stopped, true);
@@ -331,7 +331,7 @@ describe('PythonTestService.run', () => {
     try {
       const svc = new PythonTestService(createMockDeps(spawn));
       const runPromise = svc.run({ testPaths: ['tests/'] });
-      process.nextTick(() => spawn._lastProc.emit('error', new Error('spawn failed')));
+      setImmediate(() => spawn._lastProc.emit('error', new Error('spawn failed')));
       await assert.rejects(runPromise, /spawn failed/);
     } finally {
       pathHelper.getPythonConfig = orig;
@@ -346,7 +346,7 @@ describe('PythonTestService.stop', () => {
     assert.strictEqual(result.success, false);
   });
 
-  test('有进程时应 kill 并返回成功', () => {
+  test('有进程时应 kill 并返回成功', async () => {
     const spawn = createMockSpawn();
     const pathHelper = require('../../electron/src/main/utils/pathHelper');
     const orig = pathHelper.getPythonConfig;
@@ -358,6 +358,8 @@ describe('PythonTestService.stop', () => {
       let killed = false;
       // 启动一个子进程
       const runPromise = svc.run({ testPaths: ['tests/'] });
+      // run() 内含 async 语法校验步骤 (P0-1), spawn 发生在下一个 macrotask
+      await new Promise((r) => setImmediate(r));
       const proc = spawn._lastProc;
       proc.kill = () => { killed = true; };
       // 立即 stop
@@ -366,14 +368,14 @@ describe('PythonTestService.stop', () => {
       assert.strictEqual(killed, true);
       assert.strictEqual(svc.currentPythonProcess, null);
       // 清理未完成的 promise
-      process.nextTick(() => proc.emit('close', 0));
+      setImmediate(() => proc.emit('close', 0));
       return runPromise;
     } finally {
       pathHelper.getPythonConfig = orig;
     }
   });
 
-  test('stop 应调用 dialogMonitor.stop', () => {
+  test('stop 应调用 dialogMonitor.stop', async () => {
     const spawn = createMockSpawn();
     const pathHelper = require('../../electron/src/main/utils/pathHelper');
     const orig = pathHelper.getPythonConfig;
@@ -384,10 +386,12 @@ describe('PythonTestService.stop', () => {
       monitor.stop = () => { monitorStopped = true; };
       const svc = new PythonTestService(createMockDeps(spawn, { dialogMonitor: monitor }));
       svc.run({ testPaths: ['tests/'] });
+      // run() 内含 async 语法校验步骤 (P0-1), spawn 发生在下一个 macrotask
+      await new Promise((r) => setImmediate(r));
       svc.stop();
       assert.strictEqual(monitorStopped, true);
       // 清理
-      process.nextTick(() => spawn._lastProc.emit('close', 0));
+      setImmediate(() => spawn._lastProc.emit('close', 0));
     } finally {
       pathHelper.getPythonConfig = orig;
     }

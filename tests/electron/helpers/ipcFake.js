@@ -22,14 +22,21 @@ class IpcFake {
     this.onHandlers.get(channel).push(handler);
   }
 
+  // 构造最小 event mock (含 senderFrame.url, 通过 handlerUtils 的 sender 白名单校验)
+  _createEvent() {
+    return {
+      sender: { send: (evt, ...rest) => this.sendLog.push({ channel: evt, args: rest }) },
+      senderFrame: { url: 'file:///mock/test.html' },
+    };
+  }
+
   // 模拟 ipcRenderer.invoke(channel, ...args)
   async invoke(channel, ...args) {
     this.invokeLog.push({ channel, args, time: Date.now() });
     const handler = this.handlers.get(channel);
     if (handler) {
       // handler 签名: (event, ...args) - 提供最小 event mock
-      const event = { sender: { send: (evt, ...rest) => this.sendLog.push({ channel: evt, args: rest }) } };
-      return await handler(event, ...args);
+      return await handler(this._createEvent(), ...args);
     }
     return { success: false, error: `channel not mocked: ${channel}` };
   }
@@ -39,8 +46,7 @@ class IpcFake {
     this.sendLog.push({ channel, args, time: Date.now() });
     const handlers = this.onHandlers.get(channel);
     if (handlers) {
-      const event = { sender: { send: (evt, ...rest) => this.sendLog.push({ channel: evt, args: rest }) } };
-      handlers.forEach(h => h(event, ...args));
+      handlers.forEach(h => h(this._createEvent(), ...args));
     }
   }
 
@@ -58,7 +64,7 @@ class IpcFake {
   triggerOn(channel, ...args) {
     const handlers = this.onHandlers.get(channel);
     if (handlers) {
-      const event = { sender: { send: (evt, ...rest) => this.sendLog.push({ channel: evt, args: rest }) } };
+      const event = this._createEvent();
       handlers.forEach(h => h(event, ...args));
     }
   }

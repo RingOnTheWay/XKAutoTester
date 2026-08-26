@@ -23,6 +23,67 @@
 const fs = require('fs').promises;
 const path = require('path');
 
+// ─── P0-1 安全转义函数族 (渲染进程输入 → Python 源码) ───
+// 原则: 一切拼入 Python 源码的用户可控字符串, 必须按所在语法位置选择对应转义。
+// 此前 caseData.name/step.name 等直接拼接, 可被 XSS 攻破的渲染进程注入任意 Python 代码 (本机 RCE)。
+
+/** 双引号字符串字面量安全化 (Python 普通字符串, JSON.stringify 输出与 Python 字面量兼容) */
+function escapePyStringLiteral(s) {
+    return JSON.stringify(String(s ?? ''));
+}
+
+/** f-string 字面量内插值安全化 (转义 \ " 与 { }, 双括号使 f-string 原样输出) */
+function escapePyFStringPart(s) {
+    return String(s ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\{/g, '{{')
+        .replace(/\}/g, '}}')
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+}
+
+/** 单引号字符串字面量安全化 (模板常量/定位值等) */
+function escapePySingleQuoteStr(s) {
+    return String(s ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+}
+
+/** 三引号 docstring 块安全化 (防止 """ 提前终止字符串) */
+function escapePyDocstring(s) {
+    return String(s ?? '')
+        .replace(/"""/g, "'''")
+        .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+}
+
+/** 注释行安全化 (去换行, 防止注释截断后注入代码) */
+function escapePyComment(s) {
+    return String(s ?? '').replace(/[\r\n]+/g, ' ');
+}
+
+/** Python 标识符安全化 (方法名等) */
+function toPythonIdentifier(s) {
+    const cleaned = String(s ?? '').replace(/^test_/, '').replace(/[^A-Za-z0-9_]/g, '_');
+    // 全下划线/空串无实质标识符 → 保底 'case' (防生成 def test_____ 这类无效名)
+    return /[A-Za-z0-9]/.test(cleaned) ? cleaned : 'case';
+}
+
+/** 数值安全化: 非有限数回退默认值 (防 NaN/Infinity/字符串注入数字插值位) */
+function safeNumber(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+/** 整数 clamp (P0-1 纵深 + P2-7 DoS: clickCount 等展开循环上限) */
+function clampInt(value, min, max, fallback) {
+    const n = Math.floor(Number(value));
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+}
+
 // 默认 fileSystem factory: 包装 fs.promises 4 方法
 const defaultFileSystemFactory = () => ({
     mkdir: (dir, opts) => fs.mkdir(dir, opts),
@@ -69,14 +130,17 @@ class TestCaseCodeGenerator {
             let template = await this._loadTemplate();
 
             template = this.replaceTemplateVars(template, {
-                APP_NAME: caseData.targetApp?.name || '未知应用',
-                PACKAGE_NAME: caseData.targetApp?.packageName || '',
-                ACTIVITY_NAME: caseData.targetApp?.activityName || '',
-                DESCRIPTION: caseData.description || '',
-                DEVICE_NAME: caseData.deviceConfig?.deviceName || '',
-                PLATFORM_NAME: caseData.platform || 'Android',
-                PLATFORM_VERSION: caseData.deviceConfig?.platformVersion || '',
-                CLASS_NAME: this.toClassName(caseData.fileName)
+                // P0-1: 按模板中变量所在语法位置转义
+                // {{APP_NAME}}/{{DESCRIPTION}} 位于模块 docstring 内 → escapePyDocstring
+                // 其余位于单引号字符串字面量 → escapePySingleQuoteStr
+                APP_NAME: escapePyDocstring(caseData.targetApp?.name || '未知应用'),
+                PACKAGE_NAME: escapePySingleQuoteStr(caseData.targetApp?.packageName || ''),
+                ACTIVITY_NAME: escapePySingleQuoteStr(caseData.targetApp?.activityName || ''),
+                DESCRIPTION: escapePyDocstring(caseData.description || ''),
+                DEVICE_NAME: escapePySingleQuoteStr(caseData.deviceConfig?.deviceName || ''),
+                PLATFORM_NAME: escapePySingleQuoteStr(caseData.platform || 'Android'),
+                PLATFORM_VERSION: escapePySingleQuoteStr(caseData.deviceConfig?.platformVersion || ''),
+                CLASS_NAME: escapePySingleQuoteStr(this.toClassName(caseData.fileName))
             });
 
             template = this.generateBleConfig(template, caseData);
@@ -197,10 +261,11 @@ class TestCaseCodeGenerator {
 
     generateWaitTimeConfig(template, caseData) {
         const waitTimeConfig = caseData.waitTimeConfig || {};
-        template = template.replace('APP_LOAD_WAIT_TIME = 10', `APP_LOAD_WAIT_TIME = ${waitTimeConfig.appLoadWaitTime ?? 10}`);
-        template = template.replace('ELEMENT_WAIT_TIMEOUT = 30', `ELEMENT_WAIT_TIMEOUT = ${waitTimeConfig.elementWaitTimeout ?? 30}`);
-        template = template.replace('STEP_INTERVAL = 2', `STEP_INTERVAL = ${waitTimeConfig.stepInterval ?? 2}`);
-        template = template.replace('APP_CLOSE_WAIT_TIME = 2', `APP_CLOSE_WAIT_TIME = ${waitTimeConfig.appCloseWaitTime ?? 2}`);
+        // P0-1: 数字插值位一律 safeNumber 校验, 防 NaN/字符串注入
+        template = template.replace('APP_LOAD_WAIT_TIME = 10', `APP_LOAD_WAIT_TIME = ${safeNumber(waitTimeConfig.appLoadWaitTime, 10)}`);
+        template = template.replace('ELEMENT_WAIT_TIMEOUT = 30', `ELEMENT_WAIT_TIMEOUT = ${safeNumber(waitTimeConfig.elementWaitTimeout, 30)}`);
+        template = template.replace('STEP_INTERVAL = 2', `STEP_INTERVAL = ${safeNumber(waitTimeConfig.stepInterval, 2)}`);
+        template = template.replace('APP_CLOSE_WAIT_TIME = 2', `APP_CLOSE_WAIT_TIME = ${safeNumber(waitTimeConfig.appCloseWaitTime, 2)}`);
         return template;
     }
 
@@ -219,12 +284,12 @@ class TestCaseCodeGenerator {
             template = template.replace('{{BLE_IMPORT}}', '');
         } else {
             const bleConfig = `# 蓝牙设备配置常量
-BLE_UUIDS = "${bleDevice.uuids || ''}"  # 主服务UUID
-BLE_UUIDN = "${bleDevice.uuidn || ''}"  # 读服务UUID
-BLE_UUIDW = "${bleDevice.uuidw || ''}"  # 写服务UUID
-BLE_NAME = "${bleDevice.bleName || ''}"  # 蓝牙设备名称
-BLE_ADV_DATA = "${bleDevice.advData || ''}"  # 自定义广播数据
-BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
+BLE_UUIDS = ${escapePyStringLiteral(bleDevice.uuids || '')}  # 主服务UUID
+BLE_UUIDN = ${escapePyStringLiteral(bleDevice.uuidn || '')}  # 读服务UUID
+BLE_UUIDW = ${escapePyStringLiteral(bleDevice.uuidw || '')}  # 写服务UUID
+BLE_NAME = ${escapePyStringLiteral(bleDevice.bleName || '')}  # 蓝牙设备名称
+BLE_ADV_DATA = ${escapePyStringLiteral(bleDevice.advData || '')}  # 自定义广播数据
+BLE_PORT = ${escapePyStringLiteral(bleDevice.port || '')}  # 蓝牙设备串口端口`;
 
             const bleConfigInit = `ble_config = BLEConfig(
             port=BLE_PORT,
@@ -251,10 +316,10 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
 
         let decorators = '';
         if (allureConfig.epic) {
-            decorators += `@allure.epic("${allureConfig.epic}")\n`;
+            decorators += `@allure.epic(${escapePyStringLiteral(allureConfig.epic)})\n`;
         }
         if (allureConfig.feature) {
-            decorators += `@allure.feature("${allureConfig.feature}")\n`;
+            decorators += `@allure.feature(${escapePyStringLiteral(allureConfig.feature)})\n`;
         }
 
         template = template.replace('{{ALLURE_DECORATORS}}', decorators);
@@ -304,7 +369,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 return `'${safeInputValue}'`;
 
             case 'random':
-                const precision = parseInt(operationValue.randomConfig?.precision || 0);
+                const precision = clampInt(operationValue.randomConfig?.precision, 0, 10, 0);
                 if (precision === 0) {
                     return `str(random.randint(0, 100))`;
                 }
@@ -376,31 +441,30 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         // 生成方法装饰器
         let methodDecorators = '';
         if (allureConfig.story) {
-            methodDecorators += `    @allure.story("${allureConfig.story}")\n`;
+            methodDecorators += `    @allure.story(${escapePyStringLiteral(allureConfig.story)})\n`;
         }
-        methodDecorators += `    @allure.title("${caseData.name || '测试用例'}")\n`;
+        methodDecorators += `    @allure.title(${escapePyStringLiteral(caseData.name || '测试用例')})\n`;
 
-        // 生成方法描述
-        let description = '';
-        if (caseData.description) {
-            const descLines = caseData.description.split('\n');
-            description = descLines.map((line, i) => `    ${i + 1}. ${line}`).join('\n');
-        } else {
-            description = steps.map((step, i) => `    ${i + 1}. ${step.name}`).join('\n');
-        }
-
-        methodDecorators += `    @allure.description("""\n${description}\n    """)\n`;
+        // 生成方法描述 (P0-1: 改用单行转义字符串, 替代三引号块直插, 防止 """ 提前终止)
+        const descText = caseData.description
+            ? caseData.description.split('\n').map((line, i) => `${i + 1}. ${line}`).join('\n')
+            : steps.map((step, i) => `${i + 1}. ${step.name}`).join('\n');
+        methodDecorators += `    @allure.description(${escapePyStringLiteral(descText)})\n`;
 
         // 生成 pytest 标记
         const markers = allureConfig.markers || [];
         if (markers.length > 0) {
             markers.forEach(marker => {
-                methodDecorators += `    @pytest.mark.${marker}\n`;
+                // P0-1: marker 拼入装饰器名, 必须是合法 Python 标识符
+                const safeMarker = toPythonIdentifier(marker);
+                if (safeMarker) {
+                    methodDecorators += `    @pytest.mark.${safeMarker}\n`;
+                }
             });
         }
 
-        // 生成方法定义
-        let methodBody = `    def test_${caseData.fileName?.replace('test_', '') || 'case'}(self):\n`;
+        // 生成方法定义 (P0-1: 方法名必须为合法 Python 标识符)
+        let methodBody = `    def test_${toPythonIdentifier(caseData.fileName)}(self):\n`;
 
         // 生成步骤代码
         steps.forEach((step, index) => {
@@ -429,8 +493,9 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
      */
     generateStepCode(step, index, targetApp, steps, pagePackageData) {
         const stepNum = index + 1;
-        let code = `\n        # ${stepNum}. ${step.name}\n`;
-        code += `        with allure.step("${step.name}"):\n`;
+        // P0-1: 注释去换行防注入, allure.step 转义字符串字面量
+        let code = `\n        # ${stepNum}. ${escapePyComment(step.name)}\n`;
+        code += `        with allure.step(${escapePyStringLiteral(step.name)}):\n`;
 
         switch (step.type) {
             case 'element':
@@ -472,16 +537,16 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
 
         if (locatorType === 'click') {
             const coords = locatorValue.split(',');
-            const tapX = coords[0]?.trim() || '0';
-            const tapY = coords[1]?.trim() || '0';
+            const tapX = safeNumber(coords[0]?.trim(), 0);
+            const tapY = safeNumber(coords[1]?.trim(), 0);
 
             switch (operation) {
                 case 'click':
-                    const clickCount = config.operationValue?.clickCount || 1;
+                    const clickCount = clampInt(config.operationValue?.clickCount, 1, 100, 1);
                     for (let i = 0; i < clickCount; i++) {
                         code += `                self.driver.tap([(${tapX}, ${tapY})])\n`;
                     }
-                    code += `                logger.info("${step.name}成功")\n`;
+                    code += `                logger.info(${escapePyStringLiteral((step.name || '') + '成功')})\n`;
                     code += this.generateAllureAttachCode(`已点击坐标(${tapX}, ${tapY})${clickCount > 1 ? ` ${clickCount}次` : ''}`, '点击操作');
                     code += `                time.sleep(1)\n`;
                     break;
@@ -513,16 +578,16 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         } else {
             code += `                element = self.driver.find_element(\n`;
             code += `                    AppiumBy.${locatorType.toUpperCase()},\n`;
-            code += `                    '${locatorValue}'\n`;
+            code += `                    '${escapePySingleQuoteStr(locatorValue)}'\n`;
             code += `                )\n`;
 
         switch (operation) {
             case 'click':
-                const clickCount = config.operationValue?.clickCount || 1;
+                const clickCount = clampInt(config.operationValue?.clickCount, 1, 100, 1);
                 for (let i = 0; i < clickCount; i++) {
                     code += `                element.click()\n`;
                 }
-                code += `                logger.info("${step.name}成功")\n`;
+                code += `                logger.info(${escapePyStringLiteral((step.name || '') + '成功')})\n`;
                 code += this.generateAllureAttachCode(`已点击${clickCount}次`, '点击操作');
                 code += `                time.sleep(1)\n`;
                 break;
@@ -531,7 +596,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 const inputCode = this.generateInputValueCode(config.operationValue);
                 code += `                input_value = ${inputCode}\n`;
                 code += `                element.send_keys(input_value)\n`;
-                code += `                logger.info(f"${step.name}成功: {input_value}")\n`;
+                code += `                logger.info(f"${escapePyFStringPart(step.name)}成功: {input_value}")\n`;
                 code += this.generateAllureAttachCode('已输入: {input_value}', '输入操作', { isFString: true });
                 code += `                time.sleep(1)\n`;
                 break;
@@ -565,9 +630,9 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         }
 
         code += `            except Exception as e:\n`;
-        code += `                logger.error(f"${step.name}失败: {str(e)}")\n`;
+        code += `                logger.error(f"${escapePyFStringPart(step.name)}失败: {str(e)}")\n`;
         code += this.generateAllureAttachCode('操作失败: {str(e)}', '错误信息', { isFString: true });
-        code += `                pytest.fail(f"${step.name}失败: {str(e)}")\n`;
+        code += `                pytest.fail(f"${escapePyFStringPart(step.name)}失败: {str(e)}")\n`;
 
         return code;
     }
@@ -578,7 +643,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
     generateMultiElementStepCode(step, targetApp, pagePackageData) {
         const config = step.config;
         const selectedElements = config.selectedElements || [];
-        const clickCount = config.multiClickCount || 1;
+        const clickCount = clampInt(config.multiClickCount, 1, 100, 1);
 
         let code = `            try:\n`;
         code += `                # 多选元素随机选择操作\n`;
@@ -602,8 +667,8 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
 
             code += `                    {\n`;
             code += `                        'locator_type': '${locatorType.toUpperCase()}',\n`;
-            code += `                        'locator_value': '${locatorValue}',\n`;
-            code += `                        'operation': '${operation}',\n`;
+            code += `                        'locator_value': '${escapePySingleQuoteStr(locatorValue)}',\n`;
+            code += `                        'operation': '${escapePySingleQuoteStr(operation)}',\n`;
             code += `                        'operation_value': ${JSON.stringify(operationValue)}\n`;
             code += `                    },\n`;
         });
@@ -715,9 +780,9 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
 
         code += this.generateAllureAttachCode(`已从${selectedElements.length}个元素中随机选择并操作了{selected_count}个`, '多选元素操作', { isFString: true });
         code += `            except Exception as e:\n`;
-        code += `                logger.error(f"${step.name}失败: {str(e)}")\n`;
+        code += `                logger.error(f"${escapePyFStringPart(step.name)}失败: {str(e)}")\n`;
         code += this.generateAllureAttachCode('操作失败: {str(e)}', '错误信息', { isFString: true });
-        code += `                pytest.fail(f"${step.name}失败: {str(e)}")\n`;
+        code += `                pytest.fail(f"${escapePyFStringPart(step.name)}失败: {str(e)}")\n`;
 
         return code;
     }
@@ -738,9 +803,10 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         let code = `            try:\n`;
 
         if (methodName === 'send_random_data') {
-            const minValue = methodParams.min_value || 36.0;
-            const maxValue = methodParams.max_value || 37.5;
-            const precision = methodParams.precision !== undefined ? methodParams.precision : 1;
+            // P0-1: 数值插值位 safeNumber 校验
+            const minValue = safeNumber(methodParams.min_value, 36.0);
+            const maxValue = safeNumber(methodParams.max_value, 37.5);
+            const precision = safeNumber(methodParams.precision, 1);
 
             code += `                # 生成随机体温数据\n`;
             code += `                test_value, hex_data = temperature_bioland_gen(\n`;
@@ -751,7 +817,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
             code += `                logger.info(f"生成体温数据: {test_value}°C")\n`;
             code += `                self.test_ble_value = test_value\n`;
         } else if (methodName === 'send_custom_data') {
-            const temperature = methodParams.temperature;
+            const temperature = safeNumber(methodParams.temperature, 36.5);
 
             code += `                # 发送指定体温数据\n`;
             code += `                test_value, hex_data = temperature_bioland_gen(\n`;
@@ -760,7 +826,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
             code += `                logger.info(f"发送体温数据: {test_value}°C")\n`;
             code += `                self.test_ble_value = test_value\n`;
         } else {
-            code += `                hex_data = "${methodParams.hexData || ''}"\n`;
+            code += `                hex_data = ${escapePyStringLiteral(methodParams.hexData || '')}\n`;
         }
 
         code += `                if self.ble_device and self.ble_device.send_hex_data(hex_data):\n`;
@@ -771,9 +837,9 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         code += `                    logger.error("蓝牙发送数据失败")\n`;
         code += `                    pytest.fail("蓝牙发送数据失败")\n`;
         code += `            except Exception as e:\n`;
-        code += `                logger.error(f"${step.name}失败: {str(e)}")\n`;
+        code += `                logger.error(f"${escapePyFStringPart(step.name)}失败: {str(e)}")\n`;
         code += this.generateAllureAttachCode('蓝牙操作失败: {str(e)}', '错误信息', { isFString: true });
-        code += `                pytest.fail(f"${step.name}失败: {str(e)}")\n`;
+        code += `                pytest.fail(f"${escapePyFStringPart(step.name)}失败: {str(e)}")\n`;
 
         return code;
     }
@@ -786,7 +852,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         const systemConfig = config.systemConfig || {};
         const operationType = systemConfig.operationType || 'navigation';
         const navKey = systemConfig.navKey || 'back';
-        const clickCount = systemConfig.clickCount || 1;
+        const clickCount = clampInt(systemConfig.clickCount, 1, 100, 1);
 
         let code = `            try:\n`;
 
@@ -815,10 +881,10 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         }
 
         code += `            except Exception as e:\n`;
-        code += `                logger.error(f"${step.name}失败: {str(e)}")\n`;
+        code += `                logger.error(f"${escapePyFStringPart(step.name)}失败: {str(e)}")\n`;
         code += `                screenshot = self.driver.get_screenshot_as_png()\n`;
         code += this.generateAllureAttachCode('screenshot', '错误截图', { isVariable: true, type: 'PNG' });
-        code += `                pytest.fail(f"${step.name}失败: {str(e)}")\n`;
+        code += `                pytest.fail(f"${escapePyFStringPart(step.name)}失败: {str(e)}")\n`;
 
         return code;
     }
@@ -843,8 +909,9 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
             if (searchType === 'text') {
                 const textValue = searchConfig.textValue || '';
                 const matchType = searchConfig.matchType || 'contains';
+                // P0-1: 统一转义 — XPath 双引号属性用 XML 实体, Python 字符串用单引号转义
                 const escapedTextValue = textValue.replace(/"/g, '&quot;');
-                const pythonSafeTextValue = textValue.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\{/g, '{{').replace(/\}/g, '}}');
+                const pythonSafeTextValue = escapePySingleQuoteStr(textValue);
                 const xpathExpr = matchType === 'exact'
                     ? `//*[@text="${escapedTextValue}"]`
                     : `//*[contains(@text, "${escapedTextValue}")]`;
@@ -876,7 +943,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 code += `                    try:\n`;
                 code += `                        self.driver.find_element(\n`;
                 code += `                            AppiumBy.${searchLocator.toUpperCase()},\n`;
-                code += `                            '${searchLocatorValue}'\n`;
+                code += `                            '${escapePySingleQuoteStr(searchLocatorValue)}'\n`;
                 code += `                        )\n`;
                 code += `                        search_success = True\n`;
                 code += `                        logger.info("找到元素")\n`;
@@ -894,9 +961,9 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
             const compareConfig = config.compareConfig || {};
             const targetValueType = compareConfig.targetValueType || 'custom';
             const targetValue = compareConfig.targetValue || '';
-            const pythonSafeTargetValue = targetValue.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-            const tolerance = compareConfig.tolerance;
-            const hasTolerance = tolerance !== undefined && tolerance !== null && tolerance !== '';
+            const pythonSafeTargetValue = escapePySingleQuoteStr(targetValue);
+            const tolerance = safeNumber(compareConfig.tolerance, 0);
+            const hasTolerance = compareConfig.tolerance !== undefined && compareConfig.tolerance !== null && compareConfig.tolerance !== '';
             const isRandomRangeTarget = targetValueType === 'ble';
 
             // 优先从最新的页面封装数据中获取元素定位信息
@@ -908,7 +975,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
                 const bleStepId = compareConfig.bleStepId || '';
                 const bleStep = steps.find(s => s.id === bleStepId);
                 const bleStepName = bleStep ? bleStep.name : '蓝牙随机数据';
-                code += `                # 使用步骤"${bleStepName}"生成的随机值\n`;
+                code += `                # 使用步骤"${escapePyComment(bleStepName)}"生成的随机值\n`;
                 code += `                expected_value = str(self.test_ble_value)\n`;
                 code += `                logger.info(f"期望值(来自蓝牙随机数据): {expected_value}")\n`;
             } else {
@@ -923,7 +990,7 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
             code += `                    try:\n`;
             code += `                        result_element = self.driver.find_element(\n`;
             code += `                            AppiumBy.${compareLocator.toUpperCase()},\n`;
-            code += `                            '${compareLocatorValue}'\n`;
+            code += `                            '${escapePySingleQuoteStr(compareLocatorValue)}'\n`;
             code += `                        )\n`;
             code += `                        displayed_value = result_element.text\n`;
             code += `                        if displayed_value and displayed_value.strip():\n`;
@@ -983,13 +1050,22 @@ BLE_PORT = "${bleDevice.port || ''}"  # 蓝牙设备串口端口`;
         }
 
         code += `            except Exception as e:\n`;
-        code += `                logger.error(f"${step.name}失败: {str(e)}")\n`;
+        code += `                logger.error(f"${escapePyFStringPart(step.name)}失败: {str(e)}")\n`;
         code += `                screenshot = self.driver.get_screenshot_as_png()\n`;
         code += this.generateAllureAttachCode('screenshot', '错误截图', { isVariable: true, type: 'PNG' });
-        code += `                pytest.fail(f"${step.name}失败: {str(e)}")\n`;
+        code += `                pytest.fail(f"${escapePyFStringPart(step.name)}失败: {str(e)}")\n`;
 
         return code;
     }
 }
 
 module.exports = TestCaseCodeGenerator;
+// 挂载转义工具供单测直接引用 (P0-1 回归测试入口)
+module.exports.escapePyStringLiteral = escapePyStringLiteral;
+module.exports.escapePyFStringPart = escapePyFStringPart;
+module.exports.escapePySingleQuoteStr = escapePySingleQuoteStr;
+module.exports.escapePyDocstring = escapePyDocstring;
+module.exports.escapePyComment = escapePyComment;
+module.exports.toPythonIdentifier = toPythonIdentifier;
+module.exports.safeNumber = safeNumber;
+module.exports.clampInt = clampInt;

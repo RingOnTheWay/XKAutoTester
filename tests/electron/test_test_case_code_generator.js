@@ -540,3 +540,133 @@ describe('generatePythonFile 端到端', () => {
     assert.ok(result.error);
   });
 });
+
+
+// ─── P0-1 代码注入回归测试 ─────────────────────────────────
+describe('P0-1 转义函数族', () => {
+  test('escapePyStringLiteral 转义双引号/反斜杠/换行', () => {
+    const { escapePyStringLiteral } = TestCaseCodeGenerator;
+    const out = escapePyStringLiteral('a"b\\c\nd');
+    assert.strictEqual(out, '"a\\"b\\\\c\\nd"');
+  });
+
+  test('escapePyFStringPart 双括号化 { } 并转义 "', () => {
+    const { escapePyFStringPart } = TestCaseCodeGenerator;
+    const out = escapePyFStringPart('{x} "y" \\z');
+    assert.ok(out.includes('{{x}}'));
+    assert.ok(out.includes('\\"y\\"'));
+    assert.ok(out.includes('\\\\z'));
+  });
+
+  test('escapePySingleQuoteStr 转义单引号/反斜杠/换行', () => {
+    const { escapePySingleQuoteStr } = TestCaseCodeGenerator;
+    const out = escapePySingleQuoteStr("a'b\\c\nd");
+    assert.ok(out.includes("a\\'b\\\\c"));
+    assert.ok(!out.includes('\n'));
+  });
+
+  test('escapePyDocstring 防 """ 提前终止', () => {
+    const { escapePyDocstring } = TestCaseCodeGenerator;
+    const out = escapePyDocstring('x """ y');
+    assert.ok(!out.includes('"""'));
+    assert.ok(out.includes("'''"));
+  });
+
+  test('toPythonIdentifier 清洗非法字符并保底', () => {
+    const { toPythonIdentifier } = TestCaseCodeGenerator;
+    assert.strictEqual(toPythonIdentifier('test_login'), 'login');
+    assert.strictEqual(toPythonIdentifier('a b!c'), 'a_b_c');
+    assert.strictEqual(toPythonIdentifier('!!!"\n'), 'case');
+    assert.strictEqual(toPythonIdentifier(undefined), 'case');
+  });
+
+  test('clampInt 限制展开循环上限 (DoS 防线)', () => {
+    const { clampInt } = TestCaseCodeGenerator;
+    assert.strictEqual(clampInt(999999, 1, 100, 1), 100);
+    assert.strictEqual(clampInt(-5, 1, 100, 1), 1);
+    assert.strictEqual(clampInt('abc', 1, 100, 1), 1);
+    assert.strictEqual(clampInt(7, 1, 100, 1), 7);
+  });
+
+  test('safeNumber 拒绝 NaN/字符串注入数字位', () => {
+    const { safeNumber } = TestCaseCodeGenerator;
+    assert.strictEqual(safeNumber('abc', 10), 10);
+    assert.strictEqual(safeNumber('15', 10), 15);
+    assert.strictEqual(safeNumber(NaN, 10), 10);
+  });
+});
+
+describe('generatePythonFile P0-1 注入防护 端到端', () => {
+  let tmpDir, outputDir, gen;
+  before(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'xkat-p0-'));
+    outputDir = path.join(tmpDir, 'output');
+    await fs.mkdir(outputDir, { recursive: true });
+    await fs.writeFile(path.join(tmpDir, 'page_package.json'), JSON.stringify({ apps: [] }));
+    gen = new TestCaseCodeGenerator(tmpDir, '/fake');
+  });
+  after(async () => {
+    if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test('恶意用例名/步骤名不产生裸注入代码, 且生成文件可编译', async () => {
+    const payload = 'x"); import os; os.system("calc"); print("';
+    const caseData = {
+      fileName: 'inject_case',
+      name: payload,
+      description: 'desc """' + payload,
+      steps: [
+        { id: 's1', type: 'system', name: payload, config: { systemConfig: { operationType: 'navigation', navKey: 'back' } } },
+        { id: 's2', type: 'element', name: payload + '"suffix', config: { operation: 'click', locator: 'id', locatorValue: 'btn' } }
+      ],
+      targetApp: { name: payload, packageName: payload },
+      allureConfig: { story: payload, epic: payload, feature: payload, markers: ['smoke' + payload] },
+      deviceConfig: { deviceName: payload, platformVersion: payload },
+    };
+    const result = await gen.generatePythonFile(caseData, outputDir);
+    assert.strictEqual(result.success, true, result.error || '');
+
+    const pyContent = await fs.readFile(result.path, 'utf8');
+
+    // 语义级验证: 用 Python AST 解析生成文件, 确认不存在 os.system 调用节点。
+    // 转义后的 payload 只是字符串字面量 (AST Str 节点), 无法产生 Call 节点;
+    // 若转义失败 payload 逃逸为语句, AST 中会出现 Call(func=os.system) → 测试失败。
+    assert.ok(pyContent.includes('\\"'), 'payload 中的引号必须被转义');
+
+    if (process.env.SKIP_PY_COMPILE !== '1') {
+      const { execFileSync } = require('node:child_process');
+      // 1) 语法校验
+      try {
+        execFileSync('python', ['-m', 'py_compile', result.path], { stdio: 'pipe' });
+      } catch (e) {
+        assert.fail('生成文件未通过 py_compile: ' + (e.stderr || e.message));
+      }
+      // 2) 语义级注入扫描: AST 中不得出现 os.system / os.popen / subprocess 调用
+      const astScript = [
+        'import ast, sys',
+        'tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())',
+        'bad = []',
+        'for n in ast.walk(tree):',
+        '    if (isinstance(n, ast.Call)',
+        '            and isinstance(n.func, ast.Attribute)',
+        '            and n.func.attr in ("system", "popen", "Popen")):',
+        '        bad.append(n.lineno)',
+        'if bad: sys.exit("发现注入调用: " + str(bad))',
+      ].join('\n');
+      try {
+        execFileSync('python', ['-c', astScript, result.path], { stdio: 'pipe' });
+      } catch (e) {
+        assert.fail('AST 扫描发现注入调用: ' + (e.stderr || e.message));
+      }
+    }
+  });
+
+  test('非法 fileName 被清洗为合法标识符', async () => {
+    const caseData = { fileName: 'test_a b!c', name: 'ok', steps: [] };
+    const result = await gen.generatePythonFile(caseData, outputDir);
+    assert.strictEqual(result.success, true, result.error || '');
+    const pyContent = await fs.readFile(result.path, 'utf8');
+    assert.match(pyContent, /def test_a_b_c\(self\):/);
+  });
+});
+

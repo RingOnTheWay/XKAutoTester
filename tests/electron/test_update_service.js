@@ -159,7 +159,7 @@ function makeRelease(opts = {}) {
     prerelease: false,
     draft: false,
     assets: opts.assets || [
-      { name: 'XKAutoTester Setup v2.0.0.exe', browser_download_url: 'https://download/2.0.0.exe', size: 50000000 }
+      { name: 'XKAutoTester Setup v2.0.0.exe', browser_download_url: 'https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', size: 50000000 }
     ]
   };
 }
@@ -195,7 +195,7 @@ test('懒初始化: constructor 不触发 fs, 首次 downloadUpdate 触发 ensur
   assert.strictEqual(fileSystem.calls.readdir.length, 0, 'constructor 后 readdir 未调');
 
   // 首次 downloadUpdate 触发
-  await svc.downloadUpdate('https://download/2.0.0.exe', 'XKAutoTester Setup v2.0.0.exe', null);
+  await svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', 'XKAutoTester Setup v2.0.0.exe', null);
 
   assert.strictEqual(fileSystem.calls.ensureDir.length, 1, '首次 downloadUpdate 调 ensureDir 1 次');
   assert.strictEqual(fileSystem.calls.ensureDir[0], svc.updateDir, 'ensureDir 收 updateDir');
@@ -211,9 +211,9 @@ test('懒初始化幂等: 重复 downloadUpdate 仅初始化一次', async () =>
     fileSystem: { defaultExists: false, readdirResult: [] }
   });
 
-  await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
-  await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
-  await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+  await svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', 'setup.exe', null);
+  await svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', 'setup.exe', null);
+  await svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', 'setup.exe', null);
 
   assert.strictEqual(fileSystem.calls.ensureDir.length, 1, '3 次 downloadUpdate 仅 ensureDir 1 次');
 });
@@ -233,7 +233,7 @@ test('checkForUpdate 调 updateSource.fetchLatestRelease + versionComparator', a
   assert.strictEqual(result.hasUpdate, true, '1.0.0 < 2.0.0 → hasUpdate=true');
   assert.strictEqual(result.currentVersion, '1.0.0');
   assert.strictEqual(result.latestVersion, '2.0.0');
-  assert.strictEqual(result.downloadUrl, 'https://download/2.0.0.exe');
+  assert.strictEqual(result.downloadUrl, 'https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe');
   assert.strictEqual(result.fileName, 'XKAutoTester Setup v2.0.0.exe');
   assert.strictEqual(result.fileSize, 50000000);
   assert.strictEqual(result.releaseNotes, 'Release notes');
@@ -334,7 +334,7 @@ test('downloadUpdate 已存在文件返快路径 {success, filePath, message}', 
   const fileName = 'XKAutoTester Setup v2.0.0.exe';
   const expectedFilePath = path.join(svc.updateDir, fileName);
 
-  const result = await svc.downloadUpdate('https://download/2.0.0.exe', fileName, null);
+  const result = await svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', fileName, null);
 
   assert.strictEqual(result.success, true);
   assert.strictEqual(result.filePath, expectedFilePath);
@@ -357,14 +357,14 @@ test('downloadUpdate 不存在调 downloadStrategy.download', async () => {
   const expectedFilePath = path.join(svc.updateDir, fileName);
   const eventSender = { send: () => {} };
 
-  const result = await svc.downloadUpdate('https://download/2.0.0.exe', fileName, eventSender);
+  const result = await svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', fileName, eventSender);
 
   assert.strictEqual(result.success, true);
   assert.strictEqual(result.filePath, expectedFilePath);
   assert.strictEqual(result.message, 'Download completed');
   assert.strictEqual(downloadStrategy.calls.download.length, 1, 'downloadStrategy.download 调 1 次');
   assert.deepEqual(downloadStrategy.calls.download[0], {
-    downloadUrl: 'https://download/2.0.0.exe',
+    downloadUrl: 'https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe',
     filePath: expectedFilePath,
     eventSender,
   });
@@ -847,7 +847,7 @@ test('downloadUpdate 下载后 SHA256 匹配 → 成功', async () => {
   const { svc, hashCalculator } = makeAppWithSha256({ expectedHash: 'd'.repeat(64) });
   await svc.checkForUpdate();  // 设置 _expectedSha256
 
-  const result = await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+  const result = await svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', 'setup.exe', null);
 
   assert.strictEqual(result.success, true);
   assert.strictEqual(hashCalculator.calls.length, 1, '下载后调 1 次 hash 计算');
@@ -861,7 +861,7 @@ test('downloadUpdate 下载后 SHA256 不匹配 → 删除文件 + 抛错', asyn
   await svc.checkForUpdate();
 
   await assert.rejects(
-    svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null),
+    svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', 'setup.exe', null),
     /SHA256 校验失败/
   );
   // 文件应被删除
@@ -876,7 +876,7 @@ test('downloadUpdate 快路径文件已存在 + SHA256 匹配 → 直接返回',
   });
   await svc.checkForUpdate();
 
-  const result = await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+  const result = await svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', 'setup.exe', null);
 
   assert.strictEqual(result.success, true);
   assert.strictEqual(result.message, 'File already downloaded');
@@ -900,7 +900,7 @@ test('downloadUpdate 快路径文件已存在 + SHA256 不匹配 → 删除 + �
   };
   await svc.checkForUpdate();
 
-  const result = await svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null);
+  const result = await svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', 'setup.exe', null);
 
   assert.strictEqual(result.success, true, '重下载后应成功');
   assert.ok(fileSystem.calls.unlink.length >= 1, '缓存文件应被删除');
@@ -944,7 +944,7 @@ test('R10 downloadUpdate 无 _expectedSha256 (checkForUpdate 未调) → 拒绝�
   });
 
   await assert.rejects(
-    svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null),
+    svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', 'setup.exe', null),
     (err) => {
       assert.match(err.message, /缺少 SHA256 hash/, '错误消息含"缺少 SHA256 hash"');
       assert.strictEqual(err.code, 'missing_hash', 'errorCode=missing_hash');
@@ -963,7 +963,7 @@ test('R10 downloadUpdate checkForUpdate 调了但 Release 无 hash → 拒绝下
   await svc.checkForUpdate();  // _expectedSha256=null (body 无 hash)
 
   await assert.rejects(
-    svc.downloadUpdate('https://download/2.0.0.exe', 'setup.exe', null),
+    svc.downloadUpdate('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/2.0.0.exe', 'setup.exe', null),
     (err) => {
       assert.strictEqual(err.code, 'missing_hash');
       return true;
@@ -1039,4 +1039,49 @@ test('computeFileSha256 真实文件计算 (集成)', async () => {
   } finally {
     fsReal.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+
+// ── P0-4 安全回归: 文件名清洗 + 下载域名校验 ─────────────────────────
+
+test('P0-4 sanitizeUpdateFileName: 剥离路径成分 + 扩展名白名单', () => {
+  const { sanitizeUpdateFileName } = require(path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'UpdateService.js'));
+  assert.strictEqual(sanitizeUpdateFileName('XKAutoTester Setup v2.0.0.exe'), 'XKAutoTester Setup v2.0.0.exe');
+  assert.strictEqual(sanitizeUpdateFileName('..\\..\\victim.exe'), 'victim.exe', '路径穿越必须被裁剪为 basename');
+  assert.strictEqual(sanitizeUpdateFileName('..\\\\..\\\\evil.exe'), 'evil.exe');
+  assert.strictEqual(sanitizeUpdateFileName('setup.zip'), 'setup.zip');
+  assert.strictEqual(sanitizeUpdateFileName('setup.pdf'), null, '非白名单扩展名拒绝');
+  assert.strictEqual(sanitizeUpdateFileName('setup'), null, '无扩展名拒绝');
+  assert.strictEqual(sanitizeUpdateFileName(''), null);
+  assert.strictEqual(sanitizeUpdateFileName(null), null);
+  assert.strictEqual(sanitizeUpdateFileName('evil.exe\u0000.txt'), null, '控制字符拒绝');
+});
+
+test('P0-4 isTrustedDownloadUrl: 仅放行 GitHub release 域', () => {
+  const { isTrustedDownloadUrl } = require(path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'UpdateService.js'));
+  assert.strictEqual(isTrustedDownloadUrl('https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/app.exe'), true);
+  assert.strictEqual(isTrustedDownloadUrl('https://objects.githubusercontent.com/xxx/app.exe'), true);
+  assert.strictEqual(isTrustedDownloadUrl('https://evil.com/app.exe'), false);
+  assert.strictEqual(isTrustedDownloadUrl('file:///C:/app.exe'), false);
+  assert.strictEqual(isTrustedDownloadUrl('javascript:alert(1)'), false);
+  assert.strictEqual(isTrustedDownloadUrl('not-a-url'), false);
+  assert.strictEqual(isTrustedDownloadUrl(null), false);
+});
+
+test('P0-4 downloadUpdate 路径穿越文件名被裁剪为 basename', async () => {
+  const { svc, downloadStrategy } = makeFakeApp({
+    expectedSha256: 'deadbeef',
+    downloadResult: { success: true },
+  });
+  const result = await svc.downloadUpdate(
+    'https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/app.exe',
+    '..\\..\\victim.exe',
+    null
+  );
+  assert.strictEqual(result.success, true, result.error || '');
+  const call = downloadStrategy.calls.download[0];
+  assert.ok(call, 'downloadStrategy 应被调用');
+  // 关键安全断言: 下载目标路径必须位于 updateDir 内且不含 '..' 穿越
+  assert.ok(!call.filePath.includes('..'), '下载路径不得包含路径穿越');
+  assert.ok(call.filePath.endsWith('victim.exe'), '应使用裁剪后的文件名 (basename)');
 });
