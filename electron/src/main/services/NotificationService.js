@@ -39,7 +39,8 @@ function buildSignString(timestamp, secret) {
  */
 function buildRequestBody(message) {
   return {
-    at: { isAtAll: 'false', atUserIds: [], atMobiles: [] },
+    // P3-4: isAtAll 应为 boolean (钉钉 API 期望布尔, 字符串 'false' 语义异常)
+    at: { isAtAll: false, atUserIds: [], atMobiles: [] },
     text: { content: message },
     msgtype: 'text'
   };

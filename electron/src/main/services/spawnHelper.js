@@ -6,10 +6,14 @@
  *
  * 强制 windowsHide: true (避免弹出控制台窗口), 合并 process.env + options.env
  *
+ * P1-11: 支持 options.timeout 超时 (毫秒, 0=不超时) — 启动期环境检查
+ * (EnvironmentService 的 python --version / where uv 等) 若命令挂起会永久阻塞 splash,
+ * 超时后 kill 子进程并返回 timedOut:true 结果。
+ *
  * @param {string} command - 命令 (如 'python', 'where', 'reg.exe')
  * @param {string[]} [args=[]] - 参数数组
- * @param {Object} [options={}] - spawn 选项 (env / cwd 等)
- * @returns {Promise<{code: number, stdout: string, stderr: string}>}
+ * @param {Object} [options={}] - spawn 选项 (env / cwd / timeout 等)
+ * @returns {Promise<{code: number, stdout: string, stderr: string, timedOut?: boolean}>}
  */
 async function executeCommand(command, args = [], options = {}) {
   return new Promise((resolve, reject) => {
@@ -23,6 +27,18 @@ async function executeCommand(command, args = [], options = {}) {
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
+    let timer = null;
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      resolve(result);
+    };
 
     proc.stdout.on('data', (data) => {
       stdout += data.toString();
@@ -33,7 +49,7 @@ async function executeCommand(command, args = [], options = {}) {
     });
 
     proc.on('close', (code) => {
-      resolve({
+      finish({
         code,
         stdout: stdout.trim(),
         stderr: stderr.trim(),
@@ -41,8 +57,21 @@ async function executeCommand(command, args = [], options = {}) {
     });
 
     proc.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
       reject(error);
     });
+
+    if (options.timeout && options.timeout > 0) {
+      timer = setTimeout(() => {
+        try { proc.kill(); } catch (e) { /* noop */ }
+        finish({ code: -1, stdout: stdout.trim(), stderr: stderr.trim(), error: 'timeout', timedOut: true });
+      }, options.timeout);
+    }
   });
 }
 

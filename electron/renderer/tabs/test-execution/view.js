@@ -396,11 +396,6 @@ export class TestExecutionView {
     return Array.from(checked).map(cb => cb.value);
   }
 
-  refreshTestTypes() {
-    // 重新渲染当前测试类型（保留选中状态由 controller 管理）
-    // 此方法由 controller 调用，controller 负责传入最新 markers 和选中状态
-  }
-
   // ═════════════════════════════════════════════════════════════════
   // ─── 测试执行 UI 状态 + 输出显示 + 通知（原 outputMixin） ────────
   // ═════════════════════════════════════════════════════════════════
@@ -728,42 +723,30 @@ export class TestExecutionView {
   async renderModalTestFiles(files, selectedFiles, onFileCheck, onEditDevice, getFileInfo) {
     const { modalTestFileList } = this.els;
     if (!modalTestFileList) return;
-    // Bug 修复: 显示 loading 至少 1s,避免结果太快导致界面闪烁
+    const loadStart = Date.now();
+    // P1-10: loading 时长自适应 — 原固定等满 1s, 数据已就绪也白等
     modalTestFileList.innerHTML = `<div class="placeholder-message modal-loading-placeholder">${
       this.getIconHtml('refresh', 'animation: spin 1s linear infinite; vertical-align:middle;')
     }<span style="vertical-align:middle;">${window.i18n.t('testExecution.loadingFiles') || '加载中...'}</span></div>`;
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    modalTestFileList.innerHTML = '';
-
-    if (!files || files.length === 0) {
-      modalTestFileList.innerHTML = `<div class="placeholder-message">${
-        this.getIconHtml('info', 'vertical-align:middle;')
-      }<span style="vertical-align:middle;">${window.i18n.t('testExecution.noTestFilesInDir') || '当前目录下没有测试文件'}</span></div>`;
-      return;
-    }
 
     // 统一 selectedFiles 为路径字符串数组（兼容对象数组与字符串数组）
     const selectedPaths = (selectedFiles || []).map(f => (typeof f === 'string' ? f : f?.path)).filter(Boolean);
 
-    for (const file of files) {
+    // P1-10: 并行获取所有文件元数据 (原 for 循环内串行 await getFileInfo,
+    // N 个文件 = N 次 IPC 往返, 弹窗打开明显卡顿)
+    const fileInfos = await Promise.all((files || []).map(async (file) => {
       const filePath = typeof file === 'string' ? file : file?.path;
       const fileName = typeof file === 'string' ? file.split(/[\\/]/).pop() : file?.name;
-      if (!filePath) continue;
-      const isChecked = selectedPaths.includes(filePath) ? 'checked' : '';
-
-      // 获取测试用例的平台信息和蓝牙步骤信息
+      if (!filePath) return null;
+      let testCaseFileName = fileName;
+      if (testCaseFileName && testCaseFileName.endsWith('.py')) {
+        testCaseFileName = testCaseFileName.slice(0, -3);
+      }
       let platform = null;
       let deviceName = '';
       let hasBleSteps = false;
       let blePort = '';
-      let testCaseFileName = fileName;
-      if (testCaseFileName.endsWith('.py')) {
-        testCaseFileName = testCaseFileName.slice(0, -3);
-      }
-
       try {
-        // MVC: view 不直接调 electronAPI,通过 controller 传入的 getFileInfo 回调获取元数据
-        // wrapper 已处理 IPC 失败,此处直接判断 data 字段
         const result = getFileInfo ? await getFileInfo(testCaseFileName) : null;
         if (result && result.data) {
           platform = result.data.platform || null;
@@ -774,11 +757,32 @@ export class TestExecutionView {
       } catch (error) {
         // 忽略错误，使用默认值
       }
+      return { file, filePath, fileName, testCaseFileName, platform, deviceName, hasBleSteps, blePort };
+    }));
+    const infos = (fileInfos || []).filter(Boolean);
+
+    // 最小 loading 时长 300ms (防闪烁), 超过则不再补等待
+    const elapsed = Date.now() - loadStart;
+    if (elapsed < 300) {
+      await new Promise(resolve => setTimeout(resolve, 300 - elapsed));
+    }
+    modalTestFileList.innerHTML = '';
+
+    if (!files || files.length === 0) {
+      modalTestFileList.innerHTML = `<div class="placeholder-message">${
+        this.getIconHtml('info', 'vertical-align:middle;')
+      }<span style="vertical-align:middle;">${window.i18n.t('testExecution.noTestFilesInDir') || '当前目录下没有测试文件'}</span></div>`;
+      return;
+    }
+
+    for (const info of infos) {
+      const { filePath, fileName, testCaseFileName } = info;
+      const isChecked = selectedPaths.includes(filePath) ? 'checked' : '';
 
       // 显示编辑按钮的条件: 安卓平台 或 有蓝牙步骤
-      const isAndroid = platform && platform.toLowerCase() === 'android';
-      const hasDeviceName = deviceName && deviceName !== '{{DEVICE_NAME}}' && deviceName.trim() !== '';
-      const showEditBtn = isAndroid || hasBleSteps;
+      const isAndroid = info.platform && info.platform.toLowerCase() === 'android';
+      const hasDeviceName = info.deviceName && info.deviceName !== '{{DEVICE_NAME}}' && info.deviceName.trim() !== '';
+      const showEditBtn = isAndroid || info.hasBleSteps;
 
       // 构建设备信息显示（安卓用例显示设备ID，蓝牙用例显示端口）
       let deviceInfoHtml = '';
@@ -788,7 +792,7 @@ export class TestExecutionView {
 
         // 安卓设备信息
         if (isAndroid) {
-          const deviceDisplay = hasDeviceName ? deviceName : window.i18n.t('testExecution.deviceSelection.notSet');
+          const deviceDisplay = hasDeviceName ? info.deviceName : window.i18n.t('testExecution.deviceSelection.notSet');
           const deviceStatusClass = hasDeviceName ? 'device-set' : 'device-not-set';
           infoItems.push(`
             <span class="test-file-device-info ${deviceStatusClass}" data-file-name="${this.escapeHtml(testCaseFileName)}" data-type="device">
@@ -799,9 +803,9 @@ export class TestExecutionView {
         }
 
         // 蓝牙端口信息
-        if (hasBleSteps) {
-          const portDisplay = blePort || window.i18n.t('testExecution.deviceSelection.notSet');
-          const portStatusClass = blePort ? 'device-set' : 'device-not-set';
+        if (info.hasBleSteps) {
+          const portDisplay = info.blePort || window.i18n.t('testExecution.deviceSelection.notSet');
+          const portStatusClass = info.blePort ? 'device-set' : 'device-not-set';
           infoItems.push(`
             <span class="test-file-device-info ${portStatusClass}" data-file-name="${this.escapeHtml(testCaseFileName)}" data-type="ble-port">
               ${this.getIconHtml('cable')}
@@ -815,7 +819,7 @@ export class TestExecutionView {
         }
 
         editBtnHtml = `
-          <button type="button" class="edit-device-btn" data-file-name="${this.escapeHtml(testCaseFileName)}" data-file-path="${this.escapeHtml(filePath)}" data-has-ble="${hasBleSteps}" data-is-android="${isAndroid}">
+          <button type="button" class="edit-device-btn" data-file-name="${this.escapeHtml(testCaseFileName)}" data-file-path="${this.escapeHtml(filePath)}" data-has-ble="${info.hasBleSteps}" data-is-android="${isAndroid}">
             ${this.getIconHtml('edit')}
           </button>
         `;

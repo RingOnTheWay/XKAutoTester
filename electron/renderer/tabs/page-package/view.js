@@ -482,22 +482,13 @@ export class PagePackageView {
     if (titleEl) titleEl.textContent = title;
     if (messageEl) messageEl.textContent = message;
 
-    const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
-    const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
-
-    // 克隆按钮清除旧事件
-    const newConfirmBtn = confirmBtn.cloneNode(true);
-    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-    newConfirmBtn.addEventListener('click', () => {
-      window.__XKAT_MODALS__?.confirm?.close();
-      onConfirm();
-    });
-
-    const newCancelBtn = cancelBtn.cloneNode(true);
-    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
-    newCancelBtn.addEventListener('click', () => {
-      window.__XKAT_MODALS__?.confirm?.close();
-    });
+    // P1-8: 收敛为全局回调通道 — 不再 cloneNode 按钮。
+    // cloneNode 会销毁 android-connection 等已绑定的局部监听 (其 Promise 永不 resolve → modal 挂起),
+    // 确认/取消统一由 app.js 入口 + settings document 委托驱动。
+    window.__XKAT_CONFIRM_CALLBACK__ = async () => {
+      window.__XKAT_CONFIRM_CALLBACK__ = null;
+      if (typeof onConfirm === 'function') onConfirm();
+    };
 
     window.__XKAT_MODALS__?.confirm?.open();
   }
@@ -512,37 +503,34 @@ export class PagePackageView {
       if (titleEl) titleEl.textContent = window.i18n.t('inspector.resetConfirmTitle');
       if (messageEl) messageEl.textContent = window.i18n.t('inspector.resetConfirmQuestion');
 
+      const overlay = document.getElementById('confirm-modal-overlay');
       let resolved = false;
       const resolveOnce = (value) => {
         if (!resolved) { resolved = true; resolve(value); }
       };
 
-      const escHandler = (e) => { if (e.key === 'Escape') resolveOnce(true); };
-      document.addEventListener('keydown', escHandler);
-
-      const overlayClickHandler = (e) => {
-        if (e.target === document.getElementById('confirm-modal-overlay')) resolveOnce(true);
+      // P1-8/P2-2: 全局回调通道替代 cloneNode (消除监听销毁竞态),
+      // 且 cleanup 统一移除 esc/overlay 监听 (修复 overlay 监听累积泄漏)
+      const cleanup = () => {
+        document.removeEventListener('keydown', escHandler);
+        if (overlay) overlay.removeEventListener('click', overlayClickHandler);
+        if (window.__XKAT_CONFIRM_CALLBACK__ === cbRef) {
+          window.__XKAT_CONFIRM_CALLBACK__ = null;
+        }
       };
-      document.getElementById('confirm-modal-overlay')?.addEventListener('click', overlayClickHandler);
 
-      const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
-      const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
+      const escHandler = (e) => { if (e.key === 'Escape') { cleanup(); resolveOnce(true); } };
+      const overlayClickHandler = (e) => {
+        if (e.target === overlay) { cleanup(); resolveOnce(true); }
+      };
+      document.addEventListener('keydown', escHandler);
+      if (overlay) overlay.addEventListener('click', overlayClickHandler);
 
-      const newConfirmBtn = confirmBtn.cloneNode(true);
-      confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-      newConfirmBtn.addEventListener('click', () => {
-        document.removeEventListener('keydown', escHandler);
-        window.__XKAT_MODALS__?.confirm?.close();
+      const cbRef = () => {
+        cleanup();
         resolveOnce(false);
-      });
-
-      const newCancelBtn = cancelBtn.cloneNode(true);
-      cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
-      newCancelBtn.addEventListener('click', () => {
-        document.removeEventListener('keydown', escHandler);
-        window.__XKAT_MODALS__?.confirm?.close();
-        resolveOnce(true);
-      });
+      };
+      window.__XKAT_CONFIRM_CALLBACK__ = cbRef;
 
       window.__XKAT_MODALS__?.confirm?.open();
     });

@@ -99,9 +99,10 @@ class Cli:
         args = self._parse_args(argv)
         if args.inspector:
             return self._run_inspector()
+        # P3-3: 拆分后 strip 空白, 防止 "tests/a.py, tests/b.py" 带空格路径解析失败静默跳过
         return self._run_tests(
-            test_paths=args.test_paths.split(","),
-            markers=args.markers.split(",") if args.markers else None,
+            test_paths=[p.strip() for p in args.test_paths.split(",") if p.strip()],
+            markers=[m.strip() for m in args.markers.split(",") if m.strip()] if args.markers else None,
             test_plan_name=args.test_plan,
         )
 

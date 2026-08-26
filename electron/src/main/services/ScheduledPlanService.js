@@ -146,7 +146,10 @@ class ScheduledPlanService extends JsonFileCrudService {
 
       for (const plan of existingPlans) {
         if (excludeId && plan.id === excludeId) continue;
-        if (plan.status === 'cancelled') continue;
+        // P2-11: 终态计划不再参与冲突检测 (原仅跳过 cancelled,
+        // 已完成/失败/过期计划仍会误挡新建)
+        if (plan.status === 'cancelled' || plan.status === 'completed'
+          || plan.status === 'failed' || plan.status === 'expired') continue;
 
         const planTime = new Date(plan.scheduledTime);
         if (isSameMinutePlan(newTime, planTime)) {

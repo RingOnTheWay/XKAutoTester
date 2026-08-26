@@ -248,6 +248,14 @@ class InspectorService:
 
             self._device_name = device_name
             port_warning = ""
+            # P3-5: 对称预检 Inspector 自身端口 (实际监听 INSPECTOR_PORT),
+            # 原实现只预检 4723, 自身 4725 冲突只能等 Appium 启动失败后延迟报错
+            if _check_port_in_use(INSPECTOR_PORT):
+                port_warning = (
+                    f"Port {INSPECTOR_PORT} is already in use. Please close the conflicting process and retry."
+                )
+                logger.warning(port_warning)
+                return {"success": False, "error": t("inspector.errorPortInUse", port=INSPECTOR_PORT)}
             if _check_port_in_use(AppiumServer.DEFAULT_PORT):
                 port_warning = f"Port {AppiumServer.DEFAULT_PORT} is in use by another Appium instance. Inspector will use port {INSPECTOR_PORT}."
                 logger.warning(port_warning)

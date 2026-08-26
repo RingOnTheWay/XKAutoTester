@@ -529,52 +529,6 @@ export class TestExecutionModel extends EventEmitter {
     this.emit('output-flushed', batch);
   }
 
-  // ─── IPC 事件监听 (原 modelTestExecutionMixin) ────────────────
-
-  listenTestOutput() {
-    const unlisten = ApiBridge.listen({
-      'test-output': (text) => {
-        // 清理 ANSI 转义码和 \r 字符
-        const cleaned = text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '');
-        this.appendOutput(cleaned);
-      },
-    });
-    this._ipcUnsubscribers.push(unlisten);
-    return unlisten;
-  }
-
-  listenTestError() {
-    const unlisten = ApiBridge.listen({
-      'test-error': (text) => {
-        // 清理 ANSI 转义码和 \r 字符
-        const cleaned = text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '');
-        this.appendError(cleaned);
-      },
-    });
-    this._ipcUnsubscribers.push(unlisten);
-    return unlisten;
-  }
-
-  listenScheduledTestStart() {
-    const unlisten = ApiBridge.listen({
-      'scheduled-test-start': (data) => {
-        this.emit('scheduled-test-started', data);
-      },
-    });
-    this._ipcUnsubscribers.push(unlisten);
-    return unlisten;
-  }
-
-  listenScheduledPlanExpired() {
-    const unlisten = ApiBridge.listen({
-      'scheduled-plan-expired': (data) => {
-        this.emit('scheduled-plan-expired', data);
-      },
-    });
-    this._ipcUnsubscribers.push(unlisten);
-    return unlisten;
-  }
-
   // ─── 设备选择 (原 modelDeviceSelectionMixin) ──────────────────
 
   /**
@@ -1263,9 +1217,10 @@ export class TestExecutionModel extends EventEmitter {
     }
   }
 
-  selectReportRun(runId) {
-    this._state.selectedReportRun = runId;
-    this.emit('report-run-selected', runId);
+  selectReportRun(run) {
+    // P3-4: 参数实为整个 run 对象 (controller L299/L315 传 run), 原命名 runId 误导
+    this._state.selectedReportRun = run;
+    this.emit('report-run-selected', run);
   }
 
   /**

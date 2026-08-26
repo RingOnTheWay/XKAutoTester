@@ -437,7 +437,11 @@ export class SettingsController {
             this.#view.hideConfirmModal();
           }, 150);
         },
-        onCancel: () => this.#view.hideConfirmModal(),
+        onCancel: () => {
+          // P1-8: 取消时清理全局回调通道, 防止残留回调被下次弹窗误触发
+          window.__XKAT_CONFIRM_CALLBACK__ = null;
+          this.#view.hideConfirmModal();
+        },
       })
     );
 

@@ -76,6 +76,9 @@ export const SessionLifecycleMixin = {
 
         let isDragging = false;
 
+        // P2-2: 保存 document 级监听引用, close() 时移除 — 原实现每次 init 累积监听
+        this._headerDragHandlers = this._headerDragHandlers || { move: null, up: null };
+
         header.addEventListener('mousedown', (e) => {
             if (e.target.closest('button') || e.target.closest('.icon-button')) return;
             isDragging = true;
@@ -83,17 +86,32 @@ export const SessionLifecycleMixin = {
             e.preventDefault();
         });
 
-        document.addEventListener('mousemove', (e) => {
+        const moveHandler = (e) => {
             if (!isDragging) return;
             window.electronAPI?.moveWindowDrag(e.screenX, e.screenY);
-        });
-
-        document.addEventListener('mouseup', () => {
+        };
+        const upHandler = () => {
             if (isDragging) {
                 isDragging = false;
                 window.electronAPI?.endWindowDrag();
             }
-        });
+        };
+        document.addEventListener('mousemove', moveHandler);
+        document.addEventListener('mouseup', upHandler);
+        this._headerDragHandlers.move = moveHandler;
+        this._headerDragHandlers.up = upHandler;
+    },
+
+    _removeHeaderDragListeners() {
+        if (this._headerDragHandlers) {
+            if (this._headerDragHandlers.move) {
+                document.removeEventListener('mousemove', this._headerDragHandlers.move);
+            }
+            if (this._headerDragHandlers.up) {
+                document.removeEventListener('mouseup', this._headerDragHandlers.up);
+            }
+            this._headerDragHandlers = { move: null, up: null };
+        }
     },
 
     async open(deviceName, appPackage, appActivity, noReset = true) {
@@ -132,6 +150,7 @@ export const SessionLifecycleMixin = {
         this._unsubscribeProgress();
         this._destroyResizeObserver();
         this._removeHighlighterListeners();
+        this._removeHeaderDragListeners();  // P2-2: 清理 document 拖拽监听
         this._overlay.classList.add('hidden');
         this.removeCanvasListeners();
 

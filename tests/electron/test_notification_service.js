@@ -58,7 +58,7 @@ test('buildRequestBody 返 { at, text, msgtype:"text" } 结构', () => {
   const body = buildRequestBody('hello world');
 
   assert.deepStrictEqual(body, {
-    at: { isAtAll: 'false', atUserIds: [], atMobiles: [] },
+    at: { isAtAll: false, atUserIds: [], atMobiles: [] },
     text: { content: 'hello world' },
     msgtype: 'text',
   });
@@ -132,7 +132,7 @@ test('sendDingTalkNotification 调 httpClient.post + 返 {success:true, data}', 
   const call = http.calls[0];
   assert.match(call.url, /^https:\/\/oapi\.dingtalk\.com\/robot\/send\?access_token=TOKEN123&timestamp=\d+&sign=/);
   assert.deepStrictEqual(call.body, {
-    at: { isAtAll: 'false', atUserIds: [], atMobiles: [] },
+    at: { isAtAll: false, atUserIds: [], atMobiles: [] },
     text: { content: 'hello dingtalk' },
     msgtype: 'text',
   });

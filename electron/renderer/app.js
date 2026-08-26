@@ -490,6 +490,11 @@ export class App {
     const confirmModalCancelBtn = document.getElementById('confirm-modal-cancel-btn');
     if (confirmModalCancelBtn) {
       confirmModalCancelBtn.addEventListener('click', () => {
+        // P1-8: 有取消回调时交由委托层处理 (settings document 委托 / 各 tab once 监听),
+        // app.js 不再无条件 close, 避免抢先关闭导致回调 Promise 永不 resolve
+        if (typeof window.__XKAT_CONFIRM_CANCEL_CALLBACK__ === 'function') {
+          return;
+        }
         this.modals.confirm.close();
       });
     }
@@ -497,6 +502,11 @@ export class App {
     const confirmModalConfirmBtn = document.getElementById('confirm-modal-confirm-btn');
     if (confirmModalConfirmBtn) {
       confirmModalConfirmBtn.addEventListener('click', () => {
+        // P1-8: 有确认回调 (android-connection Promise / page-package 全局通道) 时
+        // 不抢先 close, 由回调链统一处理, 消除多机制竞态
+        if (typeof window.__XKAT_CONFIRM_CALLBACK__ === 'function') {
+          return;
+        }
         this.modals.confirm.close();
       });
     }
@@ -659,22 +669,39 @@ export class App {
       return true;
     };
 
+    // P1-10: mousemove 用 rAF 节流 — 原实现每次鼠标移动都执行 getBoundingClientRect
+    // + 可能的 IPC (setIgnoreMouseEvents/moveWindowDrag), 透明区域高频移动时 IPC 往返密集。
+    let rafPending = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+    let lastScreenX = 0;
+    let lastScreenY = 0;
+
     const checkMousePosition = (e) => {
-      const x = e.clientX;
-      const y = e.clientY;
-      const inTransparent = isInTransparentArea(x, y);
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      lastScreenX = e.screenX;
+      lastScreenY = e.screenY;
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {
+        rafPending = false;
+        const x = lastMouseX;
+        const y = lastMouseY;
+        const inTransparent = isInTransparentArea(x, y);
 
-      if (inTransparent && !isIgnoringMouseEvents) {
-        isIgnoringMouseEvents = true;
-        window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
-      } else if (!inTransparent && isIgnoringMouseEvents) {
-        isIgnoringMouseEvents = false;
-        window.electronAPI.setIgnoreMouseEvents(false);
-      }
+        if (inTransparent && !isIgnoringMouseEvents) {
+          isIgnoringMouseEvents = true;
+          window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+        } else if (!inTransparent && isIgnoringMouseEvents) {
+          isIgnoringMouseEvents = false;
+          window.electronAPI.setIgnoreMouseEvents(false);
+        }
 
-      if (isDragging) {
-        window.electronAPI.moveWindowDrag(e.screenX, e.screenY);
-      }
+        if (isDragging) {
+          window.electronAPI.moveWindowDrag(lastScreenX, lastScreenY);
+        }
+      });
     };
 
     document.addEventListener('mousemove', checkMousePosition);
