@@ -328,7 +328,7 @@ export class DeviceCascadeSelect extends BaseSelect {
     this._setAriaExpanded(true);
     this._registerActiveDropdown();
 
-    // 默认高亮: 有 selectedDevice 则定位 model 级, 有 selectedManufacturer 则 type 级, 否则 manufacturer 级首项
+    // 定位当前级: 有 selectedDevice 则 model 级, 有 selectedManufacturer 则 type 级, 否则 manufacturer 级
     if (this.selectedDevice) {
       this._activeLevel = 'model';
     } else if (this.selectedManufacturer) {
@@ -336,9 +336,22 @@ export class DeviceCascadeSelect extends BaseSelect {
     } else {
       this._activeLevel = 'manufacturer';
     }
+
+    // 修复: 无已选项时不默认高亮第一项 (此前 _setActive(0) 让首项带上 .active
+    // 主题色背景, 用户误以为"已选中"; 键盘首键 (方向键) 会从 -1 落到第 0 项)
     const opts = this._getLevelOptions(this._activeLevel);
     const selectedIndex = opts.findIndex(opt => opt.classList.contains('selected'));
-    this._setActive(this._activeLevel, selectedIndex >= 0 ? selectedIndex : 0);
+    if (selectedIndex >= 0) {
+      // 有已选项: 高亮定位到已选项
+      this._setActive(this._activeLevel, selectedIndex);
+    } else {
+      // 无已选项: 清除所有级 active, 保持 _activeIndices = -1
+      ['manufacturer', 'type', 'model'].forEach(level => {
+        const levelOpts = this._getLevelOptions(level);
+        levelOpts.forEach(opt => opt.classList.remove('active'));
+        this._activeIndices[level] = -1;
+      });
+    }
 
     this._lockMainContentScroll();
   }
