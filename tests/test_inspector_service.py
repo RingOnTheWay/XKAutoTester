@@ -319,3 +319,42 @@ class TestWakeDeviceUsesAdapter:
 
         # 模块不应有 subprocess 属性 (import 已删)
         assert not hasattr(mod, "subprocess")
+
+
+class TestStartSessionPortRecovery:
+    """端口被残留 Appium 占用时自动清理 (修复: 关闭 inspector 后再进入报端口占用)。"""
+
+    def test_start_session_port_in_use_auto_cleanup(self, monkeypatch):
+        """端口 4725 被残留进程占用 → 自动 taskkill 清理后正常启动。"""
+        # 预检占用 → 清理 → 等待释放: 第一次检查仍占用, 第二次释放
+        in_use = [True, True, False]
+        monkeypatch.setattr(
+            "main.core.inspector_service._check_port_in_use",
+            lambda port: in_use.pop(0) if in_use else False,
+        )
+        killed = []
+        monkeypatch.setattr(
+            "main.core.inspector_service._kill_port_process",
+            lambda port: killed.append(port),
+        )
+        # 加速: 避免等待循环真实 sleep
+        monkeypatch.setattr("main.core.inspector_service.time.sleep", lambda s: None)
+
+        service, adb, server = _make_service()
+        result = service.start_session("dev:5555", "com.x.app", ".Main")
+
+        assert result["success"] is True
+        assert killed == [4725], "应清理占用 inspector 端口的残留进程"
+        assert server.start_called is True
+
+    def test_start_session_port_in_use_cleanup_failed_returns_error(self, monkeypatch):
+        """清理后端口仍被占用 → 返回 errorPortInUse (不盲目启动)。"""
+        monkeypatch.setattr("main.core.inspector_service._check_port_in_use", lambda port: True)
+        monkeypatch.setattr("main.core.inspector_service._kill_port_process", lambda port: None)
+        monkeypatch.setattr("main.core.inspector_service.time.sleep", lambda s: None)
+
+        service, _, _ = _make_service()
+        result = service.start_session("dev:5555", "com.x.app", ".Main")
+
+        assert result["success"] is False
+        assert "4725" in result["error"] or "占用" in result["error"]

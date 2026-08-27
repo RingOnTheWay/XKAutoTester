@@ -12,6 +12,9 @@ class InspectorService {
         this.activeSessionId = null;
         this._onProgress = null;
         this._adbPath = pathHelper.getAdbPath(projectRoot);
+        // stopSession 串行锁: 渲染端 close() 不 await + 重开 startSession 会再调 stopSession,
+        // 并发写 stdin 会协议错乱且超时后 dispose 强杀 Python → Appium 子进程孤儿残留占端口
+        this._stopPromise = null;
     }
 
     setProgressCallback(callback) {
@@ -106,13 +109,24 @@ class InspectorService {
     }
 
     async stopSession() {
+        // 串行化: 并发调用共享同一清理 Promise, 避免多次 stop-session 请求并发写 stdin
+        // (close 不 await + 重开窗口 startSession 会再触发 stopSession)
+        if (this._stopPromise) return this._stopPromise;
+        this._stopPromise = this._doStopSession().finally(() => { this._stopPromise = null; });
+        return this._stopPromise;
+    }
+
+    async _doStopSession() {
         if (!this._transport || !this._transport.isActive()) {
             this._cleanup();
             return { success: true, message: 'No active session' };
         }
 
         try {
-            const response = await this._transport.request('stop-session', {}, { timeoutMs: 3000 });
+            // 超时放宽: Python 端 driver.quit + AppiumServer.stop (terminate→wait(10)→kill→wait(2)
+            // + netstat/taskkill 端口清理) 可能远超 3s; 3s 超时 → dispose 强杀 Python →
+            // Appium 子进程孤儿残留占用端口, 下次进入报"端口被占用"
+            const response = await this._transport.request('stop-session', {}, { timeoutMs: 30000 });
             return response;
         } catch (error) {
             return { success: false, error: error.message };

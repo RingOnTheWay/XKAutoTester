@@ -77,29 +77,31 @@ function createPythonProtoSimulator(commandHandlers = {}) {
         writable: true,
         write: (data) => {
           stdinWrites.push(data);
-          // 解析 request 帧,下一 tick 发 response
+          // 解析 request 帧,下一 tick 发 response (handler 可返回 Promise 模拟慢响应)
           const frame = JSON.parse(data.toString());
           setImmediate(() => {
             const handler = commandHandlers[frame.command];
             if (handler) {
-              const result = handler(frame.params, frame.id);
-              // 发 progress 通知 (如果有)
-              if (result.notifications) {
-                for (const n of result.notifications) {
-                  stdoutCbs.forEach(cb => cb(Buffer.from(JSON.stringify(
-                    { kind: 'notification', type: 'progress', stage: n }
-                  ) + '\n')));
+              Promise.resolve(handler(frame.params, frame.id)).then((result) => {
+                if (!result) return;
+                // 发 progress 通知 (如果有)
+                if (result.notifications) {
+                  for (const n of result.notifications) {
+                    stdoutCbs.forEach(cb => cb(Buffer.from(JSON.stringify(
+                      { kind: 'notification', type: 'progress', stage: n }
+                    ) + '\n')));
+                  }
                 }
-              }
-              // 发 response
-              const response = { kind: 'response', id: frame.id, ...result.response };
-              stdoutCbs.forEach(cb => cb(Buffer.from(JSON.stringify(response) + '\n')));
-              // stop-session 后发 close
-              if (frame.command === 'stop-session') {
-                setImmediate(() => {
-                  closeCbs.forEach(cb => cb(0, null));
-                });
-              }
+                // 发 response
+                const response = { kind: 'response', id: frame.id, ...result.response };
+                stdoutCbs.forEach(cb => cb(Buffer.from(JSON.stringify(response) + '\n')));
+                // stop-session 后发 close
+                if (frame.command === 'stop-session') {
+                  setImmediate(() => {
+                    closeCbs.forEach(cb => cb(0, null));
+                  });
+                }
+              });
             }
           });
           return true;
@@ -294,3 +296,61 @@ test('getScreenshot without active session returns error', async () => {
   assert.strictEqual(res.success, false);
   assert.match(res.error, /No active inspector session/);
 });
+
+// ===== 测试 9: 并发 stopSession 串行化 (关闭窗口 + 重开竞态) =====
+test('concurrent stopSession calls are serialized (single stop-session request)', async () => {
+  let stopRequests = 0;
+  const simulator = createPythonProtoSimulator({
+    'start-session': () => ({ response: { success: true, session_id: 's1' } }),
+    'stop-session': () => {
+      stopRequests += 1;
+      return { response: { success: true } };
+    },
+  });
+  const InspectorService = loadInspectorService(simulator);
+  const service = new InspectorService(PROJECT_ROOT, createI18nMock(), '/fake/userdata');
+
+  await service.startSession('d1', 'com.x', '.Main');
+  // 渲染端 close() 不 await + 重开窗口 startSession 会再次触发 stopSession → 并发
+  const [r1, r2] = await Promise.all([service.stopSession(), service.stopSession()]);
+
+  assert.strictEqual(r1.success, true);
+  assert.strictEqual(r2.success, true);
+  // 串行锁: 只发一次 stop-session 请求, 避免并发写 stdin 协议错乱
+  assert.strictEqual(stopRequests, 1);
+});
+
+// ===== 测试 10: startSession 等待进行中的 stopSession 完成 =====
+test('startSession waits for in-flight stopSession before creating new session', async () => {
+  let resolveStop;
+  const stopGate = new Promise(r => { resolveStop = r; });
+  let stopRequests = 0;
+  let startRequests = 0;
+  const simulator = createPythonProtoSimulator({
+    'start-session': () => {
+      startRequests += 1;
+      return { response: { success: true, session_id: `s${startRequests}` } };
+    },
+    'stop-session': () => {
+      stopRequests += 1;
+      return stopGate.then(() => ({ response: { success: true } }));
+    },
+  });
+  const InspectorService = loadInspectorService(simulator);
+  const service = new InspectorService(PROJECT_ROOT, createI18nMock(), '/fake/userdata');
+
+  await service.startSession('d1', 'com.x', '.Main');
+  // 触发 stopSession (close 路径, 不 await), 随后立即 startSession (重开路径)
+  const stopPromise = service.stopSession();
+  const startPromise = service.startSession('d2', 'com.y', '.Main2');
+  // 先让 stop 完成, 再放行 start
+  await new Promise(r => setTimeout(r, 20));
+  assert.strictEqual(stopRequests, 1, 'stop-session 应只请求一次');
+  resolveStop();
+  await stopPromise;
+  const startRes = await startPromise;
+
+  assert.strictEqual(startRes.success, true);
+  assert.strictEqual(startRequests, 2, 'stop 完成后应成功创建新 session');
+});
+

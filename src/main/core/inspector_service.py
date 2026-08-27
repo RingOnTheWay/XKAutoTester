@@ -4,6 +4,7 @@ import functools
 import logging
 import re
 import socket
+import time
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from typing import TYPE_CHECKING
@@ -13,7 +14,7 @@ from appium.options.android import UiAutomator2Options
 
 from main.core.adb.adb_port import AdbCommandPort
 from main.core.adb.subprocess_adb_adapter import SubprocessAdbAdapter
-from main.core.appium_server import AppiumServer
+from main.core.appium_server import AppiumServer, _kill_port_process
 from main.utils.i18n import t
 
 if TYPE_CHECKING:
@@ -251,11 +252,18 @@ class InspectorService:
             # P3-5: 对称预检 Inspector 自身端口 (实际监听 INSPECTOR_PORT),
             # 原实现只预检 4723, 自身 4725 冲突只能等 Appium 启动失败后延迟报错
             if _check_port_in_use(INSPECTOR_PORT):
-                port_warning = (
-                    f"Port {INSPECTOR_PORT} is already in use. Please close the conflicting process and retry."
-                )
-                logger.warning(port_warning)
-                return {"success": False, "error": t("inspector.errorPortInUse", port=INSPECTOR_PORT)}
+                # 端口被占用: 大概率是上次 inspector 会话泄漏的 Appium 进程
+                # (close 未等 stop-session 完成, Python 被强杀 → Appium 孤儿进程残留占 4725)
+                # 自动清理占用进程后重试, 避免用户手动关闭
+                logger.warning(f"Port {INSPECTOR_PORT} in use, cleaning up stale process...")
+                _kill_port_process(INSPECTOR_PORT)
+                # 等待端口释放 (最多 5s)
+                for _ in range(10):
+                    if not _check_port_in_use(INSPECTOR_PORT):
+                        break
+                    time.sleep(0.5)
+                if _check_port_in_use(INSPECTOR_PORT):
+                    return {"success": False, "error": t("inspector.errorPortInUse", port=INSPECTOR_PORT)}
             if _check_port_in_use(AppiumServer.DEFAULT_PORT):
                 port_warning = f"Port {AppiumServer.DEFAULT_PORT} is in use by another Appium instance. Inspector will use port {INSPECTOR_PORT}."
                 logger.warning(port_warning)
