@@ -4,8 +4,8 @@
 
 XKAutoTester 是一个基于 Electron + Python 的自动化测试平台，用于移动端应用的自动化测试，支持 Appium 驱动、Appium Inspector 元素检查、蓝牙设备模拟、定时任务调度、scrcpy 投屏、APK 解析、钉钉通知、自动更新等功能。
 
-- **版本**: 0.1.4-dev.2
-- **技术栈**: Electron 38 + Node.js + Python 3.10+（内置 3.12）+ Vite 5 / electron-vite + Appium + Pytest + Allure
+- **版本**: 0.1.5-dev.2
+- **技术栈**: Electron 43 + Node.js + Python 3.10+（内置 3.12）+ Vite 5 / electron-vite + Appium + Pytest + Allure
 - **打包工具**: electron-builder (NSIS 安装程序，含 lite 版本)
 - **Python 包管理**: uv
 - **国际化**: i18next (zh-CN / en-US)
@@ -112,41 +112,47 @@ XKAutoTester/
 │   │   │   └── utils/
 │   │   │       ├── pathHelper.js        # 路径解析（开发/打包环境 + aapt2/adb 路径缓存）
 │   │   │       ├── asyncFs.js           # 异步文件操作工具
-│   │   │       └── logger.js            # 日志工具
+│   │   │       ├── logger.js            # 日志工具
+│   │   │       ├── urlGuard.js          # openExternal URL 安全校验（https + host 白名单）
+│   │   │       └── versionCompare.js    # 语义化版本比较（原 EnvironmentService/UpdateService 抽取）
 │   │   ├── preload/
 │   │   │   └── index.js                 # Preload 桥接脚本（contextBridge 暴露 electronAPI）
 │   │   └── shared/
 │   │       ├── constants.js             # IPC 通道常量定义（主进程/渲染进程共享）
 │   │       ├── inspectorConstants.js    # Inspector 通道/事件常量
 │   │       └── inspector-protocol.json  # Inspector stdio 协议消息定义
-│   ├── renderer/                        # 渲染进程（MVC 架构）
+│   ├── renderer/                        # 渲染进程（MVC 架构；注意位于 electron/renderer，不在 src/ 下）
 │   │   ├── core/                        # 核心基类
 │   │   │   ├── Action.js                # Action 抽象
 │   │   │   ├── ApiBridge.js             # electronAPI 桥接
 │   │   │   ├── AppState.js              # 全局状态
-│   │   │   └── EventEmitter.js          # 事件发射器
-│   │   ├── tabs/                        # 5 个 Tab（每个含 controller/model/view/index/tab.html + mixins/）
-│   │   │   ├── test-execution/          # 测试执行（含 16 个 mixin）
+│   │   │   ├── EventEmitter.js          # 事件发射器
+│   │   │   └── utils/html.js            # DOM/HTML 工具
+│   │   ├── tabs/                        # 5 个 Tab（MVC 单体：controller/model/view/index/tab.html；mixin 已全部合回）
+│   │   │   ├── test-execution/          # 测试执行
 │   │   │   ├── page-package/            # 页面封装
-│   │   │   ├── test-case/               # 测试用例（含 25 个 mixin）
-│   │   │   ├── android-connection/      # 安卓连接（含 11 个 mixin）
-│   │   │   └── settings/                # 设置（含 5 个 mixin）
+│   │   │   ├── test-case/               # 测试用例（含 modules/：FileBrowser/OptionPanel/StepEditor/TestCaseEditor）
+│   │   │   ├── android-connection/      # 安卓连接
+│   │   │   └── settings/                # 设置
 │   │   ├── components/                  # UI 组件
 │   │   │   ├── mixins/                  # 组件 Mixin（11 个：Canvas/Highlighter/Loading/Locator/SessionLifecycle/Tree/deviceModal*）
-│   │   │   ├── cascade-select.js        # 级联选择器
-│   │   │   ├── custom-select.js         # 自定义下拉选择
-│   │   │   ├── datetime-picker.js       # 日期时间选择器（独立组件）
+│   │   │   ├── base-select.js           # 基础选择器（级联/自定义选择统一基座）
+│   │   │   ├── custom-select.html       # 自定义下拉模板
+│   │   │   ├── datetime-picker.js/.html # 日期时间选择器（独立组件）
 │   │   │   ├── device-cascade-select.js # 设备级联选择
 │   │   │   ├── device-selection-modal.js # 设备选择弹窗
 │   │   │   ├── inspector.js             # Appium Inspector 弹窗（含 6 个 mixin: SessionLifecycle/Canvas/Tree/Highlighter/Locator/Loading）
+│   │   │   ├── inspector-modal.html     # Inspector 弹窗模板
 │   │   │   ├── modal.js                 # 模态框
 │   │   │   ├── progress-indicator.js    # 进度指示器
 │   │   │   ├── progress-modal.js        # 进度弹窗
 │   │   │   ├── toast.js                 # Toast 通知
+│   │   │   ├── confirm-modal.html       # 确认弹窗模板
 │   │   │   └── *.html                   # 组件 HTML 模板
 │   │   ├── styles/                      # 15 个 CSS 模块（@import 架构）
 │   │   ├── app.js                       # 应用主入口
 │   │   ├── icons.js                     # Lucide 图标 SVG 定义
+│   │   ├── lucide-icons-data.js         # Lucide 图标路径数据
 │   │   ├── index.html                   # 主界面（5 个 Tab 页，按 tab 注入）
 │   │   └── styles.css                   # @import 入口
 │   ├── assets/                          # 静态资源
@@ -163,7 +169,8 @@ XKAutoTester/
 │   ├── build/
 │   │   └── installer.nsh                # NSIS 自定义安装脚本
 │   ├── patch-nsis.js                    # NSIS 构建补丁（postinstall/prebuild 钩子）
-│   ├── electron.vite.config.js          # Vite 配置（dev/build:vite 入口）
+│   ├── electron.vite.config.js          # Vite 配置（dev/build:vite 入口；renderer.root 指向 renderer/）
+│   ├── electron-builder.lite.yml        # Lite 版打包配置（不含内置环境，build-lite-win 使用）
 │   └── package.json                     # Electron 依赖与构建配置
 ├── src/                                 # Python 后端
 │   └── main/
@@ -201,7 +208,9 @@ XKAutoTester/
 │       │   ├── inspector_service.py     # Appium Inspector 服务（与 Electron InspectorService 联动）
 │       │   ├── logcat_monitor.py        # Logcat 监控
 │       │   ├── pytest_runner.py         # Pytest 运行器（聚合 pytest/ 子模块，Allure 集成/摘要生成/标记行输出）
-│       │   └── stdio_protocol.py        # stdio JSON 协议（与 JsonStdioTransport 对接）
+│       │   ├── stdio_protocol.py        # stdio JSON 协议（与 JsonStdioTransport 对接）
+│       │   ├── subprocess_handle.py     # 子进程终止通用基类（Pytest/Logcat/Appium 共用 stop 模板）
+│       │   └── test_initializer.py      # 测试初始化编排器（ADB/蓝牙/Appium/CrashMonitor 生命周期）
 │       ├── device/                      # 设备模块
 │       │   ├── __init__.py
 │       │   └── bioland/
@@ -217,17 +226,18 @@ XKAutoTester/
 │           ├── i18n.py                  # 国际化（单例 + _initialized 守护）
 │           ├── logger.py                # 日志管理（get_logger 入口）
 │           ├── paths.py                 # 路径抽象（project_root/locales_root）
-│           ├── test_initializer.py      # 测试初始化编排器（ADB/蓝牙/Appium/CrashMonitor 生命周期）
 │           ├── test_reporter.py         # 测试报告桥接（封装 allure.attach/pytest.skip/pytest.fail）
 │           └── text.py                  # 文本工具（clean_ansi_escape 等）
 ├── env/                                 # 内置环境（随安装包分发，开发模式可放置）
 │   ├── python/                          # 内置 Python 3.12
-│   ├── android-sdk/                     # Android SDK（platform-tools + build-tools 29.0.3）
+│   ├── android-sdk/                     # Android SDK（platform-tools + build-tools，扁平结构无版本子目录）
 │   ├── scrcpy/                          # scrcpy 3.3.3
 │   └── CP210x_Windows_Drivers/          # CP210x 串口驱动
 ├── scripts/
-│   └── sync_version.py                  # 版本同步脚本（package.json ↔ version.json ↔ pyproject.toml）
-├── refactor-rfcs/                       # 重构 RFC 文档（30+ 篇，记录历次重构决策）
+│   ├── sync_version.py                  # 版本同步脚本（package.json ↔ version.json ↔ pyproject.toml）
+│   └── *.ps1                            # 发布脚本（check-releases/check-tag/list-assets/patch-body/publish-release）
+├── dev-records/                         # 开发记录（Electron 升级/安全修复等，已被 gitignore 忽略）
+├── refactor-rfcs/                       # 已清空并加入 gitignore（历史 RFC 不再维护，勿依赖）
 ├── docs/                                # 文档
 │   ├── README_EN.md                     # 英文 README
 │   └── tutorials/                       # 教程（zh-CN / en-US 各 7 篇）
@@ -379,14 +389,15 @@ EnvironmentStartupService({environmentService, testCaseService,  // 20. 启动�
 - 通过 IPC 事件通知渲染进程（scheduled-test-start / scheduled-plan-expired）
 - 应用退出时自动停止调度器
 
-### 7. 元素检查器机制（新增）
+### 7. 元素检查器机制
 
-**InspectorService** + **JsonStdioTransport**（主进程）通过子进程启动 Python 后端 `inspector_service.py`，使用 **stdio JSON 协议**（`stdio_protocol.py`）双向通信：
+**InspectorService** + **JsonStdioTransport**（主进程）通过子进程启动 Python 后端 `inspector_service.py`，使用 **stdio JSON 协议**（`stdio_protocol.py`）双向通信（每行一个 JSON 消息）：
 - 启动 Appium Inspector 会话
 - 实时获取 UI 树（XML/JSON sources）
 - 支持点击/查找元素/截图
 - 渲染层 `components/inspector.js`（含 6 个 mixin）渲染交互弹窗
 - 与「页面封装」联动：可将选中元素保存为定位器
+- 启动 Inspector 需先连接 Android 设备并启动 Appium
 
 ***
 
@@ -476,7 +487,8 @@ python -m main --test-paths <paths> --markers <markers> --test-plan <name>
         "secret": ""
       }
     },
-    "autoCheckUpdate": true
+    "autoCheckUpdate": true,
+    "allowInsecureSSL": false
   }
 }
 ```
@@ -523,6 +535,7 @@ python -m main --test-paths <paths> --markers <markers> --test-plan <name>
 | `../pyproject.toml` | `pyproject.toml` | Python 项目配置 |
 | `../uv.lock` | `uv.lock` | 依赖锁定文件 |
 | `../version.json` | `version.json` | 版本信息 |
+| `locales` | `locales` | 国际化翻译文件 |
 
 > **重要变更**：
 > - `env/jdk/` 与 `env/allure/` 不再打包进安装包（filter 排除）
@@ -559,7 +572,7 @@ python -m main --test-paths <paths> --markers <markers> --test-plan <name>
 | openpyxl | 3.1.5 | Excel 操作 |
 | requests | 2.32.5 | HTTP 请求 |
 | pyserial | 3.5 | 串口通信（蓝牙设备） |
-| Pillow | 9.5.0 | 图像处理 |
+| Pillow | 10.4.0 | 图像处理（R7 安全修复升级，9.5.0 含 CVE） |
 
 > Python 端测试依赖：`pytest>=8.0.0`, `pytest-html>=4.0.0`, `pytest-cov>=5.0.0`
 > Lint：`ruff>=0.1.0`（line-length=120, target=py310，select=E/F/W/I/N/UP/B/C4，ignore=E501）
@@ -570,17 +583,17 @@ python -m main --test-paths <paths> --markers <markers> --test-plan <name>
 
 ### 主界面 Tab 页
 
-| Tab | data-tab | MVC 路径 | 含 Mixin 数 |
+| Tab | data-tab | MVC 路径 | 结构说明 |
 |-----|----------|---------|-----|
-| 测试执行 | test-execution | tabs/test-execution/ | 16 |
-| 页面封装 | page-package | tabs/page-package/ | 0 |
-| 测试用例 | test-case | tabs/test-case/ | 25 |
-| 安卓连接 | android-connection | tabs/android-connection/ | 11 |
-| 设置 | settings | tabs/settings/ | 5 |
+| 测试执行 | test-execution | tabs/test-execution/ | MVC 单体（mixin 已合回） |
+| 页面封装 | page-package | tabs/page-package/ | MVC 单体 |
+| 测试用例 | test-case | tabs/test-case/ | MVC 单体 + modules/（4 个模块） |
+| 安卓连接 | android-connection | tabs/android-connection/ | MVC 单体（mixin 已合回） |
+| 设置 | settings | tabs/settings/ | MVC 单体（mixin 已合回） |
 
 ### 前端技术特点
 
-- **MVC 架构**：每个 Tab 拆为 `controller.js` / `model.js` / `view.js` / `index.js` / `tab.html`，复杂 Tab 进一步用 `mixins/` 拆分逻辑
+- **MVC 架构**：每个 Tab 拆为 `controller.js` / `model.js` / `view.js` / `index.js` / `tab.html`；早期 `mixins/` 已全部合回，test-case 改用 `modules/` 拆分
 - **构建工具**：Vite 5 + electron-vite（开发模式 HMR / 构建产物打包）
 - **核心基类**：`core/Action.js` / `ApiBridge.js` / `AppState.js` / `EventEmitter.js`
 - **无框架**：原生 HTML + CSS + JavaScript（基于 Action 事件驱动）
@@ -588,7 +601,7 @@ python -m main --test-paths <paths> --markers <markers> --test-plan <name>
 - **图标**：Lucide 图标库（SVG 内联）
 - **样式风格**：Material Design，支持暗色模式
 - **字体**：HarmonyOS Sans SC
-- **组件**：自定义组件（cascade-select, custom-select, datetime-picker, modal, toast, progress-indicator, progress-modal, device-cascade-select, device-selection-modal, inspector）
+- **组件**：自定义组件（base-select, custom-select, datetime-picker, modal, confirm-modal, toast, progress-indicator, progress-modal, device-cascade-select, device-selection-modal, inspector）
 
 ***
 
@@ -666,13 +679,14 @@ npm run version:sync      # 强制同步
 
 ## 重构历程概览
 
-项目历经多轮重构，RFC 文档存于 `refactor-rfcs/`（30+ 篇）：
+项目历经多轮重构（`refactor-rfcs/` 已清空并加入 gitignore，历史 RFC 不再维护）：
 
 | 阶段 | 时间 | 主题 |
 |------|------|------|
 | 第一轮 | 2026-06 ~ 2026-07 | Python 后端架构 / 渲染层 MVC 边界 / Python Test Service 重构 |
 | 第二轮 | 2026-07-17 ~ 2026-07-22 | 13 候选项全部重构（25 RFC）：MVC 收紧、TestCaseCodeGenerator 抽取、配置单源、UserDataService 分解、AllureService 拆分、Inspector 私有字段统一、CSS/HTML 拆分等 |
 | 第三轮 | 2026-07-24 ~ 2026-07-28 | Vite + electron-vite 引入；Appium/ADB/BLE/APK/Inspector 等服务 deep-module 重构；Scheduler 模块化（smartScheduler + strategies）；TestCase/TestPlan/PythonTest/DataTransfer 拆分 |
+| 第四轮 | 2026-08-25 ~ 2026-08-26 | 版本 0.1.5；renderer tabs mixin 全部合回（test-case 改 modules/）；Electron 38→43 升级；R7 安全修复（Pillow 10.4.0 等）；新增发布脚本与 dev-records 记录 |
 
 ***
 
@@ -688,6 +702,11 @@ npm run version:sync      # 强制同步
 - `config/test_plans.json` — 运行时创建
 - `config/scheduled_plans.json` — 运行时创建
 - `electron/dist/` — 构建输出
+- `electron/build/` — ⚠ 含 `installer.nsh` 源码，但整个目录被 gitignore；新环境 clone 后打包前需确认该文件存在（NSIS include 引用）
+- `electron/out/` — electron-vite 构建产物
+- `refactor-rfcs/` — 已清空并加入 gitignore（历史 RFC 不再维护）
+- `dev-records/` — 开发记录（gitignore 忽略）
+- `trae-backup/` — 文件修改备份（gitignore 忽略）
 - `logs/` — 运行日志
 
 ### 2. 永远把涉及打包和 npm install 的指令留给用户自行执行
@@ -711,10 +730,3 @@ npm run version:sync      # 强制同步
 - 传统模式 `npm start` / `npm run dev:legacy` 仍可用，但无 HMR
 - `npm run build:vite` 仅生成 Vite 产物，不打包；`npm run build-win` 才生成安装包
 - `electron.vite.config.js` 为 Vite 配置入口
-
-### 6. 元素检查器（Inspector）相关
-
-- `InspectorService`（主进程）通过 `JsonStdioTransport` 与 Python `inspector_service.py` 双向通信
-- 协议：每行一个 JSON 消息（`stdio_protocol.py`）
-- 渲染层 `components/inspector.js`（含 6 个 mixin）渲染交互弹窗，可与「页面封装」联动保存定位器
-- 启动 Inspector 需先连接 Android 设备并启动 Appium
