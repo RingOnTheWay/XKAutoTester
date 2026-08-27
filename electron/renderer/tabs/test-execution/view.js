@@ -844,7 +844,7 @@ export class TestExecutionView {
       if (checkbox.checked) item.classList.add('selected');
       checkbox.addEventListener('change', (e) => {
         item.classList.toggle('selected', e.target.checked);
-        onFileCheck?.(file, e.target.checked);
+        onFileCheck?.(info, e.target.checked);
       });
 
       // 为整个文件项添加点击事件，点击时切换复选框状态
