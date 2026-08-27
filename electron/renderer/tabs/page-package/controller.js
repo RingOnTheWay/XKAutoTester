@@ -123,7 +123,13 @@ export class PagePackageController {
     });
 
     this.#onModel(model, 'save-success', ({ type }) => {
-      Toast.success(window.i18n.t('pagePackage.saveSuccess'));
+      // Inspector 打开时 (从设备识别添加元素), toast 挂在 inspector 弹窗容器内,
+      // 否则挂主窗口 (#app, 会被 inspector 遮罩 z-index 2000 盖住, 显示在主程序窗口)
+      const inspectorContainer = this.#getActiveInspectorContainer();
+      Toast.success(
+        window.i18n.t('pagePackage.saveSuccess'),
+        inspectorContainer ? { container: inspectorContainer } : {}
+      );
       view.closeModal(type);
     });
 
@@ -562,6 +568,16 @@ export class PagePackageController {
    */
   async #requestDeviceForInspector() {
     return await this.#view.showDeviceSelection({ mode: 'inspector' });
+  }
+
+  /**
+   * Inspector 弹窗打开时返回其容器 (toast 挂载点), 否则返回 null
+   * @returns {HTMLElement|null}
+   */
+  #getActiveInspectorContainer() {
+    const overlay = document.getElementById('inspector-modal-overlay');
+    if (!overlay || overlay.classList.contains('hidden')) return null;
+    return overlay.querySelector('.modal-container') || overlay;
   }
 
   // ─── Tab Lifecycle Hooks ───────────────────────────────────────

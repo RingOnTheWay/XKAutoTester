@@ -181,6 +181,16 @@ export class TestCaseController {
     this.on(model, 'apps-changed', (apps) => {
       this.view.renderAppOptions(apps, this.model.get('selectedApp'));
       this.bindAppOptionClicks();
+      // 同步选中的应用引用并重渲染步骤卡片: page-package 中新增/删除元素后,
+      // 应用列表刷新但 selectedApp 仍是旧引用, 步骤卡片的页面/元素下拉不会更新,
+      // 导致新元素要重启程序才可见; selectApp 触发 app-changed → renderSteps 重渲染
+      const selectedApp = this.model.get('selectedApp');
+      if (selectedApp) {
+        const freshApp = (apps || []).find(a => a.id === selectedApp.id);
+        if (freshApp && freshApp !== selectedApp) {
+          this.model.optionPanel.selectApp(freshApp);
+        }
+      }
     });
 
     this.on(model, 'ble-devices-changed', (devices) => {
