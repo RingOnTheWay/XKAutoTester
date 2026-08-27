@@ -840,7 +840,12 @@ export class TestExecutionView {
       `;
       const checkbox = item.querySelector('input[type="checkbox"]');
       checkbox.checked = selectedPaths.includes(filePath);
-      checkbox.addEventListener('change', (e) => onFileCheck?.(file, e.target.checked));
+      // 选中态样式跟随主题色（.selected 类）
+      if (checkbox.checked) item.classList.add('selected');
+      checkbox.addEventListener('change', (e) => {
+        item.classList.toggle('selected', e.target.checked);
+        onFileCheck?.(file, e.target.checked);
+      });
 
       // 为整个文件项添加点击事件，点击时切换复选框状态
       item.addEventListener('click', (e) => {
@@ -896,7 +901,13 @@ export class TestExecutionView {
         </label>
       `;
       const checkbox = item.querySelector('input[type="checkbox"]');
-      checkbox.addEventListener('change', (e) => onTypeCheck?.(markerName, e.target.checked));
+      checkbox.checked = selectedTypes?.includes(markerName) ?? false;
+      // 选中态样式跟随主题色（.selected 类）
+      if (checkbox.checked) item.classList.add('selected');
+      checkbox.addEventListener('change', (e) => {
+        item.classList.toggle('selected', e.target.checked);
+        onTypeCheck?.(markerName, e.target.checked);
+      });
       modalTestTypeList.appendChild(item);
     });
   }
@@ -972,11 +983,15 @@ export class TestExecutionView {
       const selectedPaths = plan.testFiles.map(f => (typeof f === 'string' ? f : f?.path)).filter(Boolean);
       this.els.modalTestFileList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
         cb.checked = selectedPaths.includes(cb.value);
+        // 同步选中态样式（跟随主题色）
+        cb.closest('.modal-test-file-item')?.classList.toggle('selected', cb.checked);
       });
     }
     if (plan.testTypes && this.els.modalTestTypeList) {
       this.els.modalTestTypeList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
         cb.checked = plan.testTypes.includes(cb.value);
+        // 同步选中态样式（跟随主题色）
+        cb.closest('.modal-test-type-item')?.classList.toggle('selected', cb.checked);
       });
     }
   }

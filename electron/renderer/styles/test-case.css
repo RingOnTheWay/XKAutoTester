@@ -3345,6 +3345,10 @@ body.dark-theme .custom-select__selected:hover {
   margin: 0;
   width: 16px;
   height: 16px;
+  /* 勾选颜色跟随主题色，避免使用浏览器默认蓝色 */
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .modal-test-file-item label,
