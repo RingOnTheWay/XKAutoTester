@@ -491,6 +491,10 @@ export class PagePackageView {
 
   /**
    * Inspector 重置确认弹窗（返回 Promise）
+   *
+   * 语义:
+   * - 确认 (清除数据启动)      → resolve(false)  → noReset = false
+   * - 取消 / Esc / 点击遮罩     → resolve(true)   → noReset = true (不清除数据启动)
    */
   showResetConfirmModal() {
     return new Promise((resolve) => {
@@ -505,6 +509,17 @@ export class PagePackageView {
         if (!resolved) { resolved = true; resolve(value); }
       };
 
+      const cbRef = () => {
+        cleanup();
+        resolveOnce(false);
+      };
+      // 取消回调: 取消 = 不清除数据启动 (noReset=true), 关闭弹窗并继续流程
+      const cancelRef = () => {
+        cleanup();
+        window.__XKAT_MODALS__?.confirm?.close();
+        resolveOnce(true);
+      };
+
       // P1-8/P2-2: 全局回调通道替代 cloneNode (消除监听销毁竞态),
       // 且 cleanup 统一移除 esc/overlay 监听 (修复 overlay 监听累积泄漏)
       const cleanup = () => {
@@ -513,20 +528,24 @@ export class PagePackageView {
         if (window.__XKAT_CONFIRM_CALLBACK__ === cbRef) {
           window.__XKAT_CONFIRM_CALLBACK__ = null;
         }
+        if (window.__XKAT_CONFIRM_CANCEL_CALLBACK__ === cancelRef) {
+          window.__XKAT_CONFIRM_CANCEL_CALLBACK__ = null;
+        }
       };
 
       const escHandler = (e) => { if (e.key === 'Escape') { cleanup(); resolveOnce(true); } };
       const overlayClickHandler = (e) => {
-        if (e.target === overlay) { cleanup(); resolveOnce(true); }
+        if (e.target === overlay) {
+          cleanup();
+          window.__XKAT_MODALS__?.confirm?.close();
+          resolveOnce(true);
+        }
       };
       document.addEventListener('keydown', escHandler);
       if (overlay) overlay.addEventListener('click', overlayClickHandler);
 
-      const cbRef = () => {
-        cleanup();
-        resolveOnce(false);
-      };
       window.__XKAT_CONFIRM_CALLBACK__ = cbRef;
+      window.__XKAT_CONFIRM_CANCEL_CALLBACK__ = cancelRef;
 
       window.__XKAT_MODALS__?.confirm?.open();
     });
