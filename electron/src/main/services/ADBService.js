@@ -34,12 +34,14 @@ const DANGEROUS_COMMAND_PATTERNS = [
 const ADB_DEVICES_TIMEOUT_MS = 5000;          // getConnectedDevices
 const ADB_COMMAND_TIMEOUT_MS = 5000;          // executeAdbCommand
 const ADB_START_SERVER_TIMEOUT_MS = 15000;    // adb start-server (daemon 冷启动可能较慢)
+const ADB_DEVICES_RETRY_COUNT = 3;            // start-server 后 devices 轮询重试次数
+const ADB_DEVICES_RETRY_DELAY_MS = 800;       // 轮询重试间隔
 
-// daemon 未运行/启动失败的典型输出特征 (命中则自动执行 start-server 后重试)
+// daemon 未运行/启动失败的典型输出特征 (命中则自动执行 start-server 后轮询重试)
+// 注意: "daemon not running" 是正常冷启动提示(成功输出也含), 不作为错误特征
 const ADB_DAEMON_ERROR_PATTERNS = [
   /cannot connect to daemon/i,
   /cannot bind/i,
-  /daemon not running/i,
   /failed to start/i,
   /server not running/i,
   /connection refused/i,
@@ -121,7 +123,8 @@ class ADBService {
    *
    * daemon 未运行时自动处理:
    * - `adb devices` 本身会尝试拉起 daemon, 但冷启动可能超时或失败 (端口占用/版本冲突等)
-   * - 检测到失败/daemon 相关错误时, 先显式执行 `adb start-server`, 再重试一次 `adb devices`
+   * - 检测到失败/daemon 相关错误时, 先显式执行 `adb start-server`, 再轮询重试 `adb devices`
+   *   直到 daemon 就绪 (冷启动后设备枚举可能需要几秒, 单次重试易失败)
    * - start-server 幂等: daemon 已运行会直接成功, 无副作用
    * @returns {Promise<Array<{id: string, status: string}>>}
    */
@@ -129,10 +132,15 @@ class ADBService {
     try {
       let result = await this._executor.execute(['devices'], { timeoutMs: ADB_DEVICES_TIMEOUT_MS });
 
-      // daemon 未运行/启动失败: 自动 start-server 后重试一次
+      // daemon 未运行/启动失败: 自动 start-server 后轮询重试
       if (!result.success || this._isDaemonError(result)) {
         await this._executor.execute(['start-server'], { timeoutMs: ADB_START_SERVER_TIMEOUT_MS });
-        result = await this._executor.execute(['devices'], { timeoutMs: ADB_DEVICES_TIMEOUT_MS });
+
+        for (let attempt = 0; attempt < ADB_DEVICES_RETRY_COUNT; attempt++) {
+          result = await this._executor.execute(['devices'], { timeoutMs: ADB_DEVICES_TIMEOUT_MS });
+          if (result.success && !this._isDaemonError(result)) break;
+          await this._sleep(ADB_DEVICES_RETRY_DELAY_MS);
+        }
       }
 
       if (!result.success) {
@@ -164,6 +172,15 @@ class ADBService {
   _isDaemonError(result) {
     const text = `${result.output || ''}\n${result.error || ''}`;
     return ADB_DAEMON_ERROR_PATTERNS.some(pattern => pattern.test(text));
+  }
+
+  /**
+   * 延迟辅助 (测试友好, 可被替换)
+   * @param {number} ms
+   * @returns {Promise<void>}
+   */
+  _sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**

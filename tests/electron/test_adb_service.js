@@ -160,6 +160,40 @@ test('getConnectedDevices daemon 未运行: 自动 start-server 后重试成功'
   }
 });
 
+test('getConnectedDevices daemon 冷启动慢: 轮询重试直到成功', async () => {
+  const callLog = [];
+  let devicesCalls = 0;
+  const executorMock = {
+    execute: async (args) => {
+      callLog.push(args);
+      if (args[0] === 'start-server') {
+        return { success: true, output: '* daemon started successfully', error: '' };
+      }
+      devicesCalls += 1;
+      // 前 3 次 devices 失败 (初始 1 次 + 轮询 2 次, daemon 尚未就绪); 第 4 次 (轮询第 3 次) 成功
+      if (devicesCalls <= 3) {
+        return { success: false, output: '', error: 'error: cannot connect to daemon' };
+      }
+      return { success: true, output: 'List of devices attached\ndev1    device\ndev2    device\n', error: '' };
+    },
+  };
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { commandExecutor: executorMock });
+    const devices = await svc.getConnectedDevices();
+
+    // 1 次初始 devices + 1 次 start-server + 3 次轮询 (第 3 次成功 break)
+    assert.deepStrictEqual(callLog, [
+      ['devices'], ['start-server'],
+      ['devices'], ['devices'], ['devices'],
+    ]);
+    assert.strictEqual(devices.length, 2);
+  } finally {
+    restoreElectron();
+  }
+});
+
 test('getConnectedDevices devices 首次成功: 不触发 start-server', async () => {
   const callLog = [];
   const executorMock = {
@@ -181,7 +215,7 @@ test('getConnectedDevices devices 首次成功: 不触发 start-server', async (
   }
 });
 
-test('getConnectedDevices start-server 后仍失败: 返回空数组', async () => {
+test('getConnectedDevices start-server 后仍失败: 轮询耗尽返回空数组', async () => {
   const callLog = [];
   const executorMock = {
     execute: async (args) => {
@@ -195,12 +229,17 @@ test('getConnectedDevices start-server 后仍失败: 返回空数组', async () 
     const svc = new ADBService(PROJECT_ROOT, i18nMock, { commandExecutor: executorMock });
     const devices = await svc.getConnectedDevices();
 
-    assert.deepStrictEqual(callLog, [['devices'], ['start-server'], ['devices']]);
+    // 1 次初始 devices + 1 次 start-server + 3 次轮询 (全部失败)
+    assert.deepStrictEqual(callLog, [
+      ['devices'], ['start-server'],
+      ['devices'], ['devices'], ['devices'],
+    ]);
     assert.deepStrictEqual(devices, []);
   } finally {
     restoreElectron();
   }
 });
+
 
 
 
