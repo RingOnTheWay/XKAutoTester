@@ -640,17 +640,22 @@ export class TestExecutionController {
    * 根据弹窗内当前选中的测试文件重新提取并渲染测试类型
    */
   async refreshModalTestTypes() {
-    const selectedFiles = this.view.getModalSelectedTestFiles();
-    if (selectedFiles.length === 0) {
-      this.view.renderModalTestTypesPlaceholder();
-      return;
+    try {
+      const selectedFiles = this.view.getModalSelectedTestFiles();
+      if (selectedFiles.length === 0) {
+        this.view.renderModalTestTypesPlaceholder();
+        return;
+      }
+      const markers = await this.model.extractMarkersFromFiles(selectedFiles);
+      // 保留当前已选中的测试类型
+      const previouslySelected = this.view.getModalSelectedTestTypes();
+      this.view.renderModalTestTypes(markers, previouslySelected, (type, checked) => {
+        // 类型选择变更回调（无需重新提取）
+      });
+    } catch (error) {
+      // 防御: 任何异常不中断交互, 类型区保持当前状态
+      console.error('[TestExecution] refreshModalTestTypes failed:', error);
     }
-    const markers = await this.model.extractMarkersFromFiles(selectedFiles);
-    // 保留当前已选中的测试类型
-    const previouslySelected = this.view.getModalSelectedTestTypes();
-    this.view.renderModalTestTypes(markers, previouslySelected, (type, checked) => {
-      // 类型选择变更回调（无需重新提取）
-    });
   }
 
   handleEditTestPlan() {

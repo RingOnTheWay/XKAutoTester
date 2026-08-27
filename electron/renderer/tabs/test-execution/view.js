@@ -851,10 +851,13 @@ export class TestExecutionView {
       item.addEventListener('click', (e) => {
         // 排除编辑按钮的点击
         if (e.target.closest('.edit-device-btn')) return;
-        // 排除复选框本身的点击
+        // 复选框自身点击走原生行为
         if (e.target.type === 'checkbox') return;
-        // 排除label元素的点击
-        if (e.target.closest('label')) return;
+        // label 点击: 阻止原生 for 关联 (防止与手动 toggle 竞态导致双 flip,
+        // 以及 id 特殊字符导致关联失效), 统一手动切换保证恰好一次 change
+        if (e.target.closest('label')) {
+          e.preventDefault();
+        }
         checkbox.checked = !checkbox.checked;
         checkbox.dispatchEvent(new Event('change'));
       });
@@ -907,6 +910,15 @@ export class TestExecutionView {
       checkbox.addEventListener('change', (e) => {
         item.classList.toggle('selected', e.target.checked);
         onTypeCheck?.(markerName, e.target.checked);
+      });
+      // 与测试文件项一致: label 点击统一手动切换, 防止原生 for 关联竞态/失效
+      item.addEventListener('click', (e) => {
+        if (e.target.type === 'checkbox') return;
+        if (e.target.closest('label')) {
+          e.preventDefault();
+        }
+        checkbox.checked = !checkbox.checked;
+        checkbox.dispatchEvent(new Event('change'));
       });
       modalTestTypeList.appendChild(item);
     });
