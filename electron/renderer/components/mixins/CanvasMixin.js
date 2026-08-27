@@ -52,7 +52,10 @@ export const CanvasMixin = {
         this._canvas.style.width = displayWidth + 'px';
         this._canvas.style.height = displayHeight + 'px';
         this._canvas.style.left = offsetX + 'px';
-        this._canvas.style.top = offsetY + 'px';
+        // 垂直贴顶 (P2: 之前垂直居中, 选中元素后面板展开时 canvasContainer 变矮,
+        // 居中收缩导致预览"顶部下移", 失去"被面板挤压上移"的效果; 改为贴顶后容器变矮
+        // 时预览贴 header 下方, 与"挤压上移"视觉一致)
+        this._canvas.style.top = padding + 'px';
 
         this._scaleRatio = img.naturalWidth / displayWidth;
 
@@ -60,7 +63,7 @@ export const CanvasMixin = {
             this._highlighterContainer.style.width = displayWidth + 'px';
             this._highlighterContainer.style.height = displayHeight + 'px';
             this._highlighterContainer.style.left = offsetX + 'px';
-            this._highlighterContainer.style.top = offsetY + 'px';
+            this._highlighterContainer.style.top = padding + 'px';
         }
 
         this.redrawCanvas();
