@@ -31,14 +31,18 @@ const DANGEROUS_COMMAND_PATTERNS = [
 ];
 
 // 超时阈值 (模块级常量, 避免魔法数)
-const ADB_DEVICES_TIMEOUT_MS = 5000;          // getConnectedDevices
+const ADB_DEVICES_TIMEOUT_MS = 5000;          // getConnectedDevices 常规 devices
+const ADB_DEVICES_FIRST_TIMEOUT_MS = 10000;   // 首次 devices (可能触发 daemon 冷启动, 给足时间)
 const ADB_COMMAND_TIMEOUT_MS = 5000;          // executeAdbCommand
-const ADB_START_SERVER_TIMEOUT_MS = 15000;    // adb start-server (daemon 冷启动可能较慢)
-const ADB_DEVICES_RETRY_COUNT = 3;            // start-server 后 devices 轮询重试次数
+const ADB_START_SERVER_TIMEOUT_MS = 20000;    // adb start-server (daemon 冷启动可能较慢)
+const ADB_KILL_SERVER_TIMEOUT_MS = 5000;      // adb kill-server (清理损坏 server)
+const ADB_DEVICES_RETRY_COUNT = 3;            // server 就绪后 devices 轮询重试次数
 const ADB_DEVICES_RETRY_DELAY_MS = 800;       // 轮询重试间隔
 
-// daemon 未运行/启动失败的典型输出特征 (命中则自动执行 start-server 后轮询重试)
+// daemon 未运行/启动失败/server 损坏的典型输出特征 (命中则自动修复 server)
 // 注意: "daemon not running" 是正常冷启动提示(成功输出也含), 不作为错误特征
+// protocol fault / connection reset / failed to check server version 表示
+// 客户端与现有 server 协议不匹配(版本冲突或半启动的坏 server), 需 kill-server 重建
 const ADB_DAEMON_ERROR_PATTERNS = [
   /cannot connect to daemon/i,
   /cannot bind/i,
@@ -49,6 +53,10 @@ const ADB_DAEMON_ERROR_PATTERNS = [
   /adb server is not running/i,
   /failed to check daemon/i,
   /unable to start/i,
+  /failed to check server version/i,
+  /protocol fault/i,
+  /couldn't read status/i,
+  /connection reset/i,
 ];
 
 class ADBService {
@@ -121,20 +129,21 @@ class ADBService {
   /**
    * 获取已连接设备列表
    *
-   * daemon 未运行时自动处理:
-   * - `adb devices` 本身会尝试拉起 daemon, 但冷启动可能超时或失败 (端口占用/版本冲突等)
-   * - 检测到失败/daemon 相关错误时, 先显式执行 `adb start-server`, 再轮询重试 `adb devices`
-   *   直到 daemon 就绪 (冷启动后设备枚举可能需要几秒, 单次重试易失败)
-   * - start-server 幂等: daemon 已运行会直接成功, 无副作用
+   * daemon 未运行/损坏时自动恢复:
+   * - 首次 `adb devices` 若 daemon 未运行会尝试自动拉起, 给足冷启动时间 (10s)
+   * - 失败或输出含 daemon/server 错误时, 调 _ensureAdbServer() 修复:
+   *   start-server 幂等; 检测到协议错误/损坏 server 时 kill-server 重建
+   * - 修复后轮询重试 `adb devices` 直到 daemon 就绪 (冷启动后设备枚举需几秒)
    * @returns {Promise<Array<{id: string, status: string}>>}
    */
   async getConnectedDevices() {
     try {
-      let result = await this._executor.execute(['devices'], { timeoutMs: ADB_DEVICES_TIMEOUT_MS });
+      // 首次查询: 若 daemon 未运行, adb 客户端会自动拉起, 给足冷启动时间
+      let result = await this._executor.execute(['devices'], { timeoutMs: ADB_DEVICES_FIRST_TIMEOUT_MS });
 
-      // daemon 未运行/启动失败: 自动 start-server 后轮询重试
+      // daemon 未运行/server 损坏: 自动修复后轮询重试
       if (!result.success || this._isDaemonError(result)) {
-        await this._executor.execute(['start-server'], { timeoutMs: ADB_START_SERVER_TIMEOUT_MS });
+        await this._ensureAdbServer();
 
         for (let attempt = 0; attempt < ADB_DEVICES_RETRY_COUNT; attempt++) {
           result = await this._executor.execute(['devices'], { timeoutMs: ADB_DEVICES_TIMEOUT_MS });
@@ -161,6 +170,28 @@ class ADBService {
       return devices;
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * 确保 adb server 干净运行
+   *
+   * 背景: 首次 `adb devices` 自动拉起 daemon 时若客户端被中断/超时,
+   * server 可能处于"半死"状态继续占用 5037 端口, 此后所有 adb 命令
+   * (含外部控制台) 都会报 protocol fault / connection reset, 只有杀掉
+   * 这个坏 server 重新启动才能恢复。
+   *
+   * 策略:
+   * - 先 start-server (幂等: daemon 正常则快速返回)
+   * - 若 start-server 失败或输出含协议/daemon 错误 (server 损坏或版本冲突),
+   *   先 kill-server 清理占用 5037 的坏 server, 再重新 start-server
+   */
+  async _ensureAdbServer() {
+    let startResult = await this._executor.execute(['start-server'], { timeoutMs: ADB_START_SERVER_TIMEOUT_MS });
+    if (!startResult.success || this._isDaemonError(startResult)) {
+      // server 损坏: 清理后重建
+      await this._executor.execute(['kill-server'], { timeoutMs: ADB_KILL_SERVER_TIMEOUT_MS });
+      await this._executor.execute(['start-server'], { timeoutMs: ADB_START_SERVER_TIMEOUT_MS });
     }
   }
 

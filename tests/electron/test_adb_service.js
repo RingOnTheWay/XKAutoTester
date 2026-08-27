@@ -229,12 +229,52 @@ test('getConnectedDevices start-server 后仍失败: 轮询耗尽返回空数组
     const svc = new ADBService(PROJECT_ROOT, i18nMock, { commandExecutor: executorMock });
     const devices = await svc.getConnectedDevices();
 
-    // 1 次初始 devices + 1 次 start-server + 3 次轮询 (全部失败)
+    // 1 次初始 devices + 修复(start-server 失败 → kill-server → start-server) + 3 次轮询 devices (全部失败)
     assert.deepStrictEqual(callLog, [
-      ['devices'], ['start-server'],
+      ['devices'], ['start-server'], ['kill-server'], ['start-server'],
       ['devices'], ['devices'], ['devices'],
     ]);
     assert.deepStrictEqual(devices, []);
+  } finally {
+    restoreElectron();
+  }
+});
+
+test('getConnectedDevices start-server 协议错误: kill-server 重建后成功', async () => {
+  const callLog = [];
+  const executorMock = {
+    execute: async (args) => {
+      callLog.push(args);
+      const cmd = args[0];
+      if (cmd === 'start-server') {
+        // 第一次 start-server 协议错误 (server 损坏/版本不匹配); kill-server 后第二次成功
+        if (callLog.filter(a => a[0] === 'start-server').length === 1) {
+          return { success: false, output: '', error: "adb.exe: failed to check server version: protocol fault (couldn't read status): connection reset" };
+        }
+        return { success: true, output: '* daemon started successfully', error: '' };
+      }
+      if (cmd === 'kill-server') {
+        return { success: true, output: '* server not running', error: '' };
+      }
+      // devices: 初始失败 (daemon 未运行); 修复后成功
+      if (callLog.filter(a => a[0] === 'devices').length === 1) {
+        return { success: false, output: '', error: 'error: cannot connect to daemon' };
+      }
+      return { success: true, output: 'List of devices attached\ndev1    device\n', error: '' };
+    },
+  };
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { commandExecutor: executorMock });
+    const devices = await svc.getConnectedDevices();
+
+    // 初始 devices → 修复(start-server 协议错误 → kill-server → start-server) → 轮询 devices 成功
+    assert.deepStrictEqual(callLog, [
+      ['devices'], ['start-server'], ['kill-server'], ['start-server'], ['devices'],
+    ]);
+    assert.strictEqual(devices.length, 1);
+    assert.deepStrictEqual(devices[0], { id: 'dev1', status: 'device' });
   } finally {
     restoreElectron();
   }
