@@ -31,8 +31,23 @@ const DANGEROUS_COMMAND_PATTERNS = [
 ];
 
 // 超时阈值 (模块级常量, 避免魔法数)
-const ADB_DEVICES_TIMEOUT_MS = 5000;    // getConnectedDevices
-const ADB_COMMAND_TIMEOUT_MS = 5000;    // executeAdbCommand
+const ADB_DEVICES_TIMEOUT_MS = 5000;          // getConnectedDevices
+const ADB_COMMAND_TIMEOUT_MS = 5000;          // executeAdbCommand
+const ADB_START_SERVER_TIMEOUT_MS = 15000;    // adb start-server (daemon 冷启动可能较慢)
+
+// daemon 未运行/启动失败的典型输出特征 (命中则自动执行 start-server 后重试)
+const ADB_DAEMON_ERROR_PATTERNS = [
+  /cannot connect to daemon/i,
+  /cannot bind/i,
+  /daemon not running/i,
+  /failed to start/i,
+  /server not running/i,
+  /connection refused/i,
+  /cannot reach daemon/i,
+  /adb server is not running/i,
+  /failed to check daemon/i,
+  /unable to start/i,
+];
 
 class ADBService {
   /**
@@ -103,11 +118,23 @@ class ADBService {
 
   /**
    * 获取已连接设备列表
+   *
+   * daemon 未运行时自动处理:
+   * - `adb devices` 本身会尝试拉起 daemon, 但冷启动可能超时或失败 (端口占用/版本冲突等)
+   * - 检测到失败/daemon 相关错误时, 先显式执行 `adb start-server`, 再重试一次 `adb devices`
+   * - start-server 幂等: daemon 已运行会直接成功, 无副作用
    * @returns {Promise<Array<{id: string, status: string}>>}
    */
   async getConnectedDevices() {
     try {
-      const result = await this._executor.execute(['devices'], { timeoutMs: ADB_DEVICES_TIMEOUT_MS });
+      let result = await this._executor.execute(['devices'], { timeoutMs: ADB_DEVICES_TIMEOUT_MS });
+
+      // daemon 未运行/启动失败: 自动 start-server 后重试一次
+      if (!result.success || this._isDaemonError(result)) {
+        await this._executor.execute(['start-server'], { timeoutMs: ADB_START_SERVER_TIMEOUT_MS });
+        result = await this._executor.execute(['devices'], { timeoutMs: ADB_DEVICES_TIMEOUT_MS });
+      }
+
       if (!result.success) {
         return [];
       }
@@ -127,6 +154,16 @@ class ADBService {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * 判断 adb 输出是否为 daemon 未运行/启动失败类错误
+   * @param {{output?: string, error?: string}} result
+   * @returns {boolean}
+   */
+  _isDaemonError(result) {
+    const text = `${result.output || ''}\n${result.error || ''}`;
+    return ADB_DAEMON_ERROR_PATTERNS.some(pattern => pattern.test(text));
   }
 
   /**

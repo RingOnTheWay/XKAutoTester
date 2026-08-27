@@ -129,6 +129,80 @@ test('getConnectedDevices 忽略空行和无关行', async () => {
   }
 });
 
+// ── daemon 自动启动 (start-server) 测试 ─────────────────────
+
+test('getConnectedDevices daemon 未运行: 自动 start-server 后重试成功', async () => {
+  const callLog = [];
+  const executorMock = {
+    execute: async (args) => {
+      callLog.push(args);
+      if (args[0] === 'start-server') {
+        return { success: true, output: '* daemon started successfully', error: '' };
+      }
+      // 第一次 devices: daemon 启动失败; 重试的 devices: 成功返回设备
+      if (callLog.filter(a => a[0] === 'devices').length === 1) {
+        return { success: false, output: '* daemon not running; starting now at tcp:5037\n', error: 'error: cannot connect to daemon' };
+      }
+      return { success: true, output: 'List of devices attached\n70665345151351    device\n', error: '' };
+    },
+  };
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { commandExecutor: executorMock });
+    const devices = await svc.getConnectedDevices();
+
+    assert.deepStrictEqual(callLog, [['devices'], ['start-server'], ['devices']]);
+    assert.strictEqual(devices.length, 1);
+    assert.deepStrictEqual(devices[0], { id: '70665345151351', status: 'device' });
+  } finally {
+    restoreElectron();
+  }
+});
+
+test('getConnectedDevices devices 首次成功: 不触发 start-server', async () => {
+  const callLog = [];
+  const executorMock = {
+    execute: async (args) => {
+      callLog.push(args);
+      return { success: true, output: 'List of devices attached\n\ndev1    device\n', error: '' };
+    },
+  };
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { commandExecutor: executorMock });
+    const devices = await svc.getConnectedDevices();
+
+    assert.deepStrictEqual(callLog, [['devices']]);
+    assert.strictEqual(devices.length, 1);
+  } finally {
+    restoreElectron();
+  }
+});
+
+test('getConnectedDevices start-server 后仍失败: 返回空数组', async () => {
+  const callLog = [];
+  const executorMock = {
+    execute: async (args) => {
+      callLog.push(args);
+      return { success: false, output: '', error: 'adb not found' };
+    },
+  };
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { commandExecutor: executorMock });
+    const devices = await svc.getConnectedDevices();
+
+    assert.deepStrictEqual(callLog, [['devices'], ['start-server'], ['devices']]);
+    assert.deepStrictEqual(devices, []);
+  } finally {
+    restoreElectron();
+  }
+});
+
+
 
 // ── executeAdbCommand 命令路由测试 (spawn mock) ──────────────
 
