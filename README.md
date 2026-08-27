@@ -10,7 +10,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12-3c873a?style=flat-square)](https://www.python.org)
 [![Electron](https://img.shields.io/badge/Electron-43-47848f?style=flat-square)](https://www.electronjs.org)
 [![Vite](https://img.shields.io/badge/Vite-5-646cff?style=flat-square)](https://vitejs.dev)
-[![Version](https://img.shields.io/badge/Version-0.1.5--dev.2-9cf?style=flat-square)](https://github.com/RingOnTheWay/XKAutoTester)
+[![Version](https://img.shields.io/badge/Version-0.1.6--dev.1-9cf?style=flat-square)](https://github.com/RingOnTheWay/XKAutoTester)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078d7?style=flat-square)](https://www.microsoft.com/windows)
 
 **简体中文 | [English](docs/README_EN.md)**
