@@ -495,6 +495,9 @@ export class PagePackageView {
    * 语义:
    * - 确认 (清除数据启动)      → resolve(false)  → noReset = false
    * - 取消 / Esc / 点击遮罩     → resolve(true)   → noReset = true (不清除数据启动)
+   *
+   * P1-8: 确认/取消按钮必须在此直接绑定 click (全局通道只是存储,
+   * 触发依赖调用方的委托; 若无委托回调永不执行, 弹窗将卡死无法继续流程)
    */
   showResetConfirmModal() {
     return new Promise((resolve) => {
@@ -504,33 +507,24 @@ export class PagePackageView {
       if (messageEl) messageEl.textContent = window.i18n.t('inspector.resetConfirmQuestion');
 
       const overlay = document.getElementById('confirm-modal-overlay');
+      const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
+      const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
       let resolved = false;
       const resolveOnce = (value) => {
         if (!resolved) { resolved = true; resolve(value); }
       };
 
+      // 确认 = 清除数据启动 (noReset=false), 关闭弹窗继续流程
       const cbRef = () => {
         cleanup();
+        window.__XKAT_MODALS__?.confirm?.close();
         resolveOnce(false);
       };
-      // 取消回调: 取消 = 不清除数据启动 (noReset=true), 关闭弹窗并继续流程
+      // 取消 = 不清除数据启动 (noReset=true), 关闭弹窗继续流程
       const cancelRef = () => {
         cleanup();
         window.__XKAT_MODALS__?.confirm?.close();
         resolveOnce(true);
-      };
-
-      // P1-8/P2-2: 全局回调通道替代 cloneNode (消除监听销毁竞态),
-      // 且 cleanup 统一移除 esc/overlay 监听 (修复 overlay 监听累积泄漏)
-      const cleanup = () => {
-        document.removeEventListener('keydown', escHandler);
-        if (overlay) overlay.removeEventListener('click', overlayClickHandler);
-        if (window.__XKAT_CONFIRM_CALLBACK__ === cbRef) {
-          window.__XKAT_CONFIRM_CALLBACK__ = null;
-        }
-        if (window.__XKAT_CONFIRM_CANCEL_CALLBACK__ === cancelRef) {
-          window.__XKAT_CONFIRM_CANCEL_CALLBACK__ = null;
-        }
       };
 
       const escHandler = (e) => { if (e.key === 'Escape') { cleanup(); resolveOnce(true); } };
@@ -541,9 +535,29 @@ export class PagePackageView {
           resolveOnce(true);
         }
       };
+      const confirmClickHandler = () => cbRef();
+      const cancelClickHandler = () => cancelRef();
+
+      // P1-8/P2-2: cleanup 统一移除所有监听 (修复监听累积泄漏)
+      const cleanup = () => {
+        document.removeEventListener('keydown', escHandler);
+        if (overlay) overlay.removeEventListener('click', overlayClickHandler);
+        if (confirmBtn) confirmBtn.removeEventListener('click', confirmClickHandler);
+        if (cancelBtn) cancelBtn.removeEventListener('click', cancelClickHandler);
+        if (window.__XKAT_CONFIRM_CALLBACK__ === cbRef) {
+          window.__XKAT_CONFIRM_CALLBACK__ = null;
+        }
+        if (window.__XKAT_CONFIRM_CANCEL_CALLBACK__ === cancelRef) {
+          window.__XKAT_CONFIRM_CANCEL_CALLBACK__ = null;
+        }
+      };
+
       document.addEventListener('keydown', escHandler);
       if (overlay) overlay.addEventListener('click', overlayClickHandler);
+      if (confirmBtn) confirmBtn.addEventListener('click', confirmClickHandler);
+      if (cancelBtn) cancelBtn.addEventListener('click', cancelClickHandler);
 
+      // 全局回调通道 (兼容 app.js P1-8 按钮处理, 防止其抢先 close 弹窗)
       window.__XKAT_CONFIRM_CALLBACK__ = cbRef;
       window.__XKAT_CONFIRM_CANCEL_CALLBACK__ = cancelRef;
 
