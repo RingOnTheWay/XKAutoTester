@@ -5,6 +5,7 @@ const fsp = require('fs').promises;
 const path = require('path');
 const { IPC_CHANNELS } = require('../../shared/constants');
 const { isAllowedExternalUrl } = require('../utils/urlGuard');
+const lastDialogPaths = require('./base/lastDialogPaths');
 
 function isNonEmptyString(v) {
   return typeof v === 'string' && v.trim().length > 0;
@@ -12,6 +13,9 @@ function isNonEmptyString(v) {
 
 function register(ipcMain, services) {
   const { electronApp, i18nService } = services;
+
+  // 文件选择器"上次选择路径"记忆: 存 config.json LAST_DIALOG_PATHS 字段
+  lastDialogPaths.init(() => path.join(electronApp.userConfigPath, 'config.json'));
 
   // i18n 文案封装: i18nService 不可用时回退默认文案 (测试/初始化期)
   const t = (key, fallback) => (i18nService && typeof i18nService.t === 'function'
@@ -30,36 +34,62 @@ function register(ipcMain, services) {
     return resolved === testCasesDir || resolved.startsWith(testCasesDir + path.sep);
   }
 
-  registerHandler(ipcMain, IPC_CHANNELS.SELECT_DIRECTORY, () =>
-    dialog.showOpenDialog(electronApp.mainWindow, { properties: ['openDirectory'] })
-  );
+  registerHandler(ipcMain, IPC_CHANNELS.SELECT_DIRECTORY, async () => {
+    const defaultPath = await lastDialogPaths.getDefaultPath(IPC_CHANNELS.SELECT_DIRECTORY);
+    const result = await dialog.showOpenDialog(electronApp.mainWindow, {
+      properties: ['openDirectory'],
+      ...(defaultPath ? { defaultPath } : {}),
+    });
+    if (!result.canceled && result.filePaths && result.filePaths[0]) {
+      await lastDialogPaths.rememberPath(IPC_CHANNELS.SELECT_DIRECTORY, result.filePaths[0]);
+    }
+    return result;
+  });
 
-  registerHandler(ipcMain, IPC_CHANNELS.SELECT_FILE, () =>
-    dialog.showOpenDialog(electronApp.mainWindow, {
+  registerHandler(ipcMain, IPC_CHANNELS.SELECT_FILE, async () => {
+    const defaultPath = await lastDialogPaths.getDefaultPath(IPC_CHANNELS.SELECT_FILE);
+    const result = await dialog.showOpenDialog(electronApp.mainWindow, {
       properties: ['openFile'],
       filters: [
         { name: 'Python Files', extensions: ['py'] },
         { name: 'All Files', extensions: ['*'] }
-      ]
-    })
-  );
+      ],
+      ...(defaultPath ? { defaultPath } : {}),
+    });
+    if (!result.canceled && result.filePaths && result.filePaths[0]) {
+      await lastDialogPaths.rememberPath(IPC_CHANNELS.SELECT_FILE, result.filePaths[0]);
+    }
+    return result;
+  });
 
-  registerHandler(ipcMain, IPC_CHANNELS.SELECT_FILES, () => {
+  registerHandler(ipcMain, IPC_CHANNELS.SELECT_FILES, async () => {
     const title = i18nService ? i18nService.t('fileManager.upload') : 'Upload';
-    return dialog.showOpenDialog(electronApp.mainWindow, {
+    const defaultPath = await lastDialogPaths.getDefaultPath(IPC_CHANNELS.SELECT_FILES);
+    const result = await dialog.showOpenDialog(electronApp.mainWindow, {
       title,
       buttonLabel: title,
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'All Files', extensions: ['*'] }]
+      filters: [{ name: 'All Files', extensions: ['*'] }],
+      ...(defaultPath ? { defaultPath } : {}),
     });
+    if (!result.canceled && result.filePaths && result.filePaths[0]) {
+      await lastDialogPaths.rememberPath(IPC_CHANNELS.SELECT_FILES, result.filePaths[0]);
+    }
+    return result;
   });
 
-  registerHandler(ipcMain, IPC_CHANNELS.SELECT_APK_FILE, () =>
-    dialog.showOpenDialog(electronApp.mainWindow, {
+  registerHandler(ipcMain, IPC_CHANNELS.SELECT_APK_FILE, async () => {
+    const defaultPath = await lastDialogPaths.getDefaultPath(IPC_CHANNELS.SELECT_APK_FILE);
+    const result = await dialog.showOpenDialog(electronApp.mainWindow, {
       properties: ['openFile'],
-      filters: [{ name: 'Android Package', extensions: ['apk'] }]
-    })
-  );
+      filters: [{ name: 'Android Package', extensions: ['apk'] }],
+      ...(defaultPath ? { defaultPath } : {}),
+    });
+    if (!result.canceled && result.filePaths && result.filePaths[0]) {
+      await lastDialogPaths.rememberPath(IPC_CHANNELS.SELECT_APK_FILE, result.filePaths[0]);
+    }
+    return result;
+  });
 
   registerHandler(ipcMain, IPC_CHANNELS.CHECK_PATH_EXISTS, (pathToCheck) => {
     if (!isNonEmptyString(pathToCheck)) {
