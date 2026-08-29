@@ -783,9 +783,11 @@ export class TestCaseController {
       name: selectedFile.name,
     });
 
-    this.view.showConfirmModal(title, message, () => {
-      const file = this.model.get('selectedFile');
-      this.model.deleteCase(file?.name, file?.pyFilePath);
+    showConfirmModal(title, message).then((ok) => {
+      if (ok) {
+        const file = this.model.get('selectedFile');
+        this.model.deleteCase(file?.name, file?.pyFilePath);
+      }
     });
   }
 

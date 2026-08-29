@@ -375,6 +375,13 @@ class ElectronApp {
       if (this.services.allureService) {
         this.services.allureService.cleanupSync();
       }
+      // R24 P3-2: 退出前关闭持久日志流 (Logger.close), 防止尾日志丢失
+      try {
+        this.services.allureService?.logger?.close?.();
+        this.services.pythonTestService?.logger?.close?.();
+      } catch (e) {
+        console.error('[will-quit] logger.close failed:', e);
+      }
     });
   }
 

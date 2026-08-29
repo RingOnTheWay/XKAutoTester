@@ -3,6 +3,12 @@
 // cloneNode 重建 (test-case save-confirm) → 全局 confirm-modal + 回调通道。
 // 语义: 确认 → true; 取消 / Esc / 遮罩 → false。
 
+// R24 P1-6: 模块级未决 Promise — 单弹窗串行化。
+// 前一次弹窗未关闭时再次调用 showConfirmModal, 先 resolve(false) 旧弹窗,
+// 防止旧 keydown/click 监听器泄漏 + 旧 Promise 永久挂起
+// (两版 API 并存期全局回调被覆盖导致前者永不 resolve 的同类问题)。
+let _pendingResolve = null;
+
 /**
  * 打开通用确认弹窗, 返回 Promise<boolean>
  * @param {string} title
@@ -10,7 +16,12 @@
  * @returns {Promise<boolean>}
  */
 export function showConfirmModal(title, message) {
+  if (_pendingResolve) {
+    _pendingResolve(false);
+    _pendingResolve = null;
+  }
   return new Promise((resolve) => {
+    _pendingResolve = resolve;
     const titleEl = document.getElementById('confirm-modal-title');
     const messageEl = document.getElementById('confirm-modal-message');
     if (titleEl) titleEl.textContent = title || '';
@@ -24,6 +35,7 @@ export function showConfirmModal(title, message) {
     const resolveOnce = (value) => {
       if (!resolved) {
         resolved = true;
+        _pendingResolve = null;
         resolve(value);
       }
     };
@@ -42,6 +54,8 @@ export function showConfirmModal(title, message) {
     const escHandler = (e) => {
       if (e.key === 'Escape') {
         cleanup();
+        // R24 P1-6: 补 close — 此前 Esc 只 resolve 不关弹窗, DOM 残留
+        window.__XKAT_MODALS__?.confirm?.close();
         resolveOnce(false);
       }
     };

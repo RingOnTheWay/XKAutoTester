@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from threading import Thread
 
@@ -141,7 +142,20 @@ class PytestProcess(SubprocessHandle):
         # 主线程读取 stdout
         stdout_lines: list[str] = []
         assert process.stdout is not None
+        # R24 P1-4: 看门狗移入读循环 — 原实现先 readline() 阻塞 (子进程存活且无新输出时
+        # 永不返回), 导致下方 process.wait(timeout=timeout) 永远执行不到, 死锁用例让
+        # 整链路永久挂起 (P1-9 声称已修复实则失效)。现改为循环内按耗时检查, 超时即终止。
+        start_time = time.monotonic() if timeout is not None else None
         while True:
+            if timeout is not None and time.monotonic() - start_time > timeout:
+                self.stop()
+                stderr_thread.join(timeout=5)
+                self._process = None
+                return PytestRunResult(
+                    exit_code=-1,
+                    stdout="\n".join(stdout_lines),
+                    stderr="\n".join(stderr_lines) + f"\n[pytest 执行超时 ({timeout}s), 已强制终止]",
+                )
             line = process.stdout.readline()
             if not line and process.poll() is not None:
                 break
@@ -155,21 +169,10 @@ class PytestProcess(SubprocessHandle):
 
         # 获取退出码 + 等 stderr 线程结束 (管道关闭后线程自然退出, 加 5s 超时保险)
         # KeyboardInterrupt 显式 stop() 终止子进程, 避免孤儿
-        # P1-9: timeout 看门狗, 超时强制终止 (死锁用例不再永久阻塞)
+        # R24 P1-4: 超时已在读循环内拦截并 return, 此处 wait() 无需再带 timeout —
+        # 读循环 break 时子进程已退出 (poll() is not None), wait() 立即返回。
         try:
-            if timeout is not None:
-                exit_code = process.wait(timeout=timeout)
-            else:
-                exit_code = process.wait()
-        except subprocess.TimeoutExpired:
-            self.stop()
-            stderr_thread.join(timeout=5)
-            self._process = None
-            return PytestRunResult(
-                exit_code=-1,
-                stdout="\n".join(stdout_lines),
-                stderr="\n".join(stderr_lines) + f"\n[pytest 执行超时 ({timeout}s), 已强制终止]",
-            )
+            exit_code = process.wait()
         except KeyboardInterrupt:
             self.stop()
             raise

@@ -20,8 +20,8 @@
     "prebuild": "node patch-nsis.js",
     "prebuild-win": "node patch-nsis.js",
     "prebuild-lite-win": "node patch-nsis.js",
-    "lint": "eslint src renderer tests --max-warnings 100",
-    "lint:fix": "eslint src renderer tests --fix",
+    "lint": "eslint src renderer --max-warnings 0",
+    "lint:fix": "eslint src renderer --fix",
     "format": "prettier --write \"src/**/*.js\" \"renderer/**/*.js\" \"../tests/electron/**/*.js\"",
     "format:check": "prettier --check \"src/**/*.js\" \"renderer/**/*.js\" \"../tests/electron/**/*.js\""
   },

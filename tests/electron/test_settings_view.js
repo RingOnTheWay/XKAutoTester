@@ -388,21 +388,6 @@ describe('SettingsView 全局 click 事件委托', () => {
     assert.strictEqual(outsideClicks, 1);
     unbind();
   });
-
-  test('bindGlobalClickForConfirmModal 应分发 onConfirm / onCancel', () => {
-    const v = new ViewClass();
-    let confirmCalls = 0;
-    let cancelCalls = 0;
-    const unbind = v.bindGlobalClickForConfirmModal({
-      onConfirm: () => { confirmCalls++; },
-      onCancel: () => { cancelCalls++; },
-    });
-    document.getElementById('confirm-modal-confirm-btn').click();
-    assert.strictEqual(confirmCalls, 1);
-    document.getElementById('confirm-modal-cancel-btn').click();
-    assert.strictEqual(cancelCalls, 1);
-    unbind();
-  });
 });
 
 describe('SettingsView 渲染方法', () => {

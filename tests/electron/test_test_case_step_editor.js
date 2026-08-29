@@ -560,14 +560,26 @@ describe('StepEditor updateStepSelect - 多元素', () => {
     assert.strictEqual(s.config.selectedElements[0].operation, 'click');
   });
 
-  test('tc-multi-input-type-select 按 index 写入 inputType', async () => {
+  test('tc-multi-input-type-select 按 index 写入 operationValue.inputType (R24 P1-1)', async () => {
     setupI18n();
     const StepEditor = await loadStepEditor();
     const se = new StepEditor();
     const s = se.addStep();
 
     se.updateStepSelect('tc-multi-input-type-select-1', 'faker', s.id, 2);
-    assert.strictEqual(s.config.selectedElements[2].inputType, 'faker');
+    assert.strictEqual(s.config.selectedElements[2].operationValue.inputType, 'faker');
+  });
+
+  test('tc-multi-faker-locale/provider 写入 operationValue.fakerConfig (R24 P1-1)', async () => {
+    setupI18n();
+    const StepEditor = await loadStepEditor();
+    const se = new StepEditor();
+    const s = se.addStep();
+
+    se.updateStepSelect('tc-multi-faker-locale-1', 'zh_CN', s.id, 0);
+    se.updateStepSelect('tc-multi-faker-provider-1', 'person.name', s.id, 0);
+    assert.strictEqual(s.config.selectedElements[0].operationValue.fakerConfig.locale, 'zh_CN');
+    assert.strictEqual(s.config.selectedElements[0].operationValue.fakerConfig.provider, 'person.name');
   });
 });
 

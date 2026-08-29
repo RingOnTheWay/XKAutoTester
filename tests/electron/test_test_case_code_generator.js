@@ -539,6 +539,47 @@ describe('generatePythonFile 端到端', () => {
     assert.strictEqual(result.success, false);
     assert.ok(result.error);
   });
+
+  // R24 P1-3: 生成入口路径安全 (渲染进程可控 fileName/outputDir)
+  test('R24 P1-3 fileName 空/非字符串拒绝', async (t) => {
+    if (!gen) return t.skip('模板文件不存在，跳过 e2e');
+    for (const name of ['', '   ', null, undefined, 123, {}]) {
+      const result = await gen.generatePythonFile({ fileName: name, name: 'X' }, outputDir);
+      assert.strictEqual(result.success, false, `应拒绝 fileName: ${String(name)}`);
+      assert.strictEqual(result.error, 'invalid_file_name');
+    }
+  });
+
+  test('R24 P1-3 fileName 目录穿越被 basename 剥离后安全落在 outputDir 内', async (t) => {
+    if (!gen) return t.skip('模板文件不存在，跳过 e2e');
+    const names = ['../../evil', '../x', '..\\..\\evil', 'a/b', 'a\\b', '..\\..\\config\\config.json', 'x;rm', 'a"b'];
+    for (const name of names) {
+      const result = await gen.generatePythonFile(
+        { fileName: name, name: 'X', targetApp: { name: 'A', packageName: 'c', activityName: 'M' } },
+        outputDir
+      );
+      assert.strictEqual(result.success, true, `应放行并安全生成: ${name} (${result.error || ''})`);
+      assert.ok(result.path.startsWith(outputDir), `路径必须落在 outputDir 内: ${name} → ${result.path}`);
+      assert.ok(!result.path.includes('..'), `不得含 .. 组件: ${result.path}`);
+    }
+  });
+
+  test('R24 P1-3 outputDir 相对路径/缺失拒绝', async (t) => {
+    if (!gen) return t.skip('模板文件不存在，跳过 e2e');
+    const r1 = await gen.generatePythonFile({ fileName: 'test_a' }, 'relative/dir');
+    assert.strictEqual(r1.success, false);
+    assert.strictEqual(r1.error, 'invalid_output_dir');
+    const r2 = await gen.generatePythonFile({ fileName: 'test_a' });
+    assert.strictEqual(r2.success, false);
+    assert.strictEqual(r2.error, 'invalid_output_dir');
+  });
+
+  test('R24 P1-3 caseData 非对象拒绝', async (t) => {
+    if (!gen) return t.skip('模板文件不存在，跳过 e2e');
+    const r = await gen.generatePythonFile(null, outputDir);
+    assert.strictEqual(r.success, false);
+    assert.strictEqual(r.error, 'invalid_case_data');
+  });
 });
 
 
@@ -670,3 +711,79 @@ describe('generatePythonFile P0-1 注入防护 端到端', () => {
   });
 });
 
+
+// ── R24 P2-3: toPyLiteral Python 字面量 (JSON 布尔/null → Python 关键字) ──
+
+describe('R24 P2-3 toPyLiteral', () => {
+  const { toPyLiteral } = TestCaseCodeGenerator;
+
+  test('布尔/null/undefined 映射 Python 关键字', () => {
+    assert.strictEqual(toPyLiteral(true), 'True');
+    assert.strictEqual(toPyLiteral(false), 'False');
+    assert.strictEqual(toPyLiteral(null), 'None');
+    assert.strictEqual(toPyLiteral(undefined), 'None');
+  });
+
+  test('字符串转义单引号/反斜杠', () => {
+    assert.strictEqual(toPyLiteral("a'b"), "'a\\'b'");
+    assert.strictEqual(toPyLiteral('a\\b'), "'a\\\\b'");
+  });
+
+  test('数字/数组/嵌套对象递归', () => {
+    assert.strictEqual(toPyLiteral(42), '42');
+    assert.strictEqual(toPyLiteral([1, true, null]), '[1, True, None]');
+    assert.strictEqual(toPyLiteral({ a: 1, b: false, c: { d: 'x' } }), "{'a': 1, 'b': False, 'c': {'d': 'x'}}");
+  });
+
+  test('对象 key 含注入字符被转义', () => {
+    assert.strictEqual(toPyLiteral({ "k'ey": 1 }), "{'k\\'ey': 1}");
+  });
+
+  test('multi 元素 operationValue 含布尔时生成合法 Python (此前 NameError)', async () => {
+    // 用真实模板生成, 断言生成代码含 True/False 而非 true/false
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'xkat-pylit-'));
+    const outDir = path.join(tmpDir, 'out');
+    await fs.mkdir(outDir, { recursive: true });
+    await fs.writeFile(path.join(tmpDir, 'page_package.json'), JSON.stringify({ apps: [] }));
+    const tplPath = path.join(__dirname, '..', '..', 'electron', 'templates', 'test_case_template.py');
+    if (!fss.existsSync(tplPath)) {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+      return;
+    }
+    const gen = new TestCaseCodeGenerator(tmpDir, '/fake');
+    const result = await gen.generatePythonFile(
+      {
+        fileName: 'test_bool_op',
+        name: 'B',
+        targetApp: { name: 'A', packageName: 'c', activityName: 'M' },
+        steps: [
+          {
+            type: 'element',
+            name: '多选',
+            config: {
+              pageId: 'p1',
+              multiSelect: true,
+              selectedElements: [
+                {
+                  elementId: 'e1',
+                  operation: 'sendText',
+                  operationValue: { inputType: 'faker', fakerConfig: { provider: 'person.name' }, checked: true, enabled: false, note: null },
+                },
+              ],
+            },
+          },
+        ],
+      },
+      outDir
+    );
+    assert.strictEqual(result.success, true, result.error || '');
+    const py = await fs.readFile(result.path, 'utf8');
+    assert.ok(!/\btrue\b/.test(py), '不得含 JSON 风格 true');
+    assert.ok(!/\bfalse\b/.test(py), '不得含 JSON 风格 false');
+    assert.ok(!/\bnull\b/.test(py), '不得含 JSON 风格 null');
+    assert.match(py, /'checked': True/);
+    assert.match(py, /'enabled': False/);
+    assert.match(py, /'note': None/);
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+});

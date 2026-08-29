@@ -4,8 +4,9 @@
 
 XKAutoTester 是一个基于 Electron + Python 的自动化测试平台，用于移动端应用的自动化测试，支持 Appium 驱动、Appium Inspector 元素检查、蓝牙设备模拟、定时任务调度、scrcpy 投屏、APK 解析、钉钉通知、自动更新等功能。
 
-- **版本**: 0.1.5-dev.2
-- **技术栈**: Electron 43 + Node.js + Python 3.10+（内置 3.12）+ Vite 5 / electron-vite + Appium + Pytest + Allure
+- **版本**: 0.1.6-dev.1
+- **技术栈**: Electron 43 + Node.js + Python 3.10+（内置 3.12）+ Vite 7.3.6 / electron-vite 5.0.0 + Appium + Pytest + Allure
+- **工程化**: ESLint 9 (flat, `--max-warnings 0`) + Prettier + Ruff + GitHub Actions CI（Electron/Python 双 job）
 - **打包工具**: electron-builder (NSIS 安装程序，含 lite 版本)
 - **Python 包管理**: uv
 - **国际化**: i18next (zh-CN / en-US)
@@ -127,11 +128,11 @@ XKAutoTester/
 │   │   │   ├── ApiBridge.js             # electronAPI 桥接
 │   │   │   ├── AppState.js              # 全局状态
 │   │   │   ├── EventEmitter.js          # 事件发射器
-│   │   │   └── utils/html.js            # DOM/HTML 工具
+│   │   │   └── utils/                   # html.js + confirmModal.js（通用确认弹窗 Promise 版，P2-3 收敛）+ scheduledPlanStatus.js（定时计划状态公共映射）
 │   │   ├── tabs/                        # 5 个 Tab（MVC 单体：controller/model/view/index/tab.html；mixin 已全部合回）
 │   │   │   ├── test-execution/          # 测试执行
 │   │   │   ├── page-package/            # 页面封装
-│   │   │   ├── test-case/               # 测试用例（含 modules/：FileBrowser/OptionPanel/StepEditor/TestCaseEditor）
+│   │   │   ├── test-case/               # 测试用例（含 modules/：FileBrowser/OptionPanel/StepEditor/TestCaseEditor/selectFieldRoutes）
 │   │   │   ├── android-connection/      # 安卓连接
 │   │   │   └── settings/                # 设置
 │   │   ├── components/                  # UI 组件
@@ -594,7 +595,7 @@ python -m main --test-paths <paths> --markers <markers> --test-plan <name>
 ### 前端技术特点
 
 - **MVC 架构**：每个 Tab 拆为 `controller.js` / `model.js` / `view.js` / `index.js` / `tab.html`；早期 `mixins/` 已全部合回，test-case 改用 `modules/` 拆分
-- **构建工具**：Vite 5 + electron-vite（开发模式 HMR / 构建产物打包）
+- **构建工具**：Vite 7.3.6 + electron-vite 5.0.0（开发模式 HMR / 构建产物打包；R23 由 Vite 5 升级）
 - **核心基类**：`core/Action.js` / `ApiBridge.js` / `AppState.js` / `EventEmitter.js`
 - **无框架**：原生 HTML + CSS + JavaScript（基于 Action 事件驱动）
 - **样式架构**：`styles/` 下 15 个 CSS 模块，`styles.css` 通过 `@import` 统一引入

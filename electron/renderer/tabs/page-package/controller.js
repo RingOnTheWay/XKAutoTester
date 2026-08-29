@@ -1,4 +1,6 @@
 import { Toast } from '../../components/toast.js';
+// R24 P1-6: 统一 core Promise 版 confirm (原 view 回调版已删)
+import { showConfirmModal } from '../../core/utils/confirmModal.js';
 
 /**
  * PagePackageController - 页面封装 Tab 控制器
@@ -510,7 +512,7 @@ export class PagePackageController {
     await this.#model.saveElement(elementData);
   }
 
-  handleConfirmDelete(type) {
+  async handleConfirmDelete(type) {
     let itemName, message;
     switch (type) {
       case 'app':
@@ -535,11 +537,10 @@ export class PagePackageController {
         });
         break;
     }
-    this.#view.showConfirmModal(
-      window.i18n.t('pagePackage.deleteConfirm'),
-      message,
-      async () => await this.#model.deleteItem(type)
-    );
+    const ok = await showConfirmModal(window.i18n.t('pagePackage.deleteConfirm'), message);
+    if (ok) {
+      await this.#model.deleteItem(type);
+    }
   }
 
   async handleOpenInspector() {
@@ -561,7 +562,13 @@ export class PagePackageController {
       return;
     }
 
-    const noReset = await this.#view.showResetConfirmModal();
+    // R24: showResetConfirmModal 迁移 core Promise 版 — 语义映射一致:
+    // 确认(清除数据启动) → ok=true → noReset=false; 取消/Esc/遮罩 → ok=false → noReset=true
+    const ok = await showConfirmModal(
+      window.i18n.t('inspector.resetConfirmTitle'),
+      window.i18n.t('inspector.resetConfirmQuestion')
+    );
+    const noReset = !ok;
     const inspectorModal = window.__XKAT_INSPECTOR_MODAL__;
     if (inspectorModal) {
       await inspectorModal.open(deviceName, app.packageName, app.activityName, noReset);

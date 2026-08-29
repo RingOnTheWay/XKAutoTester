@@ -64,6 +64,27 @@ function escapePyComment(s) {
   return String(s ?? '').replace(/[\r\n]+/g, ' ');
 }
 
+/**
+ * R24 P2-3: JS 值 → Python 字面量 (递归)。
+ * JSON.stringify 直嵌的 true/false/null 在 Python 是 NameError (应为 True/False/None) —
+ * operationValue 含布尔/null 配置时生成的 .py 运行即崩。此处映射 Python 关键字,
+ * 字符串经 escapePySingleQuoteStr 转义 (防引号注入), 对象 key 同样转义。
+ */
+function toPyLiteral(v) {
+  if (v === true) return 'True';
+  if (v === false) return 'False';
+  if (v === null || v === undefined) return 'None';
+  if (typeof v === 'number') return String(v);
+  if (typeof v === 'string') return `'${escapePySingleQuoteStr(v)}'`;
+  if (Array.isArray(v)) return `[${v.map(toPyLiteral).join(', ')}]`;
+  if (typeof v === 'object') {
+    return `{${Object.entries(v)
+      .map(([k, x]) => `'${escapePySingleQuoteStr(k)}': ${toPyLiteral(x)}`)
+      .join(', ')}}`;
+  }
+  return 'None'; // function/symbol 等异常值兜底 (不进入生成代码)
+}
+
 /** Python 标识符安全化 (方法名等) */
 function toPythonIdentifier(s) {
   const cleaned = String(s ?? '')
@@ -121,12 +142,42 @@ class TestCaseCodeGenerator {
   // ─── 入口方法 ──────────────────────────────────────────────
 
   /**
+   * R24 P1-3: 用例名清洗 — path.basename 剥离路径 (封死 '../'、'..\\' 目录穿越) +
+   * 非法字符替换为 _ (与 TestCaseService.defaultFileNameSanitizer 对齐, 保证
+   * JSON 保存与 .py 生成对同一输入得到同构文件名)。
+   * @param {*} raw
+   * @returns {string|null}
+   */
+  _sanitizeTestCaseName(raw) {
+    if (typeof raw !== 'string' || !raw.trim()) return null;
+    const base = path.basename(raw);
+    const withoutExt = base.replace(/\.(json|py)$/i, '');
+    if (!withoutExt) return null;
+    const safe = withoutExt.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
+    return safe || null;
+  }
+
+  /**
    * 生成 Python 测试文件
    * 不回写 .json, 不 mutation caseData (SSOT 由 TestCaseService)
    * @returns {Promise<{success: boolean, path?: string, error?: string}>}
    */
   async generatePythonFile(caseData, outputDir) {
     try {
+      // R24 P1-3: 入口统一清洗 — saveTestCase 内化生成 / saveAndGenerate / TEST_CASE_GENERATE_PYTHON
+      // 三入口均直达此处, 渲染进程可控 fileName/outputDir 未清洗即 path.join 越权写任意 .py。
+      if (!caseData || typeof caseData !== 'object') {
+        return { success: false, error: 'invalid_case_data' };
+      }
+      const safeName = this._sanitizeTestCaseName(caseData.fileName);
+      if (!safeName) {
+        return { success: false, error: 'invalid_file_name' };
+      }
+      if (typeof outputDir !== 'string' || !outputDir.trim() || !path.isAbsolute(outputDir)) {
+        return { success: false, error: 'invalid_output_dir' };
+      }
+      const resolvedDir = path.resolve(outputDir);
+
       const pagePackageData = await this.loadPagePackageData();
 
       let template = await this._loadTemplate();
@@ -142,7 +193,7 @@ class TestCaseCodeGenerator {
         DEVICE_NAME: escapePySingleQuoteStr(caseData.deviceConfig?.deviceName || ''),
         PLATFORM_NAME: escapePySingleQuoteStr(caseData.platform || 'Android'),
         PLATFORM_VERSION: escapePySingleQuoteStr(caseData.deviceConfig?.platformVersion || ''),
-        CLASS_NAME: escapePySingleQuoteStr(this.toClassName(caseData.fileName)),
+        CLASS_NAME: escapePySingleQuoteStr(this.toClassName(safeName)),
       });
 
       template = this.generateBleConfig(template, caseData);
@@ -153,8 +204,8 @@ class TestCaseCodeGenerator {
 
       template = this.generateTestMethods(template, caseData, pagePackageData);
 
-      const pyFileName = `${caseData.fileName}.py`;
-      const pyPath = path.join(outputDir, pyFileName);
+      const pyFileName = `${safeName}.py`;
+      const pyPath = path.join(resolvedDir, pyFileName);
       await this._fileSystem.writeFile(pyPath, template, 'utf8');
 
       return { success: true, path: pyPath };
@@ -717,7 +768,7 @@ BLE_PORT = ${escapePyStringLiteral(bleDevice.port || '')}  # 蓝牙设备串口�
       code += `                        'locator_type': '${locatorType.toUpperCase()}',\n`;
       code += `                        'locator_value': '${escapePySingleQuoteStr(locatorValue)}',\n`;
       code += `                        'operation': '${escapePySingleQuoteStr(operation)}',\n`;
-      code += `                        'operation_value': ${JSON.stringify(operationValue)}\n`;
+      code += `                        'operation_value': ${toPyLiteral(operationValue)}\n`;
       code += `                    },\n`;
     });
 
@@ -1146,6 +1197,7 @@ module.exports.escapePyFStringPart = escapePyFStringPart;
 module.exports.escapePySingleQuoteStr = escapePySingleQuoteStr;
 module.exports.escapePyDocstring = escapePyDocstring;
 module.exports.escapePyComment = escapePyComment;
+module.exports.toPyLiteral = toPyLiteral;
 module.exports.toPythonIdentifier = toPythonIdentifier;
 module.exports.safeNumber = safeNumber;
 module.exports.clampInt = clampInt;

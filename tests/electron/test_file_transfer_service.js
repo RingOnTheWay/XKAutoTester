@@ -544,3 +544,49 @@ test('P1-4 download 目录超时: tar 永不 close 时 kill + 清临时文件 + 
   assert.ok(spawnFn.kills.length >= 1, 'tar 子进程应被 kill');
   assert.ok(removed.length >= 1, '临时目录应被清理');
 });
+
+test('R24 P2-1 download 单文件: 超时 resolve 后 close 不再 emit 成功 (矛盾事件回归)', async () => {
+  // 可手动触发 close 的 spawn: 先让超时 (50ms) resolve 失败, 再 trigger close(0),
+  // 断言不再 emit success (原实现在 settled 后仍走 close 分支 emit 成功 → 矛盾事件)
+  const kills = [];
+  const closeCbs = [];
+  const spawnFn = (cmd, args) => {
+    const proc = {
+      stdout: { on: () => {}, pipe: () => {} },
+      stderr: { on: () => {} },
+      on: (evt, cb) => { if (evt === 'close') closeCbs.push(cb); },
+      kill: () => { kills.push(1); },
+      pid: 1,
+    };
+    return proc;
+  };
+  Object.defineProperty(spawnFn, 'kills', { value: kills, enumerable: false });
+  Object.defineProperty(spawnFn, 'triggerClose', {
+    value: (code) => closeCbs.forEach((cb) => cb(code)),
+    enumerable: false,
+  });
+
+  const monitorFactory = createMockMonitorFactory();
+  const svc = new FileTransferService({
+    commandExecutor: { execute: async () => ({ success: true, output: '-rw-r--r-- 1 root root 100 f.txt' }) },  // 非目录
+    remoteStatService: { getFileSize: async () => 100, getDirSize: async () => 0 },
+    i18nService: i18nMock,
+    tarExtractor: { extract: async () => [] },
+    spawnFn,
+    fs: { statSync: () => ({ size: 100 }) },
+    progressMonitorFactory: monitorFactory,
+    admZipFactory: () => ({ addFile: () => {}, writeZip: () => {} }),
+    transferTimeoutMs: 50,
+  });
+
+  const result = await svc.download('/sdcard/f.txt', '/local/f.txt', 'dev1', null);
+  assert.strictEqual(result.success, false, '超时应 resolve 失败');
+  const monitor = monitorFactory.instances[0].monitor;
+  assert.strictEqual(monitor.events.filter((e) => e.status === 'error').length, 1, '超时 emit 一次 error');
+
+  // 超时后 close(0) 触发 → settled 短路, 不得再 emit success / 重复 error
+  spawnFn.triggerClose(0);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.strictEqual(monitor.events.filter((e) => e.status === 'success').length, 0, '超时后 close 不得 emit success');
+  assert.strictEqual(monitor.events.filter((e) => e.status === 'error').length, 1, '不得重复 emit error');
+});

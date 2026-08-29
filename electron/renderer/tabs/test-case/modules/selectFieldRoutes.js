@@ -64,17 +64,21 @@ export const SELECT_FIELD_ROUTES = [
     prefix: 'tc-multi-operation-select',
     path: ['selectedElements', '<index>', 'operation'],
   },
+  // R24 P1-1: multi 输入类配置统一收敛到 operationValue 下 (与渲染回填 renderMultiOperationValue
+  // / renderSendTextConfig / renderFakerConfig 及 Python 生成器 op_value 读取路径对齐)。
+  // 原写方向存 selectedElements[i].inputType / fakerLocale, 渲染/收集分别读写
+  // operationValue.* / elem.fakerConfig → 三处漂移, 保存后配置不回显且生成器读不到。
   {
     prefix: 'tc-multi-input-type-select',
-    path: ['selectedElements', '<index>', 'inputType'],
+    path: ['selectedElements', '<index>', 'operationValue', 'inputType'],
   },
   {
     prefix: 'tc-multi-faker-locale',
-    path: ['selectedElements', '<index>', 'fakerLocale'],
+    path: ['selectedElements', '<index>', 'operationValue', 'fakerConfig', 'locale'],
   },
   {
     prefix: 'tc-multi-faker-provider',
-    path: ['selectedElements', '<index>', 'fakerProvider'],
+    path: ['selectedElements', '<index>', 'operationValue', 'fakerConfig', 'provider'],
   },
   { prefix: 'tc-compare-element-page', path: ['compareConfig', 'pageId'] },
   { prefix: 'tc-compare-element-select', path: ['compareConfig', 'elementId'] },
@@ -103,7 +107,12 @@ export function findSelectRoute(selectId) {
  */
 export function applySelectRoute(config, selectId, value, index) {
   const route = findSelectRoute(selectId);
-  if (!route) return false;
+  if (!route) {
+    // R24 P2-8: 未知前缀不再静默 — 调用方忽略返回值时 (如 StepEditor 通用分支)
+    // 打 warn 便于发现新字段漏登记 / 前缀拼错 (正常路径不应出现)
+    console.warn(`[selectFieldRoutes] 未登记的路由前缀: ${selectId}`);
+    return false;
+  }
 
   // multi 路由缺 index 时不写入
   if (route.path.includes('<index>')) {

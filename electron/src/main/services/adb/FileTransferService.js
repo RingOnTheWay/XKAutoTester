@@ -299,7 +299,8 @@ class FileTransferService {
         } catch {
           /* 已退出 */
         }
-        cleanupTemp();
+        // R24 P2-1: 不 await 的清理须兜底 catch, 防 unhandled rejection
+        cleanupTemp().catch(() => {});
         monitor.emit(100, 'error', this._i18n.t('fileManager.downloadFailed'), 'adb exec-out tar timeout');
         finish({
           success: false,
@@ -310,6 +311,8 @@ class FileTransferService {
 
       // spawn 失败 (ENOENT/adb 缺失) 只发 error 不发 close, 必须在此处结束 Promise
       tarProcess.on('error', async (error) => {
+        // R24 P2-1: settled 短路 — 超时已 resolve 后不再 emit/finish (与 upload L143 对齐)
+        if (settled) return;
         clearTimeout(timeoutTimer);
         await cleanupTemp();
         monitor.emit(100, 'error', this._i18n.t('fileManager.downloadFailed'), error.message);
@@ -321,6 +324,8 @@ class FileTransferService {
       });
 
       tarProcess.on('close', async (code) => {
+        // R24 P2-1: settled 短路 — 超时已 resolve 后 close 不再继续 zip 处理/emit 成功
+        if (settled) return;
         clearTimeout(timeoutTimer);
         if (code === 0) {
           try {
@@ -432,6 +437,8 @@ class FileTransferService {
 
       // spawn 失败 (ENOENT/adb 缺失) 只发 error 不发 close, 必须在此处结束 Promise
       pullProcess.on('error', (error) => {
+        // R24 P2-1: settled 短路
+        if (settled) return;
         clearTimeout(timeoutTimer);
         monitor.emit(100, 'error', this._i18n.t('fileManager.downloadFailed'), error.message);
         finish({
@@ -442,6 +449,8 @@ class FileTransferService {
       });
 
       pullProcess.on('close', (code) => {
+        // R24 P2-1: settled 短路 — 超时后 close 不再 emit success/fail 矛盾事件
+        if (settled) return;
         clearTimeout(timeoutTimer);
         if (code === 0) {
           monitor.emit(100, 'success', this._i18n.t('main.fileDownloaded', { path: finalLocalPath }));

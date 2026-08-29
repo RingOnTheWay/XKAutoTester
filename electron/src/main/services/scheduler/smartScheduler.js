@@ -331,6 +331,9 @@ class SmartScheduler {
           this._logger.warn(
             `定时计划 ${planId} 执行超过 ${this._executionTimeoutMs / 60000} 分钟, 渲染进程仍存活, 不自动标记 (可能为长用例)`
           );
+          // R24 P2-2: 重新武装看门狗 — 原实现仅告警 return, 该 plan 从此脱离监控
+          // (此后渲染进程挂死也无人标记 failed)。周期化后每 EXECUTION_TIMEOUT_MS 检查一次。
+          this._startExecutionWatchdog(planId);
           return;
         }
         this._logger.warn(

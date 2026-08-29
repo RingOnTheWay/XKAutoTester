@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 # 设备行匹配: "设备ID    device" (仅 device 状态,跳过 unauthorized/offline)
 _DEVICE_LINE_RE = re.compile(r"^([^\s]+)\s+device$")
 
+# R24 P3-7: USB 授权等待参数 (原内联魔法数字 60/2, 与其他模块 sleep 命名常量对齐)
+USB_AUTH_MAX_WAIT_SECONDS = 60
+USB_AUTH_CHECK_INTERVAL_SECONDS = 2
+
 # 默认 TCP 连接端口 (device_name 不含 ':' 时使用)
 _DEFAULT_TCP_PORT = 5555
 
@@ -240,8 +244,8 @@ class DeviceConnectionService:
         logger.info(t("python.adbManager.pleaseAuthorizeDevice"))
         self._show_unauthorized_dialog()
 
-        max_wait_time = 60
-        check_interval = 2
+        max_wait_time = USB_AUTH_MAX_WAIT_SECONDS
+        check_interval = USB_AUTH_CHECK_INTERVAL_SECONDS
         waited_time = 0
 
         while waited_time < max_wait_time:

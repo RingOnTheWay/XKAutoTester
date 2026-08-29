@@ -10,6 +10,16 @@ const AdbProgressMonitor = require(path.join(
   __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'AdbProgressMonitor.js'
 ));
 
+// R24: 条件等待 helper — 固定 setTimeout 等待在 CI 慢机器上 flaky,
+// 正向"等待轮询触发"改条件驱动; 负向断言 (确认无调用) 保留短等待
+async function waitFor(cond, timeout = 1000, step = 5) {
+  const start = Date.now();
+  while (!cond()) {
+    if (Date.now() - start > timeout) throw new Error('waitFor 超时');
+    await new Promise((r) => setTimeout(r, step));
+  }
+}
+
 // ── 工具: 构造 mock ──────────────────────────────────────────
 
 function createMonitorOpts(overrides = {}) {
@@ -143,7 +153,7 @@ test('start 启动 setInterval 触发 _pollStat', async () => {
   }));
 
   monitor.start(10);  // 10ms 间隔
-  await new Promise(resolve => setTimeout(resolve, 50));
+  await waitFor(() => calls.length >= 1);  // R24: 条件等待首轮轮询触发
   monitor.stop();
 
   assert.ok(calls.length >= 1, 'executeStat 应被调用');
@@ -174,7 +184,7 @@ test('stop 清 interval 不再触发 _pollStat', async () => {
   const monitor = new AdbProgressMonitor(createMonitorOpts({ executeStat }));
 
   monitor.start(10);
-  await new Promise(resolve => setTimeout(resolve, 15));
+  await waitFor(() => calls.length >= 1);  // R24: 条件等待首轮轮询触发
   monitor.stop();
   const callCountAfterStop = calls.length;
   await new Promise(resolve => setTimeout(resolve, 30));
@@ -204,7 +214,7 @@ test('start 后 stop 后再 start 重新启动', async () => {
   const monitor = new AdbProgressMonitor(createMonitorOpts({ executeStat }));
 
   monitor.start(10);
-  await new Promise(resolve => setTimeout(resolve, 15));
+  await waitFor(() => calls.length >= 1);  // R24: 第一次 start 首轮轮询触发
   monitor.stop();
   const callsAfterFirst = calls.length;
   monitor.start(10);

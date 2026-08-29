@@ -165,7 +165,13 @@
     "insecureReleaseWarning": "⚠ 该版本未提供 SHA256 校验值，无法验证完整性，已禁用下载 (安全闭环)",
     "updateHashVerified": "✓ SHA256 校验值已就绪，可安全下载安装",
     "run": "运行",
-    "preventSleep": "程序运行时禁用睡眠模式"
+    "preventSleep": "程序运行时禁用睡眠模式",
+    "exporting": "正在导出",
+    "importing": "正在导入",
+    "installUpdate": "安装更新"
+  },
+  "environment": {
+    "preparing": "正在准备环境..."
   },
   "android": {
     "deviceSelection": "设备选择",
@@ -190,6 +196,8 @@
     "deviceNameRequired": "请输入设备名称",
     "blePortFormatError": "蓝牙端口格式应为 COM+数字",
     "deviceIdUpdated": "设备信息已更新",
+    "selectUsbDevice": "请先选择 USB 连接的设备",
+    "ipFormatError": "IP 地址格式不正确",
     "updateDeviceInfoFailed": "更新设备信息失败"
   },
   "fileManager": {
@@ -557,6 +565,7 @@
     "deleteSuccess": "定时计划删除成功",
     "deleteFailed": "定时计划删除失败",
     "statusPending": "待执行",
+    "statusUnknown": "未知",
     "statusRunning": "执行中",
     "statusCompleted": "已完成",
     "statusCancelled": "已取消",
@@ -1027,7 +1036,11 @@
     "errorNoSession": "无活跃会话，请重新连接",
     "errorXmlParse": "页面源数据解析失败",
     "errorElementNotFound": "未找到指定元素",
-    "errorSessionExists": "会话已存在，请先停止当前会话"
+    "errorSessionExists": "会话已存在，请先停止当前会话",
+    "noElements": "未找到界面元素",
+    "startFailed": "启动 Inspector 失败",
+    "refreshFailed": "刷新元素失败",
+    "screenshotFailed": "加载截图失败"
   },
   "python": {
     "main": {

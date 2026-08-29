@@ -24,6 +24,10 @@ class Mutex {
       this._locked = false;
     }
   }
+  /** R24 P3-4: 锁空闲 (无持有者且无排队) — 供 withLock 完成后回收 Map 条目 */
+  get idle() {
+    return !this._locked && this._queue.length === 0;
+  }
   async withLock(fn) {
     await this.acquire();
     try {
@@ -59,17 +63,18 @@ async function readJson(path) {
 }
 
 // 原子写 - 先写临时文件再 rename, 防止并发写产生半截文件
+// R24 P3-4: writeFile 抛错也清理 tmp (原 writeFile 在 try 外, 失败残留 .tmp 文件)
 async function writeJson(path, data, spaces = 2) {
   const tmpPath = path + '.tmp.' + process.pid + '.' + Date.now();
-  await fs.writeFile(tmpPath, JSON.stringify(data, null, spaces), 'utf8');
   try {
+    await fs.writeFile(tmpPath, JSON.stringify(data, null, spaces), 'utf8');
     await fs.rename(tmpPath, path);
   } catch (e) {
-    // rename 失败时清理临时文件
+    // writeFile/rename 失败均清理临时文件
     try {
       await fs.unlink(tmpPath);
     } catch {
-      /* ignore */
+      /* ignore (tmp 未创建) */
     }
     throw e;
   }
@@ -142,5 +147,18 @@ module.exports = {
   readConfigIfExists,
   Mutex,
   getLock,
-  withLock: (filePath, fn) => getLock(filePath).withLock(fn),
+  withLock: async (filePath, fn) => {
+    // R24 P3-4: 锁空闲即回收, 防 _pathLocks Map 无限增长 (运行期动态路径)
+    const resolved = pathLib.resolve(filePath);
+    let lock = _pathLocks.get(resolved);
+    if (!lock) {
+      lock = new Mutex();
+      _pathLocks.set(resolved, lock);
+    }
+    try {
+      return await lock.withLock(fn);
+    } finally {
+      if (lock.idle) _pathLocks.delete(resolved);
+    }
+  },
 };

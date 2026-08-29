@@ -644,72 +644,10 @@ export class TestExecutionView {
     }
   }
 
-  // 显示自定义确认弹窗（复用全局 confirm modal，回调存全局）
-  showConfirmModal(title, message, onConfirm) {
-    const titleElement = document.getElementById('confirm-modal-title');
-    const messageElement = document.getElementById('confirm-modal-message');
-
-    if (titleElement) titleElement.textContent = title;
-    if (messageElement) messageElement.textContent = message;
-
-    // 保存回调到全局，供 controller 的事件委托读取
-    window.__XKAT_CONFIRM_CALLBACK__ = onConfirm;
-
-    // 重置确认按钮状态
-    const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
-    if (confirmBtn) {
-      confirmBtn.disabled = false;
-      confirmBtn.classList.remove('loading');
-      // 清除旧的 originalText，使用当前语言重新翻译
-      delete confirmBtn.dataset.originalText;
-      const i18nKey = confirmBtn.getAttribute('data-i18n');
-      confirmBtn.innerHTML = i18nKey ? window.i18n.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
-    }
-
-    const confirmModal = window.__XKAT_MODALS__?.confirm;
-    if (confirmModal) {
-      confirmModal.open();
-    } else {
-      // fallback 到原生确认框
-      if (window.confirm(message)) {
-        onConfirm();
-      }
-    }
-  }
-
-  // ─── 全局确认弹窗按钮绑定 (供 controller 使用) ───────────────────
-  bindGlobalClickForConfirmModal({ onConfirm, onCancel } = {}) {
-    const handler = (e) => {
-      if (e.target.id === 'confirm-modal-confirm-btn' || e.target.closest('#confirm-modal-confirm-btn')) {
-        onConfirm?.();
-      }
-      if (e.target.id === 'confirm-modal-cancel-btn' || e.target.closest('#confirm-modal-cancel-btn')) {
-        onCancel?.();
-      }
-    };
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
-  }
-
-  setConfirmButtonLoading(loading) {
-    const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
-    if (!confirmBtn) return;
-    if (loading) {
-      // 保存原始文本 (若未保存过)
-      if (!confirmBtn.dataset.originalText) {
-        confirmBtn.dataset.originalText = confirmBtn.textContent;
-      }
-      confirmBtn.disabled = true;
-      confirmBtn.classList.add('loading');
-      confirmBtn.innerHTML = `<span class="spinner"></span>`;
-    } else {
-      confirmBtn.disabled = false;
-      confirmBtn.classList.remove('loading');
-      delete confirmBtn.dataset.originalText;
-      const i18nKey = confirmBtn.getAttribute('data-i18n');
-      confirmBtn.innerHTML = i18nKey ? window.i18n.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
-    }
-  }
+  // R24 P1-6: 回调版 showConfirmModal / bindGlobalClickForConfirmModal /
+  // setConfirmButtonLoading 已删 — 统一走 core/utils/confirmModal.js Promise 版
+  // (原回调版写全局 __XKAT_CONFIRM_CALLBACK__, 与 core 版并存时并发弹窗
+  // 全局回调被覆盖致前者 Promise 挂起)
 
   /**
    * 显示设备选择弹窗 (MVC: view 负责 UI 组件创建)

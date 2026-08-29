@@ -165,7 +165,13 @@
     "insecureReleaseWarning": "⚠ This release has no SHA256 hash; integrity cannot be verified. Download disabled (security closure).",
     "updateHashVerified": "✓ SHA256 hash present; safe to download and install.",
     "run": "Run",
-    "preventSleep": "Prevent sleep mode while running"
+    "preventSleep": "Prevent sleep mode while running",
+    "exporting": "Exporting",
+    "importing": "Importing",
+    "installUpdate": "Install update"
+  },
+  "environment": {
+    "preparing": "Preparing environment..."
   },
   "android": {
     "deviceSelection": "Device Selection",
@@ -190,6 +196,8 @@
     "deviceNameRequired": "Please enter device name",
     "blePortFormatError": "BLE port format should be COM+number",
     "deviceIdUpdated": "Device info updated",
+    "selectUsbDevice": "Please select a USB-connected device first",
+    "ipFormatError": "Invalid IP address format",
     "updateDeviceInfoFailed": "Failed to update device info"
   },
   "fileManager": {
@@ -557,6 +565,7 @@
     "deleteSuccess": "Scheduled plan deleted successfully",
     "deleteFailed": "Failed to delete scheduled plan",
     "statusPending": "Pending",
+    "statusUnknown": "Unknown",
     "statusRunning": "Running",
     "statusCompleted": "Completed",
     "statusCancelled": "Cancelled",
@@ -1027,7 +1036,11 @@
     "errorNoSession": "No active session, reconnect please",
     "errorXmlParse": "Page source parse failed",
     "errorElementNotFound": "Element not found",
-    "errorSessionExists": "Session already exists, stop current session first"
+    "errorSessionExists": "Session already exists, stop current session first",
+    "noElements": "No elements found",
+    "startFailed": "Failed to start Inspector",
+    "refreshFailed": "Failed to refresh elements",
+    "screenshotFailed": "Failed to load screenshot"
   },
   "python": {
     "main": {

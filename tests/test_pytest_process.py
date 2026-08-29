@@ -209,3 +209,69 @@ class TestPytestProcessRun:
         proc.run(full_cmd)
 
         assert captured[0] == full_cmd
+
+
+class _StuckPipe:
+    """模拟"存活但无输出"的卡死子进程管道 (死锁用例)。
+
+    readline() 恒返回 "" (管道空), 进程 poll() 恒 None (活着)。
+    回归场景: 原实现 readline 阻塞/空转导致 process.wait(timeout=timeout)
+    永远执行不到 → 看门狗失效 (P1-9 声称修复实则失效)。
+    """
+
+    def readline(self) -> str:
+        return ""
+
+
+class _StuckPopen:
+    """模拟卡死的 Popen: 无输出 + 永不退出, 直到被 stop() terminate。"""
+
+    def __init__(self) -> None:
+        self.stopped = False
+        self.stdout = _StuckPipe()
+        self.stderr = _StuckPipe()
+
+    def poll(self) -> int | None:
+        return None if not self.stopped else 9
+
+    def terminate(self) -> None:
+        self.stopped = True
+
+    def kill(self) -> None:
+        self.stopped = True
+
+    def wait(self, timeout: float | None = None) -> int:
+        # terminate 视为立即生效, 不抛 TimeoutExpired (避免测试等待 4s kill 兜底)
+        return 9
+
+
+class TestPytestProcessTimeout:
+    """R24 P1-4: 看门狗移入读循环 — 死锁用例超时强制终止回归测试。"""
+
+    def test_timeout_kills_stuck_process_and_returns_minus_one(self) -> None:
+        """卡死进程 (存活且无输出) 超时后 stop() + 返回 exit_code=-1。
+
+        回归验证: 原实现在 stdout readline() 空转/阻塞期间, wait(timeout=timeout)
+        永不执行 → run() 永久挂起; 修复后超时检查在读循环内按耗时触发。
+        """
+        stuck = _StuckPopen()
+
+        def _factory(command: list[str]) -> _StuckPopen:
+            return stuck
+
+        proc = PytestProcess(popen_factory=_factory)
+        result = proc.run(["pytest", "--timeout"], timeout=0.2)
+
+        assert result.exit_code == -1
+        assert "[pytest 执行超时 (0.2s), 已强制终止]" in result.stderr
+        assert stuck.stopped is True, "超时路径必须调用 stop() 终止子进程"
+
+    def test_timeout_none_no_watchdog(self) -> None:
+        """timeout=None 时不触发看门狗, 正常流程不受影响。"""
+        factory = make_popen_factory([], ["ok\n"], [], exit_code=0)
+
+        proc = PytestProcess(popen_factory=factory)
+        result = proc.run(["pytest"])
+
+        assert result.exit_code == 0
+        assert result.stdout == "ok"

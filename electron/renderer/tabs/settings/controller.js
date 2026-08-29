@@ -1,6 +1,8 @@
 import { ApiBridge } from '../../core/ApiBridge.js';
 import { AppState } from '../../core/AppState.js';
 import { Toast } from '../../components/toast.js';
+// R24 P1-6: 统一 core Promise 版 confirm (原 view 回调版已删)
+import { showConfirmModal } from '../../core/utils/confirmModal.js';
 
 /**
  * SettingsController - 设置 Tab 控制器
@@ -184,28 +186,31 @@ export class SettingsController {
         const newPath = result.filePaths[0];
         // 禁止选择程序安装目录 (及子目录) 作配置存放路径, 防止更新时配置丢失
         if (await this.#isInsideProgramDir(newPath)) {
-          this.#view.showConfirmModal(
+          await showConfirmModal(
             window.i18n.t('settings.configPathForbiddenTitle'),
-            window.i18n.t('settings.configPathForbiddenMessage'),
-            () => {}
+            window.i18n.t('settings.configPathForbiddenMessage')
           );
           return;
         }
-        this.#view.showConfirmModal(
+        const ok = await showConfirmModal(
           window.i18n.t('settings.confirmChangeConfigPath'),
-          window.i18n.t('settings.changeConfigPathMessage'),
-          () => this.#model.changeDataPath(newPath)
+          window.i18n.t('settings.changeConfigPathMessage')
         );
+        if (ok) {
+          await this.#model.changeDataPath(newPath);
+        }
       }
     });
 
     // 配置存储路径 - 重置
-    this.#bindClick('reset-config-storage', () => {
-      this.#view.showConfirmModal(
+    this.#bindClick('reset-config-storage', async () => {
+      const ok = await showConfirmModal(
         window.i18n.t('settings.confirmResetConfigPath'),
-        window.i18n.t('settings.resetConfigPathMessage'),
-        () => this.#model.resetDataPath()
+        window.i18n.t('settings.resetConfigPathMessage')
       );
+      if (ok) {
+        await this.#model.resetDataPath();
+      }
     });
 
     // 语言选择 - 选项点击
@@ -294,51 +299,49 @@ export class SettingsController {
     this.#bindClick('import-config-btn', async () => {
       const result = await this.#model.selectImportPath();
       if (result && !result.canceled && result.filePaths?.length > 0) {
-        this.#view.showConfirmModal(
+        const ok = await showConfirmModal(
           window.i18n.t('settings.importConfig'),
-          window.i18n.t('settings.importConfigConfirm'),
-          async () => {
-            // wrapper 已处理 IPC 失败,错误由 model 层 catch emit + 外层 try-catch 接
-            const importResult = await this.#model.importConfig(result.filePaths[0]);
-            Toast?.success(window.i18n.t('settings.importConfigSuccess'));
-            if (importResult?.needRestart) {
-              // 标记保持 modal 打开，阻止 hideConfirmModal 关闭
-              this.#view._keepModalOpen = true;
-              this.#view.showConfirmModal(
-                window.i18n.t('settings.restartRequired'),
-                window.i18n.t('settings.restartMessage'),
-                () => this.#model.relaunchApp()
-              );
-            }
-          }
+          window.i18n.t('settings.importConfigConfirm')
         );
+        if (!ok) return;
+        // wrapper 已处理 IPC 失败,错误由 model 层 catch emit + 外层 try-catch 接
+        const importResult = await this.#model.importConfig(result.filePaths[0]);
+        Toast?.success(window.i18n.t('settings.importConfigSuccess'));
+        if (importResult?.needRestart) {
+          // R24 P1-6: 链式确认用嵌套 await (原 _keepModalOpen 标记已随 view 桥接删除)
+          const okRestart = await showConfirmModal(
+            window.i18n.t('settings.restartRequired'),
+            window.i18n.t('settings.restartMessage')
+          );
+          if (okRestart) {
+            await this.#model.relaunchApp();
+          }
+        }
       }
     });
 
     // 清理 Allure 报告
     this.#bindClick('clear-allure-reports-btn', async () => {
-      this.#view.showConfirmModal(
+      const ok = await showConfirmModal(
         window.i18n.t('settings.clearAllureReports'),
-        window.i18n.t('settings.clearAllureReportsConfirm'),
-        async () => {
-          // wrapper 已处理 IPC 失败,错误由 model 层 catch emit
-          await this.#model.clearAllureReports();
-          Toast?.success(window.i18n.t('settings.clearAllureReportsSuccess'));
-        }
+        window.i18n.t('settings.clearAllureReportsConfirm')
       );
+      if (!ok) return;
+      // wrapper 已处理 IPC 失败,错误由 model 层 catch emit
+      await this.#model.clearAllureReports();
+      Toast?.success(window.i18n.t('settings.clearAllureReportsSuccess'));
     });
 
     // 清理所有日志
     this.#bindClick('clear-all-logs-btn', async () => {
-      this.#view.showConfirmModal(
+      const ok = await showConfirmModal(
         window.i18n.t('settings.clearAllLogs'),
-        window.i18n.t('settings.clearAllLogsConfirm'),
-        async () => {
-          // wrapper 已处理 IPC 失败,错误由 model 层 catch emit
-          await this.#model.clearAllLogs();
-          Toast?.success(window.i18n.t('settings.clearAllLogsSuccess'));
-        }
+        window.i18n.t('settings.clearAllLogsConfirm')
       );
+      if (!ok) return;
+      // wrapper 已处理 IPC 失败,错误由 model 层 catch emit
+      await this.#model.clearAllLogs();
+      Toast?.success(window.i18n.t('settings.clearAllLogsSuccess'));
     });
 
     // 自动检查更新
@@ -425,32 +428,10 @@ export class SettingsController {
       })
     );
 
-    // Confirm modal 按钮（事件委托，因 HTML 动态加载）
-    this.#unbinds.push(
-      this.#view.bindGlobalClickForConfirmModal({
-        onConfirm: () => {
-          const callback = window.__XKAT_CONFIRM_CALLBACK__ || this.#view._confirmCallback;
-          // 显示 loading，保持 modal 开着
-          this.#view.setConfirmButtonLoading(true);
-          // 延迟执行：让浏览器先渲染 loading 动画
-          setTimeout(async () => {
-            try {
-              if (callback) await callback();
-            } catch (err) {
-              console.error('Confirm action failed:', err);
-            }
-            // 非重启操作：callback 完成后关闭 modal
-            // 重启操作：进程已退出，这行不会执行
-            this.#view.hideConfirmModal();
-          }, 150);
-        },
-        onCancel: () => {
-          // P1-8: 取消时清理全局回调通道, 防止残留回调被下次弹窗误触发
-          window.__XKAT_CONFIRM_CALLBACK__ = null;
-          this.#view.hideConfirmModal();
-        },
-      })
-    );
+    // R24 P1-6: settings 本地 confirm 事件委托已删 — core/utils/confirmModal.js
+    // Promise 版自行绑定按钮 + 管理弹窗生命周期, 不再依赖全局回调通道与
+    // document 委托 (原三份 bindGlobalClickForConfirmModal 重复, 且回调覆盖致
+    // 并发弹窗前者 Promise 挂起)。
 
     // 导出/导入进度监听
     this.#bindProgressListeners();

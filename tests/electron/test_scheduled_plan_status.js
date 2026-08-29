@@ -36,5 +36,5 @@ test('P2-2 无 scheduledTime → pending (非过期)', async () => {
 
 test('P2-2 null 计划 → unknown', async () => {
   const get = await loadModule();
-  assert.deepStrictEqual(get(null), { class: 'unknown', text: 'Unknown' });
+  assert.deepStrictEqual(get(null), { class: 'unknown', text: 'i18n:scheduledPlan.statusUnknown' });
 });

@@ -13,6 +13,13 @@ const SAFETY_THRESHOLD = 100; // ms, precise mode 提前量 (L193)
 const IDLE_CHECK_INTERVAL = 30 * 60 * 1000; // 30min, idle mode polling (L186)
 const LONG_TERM_REFRESH_INTERVAL = 24 * 60 * 60 * 1000; // 24h, long_term mode refresh (L235)
 
+// R24 P3-10: medium mode checkInterval 3 分支阈值/间隔命名 (原内联乘法表达式)
+const MEDIUM_CHECK_THRESHOLD_2H = 2 * 60 * 60 * 1000;
+const MEDIUM_CHECK_INTERVAL_10M = 10 * 60 * 1000;
+const MEDIUM_CHECK_THRESHOLD_6H = 6 * 60 * 60 * 1000;
+const MEDIUM_CHECK_INTERVAL_30M = 30 * 60 * 1000;
+const MEDIUM_CHECK_INTERVAL_1H = 60 * 60 * 1000;
+
 /**
  * medium mode checkInterval 3 分支 (L240-248)。
  * - <2h → 10min
@@ -20,9 +27,9 @@ const LONG_TERM_REFRESH_INTERVAL = 24 * 60 * 60 * 1000; // 24h, long_term mode r
  * - else → 60min
  */
 function calculateMediumCheckInterval(timeUntilPlan) {
-  if (timeUntilPlan < 2 * 60 * 60 * 1000) return 10 * 60 * 1000;
-  if (timeUntilPlan < 6 * 60 * 60 * 1000) return 30 * 60 * 1000;
-  return 60 * 60 * 1000;
+  if (timeUntilPlan < MEDIUM_CHECK_THRESHOLD_2H) return MEDIUM_CHECK_INTERVAL_10M;
+  if (timeUntilPlan < MEDIUM_CHECK_THRESHOLD_6H) return MEDIUM_CHECK_INTERVAL_30M;
+  return MEDIUM_CHECK_INTERVAL_1H;
 }
 
 module.exports = {

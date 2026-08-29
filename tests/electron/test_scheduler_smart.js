@@ -423,3 +423,43 @@ test('P1-5 _finalCountdown 脏计划直接放弃 (不创建 0ms 定时器)', asy
 
   assert.strictEqual(timer.timeouts.length, timeoutsBefore, '脏计划倒计时不新增定时器');
 });
+
+// ── R24 P2-2: 执行看门狗周期化 ─────────────────────────────
+
+test('R24 P2-2 看门狗触发且渲染进程存活: 告警 + 重新武装 (不再永久脱离监控)', async () => {
+  const runningPlan = { id: 'p1', name: 'plan-1', scheduledTime: new Date(1000).toISOString(), status: 'running', testPlans: [] };
+  const { sched, timer, planSvc, logger } = makeScheduler({ plans: [runningPlan], now: 1000 });
+  // 模拟渲染进程存活 (合法长用例场景)
+  sched.mainWindow = { webContents: { isDestroyed: () => false } };
+
+  sched._startExecutionWatchdog('p1');
+  assert.strictEqual(timer.timeouts.length, 1, '初始武装 1 个看门狗 timer');
+  const timerId = timer.timeouts[0].id;
+
+  await timer.runTimeouts();
+
+  // 渲染存活 → 不标记 failed, 且重新武装 (新 timer, 非原 id)
+  assert.strictEqual(runningPlan.status, 'running', '渲染存活不得标记 failed');
+  assert.ok(timer.timeouts.some((t) => t.id !== timerId), '看门狗被重新武装 (新 timer)');
+  assert.strictEqual(planSvc.updates.length, 0, '不得写 failed');
+
+  // 第二轮触发依旧存活 → 继续重新武装 (周期化)
+  await timer.runTimeouts();
+  assert.strictEqual(runningPlan.status, 'running');
+  assert.ok(timer.timeouts.length >= 1, '周期化: 每轮触发后重新武装');
+});
+
+test('R24 P2-2 看门狗触发且渲染进程不可用: 标记 failed 且不重新武装', async () => {
+  const runningPlan = { id: 'p2', name: 'plan-2', scheduledTime: new Date(1000).toISOString(), status: 'running', testPlans: [] };
+  const { sched, timer, planSvc } = makeScheduler({ plans: [runningPlan], now: 1000 });
+  // 渲染进程不可用 (mainWindow 已销毁)
+  sched.mainWindow = { webContents: { isDestroyed: () => true } };
+
+  sched._startExecutionWatchdog('p2');
+  await timer.runTimeouts();
+
+  assert.strictEqual(planSvc.updates.length, 1, '标记 failed');
+  assert.strictEqual(planSvc.updates[0].status, 'failed');
+  // fake updateScheduledPlan 不 mutation 原对象, 仅记录 update 调用
+  assert.strictEqual(timer.timeouts.length, 0, '标记 failed 后不再重新武装');
+});

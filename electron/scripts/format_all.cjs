@@ -27,7 +27,8 @@ async function main() {
 
   let changed = 0;
   let failed = 0;
-  const tmp = path.join(root, '.prettier-tmp');
+  // R24 P3-5: 唯一临时文件名 (pid+时间戳), 原固定 .prettier-tmp 异常中断会残留
+  const tmp = path.join(root, `.prettier-tmp-${process.pid}-${Date.now()}`);
   for (const file of files) {
     try {
       const src = fs.readFileSync(file, 'utf8');

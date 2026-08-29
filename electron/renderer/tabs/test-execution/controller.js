@@ -333,10 +333,10 @@ export class TestExecutionController {
           model.selectReportRun(run);
         },
         (run) => {
-          // 删除按钮回调: 弹确认框
-          view.showConfirmModal(window.i18n.t('reportModal.delete'), window.i18n.t('reportModal.deleteConfirm'), () =>
-            model.deleteReportRun(run)
-          );
+          // 删除按钮回调: 弹确认框 (R24 P1-6: 统一 core Promise 版)
+          showConfirmModal(window.i18n.t('reportModal.delete'), window.i18n.t('reportModal.deleteConfirm')).then((ok) => {
+            if (ok) model.deleteReportRun(run);
+          });
         }
       );
       // 初始禁用"打开"按钮（选择运行记录后启用）
@@ -351,9 +351,9 @@ export class TestExecutionController {
           model.selectReportRun(run);
         },
         (run) => {
-          view.showConfirmModal(window.i18n.t('reportModal.delete'), window.i18n.t('reportModal.deleteConfirm'), () =>
-            model.deleteReportRun(run)
-          );
+          showConfirmModal(window.i18n.t('reportModal.delete'), window.i18n.t('reportModal.deleteConfirm')).then((ok) => {
+            if (ok) model.deleteReportRun(run);
+          });
         }
       );
       view.enableViewReportButton(false);
@@ -738,14 +738,14 @@ export class TestExecutionController {
 
   async handleDeleteTestPlan() {
     if (!this.model.currentTestPlan) return;
-    this.view.showConfirmModal(
+    const ok = await showConfirmModal(
       window.i18n.t('testExecution.deletePlan'),
-      window.i18n.t('testExecution.deletePlanConfirm'),
-      async () => {
-        await this.model.deleteTestPlan(this.model.currentTestPlan.id);
-        await this.model.loadTestPlans();
-      }
+      window.i18n.t('testExecution.deletePlanConfirm')
     );
+    if (ok) {
+      await this.model.deleteTestPlan(this.model.currentTestPlan.id);
+      await this.model.loadTestPlans();
+    }
   }
 
   // ═════════════════════════════════════════════════════════════════
@@ -869,14 +869,14 @@ export class TestExecutionController {
 
   async handleDeleteScheduledPlan() {
     if (!this.model.currentScheduledPlan) return;
-    this.view.showConfirmModal(
+    const ok = await showConfirmModal(
       window.i18n.t('testExecution.deleteScheduledPlan'),
-      window.i18n.t('testExecution.deleteScheduledPlanConfirm'),
-      async () => {
-        await this.model.deleteScheduledPlan(this.model.currentScheduledPlan.id);
-        await this.model.loadScheduledPlans();
-      }
+      window.i18n.t('testExecution.deleteScheduledPlanConfirm')
     );
+    if (ok) {
+      await this.model.deleteScheduledPlan(this.model.currentScheduledPlan.id);
+      await this.model.loadScheduledPlans();
+    }
   }
 
   // ─── 辅助方法（定时计划） ──────────────────────────────────

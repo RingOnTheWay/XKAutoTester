@@ -344,7 +344,12 @@ test('startSession waits for in-flight stopSession before creating new session',
   const stopPromise = service.stopSession();
   const startPromise = service.startSession('d2', 'com.y', '.Main2');
   // 先让 stop 完成, 再放行 start
-  await new Promise(r => setTimeout(r, 20));
+  // R24: 固定 20ms → 条件等待 stop-session 请求发出 (CI 慢机器不 flaky)
+  const deadline = Date.now() + 1000;
+  while (stopRequests < 1) {
+    if (Date.now() > deadline) throw new Error('等待 stop-session 请求超时');
+    await new Promise((r) => setTimeout(r, 5));
+  }
   assert.strictEqual(stopRequests, 1, 'stop-session 应只请求一次');
   resolveStop();
   await stopPromise;

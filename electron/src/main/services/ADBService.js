@@ -424,7 +424,8 @@ class ADBService {
     const safe = this._sanitizeRemotePath(remotePath);
     // 新名仅取 basename, 且不含路径分隔/元字符 (防改写到其他目录/注入)
     const safeName = this._sanitizeRemotePath(String(newName || ''));
-    if (!safe || !safeName || safeName.includes('/')) {
+    // R24 P1-2: 拒绝 '..'/'.' 特殊名, 防 mv 到父目录/当前目录改名逃逸
+    if (!safe || !safeName || safeName.includes('/') || safeName === '..' || safeName === '.') {
       return { success: false, error: 'invalid_remote_path' };
     }
     const newPath = path.posix.join(path.posix.dirname(safe), safeName);
@@ -440,7 +441,16 @@ class ADBService {
     if (typeof p !== 'string' || p.trim() === '') return null;
     // 拒绝: ; & | $ ` " ' ( ) { } < > \ 及换行/控制字符 (引号包裹无法防 $() 与 ` 等)
     if (/[;&|$`"'(){}<>\\\x00-\x1f]/.test(p)) return null;
-    return p;
+    // R24 P1-2: 规范化路径 + 拒绝裸根/系统分区 — 防止删除/重命名专用通道绕过
+    // executeAdbCommand 黑名单 (该黑名单明确挡 rm -rf /data 及子路径、裸根 /sdcard|/storage)。
+    // 例: '/sdcard' → rm -rf 全盘; '/sdcard/../../system' 可解析到系统分区, 均在此拦截;
+    // '/sdcard/DCIM/a.jpg' 等用户子路径仍放行 (与黑名单裸根语义一致)。
+    const normalized = path.posix.normalize(p);
+    const stripped = normalized.replace(/^\/+/, '');
+    if (normalized === '/' || stripped === '') return null;
+    if (/^(data|system)(\/|$)/.test(stripped)) return null; // 系统分区及子路径
+    if (/^(sdcard|storage)\/?$/.test(stripped)) return null; // 仅裸存储根 (防整盘清空)
+    return normalized;
   }
 
   /**

@@ -27,6 +27,7 @@ SHA256: （待版本定稿后填写）
 
 - **文件选择器记住上次选择路径**：选择测试目录 / 选择文件 / 文件上传 / 选择 APK / 配置导入 / 配置导出共 6 个选择器，默认定位到上次选择的路径（目录→自身，文件→父目录，路径已删除自动回退），持久化到 config.json，跨会话生效。
 - **全量代码审查修复收尾**：对主进程 / 渲染层 / Python 核心进行全量代码审查，完成 P1×8 + P2×11 + P3×16 全部整改，并补齐工程化基建（详见下方修复与优化）。
+- **R24 第二轮全量审查 + 五轮整改闭环**：在 0.1.6-dev.1 修复基线上再次全仓审查（P1×6 / P2×11 / P3×10），并分五轮全部落地：multi 元素步骤字段收敛、ADB 系统路径防护、生成器路径清洗、pytest 看门狗修复、confirm 弹窗全仓唯一收敛、i18n key 补齐与完整性测试、CI 强制化、view.js 步骤渲染域拆分等（详见下方修复与优化）。
 
 ## 🐛 修复
 
@@ -48,6 +49,16 @@ SHA256: （待版本定稿后填写）
 - **scrcpy 启动参数注入面收敛**：Windows 分支不再经 `cmd.exe /c` 拼接渲染进程参数，改为参数数组直传，消除注入风险。
 - **测试用例文件读取/删除路径清洗**：`getTestCase`/`deleteTestCase` 增加路径白名单校验，防止越权读写任意 JSON 文件。
 - **进度显示单位不一致**：文件传输进度小文件（如 1000 B）不再显示为 `0.00 MB`，统一按 B/KB/MB 智能格式化。
+- **多选元素步骤输入配置保存后失效**：input 类型 / Faker 等配置在写、渲染、收集三处字段路径不一致（写 `selectedElements[i].fakerLocale`、渲染读 `operationValue.fakerConfig`、收集写 `elem.fakerConfig`），保存后配置不回显、生成脚本读不到。现已统一收敛到 `operationValue` 下单一 schema，读写渲染全链路一致。
+- **设备文件删除/重命名可删系统路径**：专用通道路径校验只挡 shell 元字符，`rm -rf /sdcard` 等系统路径可执行；现补路径规范化 + 系统分区（data/system 整分区、sdcard/storage 裸根）拒绝，rename 拒绝 `..`/`.`。
+- **Python 生成文件越权写入**：`TEST_CASE_GENERATE_PYTHON` 通道的 outputDir/fileName 未清洗可写任意 .py（含 Python 环境包）；现生成入口统一清洗（basename 剥离路径 + 非法字符替换）+ 输出目录绝对路径校验 + handler 入参类型预检。
+- **pytest 死锁用例看门狗失效**：超时检查位于 stdout 阻塞读循环之后，死锁用例（存活且无输出）让 `wait(timeout)` 永不执行、整链路永久挂起；现超时检查移入读循环，超时即强制终止并返回 `exit_code=-1`，并补卡死进程回归测试。
+- **确认弹窗四套实现收敛 + 并发挂起**：test-case / test-execution / settings / page-package 各持回调版 `showConfirmModal` 写同一全局回调，与 Promise 版混用时并发弹窗回调被覆盖、前者 Promise 永不 resolve；现全仓收敛为唯一 `core/utils/confirmModal.js` Promise 实现，并加单弹窗串行化 + Esc 关闭补全。
+- **下载超时后仍报成功（矛盾事件）**：下载路径 close 回调缺 settled 短路，超时 resolve 后 close 仍继续打包 zip 并 emit 成功；现下载/上传统一短路，超时后不再 emit。
+- **长用例看门狗脱离监控**：执行超时触发且渲染进程存活时仅告警不重启，此后该计划永无监控；现告警后重新武装看门狗，周期检查。
+- **生成脚本含布尔/null 运行即崩**：`operationValue` 经 `JSON.stringify` 直嵌 Python，布尔/null 生成 `true/false/null` 致 `NameError`；现递归转 Python 字面量（`True/False/None`）+ 字符串/key 转义。
+- **中文 Windows 端口清理失效**：netstat 状态列硬编码 `LISTENING`，中文系统（"正在侦听"）下 Appium 残留进程端口占用无法清理；现中英文状态双匹配。
+- **i18n 缺失 10 个 key**：`inspector.noElements` 等无 fallback 直接显示 key 原文，`environment.preparing` 整段缺失；现已补齐并新增 key 完整性测试（zh/en 集合一致 + 渲染层静态引用全覆盖）。
 
 ## 🔧 优化
 
@@ -57,3 +68,9 @@ SHA256: （待版本定稿后填写）
 - **工程化：CI 工作流就绪**：GitHub Actions 集成 lint/format 检查与测试，后续提交自动校验。
 - **测试基建**：新增 E127B 温度计协议、字段映射路由、环境启动服务等单元测试；scrcpy 等测试改用 fake timers 提速；全量 Electron 1092 pass + Python 218 pass。
 - 设备管理窗口首次扫描超时由 5s 放宽至 10s，减少 daemon 冷启动被中断的概率（配合 kill-server 自愈机制）。
+- **工程化：CI 强制化**：修复 lint script 路径错误（原 `electron/tests` 不存在导致 lint 一直失败被 continue-on-error 掩盖），`--max-warnings 0` 收严；CI 改 `npm ci`、加 `timeout-minutes: 30`、uv 缓存、失败上传 allure-results，lint/ruff 移除降级标记违规即失败。
+- **工程化：依赖锁 registry 统一**：package-lock 混合 npmjs/npmmirror 两 registry（81 条），统一为 npmjs，CI 可复现。
+- **可维护性：test-case view 拆分**：`view.js` 2741 → 1958 行，步骤渲染域 12 方法拆至 `modules/stepsRenderer.js`（Object.assign 挂 prototype，行为零变化）。
+- **可维护性：flaky 测试改造**：4 个测试文件的固定 `setTimeout` 等待改条件等待（正向断言轮询等待，负向保留短等待+注释），消除 CI 慢机器超时风险。
+- **测试基建扩容**：新增 8 个测试文件共 34 用例（captcha_recognizer / paths / logger / scheduler_effects / confirm_modal / appium_port / i18n_keys / pytest_process 超时），覆盖此前零测试模块；全量 Electron **1125 pass**、Python 相关 51 pass。
+- **文档同步**：AGENTS.md 版本/技术栈/新模块记录更新至当前（0.1.6-dev.1 / Vite 7.3.6 / electron-vite 5.0.0）。

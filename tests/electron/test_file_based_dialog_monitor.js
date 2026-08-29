@@ -8,6 +8,16 @@ const os = require('node:os');
 
 const FileBasedDialogMonitor = require('../../electron/src/main/services/FileBasedDialogMonitor');
 
+// R24: 条件等待 helper — 固定 setTimeout 等待在 CI 慢机器上 flaky (超时即挂),
+// 改为"条件驱动"轮询 (正向断言), 负向断言保留短等待并注释原因
+async function waitFor(cond, timeout = 1000, step = 5) {
+  const start = Date.now();
+  while (!cond()) {
+    if (Date.now() - start > timeout) throw new Error('waitFor 超时');
+    await new Promise((r) => setTimeout(r, step));
+  }
+}
+
 /**
  * 构造临时目录
  */
@@ -87,8 +97,8 @@ describe('FileBasedDialogMonitor.start', () => {
     const monitor = new FileBasedDialogMonitor(createMockDeps(tempDir));
     monitor.start();
 
-    // 等待异步处理
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // R24: 固定 200ms → 条件等待 (watcher 触发后 100ms 内处理, CI 慢机器不超时)
+    await waitFor(() => global.__dialogMock.lastOptions !== null);
 
     assert.ok(global.__dialogMock.lastOptions !== null);
     assert.strictEqual(global.__dialogMock.lastOptions.type, 'warning');
@@ -102,7 +112,8 @@ describe('FileBasedDialogMonitor.start', () => {
     const monitor = new FileBasedDialogMonitor(createMockDeps(tempDir));
     global.__dialogMock.lastOptions = null;
     monitor.start();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // R24: 负向断言无法条件等待, 保留 150ms (覆盖 watcher 100ms 处理延迟后确认未触发)
+    await new Promise(resolve => setTimeout(resolve, 150));
     assert.strictEqual(global.__dialogMock.lastOptions, null);
     monitor.stop();
   });

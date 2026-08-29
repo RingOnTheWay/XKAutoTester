@@ -8,7 +8,8 @@
  * @returns {{class: string, text: string}}
  */
 export function getScheduledPlanStatus(plan) {
-  if (!plan) return { class: 'unknown', text: 'Unknown' };
+  // R24 P3-3: 无 plan 时走 i18n (原硬编码 'Unknown', 语言切换失效)
+  if (!plan) return { class: 'unknown', text: window.i18n.t('scheduledPlan.statusUnknown') };
   const now = new Date();
   const scheduledTime = plan.scheduledTime ? new Date(plan.scheduledTime) : null;
 

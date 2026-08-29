@@ -59,6 +59,27 @@ test('P2-1 未知 selectId 返回 false 无副作用', async () => {
   assert.strictEqual(findSelectRoute(null), null);
 });
 
+test('R24 P1-1 multi 输入类字段统一收敛到 operationValue 下 (写/渲染/收集同 schema)', async () => {
+  const { applySelectRoute } = await loadRoutes();
+  const config = {};
+
+  applySelectRoute(config, 'tc-multi-input-type-select-1', 'faker', 0);
+  applySelectRoute(config, 'tc-multi-faker-locale-1', 'zh_CN', 0);
+  applySelectRoute(config, 'tc-multi-faker-provider-1', 'person.name', 0);
+
+  // 与渲染回填 renderMultiOperationValue (elemConfig.operationValue) 及
+  // Python 生成器 op_value.get('inputType'/'fakerConfig') 读取路径严格一致
+  assert.strictEqual(config.selectedElements[0].operationValue.inputType, 'faker');
+  assert.deepStrictEqual(config.selectedElements[0].operationValue.fakerConfig, {
+    locale: 'zh_CN',
+    provider: 'person.name',
+  });
+  // 旧漂移字段不再写入
+  assert.strictEqual(config.selectedElements[0].fakerLocale, undefined);
+  assert.strictEqual(config.selectedElements[0].fakerConfig, undefined);
+  assert.strictEqual(config.selectedElements[0].inputType, undefined);
+});
+
 test('P2-1 路由覆盖完整性: 所有已知前缀均可匹配', async () => {
   const { findSelectRoute } = await loadRoutes();
   const knownPrefixes = [
