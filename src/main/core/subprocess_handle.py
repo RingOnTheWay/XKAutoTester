@@ -19,6 +19,7 @@
 
 不持锁, 锁由 facade 持有 (对称 LogcatProcess 设计)。
 """
+
 from __future__ import annotations
 
 import logging

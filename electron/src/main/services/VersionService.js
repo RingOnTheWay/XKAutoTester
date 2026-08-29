@@ -21,7 +21,7 @@ const DEFAULT_VERSION_INFO = Object.freeze({
   version: '0.0.0',
   buildDate: '',
   prerelease: '',
-  fullVersion: '0.0.0'
+  fullVersion: '0.0.0',
 });
 
 class VersionService {
@@ -34,10 +34,12 @@ class VersionService {
     this._versionFile = path.join(projectRoot, 'version.json');
     this._initialized = false;
     this._versionData = null;
-    this._fileSystemFactory = opts.fileSystemFactory || (() => ({
-      exists: (p) => fs.existsSync(p),
-      readFileSync: (p, encoding) => fs.readFileSync(p, encoding)
-    }));
+    this._fileSystemFactory =
+      opts.fileSystemFactory ||
+      (() => ({
+        exists: (p) => fs.existsSync(p),
+        readFileSync: (p, encoding) => fs.readFileSync(p, encoding),
+      }));
     this._fs = this._fileSystemFactory();
   }
 

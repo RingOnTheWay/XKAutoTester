@@ -8,6 +8,7 @@
 - _check_device_in_list: device/unauthorized/offline/not_found
 - _show_unauthorized_dialog: 文件副作用
 """
+
 from __future__ import annotations
 
 import json
@@ -51,10 +52,7 @@ class TestDeviceConnectionService:
             ["devices"],
             AdbResult(
                 0,
-                "List of devices attached\n"
-                "192.168.1.100:5555\tdevice\n"
-                "emulator-5554\tdevice\n"
-                "\n",
+                "List of devices attached\n192.168.1.100:5555\tdevice\nemulator-5554\tdevice\n\n",
                 "",
             ),
         )
@@ -77,10 +75,7 @@ class TestDeviceConnectionService:
             ["devices"],
             AdbResult(
                 0,
-                "List of devices attached\n"
-                "good_device\tdevice\n"
-                "bad_device\tunauthorized\n"
-                "offline_dev\toffline\n",
+                "List of devices attached\ngood_device\tdevice\nbad_device\tunauthorized\noffline_dev\toffline\n",
                 "",
             ),
         )
@@ -269,9 +264,7 @@ class TestDeviceConnectionService:
         def fake_get_logs_path(name):
             return tmp_path / name
 
-        monkeypatch.setattr(
-            "main.utils.paths.get_logs_path", fake_get_logs_path
-        )
+        monkeypatch.setattr("main.utils.paths.get_logs_path", fake_get_logs_path)
 
         svc._show_unauthorized_dialog()
 
@@ -294,8 +287,7 @@ class TestDeviceConnectionService:
         )
 
         # mock: time.sleep 不阻塞 + _show_unauthorized_dialog 不写文件
-        with patch("main.core.adb.device_connection.time.sleep"), \
-             patch.object(svc, "_show_unauthorized_dialog"):
+        with patch("main.core.adb.device_connection.time.sleep"), patch.object(svc, "_show_unauthorized_dialog"):
             ok, msg = svc._wait_for_usb_authorization()
 
         assert ok is False
@@ -314,8 +306,7 @@ class TestDeviceConnectionService:
             AdbResult(0, "List of devices attached\ndev:5555\tdevice\n", ""),
         )
 
-        with patch("main.core.adb.device_connection.time.sleep"), \
-             patch.object(svc, "_show_unauthorized_dialog"):
+        with patch("main.core.adb.device_connection.time.sleep"), patch.object(svc, "_show_unauthorized_dialog"):
             ok, _ = svc._wait_for_usb_authorization()
 
         assert ok is True

@@ -1,3 +1,4 @@
+# ruff: noqa: N999  # E127B 为设备型号名, 非 PEP8 模块命名
 """
 Bioland E127B 体温计设备数据生成器
 """
@@ -7,13 +8,13 @@ import random
 # ── P3-2: E127B 数据帧协议常量 (原 8 字节魔数无命名, 协议变更难维护) ──
 # 帧头/命令/载荷固定段 (来自设备协议文档)
 _FRAME_HEADER = 0x55
-_FRAME_LENGTH = 0x0C       # 帧长度
-_CMD_BODY_TEMP = 0x03      # 体温数据命令
-_CMD_FLAG = 0x12           # 命令标志
+_FRAME_LENGTH = 0x0C  # 帧长度
+_CMD_BODY_TEMP = 0x03  # 体温数据命令
+_CMD_FLAG = 0x12  # 命令标志
 _STATUS = 0x01
 _CHANNEL = 0x01
 _TEMP_PAYLOAD_PREFIX = [0x00, 0x00, 0x00]  # 载荷前缀 (含 1 字节温度高位预留)
-_TEMP_INT_FACTOR = 100     # 温度 → 整数放大系数 (如 36.5 → 3650)
+_TEMP_INT_FACTOR = 100  # 温度 → 整数放大系数 (如 36.5 → 3650)
 
 
 def temperature_bioland_gen(
@@ -38,8 +39,15 @@ def temperature_bioland_gen(
     temp_bytes = temp_int.to_bytes(2, byteorder="little")
 
     packet = [
-        _FRAME_HEADER, _FRAME_LENGTH, _CMD_BODY_TEMP, _CMD_FLAG,
-        _STATUS, _CHANNEL, *_TEMP_PAYLOAD_PREFIX, temp_bytes[0], temp_bytes[1],
+        _FRAME_HEADER,
+        _FRAME_LENGTH,
+        _CMD_BODY_TEMP,
+        _CMD_FLAG,
+        _STATUS,
+        _CHANNEL,
+        *_TEMP_PAYLOAD_PREFIX,
+        temp_bytes[0],
+        temp_bytes[1],
     ]
 
     checksum = sum(packet) & 0xFF

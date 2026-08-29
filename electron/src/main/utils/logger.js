@@ -7,7 +7,7 @@ class Logger {
     this.baseLogDir = baseLogDir;
     this.serviceName = serviceName;
     this.currentLogPath = null;
-    this._stream = null;  // P2-6: 持久 WriteStream
+    this._stream = null; // P2-6: 持久 WriteStream
   }
 
   async ensureLogDir() {
@@ -36,7 +36,7 @@ class Logger {
       this._stream = fs.createWriteStream(logPath, { flags: 'a' });
       this._stream.on('error', (err) => {
         console.error('日志流错误:', err);
-        this._stream = null;  // 下次 log 重建
+        this._stream = null; // 下次 log 重建
       });
     }
     return this._stream;

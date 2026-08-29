@@ -4,6 +4,7 @@
 """
 
 import logging
+import re
 import time
 
 import serial
@@ -63,6 +64,17 @@ class BLEDevice:
         self.adv_data = adv_data  # 自定义广播数据
         logger.info(f"初始化蓝牙设备，端口: {port}，超时设置: {response_timeout}秒")
 
+    @staticmethod
+    def _sanitize_at_value(value):
+        """P2-8: 过滤 AT 命令值中的控制字符/分隔符, 防注入额外 AT 指令。
+
+        外部配置 (ble_name/adv_data/uuid) 拼接进 AT+NAME= 等命令时,
+        含 \\r\\n 可注入第二条命令, 含 = 可改写命令分隔语义。统一剥离。
+        """
+        if value is None:
+            return ""
+        return re.sub(r"[\r\n=;]+", "", str(value))
+
     def _write_at(self, command: str) -> None:
         """写 AT 指令 (加 \\r\\n 后缀如未含, encode, log)"""
         if not command.endswith("\r\n"):
@@ -86,7 +98,8 @@ class BLEDevice:
             while time.time() - start_time < self.response_timeout:
                 raw = self.ser.readline()
                 if raw:
-                    decoded = raw.decode().strip()
+                    # P2-8: 容错解码 (非 UTF-8 字节不抛异常)
+                    decoded = raw.decode(errors="replace").strip()
                     if decoded:
                         line = decoded
                         break
@@ -220,14 +233,14 @@ class BLEDevice:
 
     def set_ble_name(self, ble_name):
         """通过AT指令设置蓝牙设备名称, 成功时更新 self.ble_name"""
-        success, _ = self._transaction(f"AT+NAME={ble_name}")
+        success, _ = self._transaction(f"AT+NAME={self._sanitize_at_value(ble_name)}")
         if success:
             self.ble_name = ble_name
         return success
 
     def set_adv_data(self, adv_data):
         """通过AT指令设置自定义广播数据, 成功时更新 self.adv_data"""
-        success, _ = self._transaction(f"AT+AMDATA={adv_data}")
+        success, _ = self._transaction(f"AT+AMDATA={self._sanitize_at_value(adv_data)}")
         if success:
             self.adv_data = adv_data
         return success
@@ -238,7 +251,7 @@ class BLEDevice:
         if uuid_type not in valid_types:
             logger.error(f"无效的UUID类型: {uuid_type}，支持的类型: {valid_types}")
             return False
-        success, _ = self._transaction(f"AT+{uuid_type}={uuid_value}")
+        success, _ = self._transaction(f"AT+{uuid_type}={self._sanitize_at_value(uuid_value)}")
         if success:
             if uuid_type == "UUIDS":
                 self.uuids = uuid_value

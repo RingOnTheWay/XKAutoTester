@@ -5,12 +5,12 @@ const { JsonFileCrudService } = require('./base/JsonFileCrudService');
 // ── module-level 常量 (对称 EnvironmentService REQUIRED_PYTHON_VERSION 等 7 const) ──
 
 const MARKER_DESCRIPTIONS = {
-  'smoke': '冒烟测试',
-  'unit': '单元功能测试',
-  'exception': '异常场景测试',
-  'critical': '关键功能测试',
-  'appium': 'Appium移动端测试',
-  'playwright': 'Playwright测试'
+  smoke: '冒烟测试',
+  unit: '单元功能测试',
+  exception: '异常场景测试',
+  critical: '关键功能测试',
+  appium: 'Appium移动端测试',
+  playwright: 'Playwright测试',
 };
 
 const DEFAULT_TEST_TYPE = 'unit';
@@ -20,9 +20,7 @@ const DEFAULT_TEST_TYPE = 'unit';
 // 仅允许渲染进程通过 saveTestPlan/updateTestPlan 写入的业务字段。
 // runs/last_run/report_path 等运行期字段由服务端维护, 渲染进程无权写入
 // (此前 planData 整体替换, 可注入 report_path 触发任意目录递归删除)。
-const PLAN_EDITABLE_FIELDS = [
-  'id', 'name', 'description', 'loopCount', 'continueOnFailure', 'testFiles', 'testTypes'
-];
+const PLAN_EDITABLE_FIELDS = ['id', 'name', 'description', 'loopCount', 'continueOnFailure', 'testFiles', 'testTypes'];
 
 /**
  * 按白名单拷贝计划数据 (P0-2: 剥离所有运行期/未知字段)
@@ -180,10 +178,10 @@ class TestPlanService extends JsonFileCrudService {
    */
   constructor(userConfigPath, projectRoot, opts = {}) {
     const testPlansPath = path.join(userConfigPath, 'test_plans.json');
-    super(testPlansPath, [], opts);  // 透传 opts.asyncFsFactory + opts.idGenerator 给 base
+    super(testPlansPath, [], opts); // 透传 opts.asyncFsFactory + opts.idGenerator 给 base
     this.userConfigPath = userConfigPath;
     this.projectRoot = projectRoot;
-    this._initialized = false;  // 懒初始化 flag (对称 TestCaseService/EnvironmentService)
+    this._initialized = false; // 懒初始化 flag (对称 TestCaseService/EnvironmentService)
     this._fileSystemFactory = opts.fileSystemFactory || defaultFileSystemFactory;
     this._cwdProvider = opts.cwdProvider || defaultCwdProvider;
     this._loggerFactory = opts.loggerFactory || defaultLoggerFactory;
@@ -209,7 +207,7 @@ class TestPlanService extends JsonFileCrudService {
     return this.withLock(async () => {
       try {
         const plans = await this.getData();
-        const plan = plans.find(p => p.name === testPlanName);
+        const plan = plans.find((p) => p.name === testPlanName);
         if (!plan || !plan.runs || plan.runs.length === 0) {
           return { success: false, error: '未找到测试计划或运行记录' };
         }
@@ -235,7 +233,7 @@ class TestPlanService extends JsonFileCrudService {
     return this.withLock(async () => {
       try {
         const plans = await this.getData();
-        const plan = plans.find(p => p.name === testPlanName);
+        const plan = plans.find((p) => p.name === testPlanName);
         if (!plan) {
           this._logger.error(`recordRun: 测试计划 '${testPlanName}' 不存在, 跳过运行记录`);
           return { success: false, error: '未找到测试计划' };
@@ -244,8 +242,9 @@ class TestPlanService extends JsonFileCrudService {
         // 本地时间, 格式对齐 Python %Y-%m-%d %H:%M:%S
         const now = new Date();
         const pad = (n) => String(n).padStart(2, '0');
-        const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} `
-          + `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        const timestamp =
+          `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +
+          `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
         plan.runs.push({ report_path: null, timestamp });
         // 截断至 100 条 (对称 Python Caps.max_runs_per_plan)
         if (plan.runs.length > 100) plan.runs = plan.runs.slice(-100);
@@ -270,7 +269,7 @@ class TestPlanService extends JsonFileCrudService {
           return { success: false, error: '测试计划名称不能为空' };
         }
         let existingPlans = await this.getData();
-        const index = existingPlans.findIndex(p => p.name === clean.name);
+        const index = existingPlans.findIndex((p) => p.name === clean.name);
         if (index >= 0) {
           clean.id = existingPlans[index].id || this._generateId();
           // 保留服务端维护的运行期字段 (runs/last_run), 避免编辑后历史记录丢失
@@ -301,7 +300,7 @@ class TestPlanService extends JsonFileCrudService {
           return { success: false, error: '缺少测试计划 ID' };
         }
         let existingPlans = await this.getData();
-        const index = existingPlans.findIndex(p => p.id === clean.id);
+        const index = existingPlans.findIndex((p) => p.id === clean.id);
         if (index >= 0) {
           const originalPlan = existingPlans[index];
           clean.created = originalPlan.created || clean.created;
@@ -328,7 +327,7 @@ class TestPlanService extends JsonFileCrudService {
     return this.withLock(async () => {
       try {
         let existingPlans = await this.getData();
-        const index = existingPlans.findIndex(p => p.id === planId);
+        const index = existingPlans.findIndex((p) => p.id === planId);
         if (index >= 0) {
           existingPlans.splice(index, 1);
           await this.saveData(existingPlans);
@@ -350,24 +349,26 @@ class TestPlanService extends JsonFileCrudService {
         return { success: false, error: '测试计划文件不存在', runs: [] };
       }
       const plans = await this.getData();
-      const plan = plans.find(p => p.name === testPlanName);
+      const plan = plans.find((p) => p.name === testPlanName);
       if (!plan) {
         return { success: false, error: '未找到指定测试计划', runs: [] };
       }
       const runs = plan.runs || [];
       const sortedRuns = runs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       const total = sortedRuns.length;
-      const processedRuns = await Promise.all(sortedRuns.map(async (run, index) => {
-        const reportExists = run.report_path && await this._fs.exists(run.report_path);
-        return {
-          // 序号: 最新为最大 (倒序)。index=0 (最新) -> total, index=total-1 (最早) -> 1
-          index: total - index,
-          timestamp: run.timestamp,
-          reportPath: run.report_path,
-          available: reportExists,
-          isLatest: index === 0
-        };
-      }));
+      const processedRuns = await Promise.all(
+        sortedRuns.map(async (run, index) => {
+          const reportExists = run.report_path && (await this._fs.exists(run.report_path));
+          return {
+            // 序号: 最新为最大 (倒序)。index=0 (最新) -> total, index=total-1 (最早) -> 1
+            index: total - index,
+            timestamp: run.timestamp,
+            reportPath: run.report_path,
+            available: reportExists,
+            isLatest: index === 0,
+          };
+        })
+      );
       return { success: true, runs: processedRuns };
     } catch (error) {
       this._logger.error('获取测试计划运行记录失败:', error);
@@ -386,13 +387,15 @@ class TestPlanService extends JsonFileCrudService {
     return this.withLock(async () => {
       try {
         const plans = await this.getData();
-        const plan = plans.find(p => p.name === testPlanName);
+        const plan = plans.find((p) => p.name === testPlanName);
         if (!plan) {
           return { success: false, error: '未找到指定测试计划' };
         }
         const runs = plan.runs || [];
         // 优先用 report_path 匹配, 其次用 timestamp (报告已删除的记录 report_path 可能为 null)
-        const targetRun = runs.find(r => (r.report_path && r.report_path === identifier) || r.timestamp === identifier);
+        const targetRun = runs.find(
+          (r) => (r.report_path && r.report_path === identifier) || r.timestamp === identifier
+        );
         if (!targetRun) {
           return { success: false, error: '未找到指定的运行记录' };
         }
@@ -411,7 +414,10 @@ class TestPlanService extends JsonFileCrudService {
         if (targetRun.report_path) {
           try {
             if (await this._fs.exists(targetRun.report_path)) {
-              await this._fs.rm(targetRun.report_path, { recursive: true, force: true });
+              await this._fs.rm(targetRun.report_path, {
+                recursive: true,
+                force: true,
+              });
             }
           } catch (e) {
             this._logger.error(`删除报告目录失败: ${targetRun.report_path}: ${e.message}`);
@@ -419,9 +425,8 @@ class TestPlanService extends JsonFileCrudService {
         }
 
         // 从 runs 数组中移除该记录 (用 timestamp 唯一匹配, 避免 report_path=null 误删多条)
-        plan.runs = runs.filter(r => r.timestamp !== targetRun.timestamp);
+        plan.runs = runs.filter((r) => r.timestamp !== targetRun.timestamp);
         await this.saveData(plans);
-        console.log(`[TestPlanService] 已删除测试计划 '${testPlanName}' 的运行记录: ${targetRun.timestamp}`);
         return { success: true };
       } catch (error) {
         this._logger.error('删除测试计划运行记录失败:', error);
@@ -455,7 +460,7 @@ class TestPlanService extends JsonFileCrudService {
           testFiles.push({
             name: file,
             path: filePath,
-            type: inferTestType(file)
+            type: inferTestType(file),
           });
         }
       }
@@ -481,9 +486,9 @@ class TestPlanService extends JsonFileCrudService {
           markers.add(m);
         }
       }
-      const foundMarkers = Array.from(markers).map(markerName => ({
+      const foundMarkers = Array.from(markers).map((markerName) => ({
         name: markerName,
-        description: this._markerDescriptions[markerName] || `${markerName}测试`
+        description: this._markerDescriptions[markerName] || `${markerName}测试`,
       }));
       return foundMarkers;
     } catch (error) {
@@ -532,5 +537,5 @@ module.exports = {
   MARKER_DESCRIPTIONS,
   sanitizePlanData,
   isPathInside,
-  PLAN_EDITABLE_FIELDS
+  PLAN_EDITABLE_FIELDS,
 };

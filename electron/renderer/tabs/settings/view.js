@@ -96,7 +96,9 @@ export class SettingsView {
     mainContent.classList.add('dropdown-open');
     if (!this.#scrollPreventHandler) {
       this.#scrollPreventHandler = (e) => e.preventDefault();
-      mainContent.addEventListener('wheel', this.#scrollPreventHandler, { passive: false });
+      mainContent.addEventListener('wheel', this.#scrollPreventHandler, {
+        passive: false,
+      });
     }
   }
 
@@ -143,13 +145,13 @@ export class SettingsView {
 
     // 更新主题色选项选中状态
     if (this.els.themeColorOptions) {
-      this.els.themeColorOptions.querySelectorAll('.theme-color-option').forEach(opt => {
+      this.els.themeColorOptions.querySelectorAll('.theme-color-option').forEach((opt) => {
         opt.classList.toggle('active', opt.dataset.color === color);
       });
     }
 
     // 更新按钮和进度条颜色
-    document.querySelectorAll('.btn-primary, .progress-fill').forEach(el => {
+    document.querySelectorAll('.btn-primary, .progress-fill').forEach((el) => {
       el.style.backgroundColor = color;
     });
   }
@@ -242,7 +244,7 @@ export class SettingsView {
 
     // 更新选项选中状态
     if (this.els.customLanguageOptions) {
-      this.els.customLanguageOptions.querySelectorAll('.custom-select__option').forEach(opt => {
+      this.els.customLanguageOptions.querySelectorAll('.custom-select__option').forEach((opt) => {
         opt.classList.toggle('selected', opt.dataset.value === language);
       });
     }
@@ -267,7 +269,9 @@ export class SettingsView {
         const textSpan = this.els.customLanguageSelected?.querySelector('.custom-select__text');
         if (textSpan) textSpan.textContent = option.querySelector('span')?.textContent || lang;
         // 更新选项选中状态
-        customLanguageOptions.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
+        customLanguageOptions
+          .querySelectorAll('.custom-select__option')
+          .forEach((opt) => opt.classList.remove('selected'));
         option.classList.add('selected');
       }
       customLanguageOptions.classList.remove('show');
@@ -321,13 +325,16 @@ export class SettingsView {
     if (this.els.customNotificationPlatformSelected) {
       const textSpan = this.els.customNotificationPlatformSelected.querySelector('.custom-select__text');
       if (textSpan) {
-        const labels = { 'none': window.i18n.t('settings.none'), 'dingtalk': window.i18n.t('settings.dingtalk') };
+        const labels = {
+          none: window.i18n.t('settings.none'),
+          dingtalk: window.i18n.t('settings.dingtalk'),
+        };
         textSpan.textContent = labels[platform] || platform;
       }
     }
 
     if (this.els.customNotificationPlatformOptions) {
-      this.els.customNotificationPlatformOptions.querySelectorAll('.custom-select__option').forEach(opt => {
+      this.els.customNotificationPlatformOptions.querySelectorAll('.custom-select__option').forEach((opt) => {
         opt.classList.toggle('selected', opt.dataset.value === platform);
       });
     }
@@ -369,7 +376,9 @@ export class SettingsView {
         // 更新选中显示
         const textSpan = this.els.customNotificationPlatformSelected?.querySelector('.custom-select__text');
         if (textSpan) textSpan.textContent = option.querySelector('span')?.textContent || platform;
-        customNotificationPlatformOptions.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
+        customNotificationPlatformOptions
+          .querySelectorAll('.custom-select__option')
+          .forEach((opt) => opt.classList.remove('selected'));
         option.classList.add('selected');
       }
       customNotificationPlatformOptions.classList.remove('show');
@@ -384,7 +393,11 @@ export class SettingsView {
    */
   moveNotificationOptionsToBody() {
     const { customNotificationPlatformOptions, customNotificationPlatformSelected } = this.els;
-    if (customNotificationPlatformOptions && customNotificationPlatformSelected && !customNotificationPlatformOptions.dataset.moved) {
+    if (
+      customNotificationPlatformOptions &&
+      customNotificationPlatformSelected &&
+      !customNotificationPlatformOptions.dataset.moved
+    ) {
       document.body.appendChild(customNotificationPlatformOptions);
       customNotificationPlatformOptions.dataset.moved = 'true';
     }
@@ -596,7 +609,12 @@ export class SettingsView {
     this.updateLanguageSelector(settings.language || 'zh-CN');
 
     // 通知
-    this.updateNotificationConfig(settings.notification || { platform: 'none', dingtalk: { access_token: '', secret: '' } });
+    this.updateNotificationConfig(
+      settings.notification || {
+        platform: 'none',
+        dingtalk: { access_token: '', secret: '' },
+      }
+    );
 
     // 自动检查更新
     if (this.els.autoCheckUpdateToggle) {
@@ -744,7 +762,7 @@ export class SettingsView {
     if (mainContent) {
       mainContent.classList.remove('dropdown-open');
     }
-    document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+    document.querySelectorAll('.custom-select__options.show').forEach((opt) => {
       opt.classList.remove('show');
     });
   }
@@ -754,7 +772,7 @@ export class SettingsView {
    * @param {Element} [except] - 不需要隐藏的元素
    */
   hideAllCustomSelectOptions(except = null) {
-    document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+    document.querySelectorAll('.custom-select__options.show').forEach((opt) => {
       if (opt !== except) opt.classList.remove('show');
     });
   }
@@ -785,7 +803,8 @@ export class SettingsView {
         return;
       }
       // 4. 检查是否点击了下拉选项（由各自 options handler 处理）
-      const isInCustomSelect = e.target.closest('.custom-select') ||
+      const isInCustomSelect =
+        e.target.closest('.custom-select') ||
         e.target.closest('.custom-select__options') ||
         e.target.closest('.custom-select__option') ||
         e.target.closest('.theme-color-options') ||

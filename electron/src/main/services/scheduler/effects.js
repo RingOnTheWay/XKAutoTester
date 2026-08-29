@@ -30,4 +30,8 @@ function defaultNotifierFactory(window) {
   };
 }
 
-module.exports = { globalTimerProvider, defaultWatcherFactory, defaultNotifierFactory };
+module.exports = {
+  globalTimerProvider,
+  defaultWatcherFactory,
+  defaultNotifierFactory,
+};

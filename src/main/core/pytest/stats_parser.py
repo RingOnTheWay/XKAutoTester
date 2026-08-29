@@ -7,6 +7,7 @@
 - 4 正则提取各状态计数
 - total = passed + failed + skipped + broken
 """
+
 from __future__ import annotations
 
 import re

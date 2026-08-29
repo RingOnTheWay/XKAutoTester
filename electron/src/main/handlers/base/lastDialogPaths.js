@@ -52,7 +52,7 @@ class LastDialogPathsStore {
       if (await asyncFs.exists(cfgPath)) {
         const json = await asyncFs.readJson(cfgPath);
         const stored = json && json[STORAGE_KEY];
-        this._cache = (stored && typeof stored === 'object' && !Array.isArray(stored)) ? stored : {};
+        this._cache = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
       }
     } catch (e) {
       this._cache = {};
@@ -81,7 +81,9 @@ class LastDialogPathsStore {
     for (const c of candidates) {
       try {
         if (fs.existsSync(c) && fs.statSync(c).isDirectory()) return c;
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     }
     return undefined;
   }
@@ -111,11 +113,16 @@ class LastDialogPathsStore {
       await asyncFs.withLock(cfgPath, async () => {
         let json = {};
         if (await asyncFs.exists(cfgPath)) {
-          try { json = await asyncFs.readJson(cfgPath); } catch (e) { json = {}; }
+          try {
+            json = await asyncFs.readJson(cfgPath);
+          } catch (e) {
+            json = {};
+          }
         }
-        const prev = (json[STORAGE_KEY] && typeof json[STORAGE_KEY] === 'object' && !Array.isArray(json[STORAGE_KEY]))
-          ? json[STORAGE_KEY]
-          : {};
+        const prev =
+          json[STORAGE_KEY] && typeof json[STORAGE_KEY] === 'object' && !Array.isArray(json[STORAGE_KEY])
+            ? json[STORAGE_KEY]
+            : {};
         json[STORAGE_KEY] = { ...prev, [key]: filePath };
         await asyncFs.writeJson(cfgPath, json);
       });

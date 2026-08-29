@@ -15,6 +15,7 @@
 
 纯函数,无 IO/线程/i18n,完全可测。
 """
+
 from __future__ import annotations
 
 import re
@@ -31,9 +32,7 @@ TIMESTAMP_LINE_PATTERN = re.compile(
 
 # logcat 行格式正则 (-v time 回退)
 # 格式: MM-DD HH:MM:SS.mmm LEVEL/TAG(PID): MESSAGE
-TIME_LINE_PATTERN = re.compile(
-    r"^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+([VDIWEF])/(.+?)\(\s*(\d+)\):\s+(.*?)$"
-)
+TIME_LINE_PATTERN = re.compile(r"^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+([VDIWEF])/(.+?)\(\s*(\d+)\):\s+(.*?)$")
 
 # 日志级别映射 (V<D<I<W<E<F)
 LOG_LEVELS = "VDIWEF"
@@ -158,8 +157,12 @@ def format_line(
         if LOG_LEVEL_MAP.get(level, 0) < min_log_level:
             return None
         if not should_capture(
-            pid, tag, level, msg,
-            app_pid=app_pid, app_package=app_package,
+            pid,
+            tag,
+            level,
+            msg,
+            app_pid=app_pid,
+            app_package=app_package,
             crash_capture_remaining=crash_capture_remaining,
         ):
             return None
@@ -172,8 +175,12 @@ def format_line(
         if LOG_LEVEL_MAP.get(level, 0) < min_log_level:
             return None
         if not should_capture(
-            pid, tag, level, msg,
-            app_pid=app_pid, app_package=app_package,
+            pid,
+            tag,
+            level,
+            msg,
+            app_pid=app_pid,
+            app_package=app_package,
             crash_capture_remaining=crash_capture_remaining,
         ):
             return None

@@ -10,6 +10,7 @@
 - popen_stream: 流式启动 (长生命周期,readline 循环,不超时)
 - AdbResult.success property 代替 16 处 returncode == 0 判断
 """
+
 from __future__ import annotations
 
 import subprocess

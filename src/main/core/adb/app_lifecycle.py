@@ -12,6 +12,7 @@
 - 全部 i18n 键保留 python.adbManager.*
 - 注入 executor,测试可注 FakeAdbAdapter
 """
+
 from __future__ import annotations
 
 import logging
@@ -105,13 +106,9 @@ class AppLifecycleService:
                     logger.info(t("python.adbManager.gotAppPid", pid=pid))
                     return pid
                 except ValueError:
-                    logger.warning(
-                        t("python.adbManager.appNotRunningOrNoPid", package=self._app_package)
-                    )
+                    logger.warning(t("python.adbManager.appNotRunningOrNoPid", package=self._app_package))
                     return None
-            logger.warning(
-                t("python.adbManager.appNotRunningOrNoPid", package=self._app_package)
-            )
+            logger.warning(t("python.adbManager.appNotRunningOrNoPid", package=self._app_package))
             return None
         except Exception as e:
             logger.warning(t("python.adbManager.getAppPidError", error=e))

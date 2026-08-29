@@ -8,6 +8,7 @@
 
 纯函数无 mock; factory 注入用 MagicMock + FakeClock 隔离 4 依赖 + time。
 """
+
 from __future__ import annotations
 
 import logging

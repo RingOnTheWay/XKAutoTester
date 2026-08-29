@@ -81,7 +81,7 @@ export class EventEmitter {
   emit(event, ...args) {
     const listeners = this.#listeners.get(event);
     if (listeners) {
-      listeners.forEach(fn => {
+      listeners.forEach((fn) => {
         try {
           fn(...args);
         } catch (err) {

@@ -7,6 +7,7 @@
 - get_dumpsys_window: dumpsys window windows + 失败空字符串
 - ensure_closed: 编排 check_status + force_stop + sleep
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -97,9 +98,7 @@ class TestAppLifecycleService:
 
         assert svc.force_stop(silent=True) is True
         # 命令相同 (silent 仅控制日志,不影响命令)
-        assert adapter.calls[0] == [
-            "-s", "dev:5555", "shell", "am", "force-stop", "com.x.app"
-        ]
+        assert adapter.calls[0] == ["-s", "dev:5555", "shell", "am", "force-stop", "com.x.app"]
 
     def test_force_stop_silent_failure(self):
         """silent=True 失败 → False。"""

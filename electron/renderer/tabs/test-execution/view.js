@@ -11,6 +11,7 @@
  */
 import { Icons } from '../../icons.js';
 import { escapeHtml as escapeHtmlUtil } from '../../core/utils/html.js';
+import { getScheduledPlanStatus } from '../../core/utils/scheduledPlanStatus.js';
 import DeviceSelectionModal from '../../components/device-selection-modal.js';
 import DateTimePicker from '../../components/datetime-picker.js';
 
@@ -133,23 +134,8 @@ export class TestExecutionView {
   }
 
   static getScheduledPlanStatus(plan) {
-    if (!plan) return { class: 'unknown', text: 'Unknown' };
-    const now = new Date();
-    const scheduledTime = plan.scheduledTime ? new Date(plan.scheduledTime) : null;
-
-    if (plan.status === 'completed') {
-      return { class: 'completed', text: window.i18n.t('scheduledPlan.statusCompleted') };
-    } else if (plan.status === 'running') {
-      return { class: 'running', text: window.i18n.t('scheduledPlan.statusRunning') };
-    } else if (plan.status === 'cancelled') {
-      return { class: 'cancelled', text: window.i18n.t('scheduledPlan.statusCancelled') };
-    } else if (plan.status === 'expired') {
-      return { class: 'expired', text: window.i18n.t('scheduledPlan.statusExpired') };
-    } else if (scheduledTime && scheduledTime <= now) {
-      return { class: 'overdue', text: window.i18n.t('scheduledPlan.statusOverdue') };
-    } else {
-      return { class: 'pending', text: window.i18n.t('scheduledPlan.statusPending') };
-    }
+    // P2-2: 委托统一工具 (原与 model.js 双份重复)
+    return getScheduledPlanStatus(plan);
   }
 
   // ─── 私有方法（公共化供内联方法调用） ──────────────────────────
@@ -191,13 +177,14 @@ export class TestExecutionView {
     testFileList.innerHTML = '';
 
     if (!files || files.length === 0) {
-      testFileList.innerHTML = `<div class="placeholder-message">${
-        this.getIconHtml('info', 'vertical-align:middle;')
-      }<span style="vertical-align:middle;">${window.i18n.t('testExecution.noTestFilesInDir') || '当前目录下没有测试文件'}</span></div>`;
+      testFileList.innerHTML = `<div class="placeholder-message">${this.getIconHtml(
+        'info',
+        'vertical-align:middle;'
+      )}<span style="vertical-align:middle;">${window.i18n.t('testExecution.noTestFilesInDir', { defaultValue: '当前目录下没有测试文件' })}</span></div>`;
       return;
     }
 
-    files.forEach(file => {
+    files.forEach((file) => {
       const isChecked = selectedFiles?.includes(file) ? 'checked' : '';
       const item = document.createElement('div');
       item.className = 'test-file-item';
@@ -221,11 +208,15 @@ export class TestExecutionView {
     testPlanList.innerHTML = '';
 
     if (!plans || plans.length === 0) {
-      this.displayTestPlansPlaceholder(window.i18n.t('testExecution.noTestPlans') || '暂无测试计划');
+      this.displayTestPlansPlaceholder(
+        window.i18n.t('testExecution.noTestPlans', {
+          defaultValue: '暂无测试计划',
+        })
+      );
       return;
     }
 
-    plans.forEach(plan => {
+    plans.forEach((plan) => {
       const item = document.createElement('div');
       item.className = `test-plan-item${plan.id === currentPlanId ? ' selected' : ''}${plan.name === runningPlanName ? ' running' : ''}`;
       item.setAttribute('data-plan-id', plan.id);
@@ -234,16 +225,26 @@ export class TestExecutionView {
       // 构建测试计划详细信息
       const fileCount = plan.testFiles ? plan.testFiles.length : 0;
       const typeCount = plan.testTypes ? plan.testTypes.length : 0;
-      const fileInfo = fileCount > 0 ? `${fileCount} ${window.i18n.t('testExecution.files')}` : window.i18n.t('testExecution.noFiles');
-      const typeInfo = typeCount > 0 ? `${typeCount} ${window.i18n.t('testExecution.types')}` : window.i18n.t('testExecution.allTypes');
+      const fileInfo =
+        fileCount > 0 ? `${fileCount} ${window.i18n.t('testExecution.files')}` : window.i18n.t('testExecution.noFiles');
+      const typeInfo =
+        typeCount > 0
+          ? `${typeCount} ${window.i18n.t('testExecution.types')}`
+          : window.i18n.t('testExecution.allTypes');
 
       // 循环设置信息
       const loopCount = plan.loopCount || 1;
       const continueOnFailure = plan.continueOnFailure !== false;
-      const loopInfo = window.i18n.t('testExecution.loopInfo', { count: loopCount });
-      const continueInfo = !continueOnFailure ? `<span class="continue-info">${this.getIconHtml('warning')}<span>${window.i18n.t('testExecution.stopOnFailure')}</span></span>` : '';
+      const loopInfo = window.i18n.t('testExecution.loopInfo', {
+        count: loopCount,
+      });
+      const continueInfo = !continueOnFailure
+        ? `<span class="continue-info">${this.getIconHtml('warning')}<span>${window.i18n.t('testExecution.stopOnFailure')}</span></span>`
+        : '';
 
-      const descriptionHtml = plan.description ? `<div style="font-size: 12px; color: var(--text-secondary); margin-left: 1px;">${this.escapeHtml(plan.description)}</div>` : '';
+      const descriptionHtml = plan.description
+        ? `<div style="font-size: 12px; color: var(--text-secondary); margin-left: 1px;">${this.escapeHtml(plan.description)}</div>`
+        : '';
 
       item.innerHTML = `
         ${this.getIconHtml('assignment')}
@@ -270,7 +271,7 @@ export class TestExecutionView {
   selectTestPlanItem(planId) {
     const { testPlanList } = this.els;
     if (!testPlanList) return;
-    testPlanList.querySelectorAll('.test-plan-item.selected').forEach(el => el.classList.remove('selected'));
+    testPlanList.querySelectorAll('.test-plan-item.selected').forEach((el) => el.classList.remove('selected'));
     if (planId) {
       const target = testPlanList.querySelector(`.test-plan-item[data-plan-id="${CSS.escape(planId)}"]`);
       if (target) target.classList.add('selected');
@@ -285,7 +286,7 @@ export class TestExecutionView {
   setTestPlanRunning(planName, isRunning) {
     const { testPlanList } = this.els;
     if (!testPlanList) return;
-    testPlanList.querySelectorAll('.test-plan-item.running').forEach(el => el.classList.remove('running'));
+    testPlanList.querySelectorAll('.test-plan-item.running').forEach((el) => el.classList.remove('running'));
     if (isRunning && planName) {
       const target = testPlanList.querySelector(`.test-plan-item[data-plan-name="${CSS.escape(planName)}"]`);
       if (target) target.classList.add('running');
@@ -295,9 +296,9 @@ export class TestExecutionView {
   highlightTestPlanItems(planIds) {
     const { testPlanList } = this.els;
     if (!testPlanList) return;
-    testPlanList.querySelectorAll('.test-plan-item.selected').forEach(el => el.classList.remove('selected'));
+    testPlanList.querySelectorAll('.test-plan-item.selected').forEach((el) => el.classList.remove('selected'));
     if (planIds && planIds.length > 0) {
-      planIds.forEach(id => {
+      planIds.forEach((id) => {
         const target = testPlanList.querySelector(`.test-plan-item[data-plan-id="${CSS.escape(id)}"]`);
         if (target) target.classList.add('selected');
       });
@@ -307,9 +308,10 @@ export class TestExecutionView {
   displayTestPlansPlaceholder(message) {
     const { testPlanList } = this.els;
     if (!testPlanList) return;
-    testPlanList.innerHTML = `<div class="placeholder-message">${
-      this.getIconHtml('info', 'vertical-align:middle;')
-    }<span style="vertical-align:middle;">${message}</span></div>`;
+    testPlanList.innerHTML = `<div class="placeholder-message">${this.getIconHtml(
+      'info',
+      'vertical-align:middle;'
+    )}<span style="vertical-align:middle;">${message}</span></div>`;
   }
 
   updatePlanButtons(hasPlan, isRunning) {
@@ -338,7 +340,7 @@ export class TestExecutionView {
       testTypeSelector.innerHTML = '';
       const placeholderElement = document.createElement('div');
       placeholderElement.className = 'placeholder-message';
-      placeholderElement.innerHTML = `${this.getIconHtml('info')}<span>${window.i18n.t('testExecution.noMarkers') || '没有找到pytest标记，将执行所有测试'}</span>`;
+      placeholderElement.innerHTML = `${this.getIconHtml('info')}<span>${window.i18n.t('testExecution.noMarkers', { defaultValue: '没有找到pytest标记，将执行所有测试' })}</span>`;
       testTypeSelector.appendChild(placeholderElement);
       return;
     }
@@ -346,7 +348,7 @@ export class TestExecutionView {
     // 去重
     const uniqueMarkers = [];
     const seenNames = new Set();
-    markers.forEach(marker => {
+    markers.forEach((marker) => {
       const markerName = typeof marker === 'string' ? marker : marker?.name;
       if (markerName && !seenNames.has(markerName)) {
         seenNames.add(markerName);
@@ -356,9 +358,9 @@ export class TestExecutionView {
 
     testTypeSelector.innerHTML = '';
     const fragment = document.createDocumentFragment();
-    uniqueMarkers.forEach(marker => {
+    uniqueMarkers.forEach((marker) => {
       const markerName = typeof marker === 'string' ? marker : marker?.name;
-      const markerDesc = typeof marker === 'string' ? marker : (marker?.description || marker?.name);
+      const markerDesc = typeof marker === 'string' ? marker : marker?.description || marker?.name;
       if (!markerName) return;
 
       const label = document.createElement('label');
@@ -393,7 +395,7 @@ export class TestExecutionView {
     const { testTypeSelector } = this.els;
     if (!testTypeSelector) return [];
     const checked = testTypeSelector.querySelectorAll('input[type="checkbox"]:checked');
-    return Array.from(checked).map(cb => cb.value);
+    return Array.from(checked).map((cb) => cb.value);
   }
 
   // ═════════════════════════════════════════════════════════════════
@@ -437,8 +439,8 @@ export class TestExecutionView {
   updateLoopProgress(current, total) {
     const { progressStatus } = this.els;
     if (progressStatus) {
-      progressStatus.textContent = window.i18n.t('testExecution.loopProgress', { current, total })
-        || `循环 ${current}/${total}`;
+      progressStatus.textContent =
+        window.i18n.t('testExecution.loopProgress', { current, total }) || `循环 ${current}/${total}`;
     }
   }
 
@@ -451,8 +453,8 @@ export class TestExecutionView {
     if (welcome) welcome.remove();
 
     // 清理所有非元素子节点（HTML 源码中的缩进/换行文本节点）
-    const textNodes = Array.from(testOutput.childNodes).filter(n => n.nodeType === Node.TEXT_NODE);
-    textNodes.forEach(n => n.remove());
+    const textNodes = Array.from(testOutput.childNodes).filter((n) => n.nodeType === Node.TEXT_NODE);
+    textNodes.forEach((n) => n.remove());
 
     // 添加 has-content class
     testOutput.classList.add('has-content');
@@ -539,7 +541,13 @@ export class TestExecutionView {
 
   // ─── 编辑设备连接标识弹窗 ───────────────────────────────────────
 
-  openEditDeviceIdModal({ deviceName = '', platformVersion = '', blePort = '', isAndroid = false, hasBleSteps = false } = {}) {
+  openEditDeviceIdModal({
+    deviceName = '',
+    platformVersion = '',
+    blePort = '',
+    isAndroid = false,
+    hasBleSteps = false,
+  } = {}) {
     const deviceIdInput = document.getElementById('edit-device-id-input');
     const androidVersionInput = document.getElementById('edit-android-version-input');
     const blePortInput = document.getElementById('edit-ble-port-input');
@@ -588,7 +596,8 @@ export class TestExecutionView {
    */
   bindEditDeviceModalButtons({ onClose, onCancel, onConfirm, onManageDevice, onManagePort } = {}) {
     const unbinds = [];
-    const { editDeviceCloseBtn, editDeviceCancelBtn, editDeviceConfirmBtn, editDeviceManageBtn, editPortManageBtn } = this.els;
+    const { editDeviceCloseBtn, editDeviceCancelBtn, editDeviceConfirmBtn, editDeviceManageBtn, editPortManageBtn } =
+      this.els;
     if (editDeviceCloseBtn && onClose) {
       const h = () => onClose();
       editDeviceCloseBtn.addEventListener('click', h);
@@ -614,7 +623,7 @@ export class TestExecutionView {
       editPortManageBtn.addEventListener('click', h);
       unbinds.push(() => editPortManageBtn.removeEventListener('click', h));
     }
-    return () => unbinds.forEach(fn => fn());
+    return () => unbinds.forEach((fn) => fn());
   }
 
   /**
@@ -704,12 +713,15 @@ export class TestExecutionView {
 
   /**
    * 显示设备选择弹窗 (MVC: view 负责 UI 组件创建)
+   * P3-15: 单例复用 (原每次 new DeviceSelectionModal 触发全量 #cacheDom)
    * @param {Object} options - 弹窗选项 { mode: 'test' | ... }
    * @returns {Promise<string>} 用户选择的 deviceId
    */
   async showDeviceSelection(options) {
-    const modal = new DeviceSelectionModal();
-    return await modal.show(options);
+    if (!this._deviceSelectionModal) {
+      this._deviceSelectionModal = new DeviceSelectionModal();
+    }
+    return await this._deviceSelectionModal.show(options);
   }
 
   /**
@@ -725,53 +737,66 @@ export class TestExecutionView {
     if (!modalTestFileList) return;
     const loadStart = Date.now();
     // P1-10: loading 时长自适应 — 原固定等满 1s, 数据已就绪也白等
-    modalTestFileList.innerHTML = `<div class="placeholder-message modal-loading-placeholder">${
-      this.getIconHtml('refresh', 'animation: spin 1s linear infinite; vertical-align:middle;')
-    }<span style="vertical-align:middle;">${window.i18n.t('testExecution.loadingFiles') || '加载中...'}</span></div>`;
+    modalTestFileList.innerHTML = `<div class="placeholder-message modal-loading-placeholder">${this.getIconHtml(
+      'refresh',
+      'animation: spin 1s linear infinite; vertical-align:middle;'
+    )}<span style="vertical-align:middle;">${window.i18n.t('testExecution.loadingFiles', { defaultValue: '加载中...' })}</span></div>`;
 
     // 统一 selectedFiles 为路径字符串数组（兼容对象数组与字符串数组）
-    const selectedPaths = (selectedFiles || []).map(f => (typeof f === 'string' ? f : f?.path)).filter(Boolean);
+    const selectedPaths = (selectedFiles || []).map((f) => (typeof f === 'string' ? f : f?.path)).filter(Boolean);
 
     // P1-10: 并行获取所有文件元数据 (原 for 循环内串行 await getFileInfo,
     // N 个文件 = N 次 IPC 往返, 弹窗打开明显卡顿)
-    const fileInfos = await Promise.all((files || []).map(async (file) => {
-      const filePath = typeof file === 'string' ? file : file?.path;
-      const fileName = typeof file === 'string' ? file.split(/[\\/]/).pop() : file?.name;
-      if (!filePath) return null;
-      let testCaseFileName = fileName;
-      if (testCaseFileName && testCaseFileName.endsWith('.py')) {
-        testCaseFileName = testCaseFileName.slice(0, -3);
-      }
-      let platform = null;
-      let deviceName = '';
-      let hasBleSteps = false;
-      let blePort = '';
-      try {
-        const result = getFileInfo ? await getFileInfo(testCaseFileName) : null;
-        if (result && result.data) {
-          platform = result.data.platform || null;
-          deviceName = result.data.deviceConfig?.deviceName || '';
-          blePort = result.data.bleDevice?.port || '';
-          hasBleSteps = result.data.steps && result.data.steps.some(step => step.type === 'ble');
+    const fileInfos = await Promise.all(
+      (files || []).map(async (file) => {
+        const filePath = typeof file === 'string' ? file : file?.path;
+        const fileName = typeof file === 'string' ? file.split(/[\\/]/).pop() : file?.name;
+        if (!filePath) return null;
+        let testCaseFileName = fileName;
+        if (testCaseFileName && testCaseFileName.endsWith('.py')) {
+          testCaseFileName = testCaseFileName.slice(0, -3);
         }
-      } catch (error) {
-        // 忽略错误，使用默认值
-      }
-      return { file, filePath, fileName, testCaseFileName, platform, deviceName, hasBleSteps, blePort };
-    }));
+        let platform = null;
+        let deviceName = '';
+        let hasBleSteps = false;
+        let blePort = '';
+        try {
+          const result = getFileInfo ? await getFileInfo(testCaseFileName) : null;
+          if (result && result.data) {
+            platform = result.data.platform || null;
+            deviceName = result.data.deviceConfig?.deviceName || '';
+            blePort = result.data.bleDevice?.port || '';
+            hasBleSteps = result.data.steps && result.data.steps.some((step) => step.type === 'ble');
+          }
+        } catch (error) {
+          // 忽略错误，使用默认值
+        }
+        return {
+          file,
+          filePath,
+          fileName,
+          testCaseFileName,
+          platform,
+          deviceName,
+          hasBleSteps,
+          blePort,
+        };
+      })
+    );
     const infos = (fileInfos || []).filter(Boolean);
 
     // 最小 loading 时长 300ms (防闪烁), 超过则不再补等待
     const elapsed = Date.now() - loadStart;
     if (elapsed < 300) {
-      await new Promise(resolve => setTimeout(resolve, 300 - elapsed));
+      await new Promise((resolve) => setTimeout(resolve, 300 - elapsed));
     }
     modalTestFileList.innerHTML = '';
 
     if (!files || files.length === 0) {
-      modalTestFileList.innerHTML = `<div class="placeholder-message">${
-        this.getIconHtml('info', 'vertical-align:middle;')
-      }<span style="vertical-align:middle;">${window.i18n.t('testExecution.noTestFilesInDir') || '当前目录下没有测试文件'}</span></div>`;
+      modalTestFileList.innerHTML = `<div class="placeholder-message">${this.getIconHtml(
+        'info',
+        'vertical-align:middle;'
+      )}<span style="vertical-align:middle;">${window.i18n.t('testExecution.noTestFilesInDir', { defaultValue: '当前目录下没有测试文件' })}</span></div>`;
       return;
     }
 
@@ -882,16 +907,17 @@ export class TestExecutionView {
     modalTestTypeList.innerHTML = '';
 
     if (!markers || markers.length === 0) {
-      modalTestTypeList.innerHTML = `<div class="placeholder-message">${
-        this.getIconHtml('info', 'vertical-align:middle;')
-      }<span style="vertical-align:middle;">${window.i18n.t('testExecution.noMarkers') || '没有找到pytest标记，将执行所有测试'}</span></div>`;
+      modalTestTypeList.innerHTML = `<div class="placeholder-message">${this.getIconHtml(
+        'info',
+        'vertical-align:middle;'
+      )}<span style="vertical-align:middle;">${window.i18n.t('testExecution.noMarkers', { defaultValue: '没有找到pytest标记，将执行所有测试' })}</span></div>`;
       return;
     }
 
-    markers.forEach(marker => {
+    markers.forEach((marker) => {
       // marker 可能是字符串或 {name, description} 对象
       const markerName = typeof marker === 'string' ? marker : marker?.name;
-      const markerDesc = typeof marker === 'string' ? marker : (marker?.description || marker?.name);
+      const markerDesc = typeof marker === 'string' ? marker : marker?.description || marker?.name;
       if (!markerName) return;
       const isChecked = selectedTypes?.includes(markerName) ? 'checked' : '';
       const item = document.createElement('div');
@@ -928,9 +954,10 @@ export class TestExecutionView {
   renderModalTestTypesPlaceholder() {
     const { modalTestTypeList } = this.els;
     if (!modalTestTypeList) return;
-    modalTestTypeList.innerHTML = `<div class="placeholder-message">${
-      this.getIconHtml('info', 'vertical-align:middle;')
-    }<span style="vertical-align:middle;">${window.i18n.t('testExecution.selectTestFileFirst') || '请先选择测试文件'}</span></div>`;
+    modalTestTypeList.innerHTML = `<div class="placeholder-message">${this.getIconHtml(
+      'info',
+      'vertical-align:middle;'
+    )}<span style="vertical-align:middle;">${window.i18n.t('testExecution.selectTestFileFirst', { defaultValue: '请先选择测试文件' })}</span></div>`;
   }
 
   updateTestTypeWarning(hasTypes) {
@@ -959,7 +986,7 @@ export class TestExecutionView {
     const { modalTestFileList } = this.els;
     if (!modalTestFileList) return [];
     const checked = modalTestFileList.querySelectorAll('input[type="checkbox"]:checked');
-    return Array.from(checked).map(cb => {
+    return Array.from(checked).map((cb) => {
       const filePath = cb.value;
       const fileName = filePath.split(/[\\/]/).pop();
       let type = 'unit';
@@ -974,11 +1001,12 @@ export class TestExecutionView {
     const { modalTestTypeList } = this.els;
     if (!modalTestTypeList) return [];
     const checked = modalTestTypeList.querySelectorAll('input[type="checkbox"]:checked');
-    return Array.from(checked).map(cb => cb.value);
+    return Array.from(checked).map((cb) => cb.value);
   }
 
   preselectModalItems(plan) {
-    const { planNameInput, planDescriptionInput, planLoopCountInput, planContinueOnFailureCheckbox, updatePlanBtn } = this.els;
+    const { planNameInput, planDescriptionInput, planLoopCountInput, planContinueOnFailureCheckbox, updatePlanBtn } =
+      this.els;
 
     if (planNameInput) planNameInput.value = plan.name || '';
     if (planDescriptionInput) planDescriptionInput.value = plan.description || '';
@@ -992,15 +1020,15 @@ export class TestExecutionView {
 
     // 预选文件和类型
     if (plan.testFiles && this.els.modalTestFileList) {
-      const selectedPaths = plan.testFiles.map(f => (typeof f === 'string' ? f : f?.path)).filter(Boolean);
-      this.els.modalTestFileList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      const selectedPaths = plan.testFiles.map((f) => (typeof f === 'string' ? f : f?.path)).filter(Boolean);
+      this.els.modalTestFileList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
         cb.checked = selectedPaths.includes(cb.value);
         // 同步选中态样式（跟随主题色）
         cb.closest('.modal-test-file-item')?.classList.toggle('selected', cb.checked);
       });
     }
     if (plan.testTypes && this.els.modalTestTypeList) {
-      this.els.modalTestTypeList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      this.els.modalTestTypeList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
         cb.checked = plan.testTypes.includes(cb.value);
         // 同步选中态样式（跟随主题色）
         cb.closest('.modal-test-type-item')?.classList.toggle('selected', cb.checked);
@@ -1047,13 +1075,14 @@ export class TestExecutionView {
     scheduledPlanList.innerHTML = '';
 
     if (!plans || plans.length === 0) {
-      scheduledPlanList.innerHTML = `<div class="placeholder-message">${
-        this.getIconHtml('info', 'vertical-align:middle;')
-      }<span style="vertical-align:middle;">${window.i18n.t('testExecution.noScheduledPlans')}</span></div>`;
+      scheduledPlanList.innerHTML = `<div class="placeholder-message">${this.getIconHtml(
+        'info',
+        'vertical-align:middle;'
+      )}<span style="vertical-align:middle;">${window.i18n.t('testExecution.noScheduledPlans')}</span></div>`;
       return;
     }
 
-    plans.forEach(plan => {
+    plans.forEach((plan) => {
       const item = document.createElement('div');
       item.className = `scheduled-plan-item${plan.id === currentPlanId ? ' selected' : ''}${plan.id === runningPlanId ? ' running' : ''}`;
       item.setAttribute('data-plan-id', plan.id);
@@ -1082,7 +1111,9 @@ export class TestExecutionView {
   selectScheduledPlanItem(planId) {
     const { scheduledPlanList } = this.els;
     if (!scheduledPlanList) return;
-    scheduledPlanList.querySelectorAll('.scheduled-plan-item.selected').forEach(el => el.classList.remove('selected'));
+    scheduledPlanList
+      .querySelectorAll('.scheduled-plan-item.selected')
+      .forEach((el) => el.classList.remove('selected'));
     if (planId) {
       const target = scheduledPlanList.querySelector(`.scheduled-plan-item[data-plan-id="${CSS.escape(planId)}"]`);
       if (target) target.classList.add('selected');
@@ -1097,7 +1128,7 @@ export class TestExecutionView {
   setScheduledPlanRunning(planId, isRunning) {
     const { scheduledPlanList } = this.els;
     if (!scheduledPlanList) return;
-    scheduledPlanList.querySelectorAll('.scheduled-plan-item.running').forEach(el => el.classList.remove('running'));
+    scheduledPlanList.querySelectorAll('.scheduled-plan-item.running').forEach((el) => el.classList.remove('running'));
     if (isRunning && planId) {
       const target = scheduledPlanList.querySelector(`.scheduled-plan-item[data-plan-id="${CSS.escape(planId)}"]`);
       if (target) target.classList.add('running');
@@ -1143,14 +1174,15 @@ export class TestExecutionView {
     scheduledPlanTestPlansList.innerHTML = '';
 
     if (!testPlans || testPlans.length === 0) {
-      scheduledPlanTestPlansList.innerHTML = `<div class="placeholder-message">${
-        this.getIconHtml('info', 'vertical-align:middle;')
-      }<span style="vertical-align:middle;">${window.i18n.t('testExecution.noTestPlans') || '暂无测试计划'}</span></div>`;
+      scheduledPlanTestPlansList.innerHTML = `<div class="placeholder-message">${this.getIconHtml(
+        'info',
+        'vertical-align:middle;'
+      )}<span style="vertical-align:middle;">${window.i18n.t('testExecution.noTestPlans', { defaultValue: '暂无测试计划' })}</span></div>`;
       return;
     }
 
     const fragment = document.createDocumentFragment();
-    testPlans.forEach(plan => {
+    testPlans.forEach((plan) => {
       const isSelected = selectedPlanIds?.includes(plan.id);
       const planElement = document.createElement('div');
       planElement.className = 'checkbox-item scheduled-plan-checkbox';
@@ -1169,7 +1201,7 @@ export class TestExecutionView {
     const { scheduledPlanTestPlansList } = this.els;
     if (!scheduledPlanTestPlansList) return [];
     const checked = scheduledPlanTestPlansList.querySelectorAll('input[type="checkbox"]:checked');
-    return Array.from(checked).map(cb => cb.value);
+    return Array.from(checked).map((cb) => cb.value);
   }
 
   // ─── 报告弹窗 ──────────────────────────────────────────────────
@@ -1198,12 +1230,12 @@ export class TestExecutionView {
     if (noRuns) noRuns.classList.add('hidden');
     reportRunsList.classList.remove('hidden');
 
-    runs.forEach(run => {
+    runs.forEach((run) => {
       const item = this._buildRunItemElement(run, {
         selectedRunId,
         onSelectRun: (r) => {
           // 取消其他选中 (扁平列表场景), 当前 item 由 _buildRunItemElement 统一 add
-          reportRunsList.querySelectorAll('.report-run-item').forEach(i => i.classList.remove('selected'));
+          reportRunsList.querySelectorAll('.report-run-item').forEach((i) => i.classList.remove('selected'));
           onSelectRun?.(r);
         },
         onDeleteRun,
@@ -1231,7 +1263,9 @@ export class TestExecutionView {
     const statusIcon = run.available
       ? this.getIconHtml('check_circle', 'vertical-align:middle;color:var(--success);margin-right:4px;')
       : this.getIconHtml('cancel', 'vertical-align:middle;color:var(--error);margin-right:4px;');
-    const latestBadge = run.isLatest ? `<span class="report-latest-badge">${window.i18n.t('reportModal.latest')}</span>` : '';
+    const latestBadge = run.isLatest
+      ? `<span class="report-latest-badge">${window.i18n.t('reportModal.latest')}</span>`
+      : '';
     const statusText = run.available
       ? window.i18n.t('reportModal.reportAvailable')
       : window.i18n.t('reportModal.reportUnavailable');
@@ -1281,7 +1315,7 @@ export class TestExecutionView {
     reportRunsList.innerHTML = '';
 
     const noRunsEl = document.getElementById('report-no-runs');
-    const validGroups = (groups || []).filter(g => g && g.runs && g.runs.length > 0);
+    const validGroups = (groups || []).filter((g) => g && g.runs && g.runs.length > 0);
 
     if (validGroups.length === 0) {
       if (noRunsEl) noRunsEl.classList.remove('hidden');
@@ -1293,14 +1327,20 @@ export class TestExecutionView {
     reportRunsList.classList.remove('hidden');
 
     const fragment = document.createDocumentFragment();
-    validGroups.forEach(group => {
+    validGroups.forEach((group) => {
       const groupEl = document.createElement('div');
-      groupEl.className = 'report-group collapsed';  // 默认收起
+      groupEl.className = 'report-group collapsed'; // 默认收起
       groupEl.setAttribute('data-source-plan', group.sourcePlanName);
 
       const count = group.runs.length;
-      const arrowIcon = this.getIconHtml('keyboard_arrow_right', 'vertical-align:middle;font-size:16px;transition:transform 0.2s ease;');
-      const folderIcon = this.getIconHtml('folder', 'vertical-align:middle;color:var(--primary);margin-right:6px;font-size:16px;');
+      const arrowIcon = this.getIconHtml(
+        'keyboard_arrow_right',
+        'vertical-align:middle;font-size:16px;transition:transform 0.2s ease;'
+      );
+      const folderIcon = this.getIconHtml(
+        'folder',
+        'vertical-align:middle;color:var(--primary);margin-right:6px;font-size:16px;'
+      );
 
       const header = document.createElement('div');
       header.className = 'report-group-header';
@@ -1318,11 +1358,11 @@ export class TestExecutionView {
 
       const body = document.createElement('div');
       body.className = 'report-group-body';
-      group.runs.forEach(run => {
+      group.runs.forEach((run) => {
         const item = this._buildRunItemElement(run, {
           onSelectRun: (r) => {
             // 跨分组取消选中, 当前 item 由 _buildRunItemElement 统一 add
-            reportRunsList.querySelectorAll('.report-run-item').forEach(i => i.classList.remove('selected'));
+            reportRunsList.querySelectorAll('.report-run-item').forEach((i) => i.classList.remove('selected'));
             onSelectRun?.(r);
           },
           onDeleteRun,
@@ -1476,7 +1516,7 @@ export class TestExecutionView {
       portModalConfirmBtn.addEventListener('click', h);
       unbinds.push(() => portModalConfirmBtn.removeEventListener('click', h));
     }
-    return () => unbinds.forEach(fn => fn());
+    return () => unbinds.forEach((fn) => fn());
   }
 
   /**
@@ -1500,7 +1540,7 @@ export class TestExecutionView {
     if (portScanning) portScanning.style.display = 'none';
     portList.classList.remove('hidden');
     portList.innerHTML = '';
-    ports.forEach(port => {
+    ports.forEach((port) => {
       const item = document.createElement('div');
       item.className = 'device-item';
       item.setAttribute('data-port-id', port.deviceId);
@@ -1514,7 +1554,7 @@ export class TestExecutionView {
         </div>
       `;
       item.addEventListener('click', () => {
-        portList.querySelectorAll('.device-item').forEach(i => i.classList.remove('selected'));
+        portList.querySelectorAll('.device-item').forEach((i) => i.classList.remove('selected'));
         item.classList.add('selected');
         if (portModalConfirmBtn) portModalConfirmBtn.disabled = false;
         onSelect?.(port);
@@ -1533,7 +1573,7 @@ export class TestExecutionView {
       portList.classList.remove('hidden');
       portList.innerHTML = `
         <div style="padding:16px;text-align:center;color:var(--text-secondary);">
-          ${window.i18n.t('testExecution.deviceSelection.noPortsFound') || '未找到串口设备'}
+          ${window.i18n.t('testExecution.deviceSelection.noPortsFound', { defaultValue: '未找到串口设备' })}
         </div>
       `;
     }
@@ -1550,7 +1590,7 @@ export class TestExecutionView {
       portList.classList.remove('hidden');
       portList.innerHTML = `
         <div style="padding:16px;text-align:center;color:var(--text-secondary);">
-          ${errorMsg || window.i18n.t('testExecution.deviceSelection.scanPortsFailed') || '获取串口列表失败'}
+          ${errorMsg || window.i18n.t('testExecution.deviceSelection.scanPortsFailed', { defaultValue: '获取串口列表失败' })}
         </div>
       `;
     }

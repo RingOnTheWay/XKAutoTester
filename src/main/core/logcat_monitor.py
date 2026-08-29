@@ -17,6 +17,7 @@
 - on_crash 回调在 _crash_lock 外调用 (消除死锁风险)
 - _CURRENT_YEAR 模块级缓存 (避免每行 time.strftime)
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,7 +32,6 @@ from main.core.logcat.log_ring_buffer import LogRingBuffer
 from main.core.logcat.logcat_parser import LOG_LEVEL_MAP, format_line
 from main.core.logcat.logcat_process import LogcatProcess
 from main.utils.i18n import t
-
 
 # P3-2: 崩溃堆栈续行捕获行数 (原魔法数字 100)
 _CRASH_STACK_TAIL_LINES = 100
@@ -137,10 +137,7 @@ class LogcatMonitor:
             )
             self._thread.start()
 
-            logger.info(
-                t("python.logcatMonitor.started",
-                  device=self.device_name, pid=self.app_pid or "unknown")
-            )
+            logger.info(t("python.logcatMonitor.started", device=self.device_name, pid=self.app_pid or "unknown"))
             return True
         except Exception as e:
             logger.error(t("python.logcatMonitor.startFailed", error=e))
@@ -181,8 +178,11 @@ class LogcatMonitor:
                     continue
 
                 try:
+                    # P3-9: errors="replace" 已兜底非法字节, 理论上不抛;
+                    # 防御性捕获仅跳过异常行并记 debug, 不再静默无痕
                     decoded = line.decode("utf-8", errors="replace").rstrip()
-                except Exception:
+                except Exception as exc:  # pragma: no cover - errors=replace 后不可达
+                    logger.debug("logcat 行解码异常, 跳过: %s", exc)
                     continue
 
                 if not decoded.strip():
@@ -217,10 +217,7 @@ class LogcatMonitor:
 
                     self._crash_capture_remaining = _CRASH_STACK_TAIL_LINES  # P3-2: 崩溃堆栈续行捕获行数
 
-                    logger.error(
-                        t("python.logcatMonitor.crashDetected",
-                          type=crash_type, line=formatted)
-                    )
+                    logger.error(t("python.logcatMonitor.crashDetected", type=crash_type, line=formatted))
 
                     if self.on_crash:
                         try:
@@ -228,9 +225,7 @@ class LogcatMonitor:
                             full_log = self.get_full_log()
                             self.on_crash(crash_type, formatted, full_log)
                         except Exception as e:
-                            logger.error(
-                                t("python.logcatMonitor.crashCallbackError", error=e)
-                            )
+                            logger.error(t("python.logcatMonitor.crashCallbackError", error=e))
 
         except Exception as e:
             if not self._stop_event.is_set():

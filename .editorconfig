@@ -1,0 +1,17 @@
+# XKAutoTester 统一编辑器配置 (R22 新增)
+# 缩进: 项目主流为 2 空格 (test-case 子模块为 4 空格, 待 Prettier 收口)
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.py]
+indent_size = 4
+
+[*.md]
+trim_trailing_whitespace = false

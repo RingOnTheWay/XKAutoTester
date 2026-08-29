@@ -1,6 +1,3 @@
-import { Action } from '../../core/Action.js';
-import { ApiBridge } from '../../core/ApiBridge.js';
-import { AppState } from '../../core/AppState.js';
 import { Toast } from '../../components/toast.js';
 
 /**
@@ -36,9 +33,9 @@ export class PagePackageController {
 
   destroy() {
     this.#destroyed = true;
-    this.#unbinds.forEach(fn => fn());
+    this.#unbinds.forEach((fn) => fn());
     this.#unbinds = [];
-    this.#unbindModel.forEach(fn => fn());
+    this.#unbindModel.forEach((fn) => fn());
     this.#unbindModel = [];
     this.#model.destroy();
   }
@@ -158,7 +155,7 @@ export class PagePackageController {
 
   #bindCascadeSelects() {
     const types = ['app', 'page', 'element'];
-    types.forEach(type => {
+    types.forEach((type) => {
       const wrapper = this.#view.getCascadeSelectWrapper(type);
       if (!wrapper) return;
 
@@ -255,7 +252,7 @@ export class PagePackageController {
     const optionsContainer = wrapper.querySelector('.cascade-select__options');
     if (!optionsContainer) return;
 
-    optionsContainer.querySelectorAll('.cascade-select__option:not(.empty)').forEach(option => {
+    optionsContainer.querySelectorAll('.cascade-select__option:not(.empty)').forEach((option) => {
       const handler = () => {
         const id = option.dataset.id;
         this.handleSelect(type, id);
@@ -268,7 +265,7 @@ export class PagePackageController {
   // ─── Sub Tab Events ────────────────────────────────────────────
 
   #bindSubTabs() {
-    this.#view.els.ppTabs.forEach(tab => {
+    this.#view.els.ppTabs.forEach((tab) => {
       const handler = () => {
         const targetTab = tab.dataset.tab;
         const targetContent = this.#view.getTabContent(targetTab);
@@ -399,7 +396,10 @@ export class PagePackageController {
       e.preventDefault();
       e.stopPropagation();
       const files = e.dataTransfer.files;
-      if (files.length === 0) { this.#view.resetApkDropZone(); return; }
+      if (files.length === 0) {
+        this.#view.resetApkDropZone();
+        return;
+      }
       const filePath = await this.#model.getFilePath(files[0]);
       await handleApkFile(filePath);
     };
@@ -516,17 +516,23 @@ export class PagePackageController {
       case 'app':
         if (!this.#model.selectedApp) return;
         itemName = this.#model.selectedApp.name;
-        message = window.i18n.t('pagePackage.deleteAppConfirm', { name: itemName });
+        message = window.i18n.t('pagePackage.deleteAppConfirm', {
+          name: itemName,
+        });
         break;
       case 'page':
         if (!this.#model.selectedPage) return;
         itemName = this.#model.selectedPage.name;
-        message = window.i18n.t('pagePackage.deletePageConfirm', { name: itemName });
+        message = window.i18n.t('pagePackage.deletePageConfirm', {
+          name: itemName,
+        });
         break;
       case 'element':
         if (!this.#model.selectedElement) return;
         itemName = this.#model.selectedElement.name;
-        message = window.i18n.t('pagePackage.deleteElementConfirm', { name: itemName });
+        message = window.i18n.t('pagePackage.deleteElementConfirm', {
+          name: itemName,
+        });
         break;
     }
     this.#view.showConfirmModal(
@@ -541,7 +547,7 @@ export class PagePackageController {
       Toast.error(window.i18n.t('inspector.noAppSelected'));
       return;
     }
-    const app = this.#model.apps.find(a => a.id === this.#model.selectedApp.id);
+    const app = this.#model.apps.find((a) => a.id === this.#model.selectedApp.id);
     if (!app || !app.packageName || !app.activityName) {
       Toast.error(window.i18n.t('inspector.noAppInfo'));
       return;

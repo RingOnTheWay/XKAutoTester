@@ -9,6 +9,7 @@
 - stdout/stderr None 防御 → "" (仅 execute 路径)
 - popen_stream 不包装异常 (调用方负责 Popen 生命周期管理)
 """
+
 from __future__ import annotations
 
 import os

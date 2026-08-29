@@ -8,6 +8,7 @@
 - args 透传 (含 adb_path 前缀)
 - 注入 fake runner
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -19,6 +20,7 @@ from main.core.adb.subprocess_adb_adapter import ADB_CMD, SubprocessAdbAdapter
 @dataclass
 class FakeCompletedProcess:
     """模拟 subprocess.CompletedProcess。"""
+
     returncode: int
     stdout: str | None = None
     stderr: str | None = None

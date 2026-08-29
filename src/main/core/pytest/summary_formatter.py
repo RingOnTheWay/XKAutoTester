@@ -8,6 +8,7 @@
 - effective_total = passed+failed+broken (skipped 不计入通过率分母)
 - allure_results_dir / markers / test_paths 条件追加
 """
+
 from __future__ import annotations
 
 from typing import Any

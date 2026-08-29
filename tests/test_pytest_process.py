@@ -9,6 +9,7 @@
 
 注入 FakePopen + popen_factory, 无真子进程。
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable

@@ -445,3 +445,102 @@ test('download 目录 spawn error: monitor emit error 恰一次 + success=false'
   const errorEvents = monitorFactory.instances[0].monitor.events.filter(e => e.status === 'error');
   assert.strictEqual(errorEvents.length, 1, 'spawn error 应只 emit 一次');
 });
+
+// ── P1-4: 传输超时兜底 ──────────────────────────────────
+
+/**
+ * 永不触发的 spawn (close/error 均不发射, 模拟设备半死)
+ * 记录 kill 调用
+ */
+function createNeverSettlingSpawn() {
+  const kills = [];
+  const spawnFn = (cmd, args) => {
+    const proc = {
+      stdout: { on: () => {}, pipe: () => {} },
+      stderr: { on: () => {} },
+      on: () => {},
+      kill: () => { kills.push(1); },
+      pid: 1,
+    };
+    return proc;
+  };
+  Object.defineProperty(spawnFn, 'kills', { value: kills, enumerable: false });
+  return { spawnFn };
+}
+
+test('P1-4 upload 超时: 永不 close 时 kill 子进程 + stop monitor + resolve 失败', async () => {
+  const { spawnFn } = createNeverSettlingSpawn();
+  const monitorFactory = createMockMonitorFactory();
+  const svc = new FileTransferService({
+    commandExecutor: { execute: async () => ({ success: true, output: '', error: '' }) },
+    remoteStatService: { getFileSize: async () => 0, getDirSize: async () => 0 },
+    i18nService: i18nMock,
+    tarExtractor: { extract: async () => [] },
+    spawnFn,
+    fs: { statSync: () => ({ size: 1024 }) },
+    progressMonitorFactory: monitorFactory,
+    admZipFactory: () => ({ addFile: () => {}, writeZip: () => {} }),
+    transferTimeoutMs: 50,  // P1-4: 注入短超时
+  });
+
+  const result = await svc.upload('/local/a.txt', '/sdcard/a.txt', 'dev1', null);
+
+  assert.strictEqual(result.success, false, '超时应 resolve 失败');
+  assert.ok(spawnFn.kills.length >= 1, '子进程应被 kill');
+  assert.strictEqual(monitorFactory.instances[0].monitor.events.filter(e => e.status === 'error').length, 1,
+    '超时 emit 一次 error');
+});
+
+test('P1-4 download 单文件超时: 永不 close 时 kill + resolve 失败', async () => {
+  const { spawnFn } = createNeverSettlingSpawn();
+  const monitorFactory = createMockMonitorFactory();
+  const svc = new FileTransferService({
+    commandExecutor: { execute: async () => ({ success: true, output: '-rw-r--r-- 1 root root 100 f.txt' }) },  // 非目录
+    remoteStatService: { getFileSize: async () => 100, getDirSize: async () => 0 },
+    i18nService: i18nMock,
+    tarExtractor: { extract: async () => [] },
+    spawnFn,
+    fs: { statSync: () => ({ size: 100 }) },
+    progressMonitorFactory: monitorFactory,
+    admZipFactory: () => ({ addFile: () => {}, writeZip: () => {} }),
+    transferTimeoutMs: 50,
+  });
+
+  const result = await svc.download('/sdcard/f.txt', '/local/f.txt', 'dev1', null);
+
+  assert.strictEqual(result.success, false, '超时应 resolve 失败');
+  assert.ok(spawnFn.kills.length >= 1, 'pull 子进程应被 kill');
+});
+
+test('P1-4 download 目录超时: tar 永不 close 时 kill + 清临时文件 + resolve 失败', async () => {
+  const { spawnFn } = createNeverSettlingSpawn();
+  const monitorFactory = createMockMonitorFactory();
+  const removed = [];
+  const asyncFsMock = {
+    ensureDir: async () => {},
+    exists: async () => true,
+    unlink: async () => {},
+    rm: async (dir, opts) => { removed.push({ dir, opts }); },
+    readdir: async () => [],
+    stat: async () => ({ isDirectory: () => false }),
+    readFile: async () => Buffer.alloc(0),
+  };
+  const svc = new FileTransferService({
+    commandExecutor: { execute: async () => ({ success: true, output: 'drwx' }) },  // 目录
+    remoteStatService: { getFileSize: async () => 0, getDirSize: async () => 0 },
+    i18nService: i18nMock,
+    tarExtractor: { extract: async () => [] },
+    spawnFn,
+    fs: { statSync: () => ({ size: 100 }), createWriteStream: () => ({ on: () => {}, write: () => {}, end: () => {} }) },
+    progressMonitorFactory: monitorFactory,
+    admZipFactory: () => ({ addFile: () => {}, writeZip: () => {} }),
+    asyncFs: asyncFsMock,
+    transferTimeoutMs: 50,
+  });
+
+  const result = await svc.download('/sdcard/dir', '/local/dir', 'dev1', null);
+
+  assert.strictEqual(result.success, false, '超时应 resolve 失败');
+  assert.ok(spawnFn.kills.length >= 1, 'tar 子进程应被 kill');
+  assert.ok(removed.length >= 1, '临时目录应被清理');
+});

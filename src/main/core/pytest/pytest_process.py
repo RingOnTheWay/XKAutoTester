@@ -13,6 +13,7 @@
 - run() 阻塞至子进程结束
 - popen_factory kwarg 注入 (测试用 FakePopen, 生产用 subprocess.Popen)
 """
+
 from __future__ import annotations
 
 import logging

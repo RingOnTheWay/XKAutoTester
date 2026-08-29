@@ -25,7 +25,7 @@ class PagePackageService extends JsonFileCrudService {
    */
   constructor(userConfigPath, opts = {}) {
     const pagePackagePath = path.join(userConfigPath, 'page_package.json');
-    super(pagePackagePath, { apps: [] }, opts);  // 透传 opts.asyncFsFactory + opts.idGenerator 给 base
+    super(pagePackagePath, { apps: [] }, opts); // 透传 opts.asyncFsFactory + opts.idGenerator 给 base
     // _idGenerator 由 base 处理 (opts.idGenerator || defaultIdGenerator); 此处不再覆写, 避免与 base._generateId 递归
     this._errorReporter = opts.errorReporter || ((msg, err) => console.error(msg, err));
   }
@@ -44,7 +44,7 @@ class PagePackageService extends JsonFileCrudService {
         platform: appData.platform || 'android',
         packageName: appData.packageName || '',
         activityName: appData.activityName || '',
-        pages: []
+        pages: [],
       };
       ctx.data.apps.push(newApp);
       return newApp;
@@ -64,16 +64,14 @@ class PagePackageService extends JsonFileCrudService {
   }
 
   async deleteApp(appId) {
-    return this._applyDelete({ appId }, (ctx) =>
-      ctx.data.apps.findIndex(a => a.id === appId)
-    );
+    return this._applyDelete({ appId }, (ctx) => ctx.data.apps.findIndex((a) => a.id === appId));
   }
 
   async searchApps(keyword) {
     return this._applyQuery({}, (ctx) => {
       if (!keyword) return ctx.data.apps;
       const k = keyword.toLowerCase();
-      return ctx.data.apps.filter(a => a.name.toLowerCase().includes(k));
+      return ctx.data.apps.filter((a) => a.name.toLowerCase().includes(k));
     });
   }
 
@@ -99,16 +97,14 @@ class PagePackageService extends JsonFileCrudService {
   }
 
   async deletePage(appId, pageId) {
-    return this._applyDelete({ appId, pageId }, (ctx) =>
-      ctx.app.pages.findIndex(p => p.id === pageId)
-    );
+    return this._applyDelete({ appId, pageId }, (ctx) => ctx.app.pages.findIndex((p) => p.id === pageId));
   }
 
   async searchPages(appId, keyword) {
     return this._applyQuery({ appId }, (ctx) => {
       if (!keyword) return ctx.app.pages;
       const k = keyword.toLowerCase();
-      return ctx.app.pages.filter(p => p.name.toLowerCase().includes(k));
+      return ctx.app.pages.filter((p) => p.name.toLowerCase().includes(k));
     });
   }
 
@@ -124,7 +120,7 @@ class PagePackageService extends JsonFileCrudService {
         id: this._idGenerator(),
         name: elementData.name,
         locator: elementData.locator,
-        value: elementData.value
+        value: elementData.value,
       };
       ctx.page.elements.push(newElement);
       return newElement;
@@ -137,7 +133,7 @@ class PagePackageService extends JsonFileCrudService {
         id: elementId,
         name: elementData.name,
         locator: elementData.locator,
-        value: elementData.value
+        value: elementData.value,
       };
       return ctx.page.elements[ctx.elementIndex];
     });
@@ -145,7 +141,7 @@ class PagePackageService extends JsonFileCrudService {
 
   async deleteElement(appId, pageId, elementId) {
     return this._applyDelete({ appId, pageId, elementId }, (ctx) =>
-      ctx.page.elements.findIndex(e => e.id === elementId)
+      ctx.page.elements.findIndex((e) => e.id === elementId)
     );
   }
 
@@ -153,9 +149,7 @@ class PagePackageService extends JsonFileCrudService {
     return this._applyQuery({ appId, pageId }, (ctx) => {
       if (!keyword) return ctx.page.elements;
       const k = keyword.toLowerCase();
-      return ctx.page.elements.filter(e =>
-        e.name.toLowerCase().includes(k) || e.value.toLowerCase().includes(k)
-      );
+      return ctx.page.elements.filter((e) => e.name.toLowerCase().includes(k) || e.value.toLowerCase().includes(k));
     });
   }
 
@@ -164,13 +158,13 @@ class PagePackageService extends JsonFileCrudService {
   async getAppStats(appId) {
     return this._applyQuery({ appId }, (ctx) => ({
       pageCount: ctx.app.pages.length,
-      elementCount: ctx.app.pages.reduce((n, p) => n + p.elements.length, 0)
+      elementCount: ctx.app.pages.reduce((n, p) => n + p.elements.length, 0),
     }));
   }
 
   async getPageStats(appId, pageId) {
     return this._applyQuery({ appId, pageId }, (ctx) => ({
-      elementCount: ctx.page.elements.length
+      elementCount: ctx.page.elements.length,
     }));
   }
 
@@ -182,15 +176,21 @@ class PagePackageService extends JsonFileCrudService {
    */
   _navigate(data, nav) {
     if (!nav.appId) return { data };
-    const app = data.apps.find(a => a.id === nav.appId);
+    const app = data.apps.find((a) => a.id === nav.appId);
     if (!app) return { error: '未找到应用' };
     if (!nav.pageId) return { data, app };
-    const page = app.pages.find(p => p.id === nav.pageId);
+    const page = app.pages.find((p) => p.id === nav.pageId);
     if (!page) return { error: '未找到页面' };
     if (!nav.elementId) return { data, app, page };
-    const elementIndex = page.elements.findIndex(e => e.id === nav.elementId);
+    const elementIndex = page.elements.findIndex((e) => e.id === nav.elementId);
     if (elementIndex === -1) return { error: '未找到元素' };
-    return { data, app, page, elementIndex, element: page.elements[elementIndex] };
+    return {
+      data,
+      app,
+      page,
+      elementIndex,
+      element: page.elements[elementIndex],
+    };
   }
 
   /** 读路径: getData → navigate → queryFn → _success */

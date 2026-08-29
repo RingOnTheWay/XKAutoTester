@@ -20,8 +20,7 @@ const asyncFs = require('../../utils/asyncFs');
  * @property {() => string} [idGenerator] - 默认 module-level defaultIdGenerator
  */
 
-const defaultIdGenerator = () =>
-  Date.now().toString(36) + Math.random().toString(36).substr(2);
+const defaultIdGenerator = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
 
 class JsonFileCrudService {
   /**

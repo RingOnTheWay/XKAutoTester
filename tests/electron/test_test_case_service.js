@@ -205,6 +205,85 @@ test('getTestCase ENOENT 返 "测试用例不存在"', async () => {
   assert.strictEqual(result.error, '测试用例不存在');
 });
 
+// P1-3: 路径穿越清洗
+test('P1-3 getTestCase 穿越文件名被清洗为 test_cases 内路径 (不读目录外文件)', async () => {
+  const { svc, fileSystem } = makeFakeApp();
+  const evilName = path.join('..', '..', 'config', 'config.json');
+
+  const result = await svc.getTestCase(evilName);
+
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.error, '测试用例不存在');  // test_cases/config.json 不存在
+  // 读的必须是 test_cases 目录内 (basename 后), 而非原穿越路径
+  const readPath = fileSystem.calls.readFile[fileSystem.calls.readFile.length - 1];
+  assert.ok(path.normalize(readPath).startsWith(path.normalize(svc.testCasesDir)),
+    `readFile 应在 testCasesDir 内, 实际: ${readPath}`);
+  assert.ok(!readPath.includes('config.json') || path.basename(readPath) === 'config.json');
+});
+
+test('P1-3 getTestCase 含非法字符文件名拒绝 (invalid_file_name)', async () => {
+  const { svc, fileSystem } = makeFakeApp();
+
+  const result = await svc.getTestCase('test" & calc.json');
+
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.error, 'invalid_file_name');
+  assert.strictEqual(fileSystem.calls.readFile.length, 0, '非法名不触发 readFile');
+});
+
+test('P1-3 getTestCase 非字符串拒绝', async () => {
+  const { svc } = makeFakeApp();
+  assert.strictEqual((await svc.getTestCase(null)).error, 'invalid_file_name');
+  assert.strictEqual((await svc.getTestCase(undefined)).error, 'invalid_file_name');
+  assert.strictEqual((await svc.getTestCase('')).error, 'invalid_file_name');
+});
+
+test('P1-3 deleteTestCase 目录外 pyFilePath 拒绝删除', async () => {
+  const { svc, fileSystem } = makeFakeApp({
+    fileSystem: {
+      files: {
+        [path.join('/fake/config/test_cases', 'test_demo.json')]: JSON.stringify({
+          id: 'tc_1', fileName: 'test_demo'
+        })
+      }
+    }
+  });
+  const victimPath = path.join('/fake', 'victim.json');
+
+  const result = await svc.deleteTestCase({
+    fileName: 'test_demo',
+    pyFilePath: victimPath
+  });
+
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.error, 'invalid_py_path');
+  // 受害路径从未被 unlink
+  assert.ok(!fileSystem.calls.unlink.includes(victimPath), '目录外文件不得被删除');
+  assert.ok(fileSystem.calls.unlink.includes(path.join('/fake/config/test_cases', 'test_demo.json')),
+    'json 本身仍被删 (删除动作继续)');
+});
+
+test('P1-3 deleteTestCase 穿越 fileName 被收拢到 test_cases 内 (无法越界)', async () => {
+  const { svc, fileSystem } = makeFakeApp();
+  const result = await svc.deleteTestCase(path.join('..', '..', 'config', 'config.json'));
+  // basename 清洗为 config.json → test_cases/config.json 不存在 → 业务错误, 非 invalid_file_name
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(fileSystem.calls.unlink.length, 0, '无任何删除');
+});
+
+test('P1-3 deleteTestCase 含非法字符 fileName 拒绝', async () => {
+  const { svc } = makeFakeApp();
+  const result = await svc.deleteTestCase('test" & calc');
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.error, 'invalid_file_name');
+});
+
+test('P1-3 checkJsonExists 穿越文件名返回 false', async () => {
+  const { svc } = makeFakeApp();
+  const exists = await svc.checkJsonExists(path.join('..', '..', 'config', 'config.json'));
+  assert.strictEqual(exists, false);
+});
+
 test('saveTestCase 调 idGenerator + fileNameSanitizer + fileSystem.writeJson (P2: 原子写)', async () => {
   const { svc, fileSystem, idGeneratorCalls, fileNameSanitizerCalls } = makeFakeApp();
 
@@ -286,7 +365,8 @@ test('A2: saveAndGenerate 不 mutation 入参 caseData (原对象保持不变)',
 test('deleteTestCase 字符串参数 + 删 json + 删 py', async () => {
   const testCasesDir = '/fake/config/test_cases';
   const jsonPath = path.join(testCasesDir, 'test_demo.json');
-  const pyPath = '/fake/output/test_demo.py';
+  // P1-3: py 输出在 userConfigPath 根 (android-connection 传 currentPath), 属合法范围
+  const pyPath = '/fake/config/test_demo.py';
   const testCase = { id: 'tc_1', fileName: 'test_demo', pyFilePath: pyPath };
 
   const { svc, fileSystem } = makeFakeApp({
@@ -309,7 +389,8 @@ test('deleteTestCase 字符串参数 + 删 json + 删 py', async () => {
 test('deleteTestCase 对象参数 {fileName, pyFilePath}', async () => {
   const testCasesDir = '/fake/config/test_cases';
   const jsonPath = path.join(testCasesDir, 'test_obj.json');
-  const pyPath = '/fake/output/test_obj.py';
+  // P1-3: py 输出在 userConfigPath 根, 属合法范围
+  const pyPath = '/fake/config/test_obj.py';
 
   const { svc, fileSystem } = makeFakeApp({
     fileSystem: {

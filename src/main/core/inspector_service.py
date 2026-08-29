@@ -230,9 +230,7 @@ class InspectorService:
         """
         self._proto = proto
         self._driver_factory = driver_factory or webdriver.Remote
-        self._server_factory = server_factory or (
-            lambda host, port: AppiumServer(host=host, port=port)
-        )
+        self._server_factory = server_factory or (lambda host, port: AppiumServer(host=host, port=port))
         self._adb: AdbCommandPort = adapter or SubprocessAdbAdapter()
         self.driver: webdriver.Remote | None = None
         self.appium_server: AppiumServer | None = None

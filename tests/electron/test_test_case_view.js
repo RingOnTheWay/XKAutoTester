@@ -362,60 +362,37 @@ describe('TestCaseView 保存确认弹窗', () => {
   });
   after(teardownJsdm);
 
-  test('showSaveConfirmModal 应显示弹窗并设置标题/消息', () => {
-    const v = new ViewClass();
-    v.showSaveConfirmModal({
-      title: '未保存的更改',
-      message: '是否保存当前编辑？',
-      onSave: () => {},
-      onDiscard: () => {},
-    });
-    const overlay = document.getElementById('save-confirm-modal-overlay');
-    assert.ok(!overlay.classList.contains('hidden'), '弹窗应可见');
-    assert.strictEqual(document.getElementById('save-confirm-modal-title').textContent, '未保存的更改');
-    assert.strictEqual(document.getElementById('save-confirm-modal-message').textContent, '是否保存当前编辑？');
+  // P2-3: showSaveConfirmModal 已收敛为委托 app.js 全局机制 (window.__XKAT_APP__.showSaveConfirmModal)
+
+  test('P2-3 showSaveConfirmModal 委托 app 全局 (透传 title/message/onSave/onDiscard)', () => {
+    const calls = [];
+    window.__XKAT_APP__ = {
+      showSaveConfirmModal: (title, message, onSave, onDiscard) => {
+        calls.push({ title, message, onSave, onDiscard });
+      },
+    };
+    try {
+      const v = new ViewClass();
+      const onSave = () => {};
+      const onDiscard = () => {};
+      v.showSaveConfirmModal({ title: '未保存的更改', message: '是否保存当前编辑？', onSave, onDiscard });
+      assert.strictEqual(calls.length, 1, '应委托 app 全局一次');
+      assert.strictEqual(calls[0].title, '未保存的更改');
+      assert.strictEqual(calls[0].message, '是否保存当前编辑？');
+      assert.strictEqual(calls[0].onSave, onSave);
+      assert.strictEqual(calls[0].onDiscard, onDiscard);
+    } finally {
+      window.__XKAT_APP__ = null;
+    }
   });
 
-  test('showSaveConfirmModal 点击保存按钮应触发 onSave 并隐藏弹窗', () => {
-    const v = new ViewClass();
-    let saved = false;
-    v.showSaveConfirmModal({
-      title: 'T',
- message: 'M',
-      onSave: () => { saved = true; },
-      onDiscard: () => {},
-    });
-    document.getElementById('save-confirm-save-btn').click();
-    assert.strictEqual(saved, true);
-    assert.ok(document.getElementById('save-confirm-modal-overlay').classList.contains('hidden'));
-  });
-
-  test('showSaveConfirmModal 点击放弃按钮应触发 onDiscard 并隐藏弹窗', () => {
+  test('P2-3 app 未初始化时降级原生 confirm', () => {
+    window.__XKAT_APP__ = null;
+    // jsdom window.confirm 默认返回 false → onDiscard 分支
     const v = new ViewClass();
     let discarded = false;
-    v.showSaveConfirmModal({
-      title: 'T', message: 'M',
-      onSave: () => {},
-      onDiscard: () => { discarded = true; },
-    });
-    document.getElementById('save-confirm-discard-btn').click();
-    assert.strictEqual(discarded, true);
-    assert.ok(document.getElementById('save-confirm-modal-overlay').classList.contains('hidden'));
-  });
-
-  test('showSaveConfirmModal 点击取消按钮应仅隐藏弹窗（不触发 onSave/onDiscard）', () => {
-    const v = new ViewClass();
-    let saved = false;
-    let discarded = false;
-    v.showSaveConfirmModal({
-      title: 'T', message: 'M',
-      onSave: () => { saved = true; },
-      onDiscard: () => { discarded = true; },
-    });
-    document.getElementById('save-confirm-cancel-btn').click();
-    assert.strictEqual(saved, false);
-    assert.strictEqual(discarded, false);
-    assert.ok(document.getElementById('save-confirm-modal-overlay').classList.contains('hidden'));
+    v.showSaveConfirmModal({ title: 'T', message: 'M', onSave: () => {}, onDiscard: () => { discarded = true; } });
+    assert.strictEqual(discarded, true, 'confirm(false) → onDiscard');
   });
 });
 

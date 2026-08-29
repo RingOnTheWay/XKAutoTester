@@ -185,7 +185,9 @@ class Cli:
         logger.info("Inspector mode ended")
         return 0
 
-    def _register_inspector_commands(self, proto: StdioProtocol, service: InspectorService, logger: logging.Logger) -> None:
+    def _register_inspector_commands(
+        self, proto: StdioProtocol, service: InspectorService, logger: logging.Logger
+    ) -> None:
         """私有: 6 命令注册, 名字全引自 inspector_constants (零字面量)。"""
 
         @proto.command(START_SESSION)

@@ -29,9 +29,9 @@ class StdioProtocol:
         stdout: TextIO | None = None,
     ) -> None:
         """Args:
-            exit_command: 收到此命令后退出 run() 循环 (S6: 解耦 inspector_constants,
-                由调用方从 inspector_constants.STOP_SESSION 注入).
-            stdin/stdout: 默认 sys.stdin/sys.stdout. 测试传 io.StringIO.
+        exit_command: 收到此命令后退出 run() 循环 (S6: 解耦 inspector_constants,
+            由调用方从 inspector_constants.STOP_SESSION 注入).
+        stdin/stdout: 默认 sys.stdin/sys.stdout. 测试传 io.StringIO.
         """
         self._exit_command = exit_command
         self._stdin = stdin if stdin is not None else sys.stdin

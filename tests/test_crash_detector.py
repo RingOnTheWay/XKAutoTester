@@ -7,6 +7,7 @@
 
 纯函数,无 mock,无 IO。
 """
+
 from __future__ import annotations
 
 from main.core.logcat.crash_detector import (

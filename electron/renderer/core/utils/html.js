@@ -3,7 +3,13 @@
 // device-cascade-select、TreeMixin、deviceModalRenderMixin), 且空值处理行为有差异。
 // 统一为: null/undefined → ''；转义 & < > " ' 五个字符。
 
-const HTML_ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const HTML_ESCAPE_MAP = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
 
 /**
  * HTML 转义 (防 XSS)

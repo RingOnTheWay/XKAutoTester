@@ -1,5 +1,4 @@
 import { Action } from '../../core/Action.js';
-import { ApiBridge } from '../../core/ApiBridge.js';
 import { Toast } from '../../components/toast.js';
 
 /**
@@ -32,7 +31,7 @@ export class AndroidConnectionController {
   }
 
   destroy() {
-    this.#cleanups.forEach(fn => fn());
+    this.#cleanups.forEach((fn) => fn());
     this.#cleanups = [];
     this.#model.stopDeviceRefresh();
     this.#model.destroy();
@@ -62,7 +61,7 @@ export class AndroidConnectionController {
         model.selectedFiles,
         (file) => this.#handleFileClick(file),
         (file, checked) => this.#handleFileCheckboxChange(file, checked),
-        (file, btn) => this.#handleFileActionsBtnClick(file, btn),
+        (file, btn) => this.#handleFileActionsBtnClick(file, btn)
       );
       view.updateSelectAllCheckbox(files.length, model.selectedFiles.length);
       view.updateActionButtonsState(model.selectedFiles.length > 0);
@@ -71,7 +70,7 @@ export class AndroidConnectionController {
       view.updatePathDisplay(
         segments,
         (segPath) => model.navigateToPath(segPath),
-        (segPath) => model.navigateToPath(segPath),
+        (segPath) => model.navigateToPath(segPath)
       );
       view.updateBackButtonState(model.currentPath === '/storage/emulated/0');
     });
@@ -87,7 +86,7 @@ export class AndroidConnectionController {
       view.updatePathDisplay(
         segments,
         (segPath) => model.navigateToPath(segPath),
-        (segPath) => model.navigateToPath(segPath),
+        (segPath) => model.navigateToPath(segPath)
       );
       view.updateBackButtonState(path === '/storage/emulated/0');
     });
@@ -194,9 +193,7 @@ export class AndroidConnectionController {
     this.#addAction('#install-apk-btn', () => model.installApk());
 
     // 全选复选框
-    this.#cleanups.push(
-      this.#view.bindSelectAllChange((checked) => this.handleToggleSelectAll(checked))
-    );
+    this.#cleanups.push(this.#view.bindSelectAllChange((checked) => this.handleToggleSelectAll(checked)));
 
     // ── 右键菜单 ─────────────────────────────────────────────
     this.#cleanups.push(
@@ -218,9 +215,7 @@ export class AndroidConnectionController {
     this.#addAction('#rename-modal-cancel-btn', () => view.closeRenameModal());
     this.#addAction('#rename-modal-close-btn', () => view.closeRenameModal());
 
-    this.#cleanups.push(
-      this.#view.bindRenameFormSubmit(() => this.handleRenameSave())
-    );
+    this.#cleanups.push(this.#view.bindRenameFormSubmit(() => this.handleRenameSave()));
 
     // ── 导航 Tab 切换 ────────────────────────────────────────
     this.#cleanups.push(
@@ -317,7 +312,9 @@ export class AndroidConnectionController {
         const versionResult = await this.#model.executeAdbCommand('getprop ro.build.version.release', deviceId);
         platformVersion = versionResult.output.trim();
         this.#view.setEditAndroidVersionInput(platformVersion);
-      } catch (e) { /* 获取版本失败容错,留空 */ }
+      } catch (e) {
+        /* 获取版本失败容错,留空 */
+      }
 
       // 重新打开编辑弹窗
       this.#view.openEditDeviceIdModal({
@@ -471,7 +468,9 @@ export class AndroidConnectionController {
     const result = await this.#model.openPort5555();
     const modalContainer = this.#view.getDeviceModalContainer();
     if (result?.success) {
-      Toast.success(window.i18n.t('deviceModal.portOpenSuccess'), { container: modalContainer });
+      Toast.success(window.i18n.t('deviceModal.portOpenSuccess'), {
+        container: modalContainer,
+      });
     } else {
       Toast.error(result?.error || window.i18n.t('deviceModal.portOpenFailed'), { container: modalContainer });
     }
@@ -508,7 +507,9 @@ export class AndroidConnectionController {
     // 确认弹窗
     const confirmed = await this.#showConfirmDialog(
       window.i18n.t('fileManager.deleteConfirm') || '确认删除',
-      window.i18n.t('fileManager.deleteConfirmMessage', { count: files.length }) || `确定要删除 ${files.length} 个文件吗？`,
+      window.i18n.t('fileManager.deleteConfirmMessage', {
+        count: files.length,
+      }) || `确定要删除 ${files.length} 个文件吗？`
     );
     if (!confirmed) return;
 
@@ -519,7 +520,9 @@ export class AndroidConnectionController {
   async #handleDeleteSingleFile(file) {
     const confirmed = await this.#showConfirmDialog(
       window.i18n.t('fileManager.deleteConfirm') || '确认删除',
-      window.i18n.t('fileManager.deleteSingleConfirmMessage', { name: file.name }) || `确定要删除 "${file.name}" 吗？`,
+      window.i18n.t('fileManager.deleteSingleConfirmMessage', {
+        name: file.name,
+      }) || `确定要删除 "${file.name}" 吗？`
     );
     if (!confirmed) return;
 
@@ -544,11 +547,11 @@ export class AndroidConnectionController {
       results.push({ fileName, result });
     }
 
-    const failed = results.filter(r => !r.result?.success);
+    const failed = results.filter((r) => !r.result?.success);
     if (failed.length === 0) {
       Toast.success(window.i18n.t('fileManager.uploadSuccess') || '上传成功');
     } else {
-      const failedNames = failed.map(r => r.fileName).join(', ');
+      const failedNames = failed.map((r) => r.fileName).join(', ');
       Toast.error(`${window.i18n.t('fileManager.uploadFailed') || '上传失败'}: ${failedNames}`);
     }
     await this.#model.loadFileList();

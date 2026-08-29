@@ -66,7 +66,11 @@ async function writeJson(path, data, spaces = 2) {
     await fs.rename(tmpPath, path);
   } catch (e) {
     // rename 失败时清理临时文件
-    try { await fs.unlink(tmpPath); } catch { /* ignore */ }
+    try {
+      await fs.unlink(tmpPath);
+    } catch {
+      /* ignore */
+    }
     throw e;
   }
 }

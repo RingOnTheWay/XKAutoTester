@@ -48,7 +48,9 @@ export class TestCaseModel extends EventEmitter {
     this.#fileBrowser = new FileBrowser(this.#api);
     this.#optionPanel = new OptionPanel(this.#api);
     // StepEditor 注入 getApp 回调，避免与 OptionPanel 硬耦合
-    this.#stepEditor = new StepEditor({ getApp: () => this.#optionPanel.selectedApp });
+    this.#stepEditor = new StepEditor({
+      getApp: () => this.#optionPanel.selectedApp,
+    });
     // TestCaseEditor 作为编排者，注入前 3 个模块 + api
     this.#testCaseEditor = new TestCaseEditor({
       api: this.#api,
@@ -65,7 +67,14 @@ export class TestCaseModel extends EventEmitter {
     this.#fileBrowser.on('error', (err) => this.emit('error', err));
 
     // 转发 OptionPanel 事件
-    const opEvents = ['apps-changed', 'ble-devices-changed', 'markers-list-changed', 'app-changed', 'platform-changed', 'markers-changed'];
+    const opEvents = [
+      'apps-changed',
+      'ble-devices-changed',
+      'markers-list-changed',
+      'app-changed',
+      'platform-changed',
+      'markers-changed',
+    ];
     for (const evt of opEvents) {
       this.#optionPanel.on(evt, (...args) => this.emit(evt, ...args));
     }
@@ -79,10 +88,15 @@ export class TestCaseModel extends EventEmitter {
 
     // 转发 TestCaseEditor 事件
     const tceEvents = [
-      'editing-changed', 'dirty-changed',
-      'loaded-device-config-changed', 'loaded-ble-device-changed',
-      'show-editor', 'cancel-edit',
-      'case-loaded', 'case-saved', 'case-deleted',
+      'editing-changed',
+      'dirty-changed',
+      'loaded-device-config-changed',
+      'loaded-ble-device-changed',
+      'show-editor',
+      'cancel-edit',
+      'case-loaded',
+      'case-saved',
+      'case-deleted',
     ];
     for (const evt of tceEvents) {
       this.#testCaseEditor.on(evt, (...args) => this.emit(evt, ...args));
@@ -93,40 +107,82 @@ export class TestCaseModel extends EventEmitter {
   // ── Deep Module Accessors ─────────────────────────────────────
 
   /** @returns {FileBrowser} */
-  get fileBrowser() { return this.#fileBrowser; }
+  get fileBrowser() {
+    return this.#fileBrowser;
+  }
   /** @returns {OptionPanel} */
-  get optionPanel() { return this.#optionPanel; }
+  get optionPanel() {
+    return this.#optionPanel;
+  }
   /** @returns {StepEditor} */
-  get stepEditor() { return this.#stepEditor; }
+  get stepEditor() {
+    return this.#stepEditor;
+  }
   /** @returns {TestCaseEditor} */
-  get testCaseEditor() { return this.#testCaseEditor; }
+  get testCaseEditor() {
+    return this.#testCaseEditor;
+  }
 
   // ── State Getters ──────────────────────────────────────────────
 
   // FileBrowser 拥有的状态 (委托)
-  get selectedDirectory() { return this.#fileBrowser.selectedDirectory; }
-  get selectedFile() { return this.#fileBrowser.selectedFile; }
-  get testFiles() { return this.#fileBrowser.testFiles; }
-  get jsonExistsMap() { return this.#fileBrowser.jsonExistsMap; }
-  get searchQuery() { return this.#fileBrowser.searchQuery; }
+  get selectedDirectory() {
+    return this.#fileBrowser.selectedDirectory;
+  }
+  get selectedFile() {
+    return this.#fileBrowser.selectedFile;
+  }
+  get testFiles() {
+    return this.#fileBrowser.testFiles;
+  }
+  get jsonExistsMap() {
+    return this.#fileBrowser.jsonExistsMap;
+  }
+  get searchQuery() {
+    return this.#fileBrowser.searchQuery;
+  }
 
   // OptionPanel 拥有的状态 (委托)
-  get apps() { return this.#optionPanel.apps; }
-  get selectedApp() { return this.#optionPanel.selectedApp; }
-  get selectedPlatform() { return this.#optionPanel.selectedPlatform; }
-  get bleDevices() { return this.#optionPanel.bleDevices; }
-  get markers() { return this.#optionPanel.markers; }
-  get selectedMarkers() { return this.#optionPanel.selectedMarkers; }
+  get apps() {
+    return this.#optionPanel.apps;
+  }
+  get selectedApp() {
+    return this.#optionPanel.selectedApp;
+  }
+  get selectedPlatform() {
+    return this.#optionPanel.selectedPlatform;
+  }
+  get bleDevices() {
+    return this.#optionPanel.bleDevices;
+  }
+  get markers() {
+    return this.#optionPanel.markers;
+  }
+  get selectedMarkers() {
+    return this.#optionPanel.selectedMarkers;
+  }
 
   // StepEditor 拥有的状态 (委托)
-  get steps() { return this.#stepEditor.steps; }
-  get draggedStep() { return this.#stepEditor.draggedStep; }
+  get steps() {
+    return this.#stepEditor.steps;
+  }
+  get draggedStep() {
+    return this.#stepEditor.draggedStep;
+  }
 
   // TestCaseEditor 拥有的状态 (委托)
-  get isEditing() { return this.#testCaseEditor.isEditing; }
-  get hasUnsavedChanges() { return this.#testCaseEditor.hasUnsavedChanges; }
-  get loadedDeviceConfig() { return this.#testCaseEditor.loadedDeviceConfig; }
-  get loadedBleDevice() { return this.#testCaseEditor.loadedBleDevice; }
+  get isEditing() {
+    return this.#testCaseEditor.isEditing;
+  }
+  get hasUnsavedChanges() {
+    return this.#testCaseEditor.hasUnsavedChanges;
+  }
+  get loadedDeviceConfig() {
+    return this.#testCaseEditor.loadedDeviceConfig;
+  }
+  get loadedBleDevice() {
+    return this.#testCaseEditor.loadedBleDevice;
+  }
 
   /**
    * 通用状态获取（供 Controller 使用）
@@ -150,51 +206,77 @@ export class TestCaseModel extends EventEmitter {
    * 内部状态对象访问器（兼容旧 mixin，#state 已清空）
    * @returns {Object} 内部状态对象 (空)
    */
-  get _state() { return this.#state; }
+  get _state() {
+    return this.#state;
+  }
 
   // ── FileBrowser 委托方法 ──────────────────────────────────────
   // 这些方法从 modelDirectoryMixin / modelFileMixin 迁移至 FileBrowser，
   // Model 保留同名方法以兼容现有 Controller 调用。
 
   /** @see FileBrowser.selectDirectory */
-  async selectDirectory() { await this.#fileBrowser.selectDirectory(); }
+  async selectDirectory() {
+    await this.#fileBrowser.selectDirectory();
+  }
 
   /** @see FileBrowser.scanTestFiles */
-  async scanTestFiles(directory) { await this.#fileBrowser.scanTestFiles(directory); }
+  async scanTestFiles(directory) {
+    await this.#fileBrowser.scanTestFiles(directory);
+  }
 
   /** @see FileBrowser.batchCheckJsonExists */
-  async batchCheckJsonExists(fileNames) { await this.#fileBrowser.batchCheckJsonExists(fileNames); }
+  async batchCheckJsonExists(fileNames) {
+    await this.#fileBrowser.batchCheckJsonExists(fileNames);
+  }
 
   /** @see FileBrowser.setSearchQuery */
-  setSearchQuery(query) { this.#fileBrowser.setSearchQuery(query); }
+  setSearchQuery(query) {
+    this.#fileBrowser.setSearchQuery(query);
+  }
 
   // ── OptionPanel 委托方法 ──────────────────────────────────────
   // 这些方法从 modelDirectoryMixin / modelCaseMixin / modelStepMixin 迁移至 OptionPanel，
   // Model 保留同名方法以兼容现有 Controller 调用。
 
   /** @see OptionPanel.load (并行加载 apps + bleDevices + markers) */
-  async load() { await this.#optionPanel.load(); }
+  async load() {
+    await this.#optionPanel.load();
+  }
 
   /** @see OptionPanel.loadApps */
-  async loadApps() { await this.#optionPanel.loadApps(); }
+  async loadApps() {
+    await this.#optionPanel.loadApps();
+  }
 
   /** @see OptionPanel.loadBleDevices */
-  async loadBleDevices() { await this.#optionPanel.loadBleDevices(); }
+  async loadBleDevices() {
+    await this.#optionPanel.loadBleDevices();
+  }
 
   /** @see OptionPanel.loadMarkers */
-  async loadMarkers() { await this.#optionPanel.loadMarkers(); }
+  async loadMarkers() {
+    await this.#optionPanel.loadMarkers();
+  }
 
   /** @see OptionPanel.selectApp */
-  selectApp(app) { this.#optionPanel.selectApp(app); }
+  selectApp(app) {
+    this.#optionPanel.selectApp(app);
+  }
 
   /** @see OptionPanel.selectPlatform */
-  selectPlatform(platform) { this.#optionPanel.selectPlatform(platform); }
+  selectPlatform(platform) {
+    this.#optionPanel.selectPlatform(platform);
+  }
 
   /** @see OptionPanel.toggleMarker */
-  toggleMarker(marker) { this.#optionPanel.toggleMarker(marker); }
+  toggleMarker(marker) {
+    this.#optionPanel.toggleMarker(marker);
+  }
 
   /** @see OptionPanel.replaceSelectedMarkers */
-  replaceSelectedMarkers(markers) { this.#optionPanel.replaceSelectedMarkers(markers); }
+  replaceSelectedMarkers(markers) {
+    this.#optionPanel.replaceSelectedMarkers(markers);
+  }
 
   // ── StepEditor 委托方法 ────────────────────────────────────────
   // 这些方法从 modelStepMixin 迁移至 StepEditor，
@@ -249,54 +331,86 @@ export class TestCaseModel extends EventEmitter {
   // ── StepEditor 非编辑操作 (不标记 dirty) ──────────────────────
 
   /** @see StepEditor.setSteps (加载用例时调用，不标记 dirty) */
-  setSteps(steps) { this.#stepEditor.setSteps(steps); }
+  setSteps(steps) {
+    this.#stepEditor.setSteps(steps);
+  }
 
   /** @see StepEditor.reset (重置编辑器时调用，不标记 dirty) */
-  resetSteps() { this.#stepEditor.reset(); }
+  resetSteps() {
+    this.#stepEditor.reset();
+  }
 
   /** @see StepEditor.syncFromDOM (View 收集 DOM 同步，不标记 dirty) */
-  syncStepsFromDOM(steps) { this.#stepEditor.syncFromDOM(steps); }
+  syncStepsFromDOM(steps) {
+    this.#stepEditor.syncFromDOM(steps);
+  }
 
   /** @see StepEditor.setDraggedStep */
-  setDraggedStep(step) { this.#stepEditor.setDraggedStep(step); }
+  setDraggedStep(step) {
+    this.#stepEditor.setDraggedStep(step);
+  }
 
   // ── TestCaseEditor 委托方法 ────────────────────────────────────
   // 这些方法从 modelFileMixin / modelCaseMixin / modelFormMixin 迁移至 TestCaseEditor，
   // Model 保留同名方法以兼容现有 Controller 调用。
 
   /** @see TestCaseEditor.markDirty */
-  markDirty() { this.#testCaseEditor.markDirty(); }
+  markDirty() {
+    this.#testCaseEditor.markDirty();
+  }
 
   /** @see TestCaseEditor.clearDirty */
-  clearDirty() { this.#testCaseEditor.clearDirty(); }
+  clearDirty() {
+    this.#testCaseEditor.clearDirty();
+  }
 
   /** @see TestCaseEditor.resetEditor (编排 StepEditor + OptionPanel + loadedConfigs) */
-  resetEditor() { this.#testCaseEditor.resetEditor(); }
+  resetEditor() {
+    this.#testCaseEditor.resetEditor();
+  }
 
   /** @see TestCaseEditor.selectFile (编排 FileBrowser + clearDirty + showEditor) */
-  selectFile(file) { this.#testCaseEditor.selectFile(file); }
+  selectFile(file) {
+    this.#testCaseEditor.selectFile(file);
+  }
 
   /** @see TestCaseEditor.deselectFile */
-  deselectFile() { this.#testCaseEditor.deselectFile(); }
+  deselectFile() {
+    this.#testCaseEditor.deselectFile();
+  }
 
   /** @see TestCaseEditor.showEditor */
-  async showEditor(file = null) { await this.#testCaseEditor.showEditor(file); }
+  async showEditor(file = null) {
+    await this.#testCaseEditor.showEditor(file);
+  }
 
   /** @see TestCaseEditor.cancelEdit */
-  cancelEdit() { this.#testCaseEditor.cancelEdit(); }
+  cancelEdit() {
+    this.#testCaseEditor.cancelEdit();
+  }
 
   /** @see TestCaseEditor.saveCase */
-  async saveCase(caseData) { await this.#testCaseEditor.saveCase(caseData); }
+  async saveCase(caseData) {
+    await this.#testCaseEditor.saveCase(caseData);
+  }
 
   /** @see TestCaseEditor.deleteCase */
-  async deleteCase(fileName, pyFilePath) { await this.#testCaseEditor.deleteCase(fileName, pyFilePath); }
+  async deleteCase(fileName, pyFilePath) {
+    await this.#testCaseEditor.deleteCase(fileName, pyFilePath);
+  }
 
   /** @see TestCaseEditor.loadCaseData */
-  async loadCaseData(fileName) { await this.#testCaseEditor.loadCaseData(fileName); }
+  async loadCaseData(fileName) {
+    await this.#testCaseEditor.loadCaseData(fileName);
+  }
 
   /** @see TestCaseEditor.collectFormData */
-  collectFormData(domData) { return this.#testCaseEditor.collectFormData(domData); }
+  collectFormData(domData) {
+    return this.#testCaseEditor.collectFormData(domData);
+  }
 
   /** @see TestCaseEditor.destroy */
-  destroy() { this.#testCaseEditor.destroy(); }
+  destroy() {
+    this.#testCaseEditor.destroy();
+  }
 }

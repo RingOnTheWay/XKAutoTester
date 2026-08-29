@@ -76,7 +76,9 @@ class TarExtractor {
     return new Promise((resolve, reject) => {
       const readStream = fs.createReadStream(tarPath);
       let buffer = Buffer.alloc(0);
-      readStream.on('data', (chunk) => { buffer = Buffer.concat([buffer, chunk]); });
+      readStream.on('data', (chunk) => {
+        buffer = Buffer.concat([buffer, chunk]);
+      });
       readStream.on('end', () => resolve(buffer));
       readStream.on('error', reject);
     });

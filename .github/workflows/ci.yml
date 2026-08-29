@@ -1,0 +1,67 @@
+# XKAutoTester CI — 测试 + lint 渐进接入 (R22)
+# 说明:
+#   - lint 步骤 (eslint/ruff) 当前 continue-on-error: true — 待违规清零后移除该标记转为强制。
+#   - Electron 版本货币检查: 43 支持线至 2027-01-05, 用 npm outdated 输出提醒 (不阻断)。
+name: CI
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+
+jobs:
+  test-electron:
+    name: Electron tests
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: electron
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron/package-lock.json
+
+      # R22: devDependencies 新增 eslint/globals/prettier, lock 尚未本地同步
+      # (沙箱网络受限无法 npm install)。用 npm install (非 npm ci) 让 CI 首次补齐并更新 lock,
+      # lock 同步后建议切回 npm ci。
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run JS tests
+        run: npm test
+
+      - name: Lint (JS) — 渐进, 待违规清零后移除 continue-on-error
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Electron 版本货币提醒 (不阻断)
+        continue-on-error: true
+        run: |
+          npx --yes npm-check-updates electron 2>/dev/null || npm outdated electron 2>/dev/null || echo "skip"
+
+  test-python:
+    name: Python tests + Ruff
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Sync dependencies
+        run: uv sync --frozen --group dev --group test
+
+      - name: Run Python tests (config/pytest.ini)
+        run: uv run pytest -c config/pytest.ini --maxfail=5
+
+      - name: Ruff check — 渐进, 待违规清零后移除 continue-on-error
+        continue-on-error: true
+        run: uv run ruff check src tests

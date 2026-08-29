@@ -19,6 +19,7 @@
  *   - dragged-step-changed(step)     拖拽中步骤变更
  */
 import { EventEmitter } from '../../../core/EventEmitter.js';
+import { applySelectRoute } from './selectFieldRoutes.js';
 
 // 模块级计数器，避免同毫秒内 Date.now() 碰撞导致 stepId 重复
 let _stepSeq = 0;
@@ -26,6 +27,137 @@ function nextStepId() {
   _stepSeq += 1;
   return `step_${Date.now()}_${_stepSeq}`;
 }
+
+// P2-1: 特殊前缀 handler (含级联副作用 / 附加清理, 主字段写入经 applySelectRoute 统一路由)
+// 其余前缀走通用路由 (SELECT_FIELD_ROUTES), 与 view.collectStepCardsData 共用单一 schema。
+// handler(step, config, value, index, getApp) → boolean (false = 条件不满足继续匹配)
+const STEP_SELECT_SPECIAL_HANDLERS = [
+  {
+    prefix: 'tc-page-select',
+    handle(step, config, value, index, getApp) {
+      applySelectRoute(config, 'tc-page-select', value, index);
+      // 级联: 页面变更清空元素/操作 + 回填 pageName
+      config.elementId = '';
+      config.elementName = null;
+      config.locator = null;
+      config.locatorValue = null;
+      config.operation = 'click';
+      config.operationValue = {};
+      const app = getApp();
+      if (app) {
+        const page = app.pages?.find((p) => p.id === value);
+        config.pageName = page?.name || '';
+      }
+      return true;
+    },
+  },
+  {
+    prefix: 'tc-element-select',
+    handle(step, config, value, index, getApp) {
+      applySelectRoute(config, 'tc-element-select', value, index);
+      // 级联: 元素变更更新 locator + click 强制
+      const app = getApp();
+      if (app && config.pageId) {
+        const page = app.pages?.find((p) => p.id === config.pageId);
+        const element = page?.elements?.find((el) => el.id === value);
+        if (element) {
+          config.elementName = element.name;
+          config.locator = element.locator;
+          config.locatorValue = element.value;
+          if (element.locator === 'click' && config.operation === 'sendText') {
+            config.operation = 'click';
+            config.operationValue = {};
+          }
+        }
+      }
+      return true;
+    },
+  },
+  {
+    prefix: 'tc-operation-select',
+    handle(step, config, value, index) {
+      applySelectRoute(config, 'tc-operation-select', value, index);
+      // 级联: 操作变更清空操作值
+      config.operationValue = {};
+      return true;
+    },
+  },
+  {
+    prefix: 'tc-ble-method-select',
+    handle(step, config, value, index) {
+      applySelectRoute(config, 'tc-ble-method-select', value, index);
+      delete config.deviceConfig.params;
+      return true;
+    },
+  },
+  {
+    prefix: 'tc-target-value-type',
+    handle(step, config, value, index) {
+      applySelectRoute(config, 'tc-target-value-type', value, index);
+      // custom/ble 互斥
+      if (value === 'custom') {
+        config.compareConfig.targetValue = '';
+        delete config.compareConfig.bleStepId;
+      } else if (value === 'ble') {
+        delete config.compareConfig.targetValue;
+        config.compareConfig.bleStepId = '';
+      }
+      return true;
+    },
+  },
+  {
+    prefix: 'tc-compare-element-page',
+    handle(step, config, value, index) {
+      applySelectRoute(config, 'tc-compare-element-page', value, index);
+      config.compareConfig.elementId = '';
+      return true;
+    },
+  },
+  {
+    prefix: 'tc-search-element-page',
+    handle(step, config, value, index) {
+      applySelectRoute(config, 'tc-search-element-page', value, index);
+      config.searchConfig.elementId = '';
+      config.searchConfig.elementName = '';
+      return true;
+    },
+  },
+  {
+    prefix: 'tc-compare-element-select',
+    handle(step, config, value, index, getApp) {
+      applySelectRoute(config, 'tc-compare-element-select', value, index);
+      // 更新 element locator
+      const app = getApp();
+      if (app && config.compareConfig.pageId) {
+        const page = app.pages?.find((p) => p.id === config.compareConfig.pageId);
+        const element = page?.elements?.find((el) => el.id === value);
+        if (element) {
+          config.compareConfig.elementName = element.name;
+          config.compareConfig.locator = element.locator;
+          config.compareConfig.locatorValue = element.value;
+        }
+      }
+      return true;
+    },
+  },
+  {
+    prefix: 'tc-search-element-select',
+    handle(step, config, value, index, getApp) {
+      applySelectRoute(config, 'tc-search-element-select', value, index);
+      const app = getApp();
+      if (app && config.searchConfig?.pageId) {
+        const page = app.pages?.find((p) => p.id === config.searchConfig.pageId);
+        const element = page?.elements?.find((el) => el.id === value);
+        if (element) {
+          config.searchConfig.elementName = element.name;
+          config.searchConfig.locator = element.locator;
+          config.searchConfig.locatorValue = element.value;
+        }
+      }
+      return true;
+    },
+  },
+];
 
 export class StepEditor extends EventEmitter {
   /** @type {() => Object|null} 返回当前选中应用 (从 OptionPanel 注入) */
@@ -48,16 +180,22 @@ export class StepEditor extends EventEmitter {
   // ── State Getters ──────────────────────────────────────────────
 
   /** @returns {Array} 步骤数组 */
-  get steps() { return this.#state.steps; }
+  get steps() {
+    return this.#state.steps;
+  }
   /** @returns {Object|null} 当前拖拽中的步骤 */
-  get draggedStep() { return this.#state.draggedStep; }
+  get draggedStep() {
+    return this.#state.draggedStep;
+  }
 
   /**
    * 通用状态获取（供 Model.get 委托）
    * @param {string} key - 状态键名
    * @returns {*} 状态值，键不存在返回 undefined
    */
-  get(key) { return this.#state[key]; }
+  get(key) {
+    return this.#state[key];
+  }
 
   /**
    * 更新状态并触发对应事件 (内部方法)
@@ -121,7 +259,9 @@ export class StepEditor extends EventEmitter {
     const newStep = {
       id: stepId,
       order: this.#state.steps.length + 1,
-      name: window.i18n.t('testCase.defaultStepName', { n: this.#state.steps.length + 1 }),
+      name: window.i18n.t('testCase.defaultStepName', {
+        n: this.#state.steps.length + 1,
+      }),
       type: 'element',
       config: {
         pageId: null,
@@ -144,7 +284,7 @@ export class StepEditor extends EventEmitter {
    * @param {string} stepId - 步骤 ID
    */
   deleteStep(stepId) {
-    this.#state.steps = this.#state.steps.filter(s => s.id !== stepId);
+    this.#state.steps = this.#state.steps.filter((s) => s.id !== stepId);
     this.updateStepOrders();
     this.emit('steps-changed', this.#state.steps);
   }
@@ -155,7 +295,7 @@ export class StepEditor extends EventEmitter {
    * @returns {Object|null} 新步骤
    */
   copyStep(stepId) {
-    const original = this.#state.steps.find(s => s.id === stepId);
+    const original = this.#state.steps.find((s) => s.id === stepId);
     if (!original) return null;
 
     const newStepId = nextStepId();
@@ -177,7 +317,7 @@ export class StepEditor extends EventEmitter {
    * @param {'up'|'down'} direction - 移动方向
    */
   moveStep(stepId, direction) {
-    const idx = this.#state.steps.findIndex(s => s.id === stepId);
+    const idx = this.#state.steps.findIndex((s) => s.id === stepId);
     if (idx === -1) return;
     if (direction === 'up' && idx === 0) return;
     if (direction === 'down' && idx === this.#state.steps.length - 1) return;
@@ -202,171 +342,29 @@ export class StepEditor extends EventEmitter {
 
   /**
    * 更新步骤中下拉选择器的值
+   * P2-1: 特殊前缀走 STEP_SELECT_SPECIAL_HANDLERS (级联/附加清理),
+   * 其余走公共 SELECT_FIELD_ROUTES 通用路由 (与 view.collectStepCardsData 同一 schema)
    * @param {string} selectId - 选择器 ID
    * @param {string} value - 新值
    * @param {string} stepId - 步骤 ID
    * @param {number} [index] - 多元素索引
    */
   updateStepSelect(selectId, value, stepId, index) {
-    const step = this.#state.steps.find(s => s.id === stepId);
+    const step = this.#state.steps.find((s) => s.id === stepId);
     if (!step) return;
 
-    // 根据 selectId 前缀更新步骤配置
     const config = step.config || {};
-    if (selectId.startsWith('tc-page-select')) {
-      config.pageId = value;
-    } else if (selectId.startsWith('tc-element-select')) {
-      config.elementId = value;
-    } else if (selectId.startsWith('tc-operation-select')) {
-      config.operation = value;
-    } else if (selectId.startsWith('tc-input-type-select')) {
-      config.operationValue = config.operationValue || {};
-      config.operationValue.inputType = value;
-    } else if (selectId.startsWith('tc-ble-method-select')) {
-      config.deviceConfig = config.deviceConfig || {};
-      config.deviceConfig.methodName = value;
-      delete config.deviceConfig.params;
-    } else if (selectId.startsWith('tc-system-operation-type')) {
-      config.systemConfig = config.systemConfig || {};
-      config.systemConfig.operationType = value;
-    } else if (selectId.startsWith('tc-page-operation-type')) {
-      config.operationType = value;
-    } else if (selectId.startsWith('tc-target-value-type')) {
-      config.compareConfig = config.compareConfig || {};
-      config.compareConfig.targetValueType = value;
-      if (value === 'custom') {
-        config.compareConfig.targetValue = '';
-        delete config.compareConfig.bleStepId;
-      } else if (value === 'ble') {
-        delete config.compareConfig.targetValue;
-        config.compareConfig.bleStepId = '';
-      }
-    } else if (selectId.startsWith('tc-search-type')) {
-      config.searchConfig = config.searchConfig || {};
-      config.searchConfig.searchType = value;
-    } else if (selectId.startsWith('tc-faker-locale')) {
-      config.operationValue = config.operationValue || {};
-      config.operationValue.fakerConfig = config.operationValue.fakerConfig || {};
-      config.operationValue.fakerConfig.locale = value;
-    } else if (selectId.startsWith('tc-faker-provider')) {
-      config.operationValue = config.operationValue || {};
-      config.operationValue.fakerConfig = config.operationValue.fakerConfig || {};
-      config.operationValue.fakerConfig.provider = value;
-    } else if (selectId.startsWith('tc-faker-method')) {
-      config.operationValue = config.operationValue || {};
-      config.operationValue.fakerConfig = config.operationValue.fakerConfig || {};
-      config.operationValue.fakerConfig.method = value;
-    } else if (selectId.startsWith('tc-faker-category')) {
-      config.operationValue = config.operationValue || {};
-      config.operationValue.fakerConfig = config.operationValue.fakerConfig || {};
-      config.operationValue.fakerConfig.category = value;
-    } else if (selectId.startsWith('tc-nav-key-select')) {
-      config.systemConfig = config.systemConfig || {};
-      config.systemConfig.navKey = value;
-    } else if (selectId.startsWith('tc-random-precision')) {
-      config.operationValue = config.operationValue || {};
-      config.operationValue.randomConfig = config.operationValue.randomConfig || {};
-      config.operationValue.randomConfig.precision = parseInt(value);
-    } else if (selectId.startsWith('tc-multi-element-select') && index !== undefined) {
-      if (!config.selectedElements) config.selectedElements = [];
-      if (!config.selectedElements[index]) config.selectedElements[index] = {};
-      config.selectedElements[index].elementId = value;
-    } else if (selectId.startsWith('tc-multi-operation-select') && index !== undefined) {
-      if (!config.selectedElements) config.selectedElements = [];
-      if (!config.selectedElements[index]) config.selectedElements[index] = {};
-      config.selectedElements[index].operation = value;
-    } else if (selectId.startsWith('tc-multi-input-type-select') && index !== undefined) {
-      if (!config.selectedElements) config.selectedElements = [];
-      if (!config.selectedElements[index]) config.selectedElements[index] = {};
-      config.selectedElements[index].inputType = value;
-    } else if (selectId.startsWith('tc-multi-faker-locale') && index !== undefined) {
-      if (!config.selectedElements) config.selectedElements = [];
-      if (!config.selectedElements[index]) config.selectedElements[index] = {};
-      config.selectedElements[index].fakerLocale = value;
-    } else if (selectId.startsWith('tc-multi-faker-provider') && index !== undefined) {
-      if (!config.selectedElements) config.selectedElements = [];
-      if (!config.selectedElements[index]) config.selectedElements[index] = {};
-      config.selectedElements[index].fakerProvider = value;
-    } else if (selectId.startsWith('tc-compare-element-page')) {
-      config.compareConfig = config.compareConfig || {};
-      config.compareConfig.pageId = value;
-      config.compareConfig.elementId = '';
-    } else if (selectId.startsWith('tc-compare-element-select')) {
-      config.compareConfig = config.compareConfig || {};
-      config.compareConfig.elementId = value;
-      // 更新 element locator
-      const app = this.#getApp();
-      if (app && config.compareConfig.pageId) {
-        const page = app.pages?.find(p => p.id === config.compareConfig.pageId);
-        const element = page?.elements?.find(el => el.id === value);
-        if (element) {
-          config.compareConfig.elementName = element.name;
-          config.compareConfig.locator = element.locator;
-          config.compareConfig.locatorValue = element.value;
-        }
-      }
-    } else if (selectId.startsWith('tc-search-element-page')) {
-      config.searchConfig = config.searchConfig || {};
-      config.searchConfig.pageId = value;
-      config.searchConfig.elementId = '';
-      config.searchConfig.elementName = '';
-    } else if (selectId.startsWith('tc-search-element-select')) {
-      config.searchConfig = config.searchConfig || {};
-      config.searchConfig.elementId = value;
-      const app = this.#getApp();
-      if (app && config.searchConfig?.pageId) {
-        const page = app.pages?.find(p => p.id === config.searchConfig.pageId);
-        const element = page?.elements?.find(el => el.id === value);
-        if (element) {
-          config.searchConfig.elementName = element.name;
-          config.searchConfig.locator = element.locator;
-          config.searchConfig.locatorValue = element.value;
-        }
-      }
-    } else if (selectId.startsWith('tc-ble-step-select')) {
-      config.compareConfig = config.compareConfig || {};
-      config.compareConfig.bleStepId = value;
+
+    // 特殊 handler (含级联副作用), 否则通用路由
+    const special = STEP_SELECT_SPECIAL_HANDLERS.find((h) => selectId.startsWith(h.prefix));
+    if (special) {
+      const getApp = () => this.#getApp();
+      special.handle(step, config, value, index, getApp);
+    } else {
+      applySelectRoute(config, selectId, value, index);
     }
 
     step.config = config;
-
-    // 级联更新：页面变更时清空元素和操作
-    if (selectId.startsWith('tc-page-select')) {
-      config.elementId = '';
-      config.elementName = null;
-      config.locator = null;
-      config.locatorValue = null;
-      config.operation = 'click';
-      config.operationValue = {};
-      const app = this.#getApp();
-      if (app) {
-        const page = app.pages?.find(p => p.id === value);
-        config.pageName = page?.name || '';
-      }
-    }
-
-    // 元素变更时更新 locator
-    if (selectId.startsWith('tc-element-select')) {
-      const app = this.#getApp();
-      if (app && config.pageId) {
-        const page = app.pages?.find(p => p.id === config.pageId);
-        const element = page?.elements?.find(el => el.id === value);
-        if (element) {
-          config.elementName = element.name;
-          config.locator = element.locator;
-          config.locatorValue = element.value;
-          if (element.locator === 'click' && config.operation === 'sendText') {
-            config.operation = 'click';
-            config.operationValue = {};
-          }
-        }
-      }
-    }
-
-    // 操作变更时清空操作值
-    if (selectId.startsWith('tc-operation-select')) {
-      config.operationValue = {};
-    }
 
     this.emit('step-updated', { stepId, selectId, value, index });
   }
@@ -377,7 +375,7 @@ export class StepEditor extends EventEmitter {
    * @param {string} type - 新类型
    */
   changeStepType(stepId, type) {
-    const step = this.#state.steps.find(s => s.id === stepId);
+    const step = this.#state.steps.find((s) => s.id === stepId);
     if (!step) return;
 
     step.type = type;
@@ -392,7 +390,7 @@ export class StepEditor extends EventEmitter {
    * @param {string} name - 新名称
    */
   updateStepName(stepId, name) {
-    const step = this.#state.steps.find(s => s.id === stepId);
+    const step = this.#state.steps.find((s) => s.id === stepId);
     if (!step) return;
 
     step.name = name;

@@ -24,8 +24,7 @@ const TestCaseCodeGenerator = require('./TestCaseCodeGenerator');
 
 // ── module-level 纯函数 (对称 UpdateService compareVersions/normalizeUpdateError) ──
 
-const defaultIdGenerator = () =>
-  `tc_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
+const defaultIdGenerator = () => `tc_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
 
 const defaultFileNameSanitizer = (raw) => {
   let name = raw || 'test_case';
@@ -65,7 +64,7 @@ class TestCaseService {
     this.userConfigPath = userConfigPath;
     this.projectRoot = projectRoot;
     this.testCasesDir = path.join(userConfigPath, 'test_cases');
-    this._initialized = false;  // 懒初始化 flag (对称 UpdateService._initialized)
+    this._initialized = false; // 懒初始化 flag (对称 UpdateService._initialized)
     this._fileSystemFactory = opts.fileSystemFactory || defaultFileSystemFactory;
     this._codeGeneratorFactory = opts.codeGeneratorFactory || defaultCodeGeneratorFactory;
     this._idGenerator = opts.idGenerator || defaultIdGenerator;
@@ -107,6 +106,23 @@ class TestCaseService {
     return null;
   }
 
+  // P1-3: 用例名清洗 — path.basename 剥离路径 + 去 .json 后缀 + 字符白名单。
+  // 渲染进程可控 fileName 传 '..\\..\\config\\config.json' 时, 只能读到
+  // 'config.json' 本身 (且在 testCasesDir 下不存在则 ENOENT), 无法穿越目录。
+  _sanitizeTestCaseName(raw) {
+    if (typeof raw !== 'string' || !raw.trim()) return null;
+    const base = path.basename(raw);
+    const withoutExt = base.replace(/\.json$/i, '');
+    if (!withoutExt || !/^[a-zA-Z0-9_\u4e00-\u9fa5-]+$/.test(withoutExt)) return null;
+    return withoutExt;
+  }
+
+  // P1-3: target 必须位于 baseDir 内部 (规范化相对路径判定, 防前缀目录穿越)
+  _isPathInside(baseDir, target) {
+    const rel = path.relative(path.resolve(baseDir), path.resolve(target));
+    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  }
+
   // ── fs helper (藏 try-catch + fs 模板, 对称 PagePackageService _applyQuery/_applyMutation) ──
 
   async _readJsonFile(filePath) {
@@ -143,7 +159,7 @@ class TestCaseService {
       await this._fileSystem.unlink(filePath);
       return true;
     } catch (e) {
-      return false;  // 吞 ENOENT
+      return false; // 吞 ENOENT
     }
   }
 
@@ -156,27 +172,29 @@ class TestCaseService {
     try {
       await this._ensureInitialized();
       const files = await this._fileSystem.readdir(this.testCasesDir);
-      const jsonFiles = files.filter(f => f.endsWith('.json'));
+      const jsonFiles = files.filter((f) => f.endsWith('.json'));
 
-      const results = await Promise.all(jsonFiles.map(async (file) => {
-        const filePath = path.join(this.testCasesDir, file);
-        const { data: testCase, error } = await this._readJsonFile(filePath);
-        if (error) return null;
-        return {
-          id: testCase.id,
-          name: testCase.name,
-          fileName: testCase.fileName,
-          description: testCase.description,
-          targetApp: testCase.targetApp?.name,
-          stepCount: testCase.steps?.length || 0,
-          created: testCase.created,
-          updated: testCase.updated,
-          hasPyFile: await this.checkPyFileExists(testCase),
-          pyFilePath: testCase.pyFilePath || ''
-        };
-      }));
+      const results = await Promise.all(
+        jsonFiles.map(async (file) => {
+          const filePath = path.join(this.testCasesDir, file);
+          const { data: testCase, error } = await this._readJsonFile(filePath);
+          if (error) return null;
+          return {
+            id: testCase.id,
+            name: testCase.name,
+            fileName: testCase.fileName,
+            description: testCase.description,
+            targetApp: testCase.targetApp?.name,
+            stepCount: testCase.steps?.length || 0,
+            created: testCase.created,
+            updated: testCase.updated,
+            hasPyFile: await this.checkPyFileExists(testCase),
+            pyFilePath: testCase.pyFilePath || '',
+          };
+        })
+      );
 
-      const testCases = results.filter(item => item !== null);
+      const testCases = results.filter((item) => item !== null);
       return { success: true, data: testCases };
     } catch (error) {
       console.error('获取测试用例列表失败:', error);
@@ -188,7 +206,12 @@ class TestCaseService {
    * 获取单个测试用例
    */
   async getTestCase(fileName) {
-    const filePath = path.join(this.testCasesDir, `${fileName}.json`);
+    // P1-3: 路径清洗, 非法名直接拒绝
+    const safeName = this._sanitizeTestCaseName(fileName);
+    if (!safeName) {
+      return { success: false, error: 'invalid_file_name' };
+    }
+    const filePath = path.join(this.testCasesDir, `${safeName}.json`);
     const { data: testCase, error } = await this._readJsonFile(filePath);
     if (error) {
       if (error.code === 'ENOENT') {
@@ -230,7 +253,12 @@ class TestCaseService {
         return saveResult;
       }
 
-      return { success: true, data: saveResult.data, path: saveResult.path, pyPath };
+      return {
+        success: true,
+        data: saveResult.data,
+        path: saveResult.path,
+        pyPath,
+      };
     } catch (error) {
       console.error('保存测试用例失败:', error);
       return { success: false, error: error.message };
@@ -298,7 +326,7 @@ class TestCaseService {
         success: true,
         data: saveResult.data,
         jsonPath: saveResult.path,
-        pyPath: genResult.path
+        pyPath: genResult.path,
       };
     } catch (error) {
       console.error('保存并生成失败:', error);
@@ -324,11 +352,19 @@ class TestCaseService {
     }
 
     try {
-      const jsonPath = path.join(this.testCasesDir, `${fileName}.json`);
+      // P1-3: fileName 路径清洗
+      const safeName = this._sanitizeTestCaseName(fileName);
+      if (!safeName) {
+        return { success: false, error: 'invalid_file_name' };
+      }
+      const jsonPath = path.join(this.testCasesDir, `${safeName}.json`);
       const jsonExists = await this._fileExists(jsonPath);
 
       if (!jsonExists && !providedPyFilePath) {
-        return { success: false, error: '测试用例不存在且未提供Python文件路径' };
+        return {
+          success: false,
+          error: '测试用例不存在且未提供Python文件路径',
+        };
       }
 
       let pyFilePath = providedPyFilePath;
@@ -341,7 +377,12 @@ class TestCaseService {
       }
 
       if (pyFilePath) {
-        await this._deleteFile(pyFilePath);  // 吞 ENOENT
+        // P1-3: pyFilePath 必须位于 userConfigPath 内 (test_cases 子目录 + 用户数据根下的
+        // .py 输出均为合法), 阻止任意路径文件删除
+        if (!this._isPathInside(this.userConfigPath, pyFilePath)) {
+          return { success: false, error: 'invalid_py_path' };
+        }
+        await this._deleteFile(pyFilePath); // 吞 ENOENT
       }
 
       return { success: true };
@@ -371,15 +412,20 @@ class TestCaseService {
   }
 
   async checkJsonExists(fileName) {
-    const jsonPath = path.join(this.testCasesDir, `${fileName}.json`);
+    // P1-3: 路径清洗, 非法名视为不存在
+    const safeName = this._sanitizeTestCaseName(fileName);
+    if (!safeName) return false;
+    const jsonPath = path.join(this.testCasesDir, `${safeName}.json`);
     return this._fileExists(jsonPath);
   }
 
   async batchCheckJsonExists(fileNames) {
     const results = {};
-    await Promise.all(fileNames.map(async (fileName) => {
-      results[fileName] = await this.checkJsonExists(fileName);
-    }));
+    await Promise.all(
+      fileNames.map(async (fileName) => {
+        results[fileName] = await this.checkJsonExists(fileName);
+      })
+    );
     return results;
   }
 
@@ -388,7 +434,7 @@ class TestCaseService {
 
     const results = { cleanedJson: [], orphanedPy: [] };
     const files = await this._fileSystem.readdir(this.testCasesDir);
-    const jsonFiles = files.filter(f => f.endsWith('.json'));
+    const jsonFiles = files.filter((f) => f.endsWith('.json'));
 
     const validFileNames = new Set();
     const checkedDirs = new Set();
@@ -435,7 +481,7 @@ class TestCaseService {
             results.orphanedPy.push({
               fileName: fileName,
               pyFile: pyFile,
-              outputDir: outputDir
+              outputDir: outputDir,
             });
           }
         }

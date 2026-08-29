@@ -180,8 +180,12 @@ test('install push 失败返回 success=false + monitor emit error', async () =>
   });
 
   const monitorFactory = createMockMonitorFactory();
+  const executorCalls = [];
   const executorMock = {
-    execute: async () => ({ success: true, output: '', error: '' }),
+    execute: async (args, opts) => {
+      executorCalls.push({ args, opts });
+      return { success: true, output: '', error: '' };
+    },
   };
 
   const svc = new ApkInstaller({
@@ -199,6 +203,10 @@ test('install push 失败返回 success=false + monitor emit error', async () =>
   // pm install 不应被调用
   const installCalls = spawnFn.calls.filter(c => c.args.includes('install'));
   assert.strictEqual(installCalls.length, 0);
+  // P2-7: push 失败也应清理设备端临时 APK (finally)
+  assert.strictEqual(executorCalls.length, 1, 'push 失败仍应触发 rm cleanup');
+  assert.ok(executorCalls[0].args.includes('rm'), 'cleanup args 应含 rm');
+  assert.ok(executorCalls[0].args.some(a => a.includes('temp_')), 'cleanup 目标应为 temp_*.apk');
   // monitor emit 100% error
   const events = monitorFactory.instances[0].monitor.events;
   assert.ok(events.some(e => e.percentage === 100 && e.status === 'error'));

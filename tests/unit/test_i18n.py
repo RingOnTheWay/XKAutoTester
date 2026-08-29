@@ -270,9 +270,7 @@ class TestI18nModuleFunctions:
         assert i18n_module.t("hello") == "你好"
         assert i18n_module.get_language() == "zh-CN"
 
-    def test_module_reload_i18n_refreshes_instance(
-        self, reset_i18n_singleton, monkeypatch, tmp_path, make_locale_file
-    ):
+    def test_module_reload_i18n_refreshes_instance(self, reset_i18n_singleton, monkeypatch, tmp_path, make_locale_file):
         """reload_i18n() 刷新模块实例"""
         make_locale_file("zh-CN", {"hello": "你好"})
         monkeypatch.setenv("XKAUTOTESTER_LOCALES_PATH", str(tmp_path / "locales"))

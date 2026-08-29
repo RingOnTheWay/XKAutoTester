@@ -9,7 +9,7 @@ const path = require('path');
 const SERVICE_PATH = path.join(
   __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'ScheduledPlanService.js'
 );
-const { ScheduledPlanService, formatDateToMinute, isSameMinutePlan } = require(SERVICE_PATH);
+const { ScheduledPlanService, formatDateToMinute, isSameMinutePlan, isValidScheduledTime } = require(SERVICE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
 
@@ -122,6 +122,48 @@ test('saveScheduledPlan 已有 id 复用 + push + saveData', async () => {
 
   assert.strictEqual(result.plan.id, 'custom-id');
   assert.strictEqual(asyncFs.calls.writeJson.length, 1);
+});
+
+// P1-5: scheduledTime 合法性校验 (脏时间 → smartScheduler NaN 忙循环)
+test('P1-5 saveScheduledPlan 非法 scheduledTime 拒绝入库', async () => {
+  const { svc, asyncFs } = makeService();
+
+  const result = await svc.saveScheduledPlan({
+    name: 'bad plan',
+    scheduledTime: 'garbage-time',
+  });
+
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.error, 'invalid_scheduled_time');
+  assert.strictEqual(asyncFs.calls.writeJson.length, 0, '非法时间不得写入');
+});
+
+test('P1-5 saveScheduledPlan 缺失 scheduledTime 拒绝', async () => {
+  const { svc } = makeService();
+  const result = await svc.saveScheduledPlan({ name: 'no time' });
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.error, 'invalid_scheduled_time');
+});
+
+test('P1-5 updateScheduledPlan 非法 scheduledTime 拒绝更新', async () => {
+  const { svc, asyncFs } = makeService({
+    initialData: [{ id: 'p1', name: 'old', scheduledTime: '2026-07-28T14:00', status: 'pending' }],
+  });
+
+  const result = await svc.updateScheduledPlan({ id: 'p1', scheduledTime: 'not-a-date' });
+
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.error, 'invalid_scheduled_time');
+  assert.strictEqual(asyncFs.calls.writeJson.length, 0, '非法时间不得覆盖写入');
+});
+
+test('P1-5 isValidScheduledTime 纯函数', () => {
+  assert.strictEqual(isValidScheduledTime('2026-07-28T14:00'), true);
+  assert.strictEqual(isValidScheduledTime(new Date().toISOString()), true);
+  assert.strictEqual(isValidScheduledTime('garbage'), false);
+  assert.strictEqual(isValidScheduledTime(null), false);
+  assert.strictEqual(isValidScheduledTime(undefined), false);
+  assert.strictEqual(isValidScheduledTime(''), false);
 });
 
 // ── updateScheduledPlan ────────────────────────────────

@@ -25,7 +25,10 @@ class AllureCliInvoker {
       timeout: 3000,
     });
     if (result.code !== 0 || !result.stdout) return null;
-    const paths = result.stdout.split('\n').map(p => p.trim()).filter(p => p && p.endsWith('.exe'));
+    const paths = result.stdout
+      .split('\n')
+      .map((p) => p.trim())
+      .filter((p) => p && p.endsWith('.exe'));
     return paths[0] || null;
   }
 
@@ -45,7 +48,7 @@ class AllureCliInvoker {
         // 开发: electron/node_modules
         path.join(this.projectRoot, 'electron', 'node_modules', 'allure'),
         // 打包: app.asar 内部 (须用 Electron node)
-        path.join(__dirname, '..', '..', '..', '..', 'node_modules', 'allure')
+        path.join(__dirname, '..', '..', '..', '..', 'node_modules', 'allure'),
       ];
 
       for (const allureDir of searchPaths) {

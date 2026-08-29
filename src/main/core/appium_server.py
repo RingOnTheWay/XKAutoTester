@@ -26,6 +26,10 @@ from main.utils.text import DATETIME_FORMAT, clean_ansi_escape
 
 logger = logging.getLogger(__name__)
 
+# P3-10: 启动/轮询等待 (命名常量, 原魔法数字)
+_THREAD_START_WAIT_S = 0.5  # log pump 线程启动等待
+_SERVER_POLL_INTERVAL_S = 2  # 服务器就绪轮询间隔
+
 
 class _LogPump:
     """Appium 子进程日志泵: 读 stdout -> 清洗 ANSI -> 写文件. 线程安全.
@@ -160,9 +164,7 @@ def _kill_port_unix(port: int, subprocess_module=subprocess) -> None:
     """Unix/Linux: fuser -k {port}/tcp。幂等。"""
     try:
         logger.info(f"Unix/Linux系统端口{port}清理...")
-        result = subprocess_module.run(
-            ["fuser", "-k", f"{port}/tcp"], capture_output=True, text=True, timeout=10
-        )
+        result = subprocess_module.run(["fuser", "-k", f"{port}/tcp"], capture_output=True, text=True, timeout=10)
         logger.info(f"Unix/Linux系统端口{port}清理完成 - 返回码: {result.returncode}")
     except Exception as e:
         logger.error(f"Unix端口清理时出错: {e}")
@@ -348,7 +350,7 @@ class AppiumServer(SubprocessHandle):
             self._log_pump.start()
 
             # 等待线程启动
-            time.sleep(0.5)
+            time.sleep(_THREAD_START_WAIT_S)
 
             # 等待服务器启动
             start_time = time.time()
@@ -356,7 +358,7 @@ class AppiumServer(SubprocessHandle):
                 if self.is_server_running():
                     logger.info(f"Appium服务器启动成功: {self.server_url}")
                     return True
-                time.sleep(2)
+                time.sleep(_SERVER_POLL_INTERVAL_S)
 
             # 超时处理
             logger.error(f"Appium服务器启动超时 ({timeout}秒)")

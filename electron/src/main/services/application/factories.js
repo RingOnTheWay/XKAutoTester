@@ -29,7 +29,8 @@ const defaultI18nServiceFactory = () => new I18nService();
 const defaultUserDataServiceFactory = (projectRoot, versionService) => new UserDataService(projectRoot, versionService);
 const defaultScheduledPlanServiceFactory = (userConfigPath) => new ScheduledPlanService(userConfigPath);
 const defaultTestPlanServiceFactory = (userConfigPath, projectRoot) => new TestPlanService(userConfigPath, projectRoot);
-const defaultAllureServiceFactory = (projectRoot, i18nService, userDataPath) => new AllureService(projectRoot, i18nService, userDataPath);
+const defaultAllureServiceFactory = (projectRoot, i18nService, userDataPath) =>
+  new AllureService(projectRoot, i18nService, userDataPath);
 const defaultPythonTestServiceFactory = (opts) => new PythonTestService(opts);
 const defaultEnvironmentServiceFactory = (projectRoot, i18nService) => new EnvironmentService(i18nService, projectRoot);
 const defaultAdbServiceFactory = (projectRoot, i18nService) => new ADBService(projectRoot, i18nService);
@@ -43,7 +44,8 @@ const defaultUpdateServiceFactory = (versionService, userDataService) =>
   new UpdateService(versionService, userDataService);
 const defaultInspectorServiceFactory = (projectRoot, i18nService, userDataPath, isPackaged = false) =>
   new InspectorService(projectRoot, i18nService, userDataPath, isPackaged);
-const defaultDataTransferServiceFactory = (userDataService, i18nService, versionService) => new DataTransferService(userDataService, i18nService, versionService);
+const defaultDataTransferServiceFactory = (userDataService, i18nService, versionService) =>
+  new DataTransferService(userDataService, i18nService, versionService);
 const defaultSchedulerServiceFactory = (scheduledPlanService, i18nService) =>
   new SmartScheduler(scheduledPlanService, i18nService);
 const defaultEnvironmentStartupServiceFactory = (opts) => new EnvironmentStartupService(opts);

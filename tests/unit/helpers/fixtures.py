@@ -15,8 +15,6 @@ import pytest
 
 # P2: spec 用的真实类 (conftest 已将 src/ 加入 sys.path, 可直接 import)
 from main.core.adb_manager import ADBManager
-from main.core.appium_server import AppiumServer
-from main.core.crash_monitor import CrashMonitor
 from main.utils.config import ConfigManager
 
 # ── 路径 fixture ───────────────────────────────────────────────

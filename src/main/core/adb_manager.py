@@ -8,6 +8,7 @@
 - 保留 LogcatMonitor lazy 持有 + check_crash_logs 双路径 (monitor 优先 + logcat -d 回退)
 - 模块级 get_connected_devices() + create_adb_manager() 保持
 """
+
 from __future__ import annotations
 
 import logging
@@ -54,12 +55,8 @@ class ADBManager:
         self._connection: DeviceConnectionService = c.get("connection") or DeviceConnectionService(
             self._adb, device_name
         )
-        self._app: AppLifecycleService = c.get("app") or AppLifecycleService(
-            self._adb, device_name, app_package
-        )
-        self._bluetooth: BluetoothService = c.get("bluetooth") or BluetoothService(
-            self._adb, device_name
-        )
+        self._app: AppLifecycleService = c.get("app") or AppLifecycleService(self._adb, device_name, app_package)
+        self._bluetooth: BluetoothService = c.get("bluetooth") or BluetoothService(self._adb, device_name)
 
     # === 聚合属性 (调用方直接访问 collaborator, 消除 pass-through) ===
 

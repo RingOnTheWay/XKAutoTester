@@ -8,11 +8,10 @@ import requests
 
 from main.core.appium_server import (
     AppiumServer,
-    _LogPump,
-    _extract_listening_pids,
     _kill_port_process,
     _kill_port_unix,
     _kill_port_windows,
+    _LogPump,
 )
 
 # ── Fake 对象 ─────────────────────────────────────────────────
@@ -272,27 +271,30 @@ class TestKillPortProcessDispatch:
 
     def test_dispatch_windows_calls_windows_func(self):
         """platform.system() == 'Windows' -> _kill_port_windows"""
-        with patch("main.core.appium_server.platform") as mock_platform, patch(
-            "main.core.appium_server._kill_port_windows"
-        ) as mock_win:
+        with (
+            patch("main.core.appium_server.platform") as mock_platform,
+            patch("main.core.appium_server._kill_port_windows") as mock_win,
+        ):
             mock_platform.system.return_value = "Windows"
             _kill_port_process(4723)
             mock_win.assert_called_once()
 
     def test_dispatch_linux_calls_unix_func(self):
         """platform.system() == 'Linux' -> _kill_port_unix"""
-        with patch("main.core.appium_server.platform") as mock_platform, patch(
-            "main.core.appium_server._kill_port_unix"
-        ) as mock_unix:
+        with (
+            patch("main.core.appium_server.platform") as mock_platform,
+            patch("main.core.appium_server._kill_port_unix") as mock_unix,
+        ):
             mock_platform.system.return_value = "Linux"
             _kill_port_process(4723)
             mock_unix.assert_called_once()
 
     def test_dispatch_darwin_calls_unix_func(self):
         """platform.system() == 'Darwin' -> _kill_port_unix"""
-        with patch("main.core.appium_server.platform") as mock_platform, patch(
-            "main.core.appium_server._kill_port_unix"
-        ) as mock_unix:
+        with (
+            patch("main.core.appium_server.platform") as mock_platform,
+            patch("main.core.appium_server._kill_port_unix") as mock_unix,
+        ):
             mock_platform.system.return_value = "Darwin"
             _kill_port_process(4723)
             mock_unix.assert_called_once()

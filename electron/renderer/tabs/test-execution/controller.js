@@ -1,5 +1,6 @@
 import { Action } from '../../core/Action.js';
 import { Toast } from '../../components/toast.js';
+import { showConfirmModal } from '../../core/utils/confirmModal.js';
 
 /**
  * TestExecutionController - 测试执行 Tab 控制器
@@ -37,7 +38,7 @@ export class TestExecutionController {
   }
 
   destroy() {
-    this.#cleanups.forEach(fn => fn());
+    this.#cleanups.forEach((fn) => fn());
     this.#cleanups = [];
     this.#model.destroy();
   }
@@ -56,9 +57,15 @@ export class TestExecutionController {
 
   // ─── 访问器（暴露私有字段给内联方法） ────────────────────
 
-  get model() { return this.#model; }
-  get view() { return this.#view; }
-  get cleanups() { return this.#cleanups; }
+  get model() {
+    return this.#model;
+  }
+  get view() {
+    return this.#view;
+  }
+  get cleanups() {
+    return this.#cleanups;
+  }
 
   // ═════════════════════════════════════════════════════════════════
   // ─── Model 事件 → View 渲染（原 controllerModelEventsMixin） ─────
@@ -70,14 +77,19 @@ export class TestExecutionController {
 
     // 测试计划列表变更
     this.onModel(model, 'testPlans-changed', (plans) => {
-      view.renderTestPlans(plans, model.currentTestPlan?.id, (plan) => {
-        // toggle: 再次点击已选中的计划则取消选中
-        if (model.currentTestPlan?.id === plan.id) {
-          model.deselectTestPlan();
-        } else {
-          model.selectTestPlan(plan);
-        }
-      }, model.runningTestPlanName);
+      view.renderTestPlans(
+        plans,
+        model.currentTestPlan?.id,
+        (plan) => {
+          // toggle: 再次点击已选中的计划则取消选中
+          if (model.currentTestPlan?.id === plan.id) {
+            model.deselectTestPlan();
+          } else {
+            model.selectTestPlan(plan);
+          }
+        },
+        model.runningTestPlanName
+      );
     });
 
     // 当前测试计划变更
@@ -107,10 +119,17 @@ export class TestExecutionController {
         view.updateSelectDirectoryButton(true);
         // 用计划的testTypes渲染测试类型，并禁用checkbox
         const testTypes = plan.testTypes || [];
-        const markers = testTypes.map(t => typeof t === 'string' ? t : t?.name || t);
-        view.displayTestTypes(markers, null, false, (selectedTypes) => {
-          model.emit('test-types-selection-changed', selectedTypes);
-        }, true, testTypes);
+        const markers = testTypes.map((t) => (typeof t === 'string' ? t : t?.name || t));
+        view.displayTestTypes(
+          markers,
+          null,
+          false,
+          (selectedTypes) => {
+            model.emit('test-types-selection-changed', selectedTypes);
+          },
+          true,
+          testTypes
+        );
       } else {
         // 取消选中或计划无文件时清空目录并启用按钮
         model.updateSelectedDirectory(null, null);
@@ -122,14 +141,19 @@ export class TestExecutionController {
 
     // 定时计划列表变更
     this.onModel(model, 'scheduledPlans-changed', (plans) => {
-      view.renderScheduledPlansList(plans, model.currentScheduledPlan?.id, (plan) => {
-        // toggle: 再次点击已选中的计划则取消选中
-        if (model.currentScheduledPlan?.id === plan.id) {
-          model.deselectScheduledPlan();
-        } else {
-          model.selectScheduledPlan(plan);
-        }
-      }, model.runningScheduledPlanId);
+      view.renderScheduledPlansList(
+        plans,
+        model.currentScheduledPlan?.id,
+        (plan) => {
+          // toggle: 再次点击已选中的计划则取消选中
+          if (model.currentScheduledPlan?.id === plan.id) {
+            model.deselectScheduledPlan();
+          } else {
+            model.selectScheduledPlan(plan);
+          }
+        },
+        model.runningScheduledPlanId
+      );
     });
 
     // 当前定时计划变更
@@ -143,14 +167,14 @@ export class TestExecutionController {
 
       if (plan) {
         // 选中定时计划时：自动选中关联的测试计划（不启用编辑/删除按钮）
-        const testPlanIds = (plan.testPlans || []).map(p => typeof p === 'string' ? p : p.id);
+        const testPlanIds = (plan.testPlans || []).map((p) => (typeof p === 'string' ? p : p.id));
 
         // 视觉上高亮关联的测试计划卡片
         view.highlightTestPlanItems(testPlanIds);
 
         // 找到关联的测试计划来显示目录和测试类型
         const allPlans = model.testPlans;
-        const matchedPlans = allPlans.filter(p => testPlanIds.includes(p.id));
+        const matchedPlans = allPlans.filter((p) => testPlanIds.includes(p.id));
         const firstPlan = matchedPlans.length > 0 ? matchedPlans[0] : null;
 
         if (firstPlan) {
@@ -160,7 +184,7 @@ export class TestExecutionController {
           }
           // 显示测试类型（禁用状态）
           const testTypes = firstPlan.testTypes || [];
-          const markers = testTypes.map(t => typeof t === 'string' ? t : t?.name || t);
+          const markers = testTypes.map((t) => (typeof t === 'string' ? t : t?.name || t));
           view.displayTestTypes(markers, null, false, () => {}, true, testTypes);
         } else {
           model.updateSelectedDirectory(null, null);
@@ -229,10 +253,17 @@ export class TestExecutionController {
     this.onModel(model, 'currentMarkers-changed', (markers) => {
       const isPlanSelected = !!model.currentTestPlan;
       const planTestTypes = model.currentTestPlan?.testTypes || [];
-      const preselected = planTestTypes.map(t => typeof t === 'string' ? t : t?.name || t);
-      view.displayTestTypes(markers, null, false, (selectedTypes) => {
-        model.emit('test-types-selection-changed', selectedTypes);
-      }, isPlanSelected, preselected);
+      const preselected = planTestTypes.map((t) => (typeof t === 'string' ? t : t?.name || t));
+      view.displayTestTypes(
+        markers,
+        null,
+        false,
+        (selectedTypes) => {
+          model.emit('test-types-selection-changed', selectedTypes);
+        },
+        isPlanSelected,
+        preselected
+      );
     });
 
     // 输出刷新（批量缓冲）
@@ -294,32 +325,37 @@ export class TestExecutionController {
     });
 
     this.onModel(model, 'report-runs-loaded', (runs) => {
-      view.renderReportRuns(runs, null, (run) => {
-        // 直接存储选中的 run 对象
-        model.selectReportRun(run);
-      }, (run) => {
-        // 删除按钮回调: 弹确认框
-        view.showConfirmModal(
-          window.i18n.t('reportModal.delete'),
-          window.i18n.t('reportModal.deleteConfirm'),
-          () => model.deleteReportRun(run)
-        );
-      });
+      view.renderReportRuns(
+        runs,
+        null,
+        (run) => {
+          // 直接存储选中的 run 对象
+          model.selectReportRun(run);
+        },
+        (run) => {
+          // 删除按钮回调: 弹确认框
+          view.showConfirmModal(window.i18n.t('reportModal.delete'), window.i18n.t('reportModal.deleteConfirm'), () =>
+            model.deleteReportRun(run)
+          );
+        }
+      );
       // 初始禁用"打开"按钮（选择运行记录后启用）
       view.enableViewReportButton(false);
     });
 
     // 定时计划整合报告分组渲染
     this.onModel(model, 'scheduled-report-runs-loaded', (groups) => {
-      view.renderScheduledReportGroups(groups, (run) => {
-        model.selectReportRun(run);
-      }, (run) => {
-        view.showConfirmModal(
-          window.i18n.t('reportModal.delete'),
-          window.i18n.t('reportModal.deleteConfirm'),
-          () => model.deleteReportRun(run)
-        );
-      });
+      view.renderScheduledReportGroups(
+        groups,
+        (run) => {
+          model.selectReportRun(run);
+        },
+        (run) => {
+          view.showConfirmModal(window.i18n.t('reportModal.delete'), window.i18n.t('reportModal.deleteConfirm'), () =>
+            model.deleteReportRun(run)
+          );
+        }
+      );
       view.enableViewReportButton(false);
     });
 
@@ -350,7 +386,7 @@ export class TestExecutionController {
 
     // 通用错误
     this.onModel(model, 'error', (err) => {
-      const msg = typeof err === 'string' ? err : (err?.error?.message || err?.message || err?.source || String(err));
+      const msg = typeof err === 'string' ? err : err?.error?.message || err?.message || err?.source || String(err);
       view.showError(msg);
     });
 
@@ -360,13 +396,19 @@ export class TestExecutionController {
       view.setPlanModalTitle(window.i18n.t('testExecution.editTestPlan'));
       // 先扫描并渲染文件列表（传入编辑设备按钮回调）
       const files = await this.model.scanTestFiles();
-      await view.renderModalTestFiles(files || [], plan.testFiles || [], (file, checked) => {
-        // 文件选择变更时重新提取测试类型
-        this.refreshModalTestTypes();
-      }, (fileName, filePath) => {
-        // 编辑设备按钮回调
-        this.model.showEditDeviceIdModal(fileName, filePath);
-      }, (fileName) => this.model.getTestCase(fileName));
+      await view.renderModalTestFiles(
+        files || [],
+        plan.testFiles || [],
+        (file, checked) => {
+          // 文件选择变更时重新提取测试类型
+          this.refreshModalTestTypes();
+        },
+        (fileName, filePath) => {
+          // 编辑设备按钮回调
+          this.model.showEditDeviceIdModal(fileName, filePath);
+        },
+        (fileName) => this.model.getTestCase(fileName)
+      );
       // 预选表单字段（名称、描述、循环等）+ 按钮切换为更新模式
       view.preselectModalItems(plan);
       // 从计划文件提取 markers 并渲染测试类型，预选 plan.testTypes
@@ -384,7 +426,11 @@ export class TestExecutionController {
     // 编辑定时计划弹窗
     this.onModel(model, 'show-edit-scheduled-plan-modal', (plan) => {
       // 设置弹窗标题
-      view.setScheduledPlanModalTitle(window.i18n.t('scheduledPlan.editTitle') || '编辑定时计划');
+      view.setScheduledPlanModalTitle(
+        window.i18n.t('scheduledPlan.editTitle', {
+          defaultValue: '编辑定时计划',
+        })
+      );
 
       // 填充定时计划表单数据（ISO 时间 → "YYYY-MM-DD HH:mm"）
       view.fillScheduledPlanForm({
@@ -399,7 +445,7 @@ export class TestExecutionController {
       // plan.testPlans 可能是 ID 字符串数组 ["id1","id2"] 或对象数组 [{id,name}]
       let selectedPlanIds = [];
       if (plan.testPlans && Array.isArray(plan.testPlans)) {
-        selectedPlanIds = plan.testPlans.map(p => typeof p === 'string' ? p : p.id);
+        selectedPlanIds = plan.testPlans.map((p) => (typeof p === 'string' ? p : p.id));
       }
       const plans = model.testPlans;
       view.renderScheduledPlanTestPlansList(plans, selectedPlanIds, (planId, checked) => {
@@ -415,9 +461,19 @@ export class TestExecutionController {
     });
 
     // 编辑设备连接标识弹窗
-    this.onModel(model, 'show-edit-device-id-modal', ({ fileName, filePath, deviceName, platformVersion, blePort, isAndroid, hasBleSteps }) => {
-      view.openEditDeviceIdModal({ deviceName, platformVersion, blePort, isAndroid, hasBleSteps });
-    });
+    this.onModel(
+      model,
+      'show-edit-device-id-modal',
+      ({ fileName, filePath, deviceName, platformVersion, blePort, isAndroid, hasBleSteps }) => {
+        view.openEditDeviceIdModal({
+          deviceName,
+          platformVersion,
+          blePort,
+          isAndroid,
+          hasBleSteps,
+        });
+      }
+    );
 
     // 运行警告（设备未配置等）
     this.onModel(model, 'run-warning', ({ message }) => {
@@ -456,9 +512,7 @@ export class TestExecutionController {
     this.addAction('#update-plan-btn', () => this.handleUpdateTestPlan());
 
     // 测试计划表单提交
-    this.cleanups.push(
-      this.view.bindTestPlanFormSubmit(() => this.handleSaveTestPlan())
-    );
+    this.cleanups.push(this.view.bindTestPlanFormSubmit(() => this.handleSaveTestPlan()));
 
     // ── 定时计划 CRUD ────────────────────────────────────────
     this.addAction('#new-scheduled-plan-btn', () => this.handleShowNewScheduledPlanModal());
@@ -469,9 +523,7 @@ export class TestExecutionController {
     this.addAction('#update-scheduled-plan-btn', () => this.handleUpdateScheduledPlan());
 
     // 定时计划表单提交
-    this.cleanups.push(
-      this.view.bindScheduledPlanFormSubmit(() => this.handleSaveScheduledPlan())
-    );
+    this.cleanups.push(this.view.bindScheduledPlanFormSubmit(() => this.handleSaveScheduledPlan()));
 
     // ── 报告弹窗 ─────────────────────────────────────────────
     this.addAction('#report-modal-close-btn', () => this.view.closeReportModal());
@@ -626,13 +678,19 @@ export class TestExecutionController {
     this.view.resetPlanModalForNew();
     const files = await this.model.scanTestFiles();
     // 初始渲染文件列表（无选中）和测试类型占位符（未选文件时提示）
-    await this.view.renderModalTestFiles(files || [], [], (file, checked) => {
-      // 文件选择变更时重新提取测试类型
-      this.refreshModalTestTypes();
-    }, (fileName, filePath) => {
-      // 编辑设备按钮回调
-      this.model.showEditDeviceIdModal(fileName, filePath);
-    }, (fileName) => this.model.getTestCase(fileName));
+    await this.view.renderModalTestFiles(
+      files || [],
+      [],
+      (file, checked) => {
+        // 文件选择变更时重新提取测试类型
+        this.refreshModalTestTypes();
+      },
+      (fileName, filePath) => {
+        // 编辑设备按钮回调
+        this.model.showEditDeviceIdModal(fileName, filePath);
+      },
+      (fileName) => this.model.getTestCase(fileName)
+    );
     this.view.renderModalTestTypesPlaceholder();
   }
 
@@ -686,7 +744,7 @@ export class TestExecutionController {
       async () => {
         await this.model.deleteTestPlan(this.model.currentTestPlan.id);
         await this.model.loadTestPlans();
-      },
+      }
     );
   }
 
@@ -696,7 +754,7 @@ export class TestExecutionController {
 
   async handleShowNewScheduledPlanModal() {
     // 重置弹窗状态
-    this.view.setScheduledPlanModalTitle(window.i18n.t('scheduledPlan.newTitle') || '新建定时计划');
+    this.view.setScheduledPlanModalTitle(window.i18n.t('scheduledPlan.newTitle', { defaultValue: '新建定时计划' }));
     this.view.fillScheduledPlanForm({});
     this.view.setScheduledPlanModalMode('new');
 
@@ -731,14 +789,11 @@ export class TestExecutionController {
     };
 
     // 检查时间冲突
-    const conflictResult = await this.model.checkTimeConflict(
-      planData.scheduledTime,
-      planData.excludeId || null
-    );
+    const conflictResult = await this.model.checkTimeConflict(planData.scheduledTime, planData.excludeId || null);
     if (conflictResult?.hasConflict) {
       const override = await this.showConfirmDialog(
         window.i18n.t('scheduledPlan.timeConflict'),
-        window.i18n.t('scheduledPlan.timeConflictMessage'),
+        window.i18n.t('scheduledPlan.timeConflictMessage')
       );
       if (!override) return;
     }
@@ -792,7 +847,7 @@ export class TestExecutionController {
       if (conflictResult?.hasConflict) {
         const override = await this.showConfirmDialog(
           window.i18n.t('scheduledPlan.timeConflict'),
-          window.i18n.t('scheduledPlan.timeConflictMessage'),
+          window.i18n.t('scheduledPlan.timeConflictMessage')
         );
         if (!override) return;
       }
@@ -806,8 +861,8 @@ export class TestExecutionController {
   getTestPlanNames(testPlanIds) {
     const allPlans = this.model.testPlans;
     if (!testPlanIds || !allPlans) return [];
-    return testPlanIds.map(id => {
-      const plan = allPlans.find(p => p.id === id);
+    return testPlanIds.map((id) => {
+      const plan = allPlans.find((p) => p.id === id);
       return plan ? plan.name : id;
     });
   }
@@ -820,22 +875,15 @@ export class TestExecutionController {
       async () => {
         await this.model.deleteScheduledPlan(this.model.currentScheduledPlan.id);
         await this.model.loadScheduledPlans();
-      },
+      }
     );
   }
 
   // ─── 辅助方法（定时计划） ──────────────────────────────────
 
   async showConfirmDialog(title, message) {
-    const result = await window.electronAPI?.showDialog?.({
-      type: 'question',
-      title,
-      message,
-      buttons: [window.i18n.t('common.confirm'), window.i18n.t('common.cancel')],
-      defaultId: 0,
-      cancelId: 1,
-    });
-    return result?.response === 0;
+    // P2-3: 收敛到全局 confirm modal (原 Electron 原生 showDialog, 交互不一致)
+    return showConfirmModal(title, message);
   }
 
   // ═════════════════════════════════════════════════════════════════
@@ -878,13 +926,21 @@ export class TestExecutionController {
     const { deviceName, platformVersion, blePort } = this.view.getEditDeviceIdFormData();
 
     if (!deviceName) {
-      Toast.error(window.i18n.t('android.deviceNameRequired') || '请输入设备名称');
+      Toast.error(
+        window.i18n.t('android.deviceNameRequired', {
+          defaultValue: '请输入设备名称',
+        })
+      );
       return;
     }
 
     // BLE 端口格式校验
     if (blePort && !/^COM\d+$/i.test(blePort)) {
-      Toast.error(window.i18n.t('android.blePortFormatError') || '蓝牙端口格式应为 COM+数字');
+      Toast.error(
+        window.i18n.t('android.blePortFormatError', {
+          defaultValue: '蓝牙端口格式应为 COM+数字',
+        })
+      );
       return;
     }
 
@@ -895,12 +951,22 @@ export class TestExecutionController {
     // 新建计划场景下 currentTestPlan 为 null,需用 view 当前选中文件回填
     const selectedFiles = this.view.getModalSelectedTestFiles();
     const files = await this.model.scanTestFiles();
-    await this.view.renderModalTestFiles(files || [], selectedFiles, (file, checked) => {
-      this.refreshModalTestTypes();
-    }, (fileName, filePath) => {
-      this.model.showEditDeviceIdModal(fileName, filePath);
-    }, (fileName) => this.model.getTestCase(fileName));
+    await this.view.renderModalTestFiles(
+      files || [],
+      selectedFiles,
+      (file, checked) => {
+        this.refreshModalTestTypes();
+      },
+      (fileName, filePath) => {
+        this.model.showEditDeviceIdModal(fileName, filePath);
+      },
+      (fileName) => this.model.getTestCase(fileName)
+    );
 
-    Toast.success(window.i18n.t('android.deviceIdUpdated') || '设备信息已更新');
+    Toast.success(
+      window.i18n.t('android.deviceIdUpdated', {
+        defaultValue: '设备信息已更新',
+      })
+    );
   }
 }

@@ -11,6 +11,7 @@
 
 注入 FakeDriver/FakeAppiumServer/FakeAdbAdapter,无真 Appium/webdriver/adb。
 """
+
 from __future__ import annotations
 
 from main.core.inspector_service import InspectorService
@@ -18,8 +19,10 @@ from tests.unit.helpers.fake_adb_adapter import FakeAdbAdapter
 
 # ============ Fakes ============
 
+
 class _FakeCommandExecutor:
     """Fake webdriver command_executor — set_timeout 静默吞。"""
+
     def set_timeout(self, seconds: int) -> None:
         self.timeout = seconds
 
@@ -29,6 +32,7 @@ class FakeDriver:
 
     提供: session_id, get_screenshot_as_base64, page_source, quit, command_executor
     """
+
     def __init__(self, url: str, options) -> None:
         self._url = url
         self._options = options
@@ -37,10 +41,10 @@ class FakeDriver:
         self.quit_called = False
         self._screenshot_b64 = "ZmFrZSBzY3JlZW5zaG90"  # "fake screenshot"
         self._page_source = (
-            '<hierarchy>'
+            "<hierarchy>"
             '<node bounds="[0,0][100,100]" resource-id="com.x:id/btn" '
             'class="android.widget.Button" text="OK" content-desc="submit"/>'
-            '</hierarchy>'
+            "</hierarchy>"
         )
 
     def get_screenshot_as_base64(self) -> str:
@@ -59,6 +63,7 @@ class FakeAppiumServer:
 
     apply_default_capabilities 仍走 AppiumServer 类方法 (facade 直调,不经实例)。
     """
+
     def __init__(self, host: str, port: int) -> None:
         self.host = host
         self.port = port
@@ -105,6 +110,7 @@ def _make_service(
 
 
 # ============ Tests ============
+
 
 class TestStartSession:
     """start_session: 成功 + 重复 + AppiumStartFailed。"""
@@ -297,7 +303,12 @@ class TestWakeDeviceUsesAdapter:
         # adapter 被调用
         assert adb.call_count == 1
         assert adb.calls[0] == [
-            "-s", "dev:5555", "shell", "input", "keyevent", "224",
+            "-s",
+            "dev:5555",
+            "shell",
+            "input",
+            "keyevent",
+            "224",
         ]
 
     def test_wake_device_without_device_name_is_noop(self):

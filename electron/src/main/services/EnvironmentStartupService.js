@@ -22,29 +22,36 @@
 //   handleGetSerialPorts()                — 1-liner 委托 environmentService
 
 const fs = require('fs');
-const { exec } = require('child_process');
+const { spawn } = require('child_process');
 const { IPC_CHANNELS } = require('../../shared/constants');
 
 // ── module-level 常量 (对称 EnvironmentService REQUIRED_PYTHON_VERSION 等) ──
 
 /** Phase-level 进度档 (per-check 0-80% 由 EnvironmentService 内部发) */
 const PROGRESS = Object.freeze({
-  CLEANUP:   { percentage: 90, key: 'splash.checks.cleaningInvalidFiles' },
+  CLEANUP: { percentage: 90, key: 'splash.checks.cleaningInvalidFiles' },
   MIGRATION: { percentage: 95, key: 'splash.checks.migratingConfig' },
-  COMPLETE:  { percentage: 100, key: 'splash.checkComplete' },
+  COMPLETE: { percentage: 100, key: 'splash.checkComplete' },
 });
 
 // ── module-level 纯函数 (对称 EnvironmentService.parsePyprojectDependencies 等) ──
 
 /**
  * 构建 PowerShell Start-Process 命令 (从 INSTALL_DRIVER handler L81-92 提取)
- * 单引号转义: ' -> ''
+ * P2-6: 原实现 exec() 经 cmd.exe 二次解析, 路径含 " & | <> ^ % 等 cmd 元字符会命令错乱/注入面。
+ * 改为 spawn 数组参数 + -EncodedCommand (UTF-16LE base64):
+ *   - spawn 不经 shell, 命令行无明文脚本 → cmd 元字符无害
+ *   - 单引号在 PowerShell 脚本内以 '' 转义
  * @param {string} installerPath
- * @returns {string}
+ * @returns {{cmd: string, args: string[]}}
  */
 function buildDriverInstallCommand(installerPath) {
-  const escaped = installerPath.replace(/'/g, "''");
-  return `powershell.exe -NoProfile -Command "Start-Process -FilePath '${escaped}'"`;
+  const script = `Start-Process -FilePath '${String(installerPath).replace(/'/g, "''")}'`;
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  return {
+    cmd: 'powershell.exe',
+    args: ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+  };
 }
 
 // ── 4 默认 port factory (factory-or-default, 对称 EnvironmentService 6-factory) ──
@@ -58,20 +65,26 @@ const defaultProgressSenderFactory = (electronApp) => (channel, payload) => {
   if (splash) splash.webContents.send(channel, payload);
 };
 
-/** 包装 fs + exec + PowerShell 启动驱动安装 */
+/** 包装 fs + spawn + PowerShell 启动驱动安装 */
 const defaultDriverInstallerFactory = () => async (installerPath) => {
   if (!installerPath || !fs.existsSync(installerPath)) {
     return { success: false, message: '安装程序路径不存在' };
   }
+  // P2-6: spawn 数组参数 + EncodedCommand, 不经 cmd.exe 二次解析 (注入面消除)
+  const { cmd, args } = buildDriverInstallCommand(installerPath);
   await new Promise((resolve, reject) => {
-    exec(buildDriverInstallCommand(installerPath), (err) => err ? reject(err) : resolve());
+    const child = spawn(cmd, args, { windowsHide: true, stdio: 'ignore' });
+    child.on('error', (err) => reject(err));
+    child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`PowerShell exit code ${code}`))));
   });
   return { success: true, message: '驱动安装程序已启动' };
 };
 
 /** 包装 app lifecycle: closeSplash + createMainWindow */
 const defaultAppLifecycleFactory = (electronApp) => ({
-  closeSplash: () => { if (electronApp.splashWindow) electronApp.splashWindow.close(); },
+  closeSplash: () => {
+    if (electronApp.splashWindow) electronApp.splashWindow.close();
+  },
   createMainWindow: () => electronApp.createWindow(),
 });
 
@@ -104,7 +117,7 @@ class EnvironmentStartupService {
     this._driverInstallerFactory = opts.driverInstallerFactory || defaultDriverInstallerFactory;
     this._appLifecycleFactory = opts.appLifecycleFactory || defaultAppLifecycleFactory;
 
-    this._initialized = false;  // 懒初始化 flag (对称 EnvironmentService._initialized)
+    this._initialized = false; // 懒初始化 flag (对称 EnvironmentService._initialized)
   }
 
   // 懒初始化 (消除构造期 I/O, 对称 EnvironmentService._ensureInitialized)
@@ -167,7 +180,11 @@ class EnvironmentStartupService {
       return { success: true };
     } catch (error) {
       this._sendProgress(IPC_CHANNELS.CHECK_COMPLETE, {
-        requiredErrors: [this._i18nService.t('splash.checks.environmentCheckFailed', { error: error.message })],
+        requiredErrors: [
+          this._i18nService.t('splash.checks.environmentCheckFailed', {
+            error: error.message,
+          }),
+        ],
         warnings: [],
       });
       throw error;

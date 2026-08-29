@@ -1,6 +1,7 @@
 import { EventEmitter } from '../../core/EventEmitter.js';
 import { ApiBridge } from '../../core/ApiBridge.js';
 import { AppState } from '../../core/AppState.js';
+import { getScheduledPlanStatus } from '../../core/utils/scheduledPlanStatus.js';
 
 /**
  * TestExecutionModel - 测试执行 Tab 的 Model 层
@@ -51,25 +52,25 @@ export class TestExecutionModel extends EventEmitter {
   });
 
   _state = {
-    selectedDirectory: null,           // 选中的测试目录路径
-    selectedDirectoryDisplayName: null,// 目录显示名称
-    selectedTestFiles: [],             // 选中的测试文件列表
-    testPlans: [],                     // 测试计划列表
-    currentTestPlan: null,             // 当前选中的测试计划
-    scheduledPlans: [],                // 定时计划列表
-    currentScheduledPlan: null,        // 当前选中的定时计划
-    isRunning: false,                  // 是否正在执行测试
-    runningTestPlanName: null,         // 正在执行的测试计划名称
-    runningScheduledPlanId: null,      // 正在执行的定时计划 ID
-    currentMarkers: [],                // 当前提取的 pytest 标记
-    selectedReportRun: null,           // 选中的报告运行记录
-    reportMode: 'testPlan',            // 报告弹窗模式: 'testPlan' | 'scheduledPlan'
+    selectedDirectory: null, // 选中的测试目录路径
+    selectedDirectoryDisplayName: null, // 目录显示名称
+    selectedTestFiles: [], // 选中的测试文件列表
+    testPlans: [], // 测试计划列表
+    currentTestPlan: null, // 当前选中的测试计划
+    scheduledPlans: [], // 定时计划列表
+    currentScheduledPlan: null, // 当前选中的定时计划
+    isRunning: false, // 是否正在执行测试
+    runningTestPlanName: null, // 正在执行的测试计划名称
+    runningScheduledPlanId: null, // 正在执行的定时计划 ID
+    currentMarkers: [], // 当前提取的 pytest 标记
+    selectedReportRun: null, // 选中的报告运行记录
+    reportMode: 'testPlan', // 报告弹窗模式: 'testPlan' | 'scheduledPlan'
     currentScheduledPlanForReport: null, // 整合报告弹窗当前定时计划 (scheduledPlan 模式)
-    outputBuffer: [],                  // 输出缓冲区
-    outputRafId: null,                 // 输出刷新的 RAF ID
-    extractingMarkers: null,           // 标记提取的 Promise 守卫
-    selectingFromPlan: false,          // 是否从计划中选择文件
-    selectedDevice: null,              // 当前选中的设备 ID（与 AppState 同步）
+    outputBuffer: [], // 输出缓冲区
+    outputRafId: null, // 输出刷新的 RAF ID
+    extractingMarkers: null, // 标记提取的 Promise 守卫
+    selectingFromPlan: false, // 是否从计划中选择文件
+    selectedDevice: null, // 当前选中的设备 ID（与 AppState 同步）
   };
 
   // ── AppState 订阅取消函数 ──────────────────────────────────────
@@ -80,25 +81,61 @@ export class TestExecutionModel extends EventEmitter {
 
   // ── State Getters ──────────────────────────────────────────────
 
-  get selectedDirectory() { return this._state.selectedDirectory; }
-  get selectedDirectoryDisplayName() { return this._state.selectedDirectoryDisplayName; }
-  get selectedTestFiles() { return this._state.selectedTestFiles; }
-  get testPlans() { return this._state.testPlans; }
-  get currentTestPlan() { return this._state.currentTestPlan; }
-  get scheduledPlans() { return this._state.scheduledPlans; }
-  get currentScheduledPlan() { return this._state.currentScheduledPlan; }
-  get isRunning() { return this._state.isRunning; }
-  get runningTestPlanName() { return this._state.runningTestPlanName; }
-  get runningScheduledPlanId() { return this._state.runningScheduledPlanId; }
-  get currentMarkers() { return this._state.currentMarkers; }
-  get selectedReportRun() { return this._state.selectedReportRun; }
-  get outputBuffer() { return this._state.outputBuffer; }
-  get outputRafId() { return this._state.outputRafId; }
-  get extractingMarkers() { return this._state.extractingMarkers; }
-  get selectingFromPlan() { return this._state.selectingFromPlan; }
-  get selectedDevice() { return this._state.selectedDevice; }
+  get selectedDirectory() {
+    return this._state.selectedDirectory;
+  }
+  get selectedDirectoryDisplayName() {
+    return this._state.selectedDirectoryDisplayName;
+  }
+  get selectedTestFiles() {
+    return this._state.selectedTestFiles;
+  }
+  get testPlans() {
+    return this._state.testPlans;
+  }
+  get currentTestPlan() {
+    return this._state.currentTestPlan;
+  }
+  get scheduledPlans() {
+    return this._state.scheduledPlans;
+  }
+  get currentScheduledPlan() {
+    return this._state.currentScheduledPlan;
+  }
+  get isRunning() {
+    return this._state.isRunning;
+  }
+  get runningTestPlanName() {
+    return this._state.runningTestPlanName;
+  }
+  get runningScheduledPlanId() {
+    return this._state.runningScheduledPlanId;
+  }
+  get currentMarkers() {
+    return this._state.currentMarkers;
+  }
+  get selectedReportRun() {
+    return this._state.selectedReportRun;
+  }
+  get outputBuffer() {
+    return this._state.outputBuffer;
+  }
+  get outputRafId() {
+    return this._state.outputRafId;
+  }
+  get extractingMarkers() {
+    return this._state.extractingMarkers;
+  }
+  get selectingFromPlan() {
+    return this._state.selectingFromPlan;
+  }
+  get selectedDevice() {
+    return this._state.selectedDevice;
+  }
 
-  get(key) { return this._state[key]; }
+  get(key) {
+    return this._state[key];
+  }
 
   setSelectedTestFiles(files) {
     this._set('selectedTestFiles', files, 'selectedTestFiles-changed');
@@ -131,10 +168,7 @@ export class TestExecutionModel extends EventEmitter {
     });
 
     // 加载测试计划和定时计划
-    await Promise.all([
-      this.loadTestPlans(),
-      this.loadScheduledPlans(),
-    ]);
+    await Promise.all([this.loadTestPlans(), this.loadScheduledPlans()]);
   }
 
   destroy() {
@@ -151,7 +185,7 @@ export class TestExecutionModel extends EventEmitter {
       this.#unsubAppState = null;
     }
     // 取消 IPC 事件监听
-    this._ipcUnsubscribers.forEach(fn => fn());
+    this._ipcUnsubscribers.forEach((fn) => fn());
     this._ipcUnsubscribers = [];
     // 移除所有事件监听
     this.removeAllListeners();
@@ -206,7 +240,7 @@ export class TestExecutionModel extends EventEmitter {
       this._set('testPlans', plans, 'testPlans-changed');
       // 同步 currentTestPlan：若已选中计划，从新列表中找到对应项更新引用
       if (this._state.currentTestPlan) {
-        const updated = plans.find(p => p.id === this._state.currentTestPlan.id);
+        const updated = plans.find((p) => p.id === this._state.currentTestPlan.id);
         if (updated) {
           if (updated !== this._state.currentTestPlan) {
             this._set('currentTestPlan', updated, 'currentTestPlan-changed');
@@ -238,7 +272,10 @@ export class TestExecutionModel extends EventEmitter {
   async updateTestPlan(planId, planData) {
     try {
       // preload updateTestPlan 只接收单个 planData 参数，需将 id 合并进去
-      const result = await this._api.updateTestPlan({ ...planData, id: planId });
+      const result = await this._api.updateTestPlan({
+        ...planData,
+        id: planId,
+      });
       await this.loadTestPlans();
       this.emit('testPlan-updated', result);
       return result;
@@ -273,7 +310,9 @@ export class TestExecutionModel extends EventEmitter {
   async runTests(scheduledPlanInfo = null) {
     const testPlan = this._state.currentTestPlan;
     if (!testPlan) {
-      this.emit('run-error', { message: window.i18n.t('testExecution.selectPlanFirst') });
+      this.emit('run-error', {
+        message: window.i18n.t('testExecution.selectPlanFirst'),
+      });
       return;
     }
 
@@ -304,17 +343,44 @@ export class TestExecutionModel extends EventEmitter {
     const continueOnFailure = testPlan.continueOnFailure !== false;
     this.appendOutput('>>> ========== ' + window.i18n.t('testExecution.testPlanDetails') + ' ==========');
     this.appendOutput('>>> ' + window.i18n.t('testExecution.planName') + ': ' + (testPlan.name || ''));
-    this.appendOutput('>>> ' + window.i18n.t('testExecution.planDescription') + ': ' + (testPlan.description || window.i18n.t('common.none')));
-    const testFileNames = this._state.selectedTestFiles.map(f => f.name || f.path).join(', ');
-    this.appendOutput('>>> ' + window.i18n.t('testExecution.testFiles') + ': ' + (testFileNames || window.i18n.t('common.none')));
+    this.appendOutput(
+      '>>> ' +
+        window.i18n.t('testExecution.planDescription') +
+        ': ' +
+        (testPlan.description || window.i18n.t('common.none'))
+    );
+    const testFileNames = this._state.selectedTestFiles.map((f) => f.name || f.path).join(', ');
+    this.appendOutput(
+      '>>> ' + window.i18n.t('testExecution.testFiles') + ': ' + (testFileNames || window.i18n.t('common.none'))
+    );
     const testTypes = this.getSelectedTestTypes().join(', ');
-    this.appendOutput('>>> ' + window.i18n.t('testExecution.testTypes') + ': ' + (testTypes || window.i18n.t('testExecution.allTypes')));
-    this.appendOutput('>>> ' + window.i18n.t('testExecution.loopSettings') + ': ' + window.i18n.t('testExecution.loopCount') + ' ' + loopCount + ', ' + window.i18n.t('testExecution.continueOnFailure') + ': ' + (continueOnFailure ? window.i18n.t('common.yes') : window.i18n.t('common.no')));
+    this.appendOutput(
+      '>>> ' + window.i18n.t('testExecution.testTypes') + ': ' + (testTypes || window.i18n.t('testExecution.allTypes'))
+    );
+    this.appendOutput(
+      '>>> ' +
+        window.i18n.t('testExecution.loopSettings') +
+        ': ' +
+        window.i18n.t('testExecution.loopCount') +
+        ' ' +
+        loopCount +
+        ', ' +
+        window.i18n.t('testExecution.continueOnFailure') +
+        ': ' +
+        (continueOnFailure ? window.i18n.t('common.yes') : window.i18n.t('common.no'))
+    );
 
     if (scheduledPlanInfo) {
       this.appendOutput('>>> ---------- ' + window.i18n.t('testExecution.scheduledPlanInfo') + ' ----------');
-      this.appendOutput('>>> ' + window.i18n.t('testExecution.scheduledPlanName') + ': ' + (scheduledPlanInfo.name || ''));
-      this.appendOutput('>>> ' + window.i18n.t('testExecution.executionTime') + ': ' + (scheduledPlanInfo.executionTime || new Date().toLocaleString()));
+      this.appendOutput(
+        '>>> ' + window.i18n.t('testExecution.scheduledPlanName') + ': ' + (scheduledPlanInfo.name || '')
+      );
+      this.appendOutput(
+        '>>> ' +
+          window.i18n.t('testExecution.executionTime') +
+          ': ' +
+          (scheduledPlanInfo.executionTime || new Date().toLocaleString())
+      );
     }
     this.appendOutput('>>> ==================================\n');
 
@@ -322,7 +388,13 @@ export class TestExecutionModel extends EventEmitter {
     let stoppedEarly = false;
     let lastResult = null;
     const loopResults = [];
-    const aggregatedStats = { passed: 0, failed: 0, skipped: 0, broken: 0, total: 0 };
+    const aggregatedStats = {
+      passed: 0,
+      failed: 0,
+      skipped: 0,
+      broken: 0,
+      total: 0,
+    };
 
     try {
       for (let i = 1; i <= loopCount; i++) {
@@ -333,7 +405,7 @@ export class TestExecutionModel extends EventEmitter {
 
         this.emit('loop-progress-changed', { current: i, total: loopCount });
 
-        const testPaths = this._state.selectedTestFiles.map(f => f.path || f);
+        const testPaths = this._state.selectedTestFiles.map((f) => f.path || f);
         const markers = this.getSelectedTestTypes();
         const planName = testPlan.name;
 
@@ -352,14 +424,22 @@ export class TestExecutionModel extends EventEmitter {
         if (lastResult) {
           if (!lastResult.success) {
             hasFailure = true;
-            loopResults.push({ loop: i, success: false, testStats: lastResult.testStats || null });
+            loopResults.push({
+              loop: i,
+              success: false,
+              testStats: lastResult.testStats || null,
+            });
             if (!continueOnFailure) {
               this.appendError(`>>> ${window.i18n.t('testExecution.loopStopped', { current: i })}`);
               break;
             }
             this.appendError(`>>> ${window.i18n.t('testExecution.loopFailed', { current: i })}`);
           } else {
-            loopResults.push({ loop: i, success: true, testStats: lastResult.testStats || null });
+            loopResults.push({
+              loop: i,
+              success: true,
+              testStats: lastResult.testStats || null,
+            });
             this.appendOutput(`>>> ${window.i18n.t('testExecution.loopCompleted', { current: i })}`);
           }
 
@@ -395,7 +475,7 @@ export class TestExecutionModel extends EventEmitter {
       let passRate = '0.00';
       let passedLoops = 0;
       if (loopCount > 1) {
-        passedLoops = loopResults.filter(r => r.success).length;
+        passedLoops = loopResults.filter((r) => r.success).length;
         passRate = loopResults.length > 0 ? ((passedLoops / loopResults.length) * 100).toFixed(2) : '0.00';
         this.appendOutput('>>> ' + window.i18n.t('testExecution.totalLoops') + ': ' + loopResults.length);
         this.appendOutput('>>> ' + window.i18n.t('testExecution.passedLoops') + ': ' + passedLoops);
@@ -412,12 +492,30 @@ export class TestExecutionModel extends EventEmitter {
       const effectiveTotal = aggregatedStats.passed + aggregatedStats.failed + aggregatedStats.broken;
       const casePassRate = effectiveTotal > 0 ? ((aggregatedStats.passed / effectiveTotal) * 100).toFixed(2) : '0.00';
       if (aggregatedStats.total > 0) {
-        this.appendOutput('>>> ' + window.i18n.t('testExecution.caseStats') + ': ' +
-          window.i18n.t('testExecution.casePassed') + ' ' + aggregatedStats.passed + ', ' +
-          window.i18n.t('testExecution.caseFailed') + ' ' + aggregatedStats.failed + ', ' +
-          window.i18n.t('testExecution.caseSkipped') + ' ' + aggregatedStats.skipped + ', ' +
-          window.i18n.t('testExecution.caseBroken') + ' ' + aggregatedStats.broken + ', ' +
-          window.i18n.t('testExecution.caseTotal') + ' ' + aggregatedStats.total);
+        this.appendOutput(
+          '>>> ' +
+            window.i18n.t('testExecution.caseStats') +
+            ': ' +
+            window.i18n.t('testExecution.casePassed') +
+            ' ' +
+            aggregatedStats.passed +
+            ', ' +
+            window.i18n.t('testExecution.caseFailed') +
+            ' ' +
+            aggregatedStats.failed +
+            ', ' +
+            window.i18n.t('testExecution.caseSkipped') +
+            ' ' +
+            aggregatedStats.skipped +
+            ', ' +
+            window.i18n.t('testExecution.caseBroken') +
+            ' ' +
+            aggregatedStats.broken +
+            ', ' +
+            window.i18n.t('testExecution.caseTotal') +
+            ' ' +
+            aggregatedStats.total
+        );
         this.appendOutput('>>> ' + window.i18n.t('testExecution.casePassRate') + ': ' + casePassRate + '%');
       }
 
@@ -459,7 +557,7 @@ export class TestExecutionModel extends EventEmitter {
         stoppedEarly: stoppedEarly,
         testStatus: testStatus,
         aggregatedStats: aggregatedStats,
-        casePassRate: casePassRate
+        casePassRate: casePassRate,
       };
       if (scheduledPlanInfo) {
         notificationInfo.scheduledPlanName = scheduledPlanInfo.name;
@@ -470,7 +568,13 @@ export class TestExecutionModel extends EventEmitter {
       this._set('isRunning', false, 'isRunning-changed');
       this._set('runningTestPlanName', null, 'runningTestPlanName-changed');
       this._set('runningScheduledPlanId', null, 'runningScheduledPlanId-changed');
-      this.emit('run-complete', { testPlan, result: lastResult, scheduledPlanInfo, testStatus, aggregatedStats });
+      this.emit('run-complete', {
+        testPlan,
+        result: lastResult,
+        scheduledPlanInfo,
+        testStatus,
+        aggregatedStats,
+      });
     }
   }
 
@@ -491,7 +595,7 @@ export class TestExecutionModel extends EventEmitter {
   appendOutput(text) {
     if (!text) return;
     // 按行过滤空白行
-    const filteredLines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+    const filteredLines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
     if (filteredLines.length === 0) return;
     const filteredText = filteredLines.join('\n');
     this._state.outputBuffer.push({ text: filteredText, isError: false });
@@ -501,7 +605,7 @@ export class TestExecutionModel extends EventEmitter {
   appendError(text) {
     if (!text) return;
     // 按行过滤空白行
-    const filteredLines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+    const filteredLines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
     if (filteredLines.length === 0) return;
     const filteredText = filteredLines.join('\n');
     this._state.outputBuffer.push({ text: filteredText, isError: true });
@@ -559,7 +663,7 @@ export class TestExecutionModel extends EventEmitter {
             androidCases.push({
               fileName,
               filePath: testFile.path,
-              caseData
+              caseData,
             });
           }
         }
@@ -570,7 +674,7 @@ export class TestExecutionModel extends EventEmitter {
 
     return {
       required: androidCases.length > 0,
-      cases: androidCases
+      cases: androidCases,
     };
   }
 
@@ -706,12 +810,11 @@ export class TestExecutionModel extends EventEmitter {
     }
 
     if (unconfiguredFiles.length > 0) {
-      const fileList = unconfiguredFiles.length > 3
-        ? unconfiguredFiles.slice(0, 3).join(', ') + '...'
-        : unconfiguredFiles.join(', ');
+      const fileList =
+        unconfiguredFiles.length > 3 ? unconfiguredFiles.slice(0, 3).join(', ') + '...' : unconfiguredFiles.join(', ');
       return {
         valid: false,
-        message: window.i18n.t('testExecution.deviceSelection.deviceNotConfigured', { files: fileList })
+        message: window.i18n.t('testExecution.deviceSelection.deviceNotConfigured', { files: fileList }),
       };
     }
 
@@ -741,7 +844,7 @@ export class TestExecutionModel extends EventEmitter {
           const caseData = result.data;
           const steps = caseData.steps || [];
 
-          const hasBleSteps = steps.some(step => step.type === 'ble');
+          const hasBleSteps = steps.some((step) => step.type === 'ble');
 
           if (hasBleSteps) {
             const blePort = caseData.bleDevice?.port;
@@ -756,12 +859,11 @@ export class TestExecutionModel extends EventEmitter {
     }
 
     if (unconfiguredFiles.length > 0) {
-      const fileList = unconfiguredFiles.length > 3
-        ? unconfiguredFiles.slice(0, 3).join(', ') + '...'
-        : unconfiguredFiles.join(', ');
+      const fileList =
+        unconfiguredFiles.length > 3 ? unconfiguredFiles.slice(0, 3).join(', ') + '...' : unconfiguredFiles.join(', ');
       return {
         valid: false,
-        message: window.i18n.t('testExecution.deviceSelection.blePortNotConfigured', { files: fileList })
+        message: window.i18n.t('testExecution.deviceSelection.blePortNotConfigured', { files: fileList }),
       };
     }
 
@@ -791,7 +893,7 @@ export class TestExecutionModel extends EventEmitter {
         platformVersion = result.data.deviceConfig?.platformVersion || '';
         blePort = result.data.bleDevice?.port || '';
         isAndroid = result.data.platform && result.data.platform.toLowerCase() === 'android';
-        hasBleSteps = result.data.steps && result.data.steps.some(step => step.type === 'ble');
+        hasBleSteps = result.data.steps && result.data.steps.some((step) => step.type === 'ble');
       }
     } catch (error) {
       console.error('获取测试用例设备信息失败:', error);
@@ -804,8 +906,8 @@ export class TestExecutionModel extends EventEmitter {
     this.emit('show-edit-device-id-modal', {
       fileName,
       filePath,
-      deviceName: (deviceName && deviceName !== '{{DEVICE_NAME}}') ? deviceName : '',
-      platformVersion: (platformVersion && platformVersion !== '{{PLATFORM_VERSION}}') ? platformVersion : '',
+      deviceName: deviceName && deviceName !== '{{DEVICE_NAME}}' ? deviceName : '',
+      platformVersion: platformVersion && platformVersion !== '{{PLATFORM_VERSION}}' ? platformVersion : '',
       blePort,
       isAndroid,
       hasBleSteps,
@@ -854,7 +956,10 @@ export class TestExecutionModel extends EventEmitter {
 
         // wrapper 已处理 IPC 失败,错误由外层 catch 接
         await this._api.testCaseSaveAndGenerate(caseData, outputDir);
-        this.emit('edit-device-id-saved', { fileName: this._editDeviceIdFileName, caseData });
+        this.emit('edit-device-id-saved', {
+          fileName: this._editDeviceIdFileName,
+          caseData,
+        });
       }
     } catch (error) {
       this.emit('error', { source: 'confirmEditDeviceId', error });
@@ -921,7 +1026,7 @@ export class TestExecutionModel extends EventEmitter {
       this._set('scheduledPlans', plans, 'scheduledPlans-changed');
       // 同步 currentScheduledPlan：若已选中计划被删除，清空
       if (this._state.currentScheduledPlan) {
-        const updated = plans.find(p => p.id === this._state.currentScheduledPlan.id);
+        const updated = plans.find((p) => p.id === this._state.currentScheduledPlan.id);
         if (!updated) {
           this._set('currentScheduledPlan', null, 'currentScheduledPlan-changed');
         } else if (updated !== this._state.currentScheduledPlan) {
@@ -950,7 +1055,10 @@ export class TestExecutionModel extends EventEmitter {
   async updateScheduledPlan(planId, planData) {
     try {
       // preload updateScheduledPlan 只接收单个 planData 参数，需将 id 合并进去
-      const result = await this._api.updateScheduledPlan({ ...planData, id: planId });
+      const result = await this._api.updateScheduledPlan({
+        ...planData,
+        id: planId,
+      });
       await this.loadScheduledPlans();
       this.emit('scheduledPlan-updated', result);
       return result;
@@ -1009,7 +1117,9 @@ export class TestExecutionModel extends EventEmitter {
    * 处理定时计划触发执行事件
    */
   async handleScheduledTestStart(data) {
-    const message = window.i18n.t('scheduledPlan.testStarting', { name: data.planName });
+    const message = window.i18n.t('scheduledPlan.testStarting', {
+      name: data.planName,
+    });
     this.appendOutput(`\n>>> ${message}`);
     // 重新加载定时计划列表，显示"执行中"状态
     await this.loadScheduledPlans();
@@ -1025,7 +1135,7 @@ export class TestExecutionModel extends EventEmitter {
 
       for (const testPlanObj of data.testPlans) {
         const testPlanId = typeof testPlanObj === 'string' ? testPlanObj : testPlanObj.id;
-        const testPlan = allTestPlans.find(p => p.id === testPlanId);
+        const testPlan = allTestPlans.find((p) => p.id === testPlanId);
 
         if (!testPlan) {
           this.appendError(`>>> ${window.i18n.t('testExecution.testPlanNotExist')}: ${testPlanId}`);
@@ -1082,23 +1192,8 @@ export class TestExecutionModel extends EventEmitter {
   }
 
   getScheduledPlanStatus(plan) {
-    if (!plan) return { class: 'unknown', text: 'Unknown' };
-    const now = new Date();
-    const scheduledTime = plan.scheduledTime ? new Date(plan.scheduledTime) : null;
-
-    if (plan.status === 'completed') {
-      return { class: 'completed', text: window.i18n.t('scheduledPlan.statusCompleted') };
-    } else if (plan.status === 'running') {
-      return { class: 'running', text: window.i18n.t('scheduledPlan.statusRunning') };
-    } else if (plan.status === 'cancelled') {
-      return { class: 'cancelled', text: window.i18n.t('scheduledPlan.statusCancelled') };
-    } else if (plan.status === 'expired') {
-      return { class: 'expired', text: window.i18n.t('scheduledPlan.statusExpired') };
-    } else if (scheduledTime && scheduledTime <= now) {
-      return { class: 'overdue', text: window.i18n.t('scheduledPlan.statusOverdue') };
-    } else {
-      return { class: 'pending', text: window.i18n.t('scheduledPlan.statusPending') };
-    }
+    // P2-2: 委托统一工具 (原与 view.js static 双份重复)
+    return getScheduledPlanStatus(plan);
   }
 
   // ─── 测试类型/标记 + 报告 + 钉钉通知 (原 modelReportsMixin) ────
@@ -1122,7 +1217,7 @@ export class TestExecutionModel extends EventEmitter {
         }
 
         // 统一转为路径字符串数组（兼容对象数组与字符串数组）
-        const filePaths = files.map(f => (typeof f === 'string' ? f : f?.path)).filter(Boolean);
+        const filePaths = files.map((f) => (typeof f === 'string' ? f : f?.path)).filter(Boolean);
         if (filePaths.length === 0) {
           this._set('currentMarkers', [], 'currentMarkers-changed');
           return [];
@@ -1133,7 +1228,10 @@ export class TestExecutionModel extends EventEmitter {
         this._set('currentMarkers', markers, 'currentMarkers-changed');
         return markers;
       } catch (error) {
-        this.emit('error', { source: 'extractMarkersFromSelectedFiles', error });
+        this.emit('error', {
+          source: 'extractMarkersFromSelectedFiles',
+          error,
+        });
         return [];
       } finally {
         this._state.extractingMarkers = null;
@@ -1151,9 +1249,7 @@ export class TestExecutionModel extends EventEmitter {
    */
   async extractMarkersFromFiles(files) {
     try {
-      const filePaths = (files || [])
-        .map(f => (typeof f === 'string' ? f : f?.path))
-        .filter(Boolean);
+      const filePaths = (files || []).map((f) => (typeof f === 'string' ? f : f?.path)).filter(Boolean);
       if (filePaths.length === 0) return [];
       const result = await this._api.extractPytestMarkers(filePaths);
       return result?.markers || result || [];
@@ -1232,17 +1328,23 @@ export class TestExecutionModel extends EventEmitter {
    */
   async deleteReportRun(run) {
     if (!run) {
-      this.emit('error', { source: 'deleteReportRun', error: new Error(window.i18n.t('reportModal.invalidReport')) });
+      this.emit('error', {
+        source: 'deleteReportRun',
+        error: new Error(window.i18n.t('reportModal.invalidReport')),
+      });
       return;
     }
 
     const isScheduledMode = this._state.reportMode === 'scheduledPlan';
     const sourcePlanName = isScheduledMode
-      ? (run.sourcePlanName || (this._state.currentScheduledPlanForReport?.name))
-      : (this._state.currentTestPlan?.name);
+      ? run.sourcePlanName || this._state.currentScheduledPlanForReport?.name
+      : this._state.currentTestPlan?.name;
 
     if (!sourcePlanName) {
-      this.emit('error', { source: 'deleteReportRun', error: new Error(window.i18n.t('testExecution.selectTestPlanFirst')) });
+      this.emit('error', {
+        source: 'deleteReportRun',
+        error: new Error(window.i18n.t('testExecution.selectTestPlanFirst')),
+      });
       return;
     }
 
@@ -1252,7 +1354,10 @@ export class TestExecutionModel extends EventEmitter {
       const identifier = run.reportPath || run.timestamp;
       const result = await this._api.deleteReportRun(sourcePlanName, identifier);
       if (!result.success) {
-        this.emit('error', { source: 'deleteReportRun', error: new Error(result.error || window.i18n.t('reportModal.deleteFailed')) });
+        this.emit('error', {
+          source: 'deleteReportRun',
+          error: new Error(result.error || window.i18n.t('reportModal.deleteFailed')),
+        });
         return;
       }
       // 清除选中的 run (如果删除的是当前选中)
@@ -1329,20 +1434,37 @@ export class TestExecutionModel extends EventEmitter {
         failed: '❌ ' + window.i18n.t('testExecution.testFailed'),
         skipped: '⏭️ ' + window.i18n.t('testExecution.testSkipped'),
         partialPassed: '⚠️ ' + window.i18n.t('testExecution.testPartialPassed'),
-        noTests: '⚠️ ' + window.i18n.t('testExecution.noTests')
+        noTests: '⚠️ ' + window.i18n.t('testExecution.noTests'),
       };
-      const testResult = statusLabels[testInfo.testStatus] || (testInfo.hasFailure ? '❌ ' + window.i18n.t('testExecution.testFailed') : '✅ ' + window.i18n.t('testExecution.testPassed'));
+      const testResult =
+        statusLabels[testInfo.testStatus] ||
+        (testInfo.hasFailure
+          ? '❌ ' + window.i18n.t('testExecution.testFailed')
+          : '✅ ' + window.i18n.t('testExecution.testPassed'));
 
       let message = window.i18n.t('testExecution.notification.title') + '\n';
 
       if (testInfo.scheduledPlanName) {
-        message += '\n' + window.i18n.t('testExecution.notification.scheduledPlan') + ': ' + testInfo.scheduledPlanName + '\n';
-        message += window.i18n.t('testExecution.notification.executionTime') + ': ' + (testInfo.scheduledPlanExecutionTime || new Date().toLocaleString()) + '\n';
+        message +=
+          '\n' + window.i18n.t('testExecution.notification.scheduledPlan') + ': ' + testInfo.scheduledPlanName + '\n';
+        message +=
+          window.i18n.t('testExecution.notification.executionTime') +
+          ': ' +
+          (testInfo.scheduledPlanExecutionTime || new Date().toLocaleString()) +
+          '\n';
       }
 
       message += '\n' + window.i18n.t('testExecution.notification.testPlan') + ': ' + testInfo.testPlanName + '\n';
-      message += window.i18n.t('testExecution.notification.testFiles') + ': ' + (testInfo.testFileNames || window.i18n.t('testExecution.notification.none')) + '\n';
-      message += window.i18n.t('testExecution.notification.testTypes') + ': ' + (testInfo.testTypes || window.i18n.t('testExecution.notification.all')) + '\n';
+      message +=
+        window.i18n.t('testExecution.notification.testFiles') +
+        ': ' +
+        (testInfo.testFileNames || window.i18n.t('testExecution.notification.none')) +
+        '\n';
+      message +=
+        window.i18n.t('testExecution.notification.testTypes') +
+        ': ' +
+        (testInfo.testTypes || window.i18n.t('testExecution.notification.all')) +
+        '\n';
       message += window.i18n.t('testExecution.notification.loopCount') + ': ' + testInfo.loopCount + '\n';
       message += '\n' + window.i18n.t('testExecution.notification.roundInfo') + ':\n';
       message += window.i18n.t('testExecution.notification.totalRounds') + ': ' + testInfo.totalLoops + '\n';
@@ -1353,14 +1475,34 @@ export class TestExecutionModel extends EventEmitter {
       if (testInfo.aggregatedStats && testInfo.aggregatedStats.total > 0) {
         const stats = testInfo.aggregatedStats;
         message += '\n' + window.i18n.t('testExecution.notification.caseStats') + ':\n';
-        message += window.i18n.t('testExecution.notification.casePassed') + ': ' + stats.passed + ', ' + window.i18n.t('testExecution.notification.caseFailed') + ': ' + stats.failed + ', ' + window.i18n.t('testExecution.notification.caseSkipped') + ': ' + stats.skipped + ', ' + window.i18n.t('testExecution.notification.caseBroken') + ': ' + stats.broken + ', ' + window.i18n.t('testExecution.notification.caseTotal') + ': ' + stats.total + '\n';
+        message +=
+          window.i18n.t('testExecution.notification.casePassed') +
+          ': ' +
+          stats.passed +
+          ', ' +
+          window.i18n.t('testExecution.notification.caseFailed') +
+          ': ' +
+          stats.failed +
+          ', ' +
+          window.i18n.t('testExecution.notification.caseSkipped') +
+          ': ' +
+          stats.skipped +
+          ', ' +
+          window.i18n.t('testExecution.notification.caseBroken') +
+          ': ' +
+          stats.broken +
+          ', ' +
+          window.i18n.t('testExecution.notification.caseTotal') +
+          ': ' +
+          stats.total +
+          '\n';
         message += window.i18n.t('testExecution.notification.casePassRate') + ': ' + testInfo.casePassRate + '%\n';
       }
 
       message += '\n' + window.i18n.t('testExecution.notification.testResult') + ': ' + testResult;
 
       const notificationData = {
-        message: message
+        message: message,
       };
 
       this.appendOutput('>>> ' + window.i18n.t('testExecution.sendingNotification') + '...');

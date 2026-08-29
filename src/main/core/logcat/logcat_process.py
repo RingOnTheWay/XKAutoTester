@@ -12,6 +12,7 @@
 - 修复原 logcat_monitor.py L155 硬编码 "adb" bug — adb 路径走 adapter
 - 不持锁,锁由 facade 持有
 """
+
 from __future__ import annotations
 
 import logging

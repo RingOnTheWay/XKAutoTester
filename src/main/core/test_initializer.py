@@ -223,9 +223,7 @@ class TestInitializer:
         self.logger.info(t("python.testInitializer.usingDevice", device=self.config.adb.device_name))
 
         try:
-            self.adb_manager = self._adb_manager_factory(
-                self.config.adb.device_name, self.config.adb.app_package
-            )
+            self.adb_manager = self._adb_manager_factory(self.config.adb.device_name, self.config.adb.app_package)
 
             if not self.adb_manager.connection.check_adb_service():
                 self.logger.warning(t("python.testInitializer.adbServiceError"))
@@ -306,9 +304,7 @@ class TestInitializer:
             bool: 初始化是否成功
         """
         self.options = _build_appium_options(self.config.appium)
-        self.appium_server = self._appium_server_factory(
-            AppiumServer.DEFAULT_HOST, AppiumServer.DEFAULT_PORT
-        )
+        self.appium_server = self._appium_server_factory(AppiumServer.DEFAULT_HOST, AppiumServer.DEFAULT_PORT)
 
         if not self.appium_server.start():
             self.logger.error(t("python.testInitializer.appiumServerStartFailed"))

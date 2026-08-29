@@ -11,6 +11,7 @@
 - 注入 executor,测试可注 FakeAdbAdapter
 - _show_unauthorized_dialog 写文件副作用留本服务内 (抽了反增复杂度)
 """
+
 from __future__ import annotations
 
 import json
@@ -183,13 +184,9 @@ class DeviceConnectionService:
 
     def _connect_tcp_device(self) -> tuple[bool, str]:
         """TCP/IP 设备连接: adb connect + 重新认证流程。"""
-        device_address = (
-            self._device_name if ":" in self._device_name else f"{self._device_name}:{_DEFAULT_TCP_PORT}"
-        )
+        device_address = self._device_name if ":" in self._device_name else f"{self._device_name}:{_DEFAULT_TCP_PORT}"
 
-        connect_result = self._executor.execute(
-            ["connect", device_address]
-        )
+        connect_result = self._executor.execute(["connect", device_address])
         stdout = connect_result.stdout
         stderr = connect_result.stderr
         logger.info(t("python.adbManager.adbConnectStdout", output=stdout))
@@ -208,24 +205,18 @@ class DeviceConnectionService:
             self._executor.execute(["devices"], timeout=5)
 
             logger.info(t("python.adbManager.disconnectForReauth"))
-            disconnect_result = self._executor.execute(
-                ["disconnect", device_address], timeout=5
-            )
+            disconnect_result = self._executor.execute(["disconnect", device_address], timeout=5)
             logger.info(t("python.adbManager.disconnectResult", output=disconnect_result.stdout))
 
             time.sleep(1)
 
             logger.info(t("python.adbManager.reconnectForAuth"))
-            reconnect_result = self._executor.execute(
-                ["connect", device_address]
-            )
+            reconnect_result = self._executor.execute(["connect", device_address])
             logger.info(t("python.adbManager.reconnectResult", output=reconnect_result.stdout))
 
             # 第二次查列表
             devices_result = self._executor.execute(["devices"], timeout=5)
-            logger.info(
-                t("python.adbManager.reconnectDeviceListStdout", output=devices_result.stdout)
-            )
+            logger.info(t("python.adbManager.reconnectDeviceListStdout", output=devices_result.stdout))
 
             if device_address in devices_result.stdout:
                 if "unauthorized" in devices_result.stdout or auth_failed:
@@ -236,11 +227,7 @@ class DeviceConnectionService:
             logger.warning(t("python.adbManager.deviceNotInList", device=self._device_name))
             return False, t("python.adbManager.deviceNotInListShort")
 
-        if (
-            _CANNOT_CONNECT_PREFIX in stdout
-            or _CONN_REFUSED_LOCALIZED in stdout
-            or _ECONNREFUSED_WIN_CODE in stdout
-        ):
+        if _CANNOT_CONNECT_PREFIX in stdout or _CONN_REFUSED_LOCALIZED in stdout or _ECONNREFUSED_WIN_CODE in stdout:
             logger.warning(t("python.adbManager.deviceConnectionRefused", device=self._device_name))
             return False, t("python.adbManager.deviceConnectionRefusedShort")
         logger.warning(t("python.adbManager.deviceConnectionFailed", device=self._device_name))
@@ -296,9 +283,7 @@ class DeviceConnectionService:
             with open(dialog_trigger_file, "w", encoding="utf-8") as f:
                 json.dump(dialog_data, f, ensure_ascii=False, indent=2)
 
-            logger.info(
-                t("python.adbManager.unauthorizedDialogFileCreated", path=dialog_trigger_file)
-            )
+            logger.info(t("python.adbManager.unauthorizedDialogFileCreated", path=dialog_trigger_file))
         except Exception as e:
             logger.warning(t("python.adbManager.showUnauthorizedDialogFailed", error=e))
             # 弹窗失败不影响主流程,继续等待授权

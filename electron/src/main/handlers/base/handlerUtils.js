@@ -32,7 +32,7 @@ function registerHandler(ipcMain, channel, handler, options = {}) {
 
   ipcMain.handle(channel, async (event, ...args) => {
     try {
-      assertTrustedSender(event);  // P0-3: 统一 sender 来源校验
+      assertTrustedSender(event); // P0-3: 统一 sender 来源校验
       if (withEvent) {
         return await handler(...args, event);
       }
@@ -50,4 +50,9 @@ function registerHandlers(ipcMain, handlers) {
   });
 }
 
-module.exports = { registerHandler, registerHandlers, isTrustedSender, assertTrustedSender };
+module.exports = {
+  registerHandler,
+  registerHandlers,
+  isTrustedSender,
+  assertTrustedSender,
+};

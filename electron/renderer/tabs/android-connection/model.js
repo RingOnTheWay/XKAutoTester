@@ -38,18 +38,18 @@ export class AndroidConnectionModel extends EventEmitter {
   });
 
   #state = {
-    selectedDevice: null,          // 当前选中的设备 ID（与 AppState 同步）
-    modalSelectedDeviceId: null,   // 设备管理弹窗中选中的设备 ID
-    deviceRefreshTimer: null,      // 设备列表刷新定时器
-    currentDeviceList: [],         // 当前设备列表
-    isDeviceRefreshing: false,     // 是否正在刷新设备列表
-    deviceStatusSaved: false,      // 设备选择状态是否已保存
+    selectedDevice: null, // 当前选中的设备 ID（与 AppState 同步）
+    modalSelectedDeviceId: null, // 设备管理弹窗中选中的设备 ID
+    deviceRefreshTimer: null, // 设备列表刷新定时器
+    currentDeviceList: [], // 当前设备列表
+    isDeviceRefreshing: false, // 是否正在刷新设备列表
+    deviceStatusSaved: false, // 设备选择状态是否已保存
     currentPath: '/storage/emulated/0', // 文件管理器当前路径
-    selectedFiles: [],             // 文件管理器选中的文件列表
-    fileList: [],                  // 文件管理器当前目录文件列表
-    contextMenuTarget: null,       // 右键菜单目标文件
+    selectedFiles: [], // 文件管理器选中的文件列表
+    fileList: [], // 文件管理器当前目录文件列表
+    contextMenuTarget: null, // 右键菜单目标文件
     ellipsisDropdownCloseSet: false, // 省略号下拉关闭监听标记
-    scrcpyParams: {},              // scrcpy 投屏参数（从配置加载）
+    scrcpyParams: {}, // scrcpy 投屏参数（从配置加载）
   };
 
   // ── AppState 订阅取消函数 ──────────────────────────────────────
@@ -57,27 +57,57 @@ export class AndroidConnectionModel extends EventEmitter {
 
   // ── State Getters ──────────────────────────────────────────────
 
-  get selectedDevice() { return this.#state.selectedDevice; }
-  get modalSelectedDeviceId() { return this.#state.modalSelectedDeviceId; }
-  get deviceRefreshTimer() { return this.#state.deviceRefreshTimer; }
-  get currentDeviceList() { return this.#state.currentDeviceList; }
-  get isDeviceRefreshing() { return this.#state.isDeviceRefreshing; }
-  get deviceStatusSaved() { return this.#state.deviceStatusSaved; }
-  get currentPath() { return this.#state.currentPath; }
-  get selectedFiles() { return this.#state.selectedFiles; }
-  get fileList() { return this.#state.fileList; }
-  get contextMenuTarget() { return this.#state.contextMenuTarget; }
-  get ellipsisDropdownCloseSet() { return this.#state.ellipsisDropdownCloseSet; }
-  get scrcpyParams() { return this.#state.scrcpyParams; }
+  get selectedDevice() {
+    return this.#state.selectedDevice;
+  }
+  get modalSelectedDeviceId() {
+    return this.#state.modalSelectedDeviceId;
+  }
+  get deviceRefreshTimer() {
+    return this.#state.deviceRefreshTimer;
+  }
+  get currentDeviceList() {
+    return this.#state.currentDeviceList;
+  }
+  get isDeviceRefreshing() {
+    return this.#state.isDeviceRefreshing;
+  }
+  get deviceStatusSaved() {
+    return this.#state.deviceStatusSaved;
+  }
+  get currentPath() {
+    return this.#state.currentPath;
+  }
+  get selectedFiles() {
+    return this.#state.selectedFiles;
+  }
+  get fileList() {
+    return this.#state.fileList;
+  }
+  get contextMenuTarget() {
+    return this.#state.contextMenuTarget;
+  }
+  get ellipsisDropdownCloseSet() {
+    return this.#state.ellipsisDropdownCloseSet;
+  }
+  get scrcpyParams() {
+    return this.#state.scrcpyParams;
+  }
 
-  get(key) { return this.#state[key]; }
+  get(key) {
+    return this.#state[key];
+  }
 
   // ── Private State Accessors (公共化供原 mixin 方法访问) ─────────
 
   /** 访问 #api */
-  get _api() { return this.#api; }
+  get _api() {
+    return this.#api;
+  }
   /** 访问 #state */
-  get _state() { return this.#state; }
+  get _state() {
+    return this.#state;
+  }
 
   // ── Private State Helper（公共化供原 mixin 方法调用） ─────────
 
@@ -166,18 +196,16 @@ export class AndroidConnectionModel extends EventEmitter {
     try {
       const newDevices = await this.getConnectedDevices();
       // 设备对象为 {id, status}，按 id 比较增减
-      const oldIdSet = new Set(this._state.currentDeviceList.map(d => d.id));
-      const newIdSet = new Set(newDevices.map(d => d.id));
+      const oldIdSet = new Set(this._state.currentDeviceList.map((d) => d.id));
+      const newIdSet = new Set(newDevices.map((d) => d.id));
 
-      const added = newDevices.filter(d => !oldIdSet.has(d.id));
-      const removedIds = this._state.currentDeviceList
-        .filter(d => !newIdSet.has(d.id))
-        .map(d => d.id);
-      const unchanged = this._state.currentDeviceList.filter(d => newIdSet.has(d.id));
+      const added = newDevices.filter((d) => !oldIdSet.has(d.id));
+      const removedIds = this._state.currentDeviceList.filter((d) => !newIdSet.has(d.id)).map((d) => d.id);
+      const unchanged = this._state.currentDeviceList.filter((d) => newIdSet.has(d.id));
 
       // 检测状态变化（如 unauthorized → device）
-      const statusChanged = newDevices.filter(d => {
-        const old = this._state.currentDeviceList.find(o => o.id === d.id);
+      const statusChanged = newDevices.filter((d) => {
+        const old = this._state.currentDeviceList.find((o) => o.id === d.id);
         return old && old.status !== d.status;
       });
 
@@ -195,7 +223,12 @@ export class AndroidConnectionModel extends EventEmitter {
         this._set('modalSelectedDeviceId', null, 'modal-selected-device-removed');
       }
 
-      this.emit('device-list-diff', { added, removed: removedIds, unchanged, statusChanged });
+      this.emit('device-list-diff', {
+        added,
+        removed: removedIds,
+        unchanged,
+        statusChanged,
+      });
     } catch (error) {
       this.emit('error', { source: 'refreshDeviceList', error });
     } finally {
@@ -209,13 +242,16 @@ export class AndroidConnectionModel extends EventEmitter {
 
       // 查询设备状态，未授权/离线时直接显示提示文案
       const devices = await this.getConnectedDevices();
-      const device = devices.find(d => d.id === deviceId);
+      const device = devices.find((d) => d.id === deviceId);
       const status = device?.status || 'unknown';
 
       if (status !== 'device') {
-        const tipKey = status === 'unauthorized' ? 'deviceModal.unauthorizedTip'
-                     : status === 'offline' ? 'deviceModal.offlineTip'
-                     : 'deviceModal.unavailableTip';
+        const tipKey =
+          status === 'unauthorized'
+            ? 'deviceModal.unauthorizedTip'
+            : status === 'offline'
+              ? 'deviceModal.offlineTip'
+              : 'deviceModal.unavailableTip';
         const tip = (window.i18n && window.i18n.t(tipKey)) || 'Device unavailable';
         info.manufacturer = tip;
         info.model = tip;
@@ -234,15 +270,20 @@ export class AndroidConnectionModel extends EventEmitter {
       let manufacturerResult = null;
       try {
         manufacturerResult = await this.executeAdbCommand('getprop ro.product.manufacturer', deviceId);
-      } catch (e) { /* 单个 ADB 命令失败容错继续 */ }
-      info.manufacturer = (manufacturerResult && manufacturerResult.output) ? (manufacturerResult.output.trim() || '-') : '-';
+      } catch (e) {
+        /* 单个 ADB 命令失败容错继续 */
+      }
+      info.manufacturer =
+        manufacturerResult && manufacturerResult.output ? manufacturerResult.output.trim() || '-' : '-';
 
       // 型号
       let modelResult = null;
       try {
         modelResult = await this.executeAdbCommand('getprop ro.product.model', deviceId);
-      } catch (e) { /* 单个 ADB 命令失败容错继续 */ }
-      info.model = (modelResult && modelResult.output) ? (modelResult.output.trim() || '-') : '-';
+      } catch (e) {
+        /* 单个 ADB 命令失败容错继续 */
+      }
+      info.model = modelResult && modelResult.output ? modelResult.output.trim() || '-' : '-';
 
       // Android 版本（wrapper 失败已抛错由外层 catch 接,此处走到即成功）
       const androidVersionResult = await this.executeAdbCommand('getprop ro.build.version.release', deviceId);
@@ -255,7 +296,9 @@ export class AndroidConnectionModel extends EventEmitter {
         let wifiResult = null;
         try {
           wifiResult = await this.executeAdbCommand('dumpsys wifi', deviceId);
-        } catch (e) { /* 单个命令失败容错,保留默认值 */ }
+        } catch (e) {
+          /* 单个命令失败容错,保留默认值 */
+        }
         if (wifiResult && wifiResult.output) {
           const wifiInfo = wifiResult.output.trim();
           const ssidMatch1 = wifiInfo.match(/SSID:\s*"([^"]+)"/i);
@@ -273,7 +316,9 @@ export class AndroidConnectionModel extends EventEmitter {
           let connectivityResult = null;
           try {
             connectivityResult = await this.executeAdbCommand('dumpsys connectivity', deviceId);
-          } catch (e) { /* 单个命令失败容错,保留默认值 */ }
+          } catch (e) {
+            /* 单个命令失败容错,保留默认值 */
+          }
           if (connectivityResult && connectivityResult.output) {
             const ssidMatch = connectivityResult.output.match(/NetworkAgentInfo[^}]*ssid[=:\s]+"?([^",}\n]+)"?/i);
             if (ssidMatch) info.wifi = ssidMatch[1].replace(/"/g, '').replace(/\s*$/, '');
@@ -285,7 +330,9 @@ export class AndroidConnectionModel extends EventEmitter {
         let batteryResult = null;
         try {
           batteryResult = await this.executeAdbCommand('dumpsys battery', deviceId);
-        } catch (e) { /* 单个命令失败容错,保留默认值 */ }
+        } catch (e) {
+          /* 单个命令失败容错,保留默认值 */
+        }
         if (batteryResult && batteryResult.output) {
           const levelMatch = batteryResult.output.match(/level:\s*(\d+)/i);
           if (levelMatch) info.battery = `${levelMatch[1]}%`;
@@ -296,7 +343,9 @@ export class AndroidConnectionModel extends EventEmitter {
         let storageResult = null;
         try {
           storageResult = await this.executeAdbCommand('df -h /data', deviceId);
-        } catch (e) { /* 单个命令失败容错,保留默认值 */ }
+        } catch (e) {
+          /* 单个命令失败容错,保留默认值 */
+        }
         if (storageResult && storageResult.output) {
           const lines = storageResult.output.trim().split('\n');
           if (lines.length >= 2) {
@@ -312,7 +361,9 @@ export class AndroidConnectionModel extends EventEmitter {
         let memResult = null;
         try {
           memResult = await this.executeAdbCommand('cat /proc/meminfo', deviceId);
-        } catch (e) { /* 单个命令失败容错,保留默认值 */ }
+        } catch (e) {
+          /* 单个命令失败容错,保留默认值 */
+        }
         if (memResult && memResult.output) {
           const totalMatch = memResult.output.match(/MemTotal:\s*(\d+)/i);
           const availMatch = memResult.output.match(/MemAvailable:\s*(\d+)/i);
@@ -335,7 +386,9 @@ export class AndroidConnectionModel extends EventEmitter {
   async openPort5555() {
     const deviceId = this._state.modalSelectedDeviceId;
     if (!deviceId || deviceId.includes(':')) {
-      this.emit('open-port-error', { message: window.i18n.t('android.selectUsbDevice') });
+      this.emit('open-port-error', {
+        message: window.i18n.t('android.selectUsbDevice'),
+      });
       return;
     }
 
@@ -353,7 +406,10 @@ export class AndroidConnectionModel extends EventEmitter {
     // 校验 IP 格式
     const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
     if (!ipRegex.test(ipAddress)) {
-      this.emit('add-device-ip-result', { success: false, error: window.i18n.t('android.ipFormatError') });
+      this.emit('add-device-ip-result', {
+        success: false,
+        error: window.i18n.t('android.ipFormatError'),
+      });
       return { success: false, error: window.i18n.t('android.ipFormatError') };
     }
 
@@ -419,14 +475,14 @@ export class AndroidConnectionModel extends EventEmitter {
   // ── 文件选择 ───────────────────────────────────────────────────
 
   addSelectedFile(file) {
-    if (!this._state.selectedFiles.some(f => f.path === file.path)) {
+    if (!this._state.selectedFiles.some((f) => f.path === file.path)) {
       this._state.selectedFiles = [...this._state.selectedFiles, file];
       this.emit('selectedFiles-changed', this._state.selectedFiles);
     }
   }
 
   removeSelectedFile(file) {
-    this._state.selectedFiles = this._state.selectedFiles.filter(f => f.path !== file.path);
+    this._state.selectedFiles = this._state.selectedFiles.filter((f) => f.path !== file.path);
     this.emit('selectedFiles-changed', this._state.selectedFiles);
   }
 
@@ -447,8 +503,9 @@ export class AndroidConnectionModel extends EventEmitter {
 
   async deleteFile(file) {
     try {
-      const cmd = file.isDirectory ? `rm -rf "${file.path}"` : `rm "${file.path}"`;
-      const result = await this.executeAdbCommand(cmd, this._state.selectedDevice);
+      // P1-6 根治: 专用通道 (原拼 shell `rm -rf "${path}"` 经 executeAdbCommand 执行,
+      // 存在设备端注入面; 现主进程侧路径清洗 + 参数数组化)
+      const result = await this._api.deleteRemoteFile(file.path, this._state.selectedDevice, !!file.isDirectory);
       return result;
     } catch (error) {
       this.emit('error', { source: 'deleteFile', error });
@@ -469,11 +526,14 @@ export class AndroidConnectionModel extends EventEmitter {
   }
 
   async renameFile(file, newName) {
-    if (!newName || newName === file.name) return { success: false, error: window.i18n.t('fileManager.invalidNewName') };
+    if (!newName || newName === file.name)
+      return {
+        success: false,
+        error: window.i18n.t('fileManager.invalidNewName'),
+      };
     try {
-      const newPath = `${this._state.currentPath}/${newName}`;
-      // wrapper 失败已抛错进 catch,走到这里即成功
-      const result = await this.executeAdbCommand(`mv "${file.path}" "${newPath}"`, this._state.selectedDevice);
+      // P1-6 根治: 专用通道 (原拼 shell `mv "a" "b"`; 主进程侧 basename 约束 + 路径清洗)
+      const result = await this._api.renameRemoteFile(file.path, newName, this._state.selectedDevice);
       await this.loadFileList();
       return result;
     } catch (error) {
@@ -549,25 +609,9 @@ export class AndroidConnectionModel extends EventEmitter {
         const exists = await this._api.checkPathExists(defaultDownloadPath);
         if (exists) return defaultDownloadPath;
 
-        // invokeWithCheck 已保证失败时抛错，此处直接返回
+        // invokeWithCheck 已保证失败时抛错 (进 catch), 此处创建成功后直接返回
         await this._api.createDirectory(defaultDownloadPath);
         return defaultDownloadPath;
-
-        // 目录不存在且无法创建，弹窗提示
-        const dialogResult = await this._api.showDialog({
-          type: 'warning',
-          title: window.i18n.t('fileManager.directoryNotFound'),
-          message: window.i18n.t('fileManager.directoryNotFoundMessage', { path: defaultDownloadPath }),
-          buttons: [window.i18n.t('common.clear'), window.i18n.t('common.cancel')],
-          defaultId: 0,
-          cancelId: 1,
-        });
-
-        if (dialogResult.response === 0) {
-          const currentConfig = await this._api.getConfig();
-          const updatedSettings = { ...currentConfig.APP_SETTINGS, default_download_directory: '' };
-          await this._api.saveConfig({ APP_SETTINGS: updatedSettings });
-        }
       }
     } catch (error) {
       this.emit('error', { source: 'resolveDownloadDirectory', error });
@@ -591,7 +635,9 @@ export class AndroidConnectionModel extends EventEmitter {
 
   async installApk() {
     if (!this._state.selectedDevice) {
-      this.emit('install-apk-error', { message: window.i18n.t('fileManager.selectDeviceFirst') });
+      this.emit('install-apk-error', {
+        message: window.i18n.t('fileManager.selectDeviceFirst'),
+      });
       return null;
     }
 
@@ -690,7 +736,9 @@ export class AndroidConnectionModel extends EventEmitter {
 
   async startScreenControl() {
     if (!this._state.selectedDevice) {
-      this.emit('screen-control-error', { message: window.i18n.t('fileManager.selectDeviceFirst') });
+      this.emit('screen-control-error', {
+        message: window.i18n.t('fileManager.selectDeviceFirst'),
+      });
       return null;
     }
 
@@ -731,7 +779,7 @@ export class AndroidConnectionModel extends EventEmitter {
     const files = [];
     if (!output || typeof output !== 'string') return files;
 
-    const lines = output.split('\n').filter(line => line.trim());
+    const lines = output.split('\n').filter((line) => line.trim());
 
     // 跳过标题行
     let startIndex = 0;
@@ -767,9 +815,18 @@ export class AndroidConnectionModel extends EventEmitter {
         const [, isDir, , size, month, day, time, name] = match;
         if (name === '.' || name === '..') continue;
         const monthMap = {
-          Jan: '01', Feb: '02', Mar: '03', Apr: '04',
-          May: '05', Jun: '06', Jul: '07', Aug: '08',
-          Sep: '09', Oct: '10', Nov: '11', Dec: '12',
+          Jan: '01',
+          Feb: '02',
+          Mar: '03',
+          Apr: '04',
+          May: '05',
+          Jun: '06',
+          Jul: '07',
+          Aug: '08',
+          Sep: '09',
+          Oct: '10',
+          Nov: '11',
+          Dec: '12',
         };
         const modDate = `${new Date().getFullYear()}-${monthMap[month]}-${day.padStart(2, '0')}`;
         files.push({
@@ -832,11 +889,26 @@ export class AndroidConnectionModel extends EventEmitter {
 
     if (isNaN(diff)) return dateString;
     if (diff < minute) return window.i18n.t('fileManager.justNow');
-    if (diff < hour) return window.i18n.t('fileManager.minutesAgo', { n: Math.floor(diff / minute) });
-    if (diff < day) return window.i18n.t('fileManager.hoursAgo', { n: Math.floor(diff / hour) });
-    if (diff < week) return window.i18n.t('fileManager.daysAgo', { n: Math.floor(diff / day) });
-    if (diff < month) return window.i18n.t('fileManager.weeksAgo', { n: Math.floor(diff / week) });
-    if (diff < year) return window.i18n.t('fileManager.monthsAgo', { n: Math.floor(diff / month) });
+    if (diff < hour)
+      return window.i18n.t('fileManager.minutesAgo', {
+        n: Math.floor(diff / minute),
+      });
+    if (diff < day)
+      return window.i18n.t('fileManager.hoursAgo', {
+        n: Math.floor(diff / hour),
+      });
+    if (diff < week)
+      return window.i18n.t('fileManager.daysAgo', {
+        n: Math.floor(diff / day),
+      });
+    if (diff < month)
+      return window.i18n.t('fileManager.weeksAgo', {
+        n: Math.floor(diff / week),
+      });
+    if (diff < year)
+      return window.i18n.t('fileManager.monthsAgo', {
+        n: Math.floor(diff / month),
+      });
     return dateString.slice(0, 16);
   }
 

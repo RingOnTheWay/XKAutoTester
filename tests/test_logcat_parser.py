@@ -9,6 +9,7 @@
 
 纯函数,无 mock,无 IO。
 """
+
 from __future__ import annotations
 
 from main.core.logcat.logcat_parser import (
@@ -87,59 +88,108 @@ class TestShouldCapture:
 
     def test_crash_capture_mode_always_captures(self):
         """crash_capture_remaining > 0 时无条件捕获。"""
-        assert should_capture(
-            "999", "UnknownTag", "I", "no package here",
-            app_pid="123", app_package="com.x.app",
-            crash_capture_remaining=100,
-        ) is True
+        assert (
+            should_capture(
+                "999",
+                "UnknownTag",
+                "I",
+                "no package here",
+                app_pid="123",
+                app_package="com.x.app",
+                crash_capture_remaining=100,
+            )
+            is True
+        )
 
     def test_pid_match_captures(self):
         """PID 匹配 app_pid 时捕获。"""
-        assert should_capture(
-            "123", "AnyTag", "I", "any msg",
-            app_pid="123", app_package="com.x.app",
-            crash_capture_remaining=0,
-        ) is True
+        assert (
+            should_capture(
+                "123",
+                "AnyTag",
+                "I",
+                "any msg",
+                app_pid="123",
+                app_package="com.x.app",
+                crash_capture_remaining=0,
+            )
+            is True
+        )
 
     def test_package_in_message_captures(self):
         """消息中包含包名时捕获 (系统对 app 的操作)。"""
-        assert should_capture(
-            "999", "ActivityManager", "I", "Force stopping com.x.app",
-            app_pid="123", app_package="com.x.app",
-            crash_capture_remaining=0,
-        ) is True
+        assert (
+            should_capture(
+                "999",
+                "ActivityManager",
+                "I",
+                "Force stopping com.x.app",
+                app_pid="123",
+                app_package="com.x.app",
+                crash_capture_remaining=0,
+            )
+            is True
+        )
 
     def test_crash_related_tag_with_keyword_captures(self):
         """崩溃相关 tag + E级别 + 关键词 → 捕获。"""
-        assert should_capture(
-            "999", "AndroidRuntime", "E", "FATAL EXCEPTION: main",
-            app_pid="123", app_package="com.x.app",
-            crash_capture_remaining=0,
-        ) is True
+        assert (
+            should_capture(
+                "999",
+                "AndroidRuntime",
+                "E",
+                "FATAL EXCEPTION: main",
+                app_pid="123",
+                app_package="com.x.app",
+                crash_capture_remaining=0,
+            )
+            is True
+        )
 
     def test_crash_related_tag_without_keyword_skipped(self):
         """崩溃相关 tag + E级别 但无关键词 → 不捕获。"""
-        assert should_capture(
-            "999", "AndroidRuntime", "E", "normal message",
-            app_pid="123", app_package="com.x.app",
-            crash_capture_remaining=0,
-        ) is False
+        assert (
+            should_capture(
+                "999",
+                "AndroidRuntime",
+                "E",
+                "normal message",
+                app_pid="123",
+                app_package="com.x.app",
+                crash_capture_remaining=0,
+            )
+            is False
+        )
 
     def test_default_no_match_returns_false(self):
         """默认情况 (PID 不匹配 + 无包名 + 非崩溃 tag) → 不捕获。"""
-        assert should_capture(
-            "999", "SomeApp", "I", "unrelated message",
-            app_pid="123", app_package="com.x.app",
-            crash_capture_remaining=0,
-        ) is False
+        assert (
+            should_capture(
+                "999",
+                "SomeApp",
+                "I",
+                "unrelated message",
+                app_pid="123",
+                app_package="com.x.app",
+                crash_capture_remaining=0,
+            )
+            is False
+        )
 
     def test_no_app_pid_skips_pid_branch(self):
         """app_pid=None 时 PID 匹配分支跳过 (不报错)。"""
-        assert should_capture(
-            "123", "AnyTag", "I", "msg",
-            app_pid=None, app_package="com.x.app",
-            crash_capture_remaining=0,
-        ) is False
+        assert (
+            should_capture(
+                "123",
+                "AnyTag",
+                "I",
+                "msg",
+                app_pid=None,
+                app_package="com.x.app",
+                crash_capture_remaining=0,
+            )
+            is False
+        )
 
 
 class TestFormatLine:

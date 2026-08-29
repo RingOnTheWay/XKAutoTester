@@ -12,6 +12,7 @@
 
 factory 注入用 MagicMock + identity wrapper, 跳过 TextIOWrapper (StringIO 无 buffer)。
 """
+
 from __future__ import annotations
 
 import sys
@@ -50,7 +51,12 @@ class FakePytestRunner:
         if self._raise_exc is not None:
             raise self._raise_exc
         self.run_custom_tests_calls.append(
-            {"test_paths": test_paths, "markers": markers, "generate_allure": generate_allure, "test_plan_name": test_plan_name}
+            {
+                "test_paths": test_paths,
+                "markers": markers,
+                "generate_allure": generate_allure,
+                "test_plan_name": test_plan_name,
+            }
         )
         return {"exit_code": self._exit_code, "test_stats": self._test_stats}
 
@@ -128,9 +134,7 @@ class TestCliRunTestsMode:
 
     def test_run_tests_exception_returns_one(self) -> None:
         """PytestRunner raise → return 1 (不传播)。"""
-        cli, _, _, _ = _make_cli(
-            pytest_runner=FakePytestRunner(raise_exc=RuntimeError("boom"))
-        )
+        cli, _, _, _ = _make_cli(pytest_runner=FakePytestRunner(raise_exc=RuntimeError("boom")))
 
         code = cli.run(argv=["--test-paths", "a.py"])
 

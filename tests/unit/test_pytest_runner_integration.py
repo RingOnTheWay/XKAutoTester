@@ -83,8 +83,6 @@ class TestPytestRunnerResultData:
         mock_process.wait.return_value = 0
         mock_popen.return_value = mock_process
 
-        result = runner.run_tests(
-            test_paths=["tests/"], markers=["smoke"], generate_allure=False, test_plan_name="mk"
-        )
+        result = runner.run_tests(test_paths=["tests/"], markers=["smoke"], generate_allure=False, test_plan_name="mk")
 
         assert result["markers"] == ["smoke"]

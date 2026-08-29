@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """XKAutoTester Python 入口。Bootstrap + Cli.run()。"""
+
 import sys
 from pathlib import Path
 

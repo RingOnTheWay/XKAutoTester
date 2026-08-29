@@ -48,7 +48,7 @@ function register(ipcMain, services) {
 
   ipcMain.on(IPC_CHANNELS.WINDOW_DRAG_START, (event, mouseX, mouseY) => {
     try {
-      assertTrustedSender(event);  // P0-3 补全: on 通道同样校验 sender
+      assertTrustedSender(event); // P0-3 补全: on 通道同样校验 sender
       if (electronApp.mainWindow && !electronApp.mainWindow.isMaximized()) {
         dragStartPos = { x: mouseX, y: mouseY };
         winStartPos = electronApp.mainWindow.getPosition();
@@ -60,7 +60,7 @@ function register(ipcMain, services) {
 
   ipcMain.on(IPC_CHANNELS.WINDOW_DRAG_MOVE, (event, mouseX, mouseY) => {
     try {
-      assertTrustedSender(event);  // P0-3 补全: on 通道同样校验 sender
+      assertTrustedSender(event); // P0-3 补全: on 通道同样校验 sender
       if (electronApp.mainWindow && dragStartPos && winStartPos) {
         const deltaX = mouseX - dragStartPos.x;
         const deltaY = mouseY - dragStartPos.y;
@@ -75,7 +75,7 @@ function register(ipcMain, services) {
 
   ipcMain.on(IPC_CHANNELS.WINDOW_DRAG_END, (event) => {
     try {
-      assertTrustedSender(event);  // P0-3 补全: on 通道同样校验 sender
+      assertTrustedSender(event); // P0-3 补全: on 通道同样校验 sender
       dragStartPos = null;
       winStartPos = null;
     } catch (error) {

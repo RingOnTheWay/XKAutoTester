@@ -85,11 +85,13 @@ class FileBasedDialogMonitor {
     await dialog.showMessageBox(this.mainWindow, {
       type: 'warning',
       title: this.i18nService.t('testExecution.deviceSelection.deviceUnauthorizedTitle'),
-      message: message || this.i18nService.t('testExecution.deviceSelection.deviceUnauthorizedMessage', { device: device_name }),
+      message:
+        message ||
+        this.i18nService.t('testExecution.deviceSelection.deviceUnauthorizedMessage', { device: device_name }),
       detail: this.i18nService.t('testExecution.deviceSelection.deviceUnauthorizedDetail'),
       buttons: [this.i18nService.t('common.confirm')],
       defaultId: 0,
-      cancelId: 0
+      cancelId: 0,
     });
   }
 }

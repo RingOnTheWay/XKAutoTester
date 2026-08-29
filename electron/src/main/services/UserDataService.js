@@ -33,22 +33,17 @@ class UserDataService {
     this.defaultConfigPath = path.join(projectRoot, 'config');
     this.versionFilePath = path.join(this.userDataPath, 'data-version.json');
 
-    this.userFiles = [
-      'config.json',
-      'page_package.json',
-      'test_plans.json',
-      'scheduled_plans.json'
-    ];
+    this.userFiles = ['config.json', 'page_package.json', 'test_plans.json', 'scheduled_plans.json'];
 
     this.userDirs = ['test_cases'];
 
     this._defaultConfigs = {
       // config.json 不再硬编码, 权威源为 config/config.json 模板文件, 由 _getDefaultConfig() 运行时读取
       'page_package.json': {
-        apps: []
+        apps: [],
       },
       'test_plans.json': [],
-      'scheduled_plans.json': []
+      'scheduled_plans.json': [],
     };
 
     // 委托实例: 迁移 + 注册表
@@ -60,7 +55,7 @@ class UserDataService {
       defaultUserDataPath: this._defaultUserDataPath,
       userFiles: this.userFiles,
       userDirs: this.userDirs,
-      defaultConfigs: this._defaultConfigs
+      defaultConfigs: this._defaultConfigs,
     });
 
     this.registry = new WindowsRegistryBridge();
@@ -131,7 +126,7 @@ class UserDataService {
   _updateVersionFile() {
     const versionData = {
       dataVersion: this._getAppVersion(),
-      lastMigrated: new Date().toISOString()
+      lastMigrated: new Date().toISOString(),
     };
     fs.writeFileSync(this.versionFilePath, JSON.stringify(versionData, null, 2), 'utf8');
   }
@@ -191,7 +186,7 @@ class UserDataService {
     this.migrator.updatePaths({
       userDataPath: this.userDataPath,
       userConfigPath: this.userConfigPath,
-      versionFilePath: this.versionFilePath
+      versionFilePath: this.versionFilePath,
     });
 
     this.registry.writePath('UserDataPath', newPath);
@@ -230,7 +225,7 @@ class UserDataService {
     this.migrator.updatePaths({
       userDataPath: this.userDataPath,
       userConfigPath: this.userConfigPath,
-      versionFilePath: this.versionFilePath
+      versionFilePath: this.versionFilePath,
     });
 
     this.registry.writePath('UserDataPath', this._defaultUserDataPath);

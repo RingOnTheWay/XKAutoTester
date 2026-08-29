@@ -1,4 +1,3 @@
-import { Action } from '../../core/Action.js';
 import { ApiBridge } from '../../core/ApiBridge.js';
 import { AppState } from '../../core/AppState.js';
 import { Toast } from '../../components/toast.js';
@@ -35,15 +34,17 @@ export class SettingsController {
     if (app?.updateUIText) app.updateUIText();
     // 启动时自动检查更新 (如启用)
     if (this.#model.autoCheckUpdate !== false) {
-      setTimeout(() => { this.#model.checkForUpdate(); }, 2000);
+      setTimeout(() => {
+        this.#model.checkForUpdate();
+      }, 2000);
     }
   }
 
   destroy() {
     this.#destroyed = true;
-    this.#unbinds.forEach(fn => fn());
+    this.#unbinds.forEach((fn) => fn());
     this.#unbinds = [];
-    this.#unbindModel.forEach(fn => fn());
+    this.#unbindModel.forEach((fn) => fn());
     this.#unbindModel = [];
     this.#model.destroy();
   }
@@ -121,13 +122,13 @@ export class SettingsController {
           const codeKey = `settings.updateErrorCodes.${err.code}`;
           const codeMsg = window.i18n.t(codeKey);
           const codeTranslated = codeMsg && codeMsg !== codeKey;
-          const reason = codeTranslated ? codeMsg : (err.error?.message || '');
+          const reason = codeTranslated ? codeMsg : err.error?.message || '';
           msg = reason ? `${translated}: ${reason}` : translated;
         } else {
           msg = translated;
         }
       } else {
-        msg = (err.error?.message || err.message || err.source || String(err));
+        msg = err.error?.message || err.message || err.source || String(err);
       }
       Toast?.error(msg);
     });
@@ -407,9 +408,15 @@ export class SettingsController {
     // 全局点击：处理下拉框开关 + 关闭（捕获阶段，确保在 app.js 的冒泡阶段 handler 之前执行）
     this.#unbinds.push(
       this.#view.bindGlobalClickForDropdowns({
-        onLanguageToggle: () => { this.#view.toggleLanguageDropdown(); },
-        onNotificationToggle: () => { this.#view.toggleNotificationDropdown(); },
-        onThemeToggle: () => { this.#view.toggleThemeColorOptions(); },
+        onLanguageToggle: () => {
+          this.#view.toggleLanguageDropdown();
+        },
+        onNotificationToggle: () => {
+          this.#view.toggleNotificationDropdown();
+        },
+        onThemeToggle: () => {
+          this.#view.toggleThemeColorOptions();
+        },
         onOutsideClick: () => {
           this.#view.hideAllCustomSelectOptions();
           this.#view.hideThemeColorOptions();
@@ -458,7 +465,9 @@ export class SettingsController {
           Toast?.info(`${window.i18n.t('settings.exporting')} ${data.percent}%`);
         }
       });
-      this.#unbinds.push(() => { if (removeExport) removeExport(); });
+      this.#unbinds.push(() => {
+        if (removeExport) removeExport();
+      });
     }
 
     if (ApiBridge.api.onImportProgress) {
@@ -467,7 +476,9 @@ export class SettingsController {
           Toast?.info(`${window.i18n.t('settings.importing')} ${data.percent}%`);
         }
       });
-      this.#unbinds.push(() => { if (removeImport) removeImport(); });
+      this.#unbinds.push(() => {
+        if (removeImport) removeImport();
+      });
     }
   }
 
@@ -497,7 +508,11 @@ export class SettingsController {
       const info = await ApiBridge.api.getProjectInfo();
       const exeDir = info?.exeDir;
       if (!exeDir || !targetPath) return false;
-      const normalize = (p) => p.replace(/[\\/]+/g, '\\').replace(/\\$/, '').toLowerCase();
+      const normalize = (p) =>
+        p
+          .replace(/[\\/]+/g, '\\')
+          .replace(/\\$/, '')
+          .toLowerCase();
       const a = normalize(targetPath);
       const b = normalize(exeDir);
       return a === b || a.startsWith(b + '\\');

@@ -8,6 +8,7 @@
 - check_crash_logs 双路径 (monitor 优先 + logcat -d 回退)
 - LogcatMonitor lazy 持有
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -98,8 +99,7 @@ class TestADBManagerFacade:
             ["-s", "dev:5555", "shell", "logcat -d"],
             AdbResult(
                 0,
-                "E AndroidRuntime: FATAL EXCEPTION: com.x.app\n"
-                "E AndroidRuntime: Process: com.x.app, PID: 12345\n",
+                "E AndroidRuntime: FATAL EXCEPTION: com.x.app\nE AndroidRuntime: Process: com.x.app, PID: 12345\n",
                 "",
             ),
         )

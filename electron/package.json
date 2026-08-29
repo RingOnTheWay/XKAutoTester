@@ -19,7 +19,11 @@
     "postinstall": "node patch-nsis.js",
     "prebuild": "node patch-nsis.js",
     "prebuild-win": "node patch-nsis.js",
-    "prebuild-lite-win": "node patch-nsis.js"
+    "prebuild-lite-win": "node patch-nsis.js",
+    "lint": "eslint src renderer tests --max-warnings 100",
+    "lint:fix": "eslint src renderer tests --fix",
+    "format": "prettier --write \"src/**/*.js\" \"renderer/**/*.js\" \"../tests/electron/**/*.js\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"renderer/**/*.js\" \"../tests/electron/**/*.js\""
   },
   "keywords": [
     "electron",
@@ -32,10 +36,13 @@
   "devDependencies": {
     "electron": "^43.4.0",
     "electron-builder": "^26.15.3",
-    "electron-vite": "^2.3.0",
+    "electron-vite": "^5.0.0",
     "jsdom": "^25.0.0",
-    "vite": "^5.4.0",
-    "vite-plugin-html-include": "^1.0.0"
+    "vite": "^7.0.0",
+    "vite-plugin-html-include": "^1.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "prettier": "^3.3.0"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",

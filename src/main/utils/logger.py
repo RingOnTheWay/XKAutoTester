@@ -117,8 +117,8 @@ def _setup_root_logger():
     try:
         if sys.stdout.encoding != "utf-8":
             sys.stdout = codecs.getwriter("utf-8")(sys.stdout.buffer)
-    except Exception:
-        pass
+    except Exception as exc:  # pragma: no cover - 初始化早期无可靠日志通道
+        logging.warning("stdout utf-8 包装失败: %s", exc)
 
     _root_configured = True
 

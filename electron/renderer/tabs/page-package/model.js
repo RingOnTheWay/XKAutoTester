@@ -38,17 +38,37 @@ export class PagePackageModel extends EventEmitter {
 
   // ── State Getters ──────────────────────────────────────────────
 
-  get apps() { return this.#state.apps; }
-  get pages() { return this.#state.pages; }
-  get elements() { return this.#state.elements; }
-  get selectedApp() { return this.#state.selectedApp; }
-  get selectedPage() { return this.#state.selectedPage; }
-  get selectedElement() { return this.#state.selectedElement; }
-  get isEditing() { return this.#state.isEditing; }
-  get editingType() { return this.#state.editingType; }
-  get initialized() { return this.#state.initialized; }
+  get apps() {
+    return this.#state.apps;
+  }
+  get pages() {
+    return this.#state.pages;
+  }
+  get elements() {
+    return this.#state.elements;
+  }
+  get selectedApp() {
+    return this.#state.selectedApp;
+  }
+  get selectedPage() {
+    return this.#state.selectedPage;
+  }
+  get selectedElement() {
+    return this.#state.selectedElement;
+  }
+  get isEditing() {
+    return this.#state.isEditing;
+  }
+  get editingType() {
+    return this.#state.editingType;
+  }
+  get initialized() {
+    return this.#state.initialized;
+  }
 
-  get(key) { return this.#state[key]; }
+  get(key) {
+    return this.#state[key];
+  }
 
   // ── Private State Helper ───────────────────────────────────────
 
@@ -118,7 +138,7 @@ export class PagePackageModel extends EventEmitter {
   // ── Selection ──────────────────────────────────────────────────
 
   selectApp(appId) {
-    const app = this.#state.apps.find(a => a.id === appId);
+    const app = this.#state.apps.find((a) => a.id === appId);
     if (!app) return;
     this.#set('selectedApp', app, 'selected-app-changed');
     // 重置下级选择
@@ -127,7 +147,7 @@ export class PagePackageModel extends EventEmitter {
   }
 
   selectPage(pageId) {
-    const page = this.#state.pages.find(p => p.id === pageId);
+    const page = this.#state.pages.find((p) => p.id === pageId);
     if (!page) return;
     this.#set('selectedPage', page, 'selected-page-changed');
     // 重置下级选择
@@ -135,7 +155,7 @@ export class PagePackageModel extends EventEmitter {
   }
 
   selectElement(elementId) {
-    const element = this.#state.elements.find(e => e.id === elementId);
+    const element = this.#state.elements.find((e) => e.id === elementId);
     if (!element) return;
     this.#set('selectedElement', element, 'selected-element-changed');
   }
@@ -219,11 +239,7 @@ export class PagePackageModel extends EventEmitter {
           elementData
         );
       } else {
-        await this.#api.addElement(
-          this.#state.selectedApp.id,
-          this.#state.selectedPage.id,
-          elementData
-        );
+        await this.#api.addElement(this.#state.selectedApp.id, this.#state.selectedPage.id, elementData);
       }
       this.emit('save-success', { type: 'element' });
       await this.loadElements(this.#state.selectedApp.id, this.#state.selectedPage.id);
@@ -232,7 +248,11 @@ export class PagePackageModel extends EventEmitter {
         this.emit('selected-element-changed', this.#state.selectedElement);
       }
     } catch (error) {
-      this.emit('error', { source: 'saveElement', message: 'saveFailed', error });
+      this.emit('error', {
+        source: 'saveElement',
+        message: 'saveFailed',
+        error,
+      });
     }
   }
 
@@ -272,7 +292,11 @@ export class PagePackageModel extends EventEmitter {
       }
       this.emit('delete-success', { type });
     } catch (error) {
-      this.emit('error', { source: 'deleteItem', message: 'deleteFailed', error });
+      this.emit('error', {
+        source: 'deleteItem',
+        message: 'deleteFailed',
+        error,
+      });
     }
   }
 
@@ -325,9 +349,12 @@ export class PagePackageModel extends EventEmitter {
    */
   getSelectedId(type) {
     switch (type) {
-      case 'app': return this.#state.selectedApp?.id;
-      case 'page': return this.#state.selectedPage?.id;
-      case 'element': return this.#state.selectedElement?.id;
+      case 'app':
+        return this.#state.selectedApp?.id;
+      case 'page':
+        return this.#state.selectedPage?.id;
+      case 'element':
+        return this.#state.selectedElement?.id;
     }
   }
 
@@ -341,13 +368,13 @@ export class PagePackageModel extends EventEmitter {
     const kw = keyword.toLowerCase();
     switch (type) {
       case 'app':
-        return this.#state.apps.filter(app => app.name.toLowerCase().includes(kw));
+        return this.#state.apps.filter((app) => app.name.toLowerCase().includes(kw));
       case 'page':
-        return this.#state.pages.filter(page => page.name.toLowerCase().includes(kw));
+        return this.#state.pages.filter((page) => page.name.toLowerCase().includes(kw));
       case 'element':
-        return this.#state.elements.filter(element =>
-          element.name.toLowerCase().includes(kw) ||
-          (element.value && element.value.toLowerCase().includes(kw))
+        return this.#state.elements.filter(
+          (element) =>
+            element.name.toLowerCase().includes(kw) || (element.value && element.value.toLowerCase().includes(kw))
         );
     }
   }

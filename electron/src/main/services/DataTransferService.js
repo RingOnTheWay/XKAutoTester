@@ -16,8 +16,8 @@ function buildManifest(type, version, fileEntries) {
     type,
     version,
     exportDate: new Date().toISOString(),
-    files: fileEntries.map(e => e.relativePath),
-    app: 'XKAutoTester'
+    files: fileEntries.map((e) => e.relativePath),
+    app: 'XKAutoTester',
   };
 }
 
@@ -37,7 +37,7 @@ function buildProgress(phase, current, total, currentFile, message) {
     total,
     percentage: total > 0 ? Math.round((current / total) * 100) : 0,
     currentFile,
-    message
+    message,
   };
 }
 
@@ -48,9 +48,7 @@ function buildProgress(phase, current, total, currentFile, message) {
  * @returns {boolean}
  */
 function isValidManifest(manifest, expectedType) {
-  return !!(manifest &&
-    manifest.app === 'XKAutoTester' &&
-    manifest.type === expectedType);
+  return !!(manifest && manifest.app === 'XKAutoTester' && manifest.type === expectedType);
 }
 
 /**
@@ -131,18 +129,12 @@ class DataTransferService {
   // ── 公共方法 (4 签名零变, 对称 H1 公共方法零变) ──
 
   async exportConfig(outputPath) {
-    return this._exportPath(
-      this.userDataService.userConfigPath,
-      'config',
-      outputPath,
-      'on-export-progress',
-      {
-        notFound: this.i18nService.t('settings.exportConfigFailed') + ': config path not found',
-        empty: this.i18nService.t('settings.exportConfigFailed') + ': no files to export',
-        packing: this.i18nService.t('settings.exportingConfig'),
-        success: this.i18nService.t('settings.exportConfigSuccess'),
-      }
-    );
+    return this._exportPath(this.userDataService.userConfigPath, 'config', outputPath, 'on-export-progress', {
+      notFound: this.i18nService.t('settings.exportConfigFailed') + ': config path not found',
+      empty: this.i18nService.t('settings.exportConfigFailed') + ': no files to export',
+      packing: this.i18nService.t('settings.exportingConfig'),
+      success: this.i18nService.t('settings.exportConfigSuccess'),
+    });
   }
 
   async exportLogs(outputPath) {
@@ -165,28 +157,39 @@ class DataTransferService {
     const channel = 'on-import-progress';
     try {
       if (!(await this._fs.exists(zipPath))) {
-        return { success: false, error: this.i18nService.t('settings.importConfigFailed') + ': file not found' };
+        return {
+          success: false,
+          error: this.i18nService.t('settings.importConfigFailed') + ': file not found',
+        };
       }
 
-      this._sendProgress(channel,
-        buildProgress('validating', 0, 0, '', this.i18nService.t('settings.validatingFile')));
+      this._sendProgress(channel, buildProgress('validating', 0, 0, '', this.i18nService.t('settings.validatingFile')));
 
       const zip = this._zip.open(zipPath);
       const zipEntries = zip.getEntries();
-      const manifestEntry = zipEntries.find(e => e.entryName === 'manifest.json');
+      const manifestEntry = zipEntries.find((e) => e.entryName === 'manifest.json');
       if (!manifestEntry) {
-        return { success: false, error: this.i18nService.t('settings.importConfigInvalid') };
+        return {
+          success: false,
+          error: this.i18nService.t('settings.importConfigInvalid'),
+        };
       }
 
       let manifest;
       try {
         manifest = JSON.parse(manifestEntry.getData().toString('utf8'));
       } catch (e) {
-        return { success: false, error: this.i18nService.t('settings.importConfigInvalid') };
+        return {
+          success: false,
+          error: this.i18nService.t('settings.importConfigInvalid'),
+        };
       }
 
       if (!isValidManifest(manifest, 'config')) {
-        return { success: false, error: this.i18nService.t('settings.importConfigInvalid') };
+        return {
+          success: false,
+          error: this.i18nService.t('settings.importConfigInvalid'),
+        };
       }
 
       const configPath = this.userDataService.userConfigPath;
@@ -194,49 +197,73 @@ class DataTransferService {
         await this._fs.mkdir(configPath);
       }
 
-      const entriesToExtract = zipEntries.filter(e => e.entryName !== 'manifest.json' && !e.isDirectory);
+      const entriesToExtract = zipEntries.filter((e) => e.entryName !== 'manifest.json' && !e.isDirectory);
       const totalItems = entriesToExtract.length;
       if (totalItems === 0) {
-        return { success: false, error: this.i18nService.t('settings.importConfigFailed') + ': empty archive' };
+        return {
+          success: false,
+          error: this.i18nService.t('settings.importConfigFailed') + ': empty archive',
+        };
       }
 
-      this._sendProgress(channel,
-        buildProgress('extracting', 0, totalItems, '', this.i18nService.t('settings.importingConfig')));
+      this._sendProgress(
+        channel,
+        buildProgress('extracting', 0, totalItems, '', this.i18nService.t('settings.importingConfig'))
+      );
 
       for (let i = 0; i < entriesToExtract.length; i++) {
         const entry = entriesToExtract[i];
         const current = i + 1;
         // zip-slip 防线: 拒绝 `..`/绝对路径/盘符 条目名 (对称 TarExtractor._sanitizeFileName)
         if (!isSafeRelativePath(entry.entryName)) {
-          this._sendProgress(channel,
-            buildProgress('error', 0, 0, entry.entryName, 'Unsafe path in archive: ' + entry.entryName));
-          return { success: false, error: this.i18nService.t('settings.importConfigInvalid') + ': unsafe path in archive' };
+          this._sendProgress(
+            channel,
+            buildProgress('error', 0, 0, entry.entryName, 'Unsafe path in archive: ' + entry.entryName)
+          );
+          return {
+            success: false,
+            error: this.i18nService.t('settings.importConfigInvalid') + ': unsafe path in archive',
+          };
         }
         const targetPath = path.join(configPath, entry.entryName);
         // path.resolve 二次校验: 防 path.join 语义差异 (Windows 分隔符/盘符) 造成越界
         if (!path.resolve(targetPath).startsWith(path.resolve(configPath) + path.sep)) {
-          this._sendProgress(channel,
-            buildProgress('error', 0, 0, entry.entryName, 'Unsafe path in archive: ' + entry.entryName));
-          return { success: false, error: this.i18nService.t('settings.importConfigInvalid') + ': unsafe path in archive' };
+          this._sendProgress(
+            channel,
+            buildProgress('error', 0, 0, entry.entryName, 'Unsafe path in archive: ' + entry.entryName)
+          );
+          return {
+            success: false,
+            error: this.i18nService.t('settings.importConfigInvalid') + ': unsafe path in archive',
+          };
         }
         const targetDir = path.dirname(targetPath);
         if (!(await this._fs.exists(targetDir))) {
           await this._fs.mkdir(targetDir);
         }
         await this._fs.writeFile(targetPath, entry.getData());
-        this._sendProgress(channel,
-          buildProgress('extracting', current, totalItems, entry.entryName,
-            this.i18nService.t('settings.extractingFile', { file: entry.entryName })));
+        this._sendProgress(
+          channel,
+          buildProgress(
+            'extracting',
+            current,
+            totalItems,
+            entry.entryName,
+            this.i18nService.t('settings.extractingFile', {
+              file: entry.entryName,
+            })
+          )
+        );
       }
 
-      this._sendProgress(channel,
-        buildProgress('extracting', totalItems, totalItems, '',
-          this.i18nService.t('settings.importConfigSuccess')));
+      this._sendProgress(
+        channel,
+        buildProgress('extracting', totalItems, totalItems, '', this.i18nService.t('settings.importConfigSuccess'))
+      );
 
       return { success: true, needRestart: true };
     } catch (error) {
-      this._sendProgress(channel,
-        buildProgress('error', 0, 0, '', error.message));
+      this._sendProgress(channel, buildProgress('error', 0, 0, '', error.message));
       return { success: false, error: error.message };
     }
   }
@@ -259,11 +286,13 @@ class DataTransferService {
         return { success: false, error: msgs.notFound };
       }
 
-      this._sendProgress(progressChannel,
-        buildProgress('reading', 0, 0, '', this.i18nService.t('settings.readingFiles')));
+      this._sendProgress(
+        progressChannel,
+        buildProgress('reading', 0, 0, '', this.i18nService.t('settings.readingFiles'))
+      );
 
       const allFiles = await this._collectFiles(sourcePath);
-      const fileEntries = allFiles.filter(e => e.type === 'file');
+      const fileEntries = allFiles.filter((e) => e.type === 'file');
       if (fileEntries.length === 0) {
         return { success: false, error: msgs.empty };
       }
@@ -271,34 +300,47 @@ class DataTransferService {
       const manifest = buildManifest(manifestType, this._getAppVersion(), fileEntries);
       const totalItems = fileEntries.length + 1;
 
-      this._sendProgress(progressChannel,
-        buildProgress('packing', 0, totalItems, '', msgs.packing));
+      this._sendProgress(progressChannel, buildProgress('packing', 0, totalItems, '', msgs.packing));
 
       const zip = this._zip.create();
       zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'));
 
-      this._sendProgress(progressChannel,
-        buildProgress('packing', 1, totalItems, 'manifest.json',
-          this.i18nService.t('settings.packingFile', { file: 'manifest.json' })));
+      this._sendProgress(
+        progressChannel,
+        buildProgress(
+          'packing',
+          1,
+          totalItems,
+          'manifest.json',
+          this.i18nService.t('settings.packingFile', { file: 'manifest.json' })
+        )
+      );
 
       for (let i = 0; i < fileEntries.length; i++) {
         const entry = fileEntries[i];
         const current = i + 2;
         zip.addLocalFile(entry.fullPath, path.dirname(entry.relativePath));
-        this._sendProgress(progressChannel,
-          buildProgress('packing', current, totalItems, entry.relativePath,
-            this.i18nService.t('settings.packingFile', { file: entry.relativePath })));
+        this._sendProgress(
+          progressChannel,
+          buildProgress(
+            'packing',
+            current,
+            totalItems,
+            entry.relativePath,
+            this.i18nService.t('settings.packingFile', {
+              file: entry.relativePath,
+            })
+          )
+        );
       }
 
       zip.writeZip(outputPath);
 
-      this._sendProgress(progressChannel,
-        buildProgress('packing', totalItems, totalItems, '', msgs.success));
+      this._sendProgress(progressChannel, buildProgress('packing', totalItems, totalItems, '', msgs.success));
 
       return { success: true, path: outputPath };
     } catch (error) {
-      this._sendProgress(progressChannel,
-        buildProgress('error', 0, 0, '', error.message));
+      this._sendProgress(progressChannel, buildProgress('error', 0, 0, '', error.message));
       return { success: false, error: error.message };
     }
   }
@@ -337,4 +379,10 @@ class DataTransferService {
   }
 }
 
-module.exports = { DataTransferService, buildManifest, buildProgress, isValidManifest, isSafeRelativePath };
+module.exports = {
+  DataTransferService,
+  buildManifest,
+  buildProgress,
+  isValidManifest,
+  isSafeRelativePath,
+};

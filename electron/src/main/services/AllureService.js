@@ -66,7 +66,7 @@ class AllureService {
 
       // 检查是否有结果文件
       const resultFiles = await this._asyncFs.readdir(allureResultsDir);
-      const jsonFiles = resultFiles.filter(f => f.endsWith('-result.json') || f.endsWith('.json'));
+      const jsonFiles = resultFiles.filter((f) => f.endsWith('-result.json') || f.endsWith('.json'));
       if (jsonFiles.length === 0) {
         await this.logger.warning('No allure result files found');
         return { success: false, error: 'allure-results目录中没有结果文件' };
@@ -75,7 +75,9 @@ class AllureService {
       // 创建报告目录: allure-reports/testPlanName/timestamp
       const run_timestamp = getTimestamp();
       const allureReportBaseDir = this._getLogsPath('Allure', 'allure-reports');
-      const testPlanDir = path.join(allureReportBaseDir, testPlanName || 'default');
+      // P3-8: testPlanName 渲染进程可控, basename 清洗防目录穿越
+      const safePlanName = path.basename(String(testPlanName || 'default')).replace(/[\\/:*?"<>|]/g, '_') || 'default';
+      const testPlanDir = path.join(allureReportBaseDir, safePlanName);
       const allureReportDir = path.join(testPlanDir, run_timestamp);
 
       await this._asyncFs.mkdir(testPlanDir, { recursive: true });
@@ -92,7 +94,10 @@ class AllureService {
 
           // 生成成功后清理 allure-results 目录
           try {
-            await this._asyncFs.rm(allureResultsDir, { recursive: true, force: true });
+            await this._asyncFs.rm(allureResultsDir, {
+              recursive: true,
+              force: true,
+            });
             await this.logger.info('Cleaned up allure-results directory');
           } catch (e) {
             await this.logger.warning(`Failed to clean allure-results: ${e.message}`);
@@ -137,7 +142,11 @@ class AllureService {
       if (stat.isDirectory()) {
         const indexHtml = path.join(itemPath, 'index.html');
         if (await this._asyncFs.exists(indexHtml)) {
-          timestampDirs.push({ name: item, path: itemPath, mtime: stat.mtimeMs });
+          timestampDirs.push({
+            name: item,
+            path: itemPath,
+            mtime: stat.mtimeMs,
+          });
         }
       }
     }
@@ -185,13 +194,19 @@ class AllureService {
       const testPlanDir = this._getLogsPath('Allure', 'allure-reports', testPlanName);
 
       if (!(await this._asyncFs.exists(testPlanDir))) {
-        return { success: false, error: `测试计划 '${testPlanName}' 的Allure报告不存在` };
+        return {
+          success: false,
+          error: `测试计划 '${testPlanName}' 的Allure报告不存在`,
+        };
       }
 
       const allureReportDir = await this._findLatestReportDir(testPlanName);
 
       if (!allureReportDir) {
-        return { success: false, error: `测试计划 '${testPlanName}' 的报告文件不完整` };
+        return {
+          success: false,
+          error: `测试计划 '${testPlanName}' 的报告文件不完整`,
+        };
       }
 
       await this.httpServer.stop();
@@ -232,7 +247,7 @@ class AllureService {
         success: true,
         url: result.url,
         port: result.port,
-        message: this.i18nService ? this.i18nService.t('allure.openingReport') : '正在打开Allure报告...'
+        message: this.i18nService ? this.i18nService.t('allure.openingReport') : '正在打开Allure报告...',
       };
     }
     return result;
@@ -250,7 +265,8 @@ class AllureService {
   }
 
   cleanup() {
-    this.httpServer.cleanupSync();
+    // P3-4: 与 cleanupSync 行为一致, 收敛为委托
+    this.cleanupSync();
   }
 
   cleanupSync() {
@@ -264,7 +280,7 @@ class AllureService {
       return {
         running: false,
         port: null,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -329,7 +345,10 @@ class AllureService {
               try {
                 const itemStat = await this._asyncFs.stat(itemPath);
                 if (itemStat.isDirectory()) {
-                  await this._asyncFs.rm(itemPath, { recursive: true, force: true });
+                  await this._asyncFs.rm(itemPath, {
+                    recursive: true,
+                    force: true,
+                  });
                 } else {
                   await this._asyncFs.unlink(itemPath);
                 }
@@ -367,7 +386,6 @@ class AllureService {
       return { exists: false };
     }
   }
-
 }
 
 module.exports = { AllureService };

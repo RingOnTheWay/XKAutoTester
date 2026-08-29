@@ -31,7 +31,7 @@ async function initializeI18next() {
     if (fs.existsSync(zhCNPath)) {
       const zhCNData = JSON.parse(fs.readFileSync(zhCNPath, 'utf8'));
       resources['zh-CN'] = {
-        translation: zhCNData
+        translation: zhCNData,
       };
     }
 
@@ -40,7 +40,7 @@ async function initializeI18next() {
     if (fs.existsSync(enUSPath)) {
       const enUSData = JSON.parse(fs.readFileSync(enUSPath, 'utf8'));
       resources['en-US'] = {
-        translation: enUSData
+        translation: enUSData,
       };
     }
 
@@ -59,7 +59,7 @@ async function initializeI18next() {
     await i18next.init({
       lng: savedLanguage,
       fallbackLng: 'zh-CN',
-      resources: resources
+      resources: resources,
     });
   } catch (error) {
     console.error('i18next初始化失败:', error);
@@ -100,7 +100,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(IPC_CHANNELS.WINDOW_MAXIMIZED, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_MAXIMIZED, listener);
   },
-  setIgnoreMouseEvents: (ignore, options, windowType) => invokeWithCheck(IPC_CHANNELS.WINDOW_SET_IGNORE_MOUSE_EVENTS, ignore, options, windowType),
+  setIgnoreMouseEvents: (ignore, options, windowType) =>
+    invokeWithCheck(IPC_CHANNELS.WINDOW_SET_IGNORE_MOUSE_EVENTS, ignore, options, windowType),
 
   // 窗口拖拽
   startWindowDrag: (mouseX, mouseY) => ipcRenderer.send(IPC_CHANNELS.WINDOW_DRAG_START, mouseX, mouseY),
@@ -189,7 +190,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Allure服务器管理
   getAllureServerStatus: () => invokeWithCheck(IPC_CHANNELS.GET_ALLURE_SERVER_STATUS),
   clearAllureReports: () => invokeWithCheck(IPC_CHANNELS.CLEAR_ALLURE_REPORTS),
-  deleteReportRun: (testPlanName, reportPath) => invokeWithCheck(IPC_CHANNELS.DELETE_REPORT_RUN, { testPlanName, reportPath }),
+  deleteReportRun: (testPlanName, reportPath) =>
+    invokeWithCheck(IPC_CHANNELS.DELETE_REPORT_RUN, {
+      testPlanName,
+      reportPath,
+    }),
   clearAllLogs: () => invokeWithCheck(IPC_CHANNELS.CLEAR_ALL_LOGS),
 
   // 弹窗功能
@@ -255,13 +260,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return invokeWithCheck(IPC_CHANNELS.EXECUTE_ADB_COMMAND, cmd, deviceId);
   },
   selectFiles: () => invokeWithCheck(IPC_CHANNELS.SELECT_FILES),
-  uploadFile: (localPath, remotePath, deviceId) => invokeWithCheck(IPC_CHANNELS.UPLOAD_FILE, localPath, remotePath, deviceId),
+  // P1-6: 专用文件操作 (主进程侧路径清洗, 不经 shell)
+  deleteRemoteFile: (remotePath, deviceId, isDirectory) =>
+    invokeWithCheck(IPC_CHANNELS.DELETE_REMOTE_FILE, remotePath, deviceId, isDirectory),
+  renameRemoteFile: (remotePath, newName, deviceId) =>
+    invokeWithCheck(IPC_CHANNELS.RENAME_REMOTE_FILE, remotePath, newName, deviceId),
+  uploadFile: (localPath, remotePath, deviceId) =>
+    invokeWithCheck(IPC_CHANNELS.UPLOAD_FILE, localPath, remotePath, deviceId),
   onUploadProgress: (callback) => {
     const listener = (event, progress) => callback(progress);
     ipcRenderer.on(IPC_CHANNELS.UPLOAD_PROGRESS, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.UPLOAD_PROGRESS, listener);
   },
-  downloadFile: (remotePath, localPath, deviceId) => invokeWithCheck(IPC_CHANNELS.DOWNLOAD_FILE, remotePath, localPath, deviceId),
+  downloadFile: (remotePath, localPath, deviceId) =>
+    invokeWithCheck(IPC_CHANNELS.DOWNLOAD_FILE, remotePath, localPath, deviceId),
   onDownloadProgress: (callback) => {
     const listener = (event, data) => callback(data);
     ipcRenderer.on(IPC_CHANNELS.DOWNLOAD_PROGRESS, listener);
@@ -279,7 +291,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createDirectory: (dirPath) => invokeWithCheck(IPC_CHANNELS.CREATE_DIRECTORY, dirPath),
 
   // 钉钉通知
-  sendDingTalkNotification: (notificationData) => invokeWithCheck(IPC_CHANNELS.SEND_DINGTALK_NOTIFICATION, notificationData),
+  sendDingTalkNotification: (notificationData) =>
+    invokeWithCheck(IPC_CHANNELS.SEND_DINGTALK_NOTIFICATION, notificationData),
 
   // 定时计划测试完成
   scheduledTestComplete: (planId) => invokeWithCheck(IPC_CHANNELS.SCHEDULED_TEST_COMPLETE, planId),
@@ -298,7 +311,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     getLanguage: () => {
       return i18next.language;
-    }
+    },
   },
 
   // 页面封装相关
@@ -319,14 +332,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // 元素管理
     getElements: (appId, pageId) => invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_GET_ELEMENTS, appId, pageId),
-    addElement: (appId, pageId, elementData) => invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_ADD_ELEMENT, appId, pageId, elementData),
-    updateElement: (appId, pageId, elementId, elementData) => invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_UPDATE_ELEMENT, appId, pageId, elementId, elementData),
-    deleteElement: (appId, pageId, elementId) => invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_DELETE_ELEMENT, appId, pageId, elementId),
-    searchElements: (appId, pageId, keyword) => invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_SEARCH_ELEMENTS, appId, pageId, keyword),
+    addElement: (appId, pageId, elementData) =>
+      invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_ADD_ELEMENT, appId, pageId, elementData),
+    updateElement: (appId, pageId, elementId, elementData) =>
+      invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_UPDATE_ELEMENT, appId, pageId, elementId, elementData),
+    deleteElement: (appId, pageId, elementId) =>
+      invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_DELETE_ELEMENT, appId, pageId, elementId),
+    searchElements: (appId, pageId, keyword) =>
+      invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_SEARCH_ELEMENTS, appId, pageId, keyword),
 
     // 统计信息
     getAppStats: (appId) => invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_GET_APP_STATS, appId),
-    getPageStats: (appId, pageId) => invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_GET_PAGE_STATS, appId, pageId)
+    getPageStats: (appId, pageId) => invokeWithCheck(IPC_CHANNELS.PAGE_PACKAGE_GET_PAGE_STATS, appId, pageId),
   },
 
   // 测试用例管理（新版）
@@ -337,23 +354,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete: (param) => invokeWithCheck(IPC_CHANNELS.TEST_CASE_DELETE, param),
     checkJsonExists: (fileName) => invokeWithCheck(IPC_CHANNELS.TEST_CASE_CHECK_JSON_EXISTS, fileName),
     batchCheckJsonExists: (fileNames) => invokeWithCheck(IPC_CHANNELS.TEST_CASE_BATCH_CHECK_JSON_EXISTS, fileNames),
-    generatePython: (caseData, outputDir) => invokeWithCheck(IPC_CHANNELS.TEST_CASE_GENERATE_PYTHON, { caseData, outputDir }),
-    saveAndGenerate: (caseData, outputDir) => invokeWithCheck(IPC_CHANNELS.TEST_CASE_SAVE_AND_GENERATE, { caseData, outputDir })
+    generatePython: (caseData, outputDir) =>
+      invokeWithCheck(IPC_CHANNELS.TEST_CASE_GENERATE_PYTHON, {
+        caseData,
+        outputDir,
+      }),
+    saveAndGenerate: (caseData, outputDir) =>
+      invokeWithCheck(IPC_CHANNELS.TEST_CASE_SAVE_AND_GENERATE, {
+        caseData,
+        outputDir,
+      }),
   },
 
   // APK解析
   apk: {
-    parse: (apkPath) => invokeWithCheck(IPC_CHANNELS.APK_PARSE, apkPath)
+    parse: (apkPath) => invokeWithCheck(IPC_CHANNELS.APK_PARSE, apkPath),
   },
 
   // BLE设备发现
   bleDeviceDiscovery: {
     getDevices: () => invokeWithCheck(IPC_CHANNELS.BLE_DEVICE_DISCOVERY_GET_DEVICES),
-    getDeviceDetail: (deviceId) => invokeWithCheck(IPC_CHANNELS.BLE_DEVICE_DISCOVERY_GET_DEVICE_DETAIL, deviceId)
+    getDeviceDetail: (deviceId) => invokeWithCheck(IPC_CHANNELS.BLE_DEVICE_DISCOVERY_GET_DEVICE_DETAIL, deviceId),
   },
 
   inspector: {
-    startSession: (deviceName, appPackage, appActivity, platformVersion, noReset) => invokeWithCheck(IPC_CHANNELS.INSPECTOR_START_SESSION, deviceName, appPackage, appActivity, platformVersion, noReset),
+    startSession: (deviceName, appPackage, appActivity, platformVersion, noReset) =>
+      invokeWithCheck(
+        IPC_CHANNELS.INSPECTOR_START_SESSION,
+        deviceName,
+        appPackage,
+        appActivity,
+        platformVersion,
+        noReset
+      ),
     getScreenshot: () => invokeWithCheck(IPC_CHANNELS.INSPECTOR_GET_SCREENSHOT),
     getPageSource: () => invokeWithCheck(IPC_CHANNELS.INSPECTOR_GET_PAGE_SOURCE),
     findElementLocators: (elementPath) => invokeWithCheck(IPC_CHANNELS.INSPECTOR_FIND_ELEMENT_LOCATORS, elementPath),
@@ -363,7 +396,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const subscription = (event, stage) => callback(stage);
       ipcRenderer.on(IPC_CHANNELS.INSPECTOR_PROGRESS, subscription);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.INSPECTOR_PROGRESS, subscription);
-    }
+    },
   },
 
   // 驱动安装
@@ -407,5 +440,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (event, data) => callback(data);
     ipcRenderer.on(IPC_CHANNELS.ON_IMPORT_PROGRESS, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.ON_IMPORT_PROGRESS, listener);
-  }
+  },
 });

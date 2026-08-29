@@ -12,8 +12,14 @@
  * @returns {number} -1 (a<b) / 0 (a==b) / 1 (a>b)
  */
 function compareVersions(a, b) {
-  const pa = String(a).replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
-  const pb = String(b).replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+  const pa = String(a)
+    .replace(/^v/i, '')
+    .split('.')
+    .map((n) => parseInt(n, 10) || 0);
+  const pb = String(b)
+    .replace(/^v/i, '')
+    .split('.')
+    .map((n) => parseInt(n, 10) || 0);
   const len = Math.max(pa.length, pb.length);
   for (let i = 0; i < len; i++) {
     const na = pa[i] || 0;

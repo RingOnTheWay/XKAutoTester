@@ -42,7 +42,7 @@ function buildRequestBody(message) {
     // P3-4: isAtAll 应为 boolean (钉钉 API 期望布尔, 字符串 'false' 语义异常)
     at: { isAtAll: false, atUserIds: [], atMobiles: [] },
     text: { content: message },
-    msgtype: 'text'
+    msgtype: 'text',
   };
 }
 
@@ -60,7 +60,7 @@ function buildSignedUrl(accessToken, timestamp, sign) {
 const defaultHttpClientFactory = () => {
   const axios = require('axios');
   return {
-    post: (url, body, opts) => axios.post(url, body, opts)
+    post: (url, body, opts) => axios.post(url, body, opts),
   };
 };
 
@@ -87,7 +87,7 @@ class NotificationService {
         return {
           success: false,
           // 复用既有 i18n key (未配置通知平台); 无法新增 key (locales 只读), 采用现有文案
-          error: this.i18nService.t('notificationNotConfigured')
+          error: this.i18nService.t('notificationNotConfigured'),
         };
       }
 
@@ -97,7 +97,7 @@ class NotificationService {
       const body = buildRequestBody(message);
 
       const response = await this._httpClient.post(url, body, {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
       });
       return { success: true, data: response.data };
     } catch (error) {
@@ -106,4 +106,9 @@ class NotificationService {
   }
 }
 
-module.exports = { NotificationService, buildSignString, buildRequestBody, buildSignedUrl };
+module.exports = {
+  NotificationService,
+  buildSignString,
+  buildRequestBody,
+  buildSignedUrl,
+};

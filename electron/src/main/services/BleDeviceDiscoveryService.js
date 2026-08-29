@@ -28,11 +28,13 @@ class BleDeviceDiscoveryService {
     this._deviceDir = path.join(projectRoot, 'src', 'main', 'device');
     this._initialized = false;
     this._deviceCache = null;
-    this._fileSystemFactory = opts.fileSystemFactory || (() => ({
-      exists: (p) => fs.existsSync(p),
-      readdirSync: (dir, opts) => fs.readdirSync(dir, opts),
-      readFileSync: (p, encoding) => fs.readFileSync(p, encoding)
-    }));
+    this._fileSystemFactory =
+      opts.fileSystemFactory ||
+      (() => ({
+        exists: (p) => fs.existsSync(p),
+        readdirSync: (dir, opts) => fs.readdirSync(dir, opts),
+        readFileSync: (p, encoding) => fs.readFileSync(p, encoding),
+      }));
     this._fs = this._fileSystemFactory();
   }
 
@@ -46,11 +48,13 @@ class BleDeviceDiscoveryService {
     const devices = [];
     if (!this._fs.exists(this._deviceDir)) return devices;
 
-    const entries = this._fs.readdirSync(this._deviceDir, { withFileTypes: true });
+    const entries = this._fs.readdirSync(this._deviceDir, {
+      withFileTypes: true,
+    });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const subDir = path.join(this._deviceDir, entry.name);
-      const jsonFiles = this._fs.readdirSync(subDir).filter(f => f.endsWith('.json'));
+      const jsonFiles = this._fs.readdirSync(subDir).filter((f) => f.endsWith('.json'));
       for (const jsonFile of jsonFiles) {
         const jsonPath = path.join(subDir, jsonFile);
         try {
@@ -60,7 +64,7 @@ class BleDeviceDiscoveryService {
             devices.push({
               ...metadata,
               _sourceDir: entry.name,
-              _sourceFile: jsonFile
+              _sourceFile: jsonFile,
             });
           }
         } catch (e) {
@@ -78,7 +82,7 @@ class BleDeviceDiscoveryService {
 
   async getDeviceDetail(deviceId) {
     this._ensureInitialized();
-    const device = this._deviceCache.find(d => d.deviceId === deviceId);
+    const device = this._deviceCache.find((d) => d.deviceId === deviceId);
     if (!device) return { success: false, error: `Device not found: ${deviceId}` };
     return { success: true, data: device };
   }

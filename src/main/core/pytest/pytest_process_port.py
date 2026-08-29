@@ -7,6 +7,7 @@
 生产: PytestProcess (subprocess.Popen + 双线程)
 测试: FakePytestProcess (鸭子类型, 不起子进程)
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

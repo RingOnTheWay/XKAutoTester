@@ -8,6 +8,7 @@
 
 纯函数, 通过 monkeypatch t() 隔离 i18n 单例。
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -78,9 +79,7 @@ class TestFormatTestSummary:
             (5, "python.pytestRunner.statusNoTestsCollected"),
         ],
     )
-    def test_exit_code_status_mapping(
-        self, patch_t: None, exit_code: int, expected_status_key: str
-    ) -> None:
+    def test_exit_code_status_mapping(self, patch_t: None, exit_code: int, expected_status_key: str) -> None:
         """exit_code 0-5 各映射到对应 status i18n key。"""
         result = {"exit_code": exit_code, "markers": [], "test_paths": []}
 

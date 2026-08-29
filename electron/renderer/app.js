@@ -10,8 +10,6 @@ import { Icons } from './icons.js';
 import { Modal } from './components/modal.js';
 import { InspectorModal } from './components/inspector.js';
 import { ProgressIndicator } from './components/progress-indicator.js';
-import { Toast } from './components/toast.js';
-import { DeviceCascadeSelect } from './components/device-cascade-select.js';
 import DeviceSelectionModal from './components/device-selection-modal.js';
 import { createTestCaseTab } from './tabs/test-case/index.js';
 import { createPagePackageTab } from './tabs/page-package/index.js';
@@ -110,7 +108,6 @@ export class App {
       this.updateComponentTranslations();
 
       this.#initialized = true;
-      console.log('[App] Phase 4: full initialization complete');
     } catch (err) {
       console.error('[App] Initialization failed:', err);
     }
@@ -131,13 +128,16 @@ export class App {
 
   changeLanguage(language) {
     if (window.i18n) {
-      window.i18n.changeLanguage(language).then(() => {
-        this.updateUIText();
-        this.updateComponentTranslations();
-        this.updateLanguageSelectorText(language);
-      }).catch(error => {
-        console.error('语言切换失败:', error);
-      });
+      window.i18n
+        .changeLanguage(language)
+        .then(() => {
+          this.updateUIText();
+          this.updateComponentTranslations();
+          this.updateLanguageSelectorText(language);
+        })
+        .catch((error) => {
+          console.error('语言切换失败:', error);
+        });
     }
   }
 
@@ -152,21 +152,21 @@ export class App {
   updateUIText(scope = document) {
     if (!window.i18n) return;
     const root = scope || document;
-    root.querySelectorAll('[data-i18n]').forEach(el => {
+    root.querySelectorAll('[data-i18n]').forEach((el) => {
       const key = el.getAttribute('data-i18n');
       if (key) {
         const translation = window.i18n.t(key);
         if (translation) el.textContent = translation;
       }
     });
-    root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    root.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
       const key = el.getAttribute('data-i18n-placeholder');
       if (key) {
         const translation = window.i18n.t(key);
         if (translation) el.placeholder = translation;
       }
     });
-    root.querySelectorAll('[data-i18n-title]').forEach(el => {
+    root.querySelectorAll('[data-i18n-title]').forEach((el) => {
       const key = el.getAttribute('data-i18n-title');
       if (key) {
         const translation = window.i18n.t(key);
@@ -202,13 +202,7 @@ export class App {
 
   async #loadTabHtml() {
     // 加载 5 tab HTML 片段 (兼容 npm start loadFile + npm run dev server)
-    const tabs = [
-      'test-execution',
-      'page-package',
-      'test-case',
-      'android-connection',
-      'settings',
-    ];
+    const tabs = ['test-execution', 'page-package', 'test-case', 'android-connection', 'settings'];
     await Promise.all(
       tabs.map(async (name) => {
         try {
@@ -248,7 +242,7 @@ export class App {
       ppElement: new Modal({ id: 'pp-element-modal-overlay' }),
       report: new Modal({ id: 'report-modal-overlay' }),
       controlParams: new Modal({ id: 'control-params-overlay' }),
-      scheduledPlan: new Modal({ id: 'scheduled-plan-modal-overlay' })
+      scheduledPlan: new Modal({ id: 'scheduled-plan-modal-overlay' }),
     };
   }
 
@@ -272,7 +266,7 @@ export class App {
 
   #initializeIcons() {
     const iconElements = document.querySelectorAll('.svg-icon[data-icon]');
-    iconElements.forEach(element => {
+    iconElements.forEach((element) => {
       const iconName = element.getAttribute('data-icon');
       if (Icons[iconName]) {
         element.innerHTML = Icons[iconName];
@@ -286,7 +280,7 @@ export class App {
   }
 
   initializeComponentIcons() {
-    document.querySelectorAll('#confirm-modal-container .svg-icon[data-icon]').forEach(element => {
+    document.querySelectorAll('#confirm-modal-container .svg-icon[data-icon]').forEach((element) => {
       const iconName = element.getAttribute('data-icon');
       if (Icons[iconName]) element.innerHTML = Icons[iconName];
     });
@@ -297,7 +291,7 @@ export class App {
   #initializeCustomSelects() {
     const selectWrappers = document.querySelectorAll('.custom-select-wrapper[data-options]');
 
-    selectWrappers.forEach(wrapper => {
+    selectWrappers.forEach((wrapper) => {
       if (wrapper.querySelector('.custom-select')) return;
 
       const optionsData = wrapper.getAttribute('data-options');
@@ -313,11 +307,15 @@ export class App {
               <span class="custom-select__text"></span>
             </div>
             <div class="custom-select__options" id="${selectId}-options">
-              ${options.map(opt => `
+              ${options
+                .map(
+                  (opt) => `
                 <div class="custom-select__option${opt.default ? ' selected' : ''}" data-value="${opt.value}">
                   <span data-i18n="${opt.label}">${window.i18n.t(opt.label)}</span>
                 </div>
-              `).join('')}
+              `
+                )
+                .join('')}
             </div>
           </div>
         `;
@@ -325,7 +323,7 @@ export class App {
         wrapper.innerHTML = selectHtml;
 
         const selectedSpan = wrapper.querySelector('.custom-select__text');
-        const defaultOption = options.find(opt => opt.default);
+        const defaultOption = options.find((opt) => opt.default);
         if (selectedSpan && defaultOption) {
           selectedSpan.textContent = window.i18n.t(defaultOption.label);
           selectedSpan.setAttribute('data-i18n', defaultOption.label);
@@ -356,7 +354,7 @@ export class App {
 
     selected.addEventListener('click', (e) => {
       e.stopPropagation();
-      document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+      document.querySelectorAll('.custom-select__options.show').forEach((opt) => {
         if (opt !== options) {
           opt.classList.remove('show');
         }
@@ -369,19 +367,23 @@ export class App {
         options.classList.add('show');
         if (mainContent) {
           mainContent.classList.add('dropdown-open');
-          mainContent.addEventListener('wheel', self.preventScroll, { passive: false });
+          mainContent.addEventListener('wheel', self.preventScroll, {
+            passive: false,
+          });
         }
       } else {
         options.classList.remove('show');
         if (mainContent) {
           mainContent.classList.remove('dropdown-open');
-          mainContent.removeEventListener('wheel', self.preventScroll, { passive: false });
+          mainContent.removeEventListener('wheel', self.preventScroll, {
+            passive: false,
+          });
         }
       }
     });
 
     const optionItems = options.querySelectorAll('.custom-select__option');
-    optionItems.forEach(option => {
+    optionItems.forEach((option) => {
       option.addEventListener('click', (e) => {
         e.stopPropagation();
         const displayText = option.querySelector('span')?.textContent || option.textContent;
@@ -391,14 +393,16 @@ export class App {
           selectedSpan.textContent = displayText;
         }
 
-        optionItems.forEach(opt => opt.classList.remove('selected'));
+        optionItems.forEach((opt) => opt.classList.remove('selected'));
         option.classList.add('selected');
 
         options.classList.remove('show');
         const mainContent = document.querySelector('.main-content');
         if (mainContent) {
           mainContent.classList.remove('dropdown-open');
-          mainContent.removeEventListener('wheel', self.preventScroll, { passive: false });
+          mainContent.removeEventListener('wheel', self.preventScroll, {
+            passive: false,
+          });
         }
       });
     });
@@ -451,9 +455,9 @@ export class App {
 
   switchTab(tabElement) {
     const targetPage = tabElement.getAttribute('data-tab');
-    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach((t) => t.classList.remove('active'));
     tabElement.classList.add('active');
-    document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+    document.querySelectorAll('.page').forEach((page) => page.classList.remove('active'));
     const pageElement = document.getElementById(targetPage);
     if (pageElement) pageElement.classList.add('active');
     this.onTabSwitch(targetPage);
@@ -467,20 +471,22 @@ export class App {
     // 全局点击 - 关闭下拉框
     document.addEventListener('click', () => {
       const hadOpenDropdowns = document.querySelectorAll('.custom-select__options.show').length > 0;
-      document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+      document.querySelectorAll('.custom-select__options.show').forEach((opt) => {
         opt.classList.remove('show');
       });
       if (hadOpenDropdowns) {
         const mainContent = document.querySelector('.main-content');
         if (mainContent) {
           mainContent.classList.remove('dropdown-open');
-          mainContent.removeEventListener('wheel', this.preventScroll, { passive: false });
+          mainContent.removeEventListener('wheel', this.preventScroll, {
+            passive: false,
+          });
         }
       }
     });
 
     // 导航标签切换
-    document.querySelectorAll('.nav-tab').forEach(tab => {
+    document.querySelectorAll('.nav-tab').forEach((tab) => {
       tab.addEventListener('click', () => {
         this.switchTab(tab);
       });
@@ -587,11 +593,14 @@ export class App {
       });
     }
 
-    window.electronAPI.isWindowMaximized().then(isMaximized => {
-      updateMaximizeButton(isMaximized);
-    }).catch(error => {
-      console.error('获取窗口最大化状态失败:', error);
-    });
+    window.electronAPI
+      .isWindowMaximized()
+      .then((isMaximized) => {
+        updateMaximizeButton(isMaximized);
+      })
+      .catch((error) => {
+        console.error('获取窗口最大化状态失败:', error);
+      });
 
     window.electronAPI.onWindowMaximized((isMaximized) => {
       updateMaximizeButton(isMaximized);

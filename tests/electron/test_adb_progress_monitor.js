@@ -99,7 +99,8 @@ test('emit 发送完整 payload 到 eventSender.send', () => {
   assert.strictEqual(sends[0].payload.status, 'downloading');
   assert.strictEqual(sends[0].payload.message, 'i18n:fileManager.downloading');
   assert.strictEqual(sends[0].payload.fileName, 'test.apk');
-  assert.strictEqual(sends[0].payload.fileSize, '0.00 MB');
+  // 智能格式化: 1000 B < 1KB 直接显示字节, 不降级为 0.00 MB
+  assert.strictEqual(sends[0].payload.fileSize, '1000 B');
 });
 
 test('emit 带 error 参数时 payload 含 error 字段', () => {

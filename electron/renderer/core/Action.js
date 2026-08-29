@@ -34,7 +34,7 @@ export class Action {
       cleanups.push(() => el.removeEventListener(eventType, handler));
     }
 
-    return () => cleanups.forEach(fn => fn());
+    return () => cleanups.forEach((fn) => fn());
   }
 
   /**
@@ -77,6 +77,6 @@ export class Action {
       cleanups.push(() => el.removeEventListener('click', wrappedHandler));
     }
 
-    return () => cleanups.forEach(fn => fn());
+    return () => cleanups.forEach((fn) => fn());
   }
 }

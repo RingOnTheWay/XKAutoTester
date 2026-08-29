@@ -14,6 +14,7 @@
 - popen_stream 无匹配返回 FakePopen([]) (空流,立即 EOF)
 - 纯 Python,无 subprocess 依赖
 """
+
 from __future__ import annotations
 
 from main.core.adb.adb_port import AdbResult

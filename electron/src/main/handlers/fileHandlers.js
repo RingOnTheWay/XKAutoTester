@@ -18,14 +18,12 @@ function register(ipcMain, services) {
   lastDialogPaths.init(() => path.join(electronApp.userConfigPath, 'config.json'));
 
   // i18n 文案封装: i18nService 不可用时回退默认文案 (测试/初始化期)
-  const t = (key, fallback) => (i18nService && typeof i18nService.t === 'function'
-    ? i18nService.t(key, { defaultValue: fallback })
-    : fallback);
+  const t = (key, fallback) =>
+    i18nService && typeof i18nService.t === 'function' ? i18nService.t(key, { defaultValue: fallback }) : fallback;
 
   // 测试用例目录 (SSOT: 与 TestCaseService.testCasesDir 一致)
-  const testCasesDir = electronApp && electronApp.userConfigPath
-    ? path.resolve(electronApp.userConfigPath, 'test_cases')
-    : null;
+  const testCasesDir =
+    electronApp && electronApp.userConfigPath ? path.resolve(electronApp.userConfigPath, 'test_cases') : null;
 
   // 校验 dir 是否位于测试用例目录或其子目录下
   function isWithinTestCasesDir(dir) {
@@ -52,7 +50,7 @@ function register(ipcMain, services) {
       properties: ['openFile'],
       filters: [
         { name: 'Python Files', extensions: ['py'] },
-        { name: 'All Files', extensions: ['*'] }
+        { name: 'All Files', extensions: ['*'] },
       ],
       ...(defaultPath ? { defaultPath } : {}),
     });
@@ -93,7 +91,10 @@ function register(ipcMain, services) {
 
   registerHandler(ipcMain, IPC_CHANNELS.CHECK_PATH_EXISTS, (pathToCheck) => {
     if (!isNonEmptyString(pathToCheck)) {
-      return { success: false, error: t('errors.invalidPath', '无效的路径参数') };
+      return {
+        success: false,
+        error: t('errors.invalidPath', '无效的路径参数'),
+      };
     }
     try {
       return fs.existsSync(pathToCheck);
@@ -105,9 +106,21 @@ function register(ipcMain, services) {
 
   registerHandler(ipcMain, IPC_CHANNELS.CREATE_DIRECTORY, (dirPath) => {
     if (!isNonEmptyString(dirPath)) {
-      return { success: false, error: t('errors.invalidPath', '无效的路径参数') };
+      return {
+        success: false,
+        error: t('errors.invalidPath', '无效的路径参数'),
+      };
     }
-    fs.mkdirSync(dirPath, { recursive: true });
+    // P3-8: 轻量防护 — 拒绝盘符根与 Windows 系统目录 (mkdir 虽为低危空目录, 防系统根污染)
+    const resolved = path.resolve(dirPath);
+    const sysRootRe = /^[a-zA-Z]:\\$|^[a-zA-Z]:\\windows(\\|$)/i;
+    if (sysRootRe.test(resolved)) {
+      return {
+        success: false,
+        error: t('errors.invalidPath', '无效的路径参数'),
+      };
+    }
+    fs.mkdirSync(resolved, { recursive: true });
     return { success: true };
   });
 
@@ -117,7 +130,10 @@ function register(ipcMain, services) {
     const { allowed, reason } = isAllowedExternalUrl(url);
     if (!allowed) {
       console.error(`[openExternal] 拒绝打开 URL: ${url} (${reason})`);
-      return { success: false, error: t('errors.openUrlNotAllowed', '不允许打开此链接') + `: ${reason}` };
+      return {
+        success: false,
+        error: t('errors.openUrlNotAllowed', '不允许打开此链接') + `: ${reason}`,
+      };
     }
     return shell.openExternal(url);
   });
@@ -132,23 +148,35 @@ function register(ipcMain, services) {
 
   registerHandler(ipcMain, IPC_CHANNELS.SAVE_TEST_CASE, async (data) => {
     if (!data || typeof data !== 'object') {
-      return { success: false, error: t('errors.invalidSaveTestCase', '无效的测试用例保存参数') };
+      return {
+        success: false,
+        error: t('errors.invalidSaveTestCase', '无效的测试用例保存参数'),
+      };
     }
     const { directory, fileName, content } = data;
 
     // directory: 非空字符串 且 位于测试用例目录 (或其子目录)
     if (!isNonEmptyString(directory) || !isWithinTestCasesDir(directory)) {
-      return { success: false, error: t('errors.saveDirNotAllowed', '保存目录必须在测试用例目录下') };
+      return {
+        success: false,
+        error: t('errors.saveDirNotAllowed', '保存目录必须在测试用例目录下'),
+      };
     }
 
     // fileName: 去扩展名后 trim 非空, 统一转安全的 .py 文件名
     if (!isNonEmptyString(fileName)) {
-      return { success: false, error: t('errors.invalidSaveTestCase', '无效的测试用例保存参数') };
+      return {
+        success: false,
+        error: t('errors.invalidSaveTestCase', '无效的测试用例保存参数'),
+      };
     }
     const rawName = fileName.trim();
     const baseName = rawName.replace(/\.py$/i, '').trim();
     if (baseName.length === 0) {
-      return { success: false, error: t('errors.invalidSaveTestCase', '无效的测试用例保存参数') };
+      return {
+        success: false,
+        error: t('errors.invalidSaveTestCase', '无效的测试用例保存参数'),
+      };
     }
     // 丢弃其它扩展名 (若传 .txt 等), path.basename 防目录穿越, 再清理非法文件名符号
     const safeName = path.basename(baseName.replace(/\.[^./]+$/, '')).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_');
@@ -156,7 +184,10 @@ function register(ipcMain, services) {
 
     // content: 非空字符串
     if (!isNonEmptyString(content)) {
-      return { success: false, error: t('errors.invalidSaveTestCase', '无效的测试用例保存参数') };
+      return {
+        success: false,
+        error: t('errors.invalidSaveTestCase', '无效的测试用例保存参数'),
+      };
     }
 
     const filePath = path.join(path.resolve(directory), finalFileName);
@@ -165,7 +196,7 @@ function register(ipcMain, services) {
     return {
       success: true,
       filePath: filePath,
-      fileName: finalFileName
+      fileName: finalFileName,
     };
   });
 
@@ -174,13 +205,19 @@ function register(ipcMain, services) {
 
     // 必须是非空字符串 且 以 .py 结尾
     if (!isNonEmptyString(filePath) || !filePath.toLowerCase().endsWith('.py')) {
-      return { success: false, error: t('errors.invalidDeleteTestCase', '无效的测试用例删除参数') };
+      return {
+        success: false,
+        error: t('errors.invalidDeleteTestCase', '无效的测试用例删除参数'),
+      };
     }
 
     // 规范化后其父目录必须在测试用例目录 (或其子目录) 下, 防止删除任意路径
     const resolvedPath = path.resolve(filePath);
     if (!isWithinTestCasesDir(path.dirname(resolvedPath))) {
-      return { success: false, error: t('errors.deleteNotAllowed', '删除目标必须在测试用例目录下') };
+      return {
+        success: false,
+        error: t('errors.deleteNotAllowed', '删除目标必须在测试用例目录下'),
+      };
     }
 
     if (!fs.existsSync(resolvedPath)) {

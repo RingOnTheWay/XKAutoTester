@@ -88,7 +88,7 @@ export const ICON_MAPPING = {
   search: 'Search',
   alert_triangle: 'TriangleAlert',
   search_x: 'SearchX',
-  external_link: 'ExternalLink'
+  external_link: 'ExternalLink',
 };
 
 export function lucideToSvg(iconData) {
@@ -102,13 +102,17 @@ export function lucideToSvg(iconData) {
     stroke: 'currentColor',
     'stroke-width': '2',
     'stroke-linecap': 'round',
-    'stroke-linejoin': 'round'
+    'stroke-linejoin': 'round',
   };
-  const attrStr = Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(' ');
+  const attrStr = Object.entries(attrs)
+    .map(([k, v]) => `${k}="${v}"`)
+    .join(' ');
 
   function renderNode(node) {
     const [tag, nodeAttrs, children] = node;
-    const nodeAttrStr = Object.entries(nodeAttrs).map(([k, v]) => `${k}="${v}"`).join(' ');
+    const nodeAttrStr = Object.entries(nodeAttrs)
+      .map(([k, v]) => `${k}="${v}"`)
+      .join(' ');
     if (children && children.length > 0) {
       return `<${tag} ${nodeAttrStr}>${children.map(renderNode).join('')}</${tag}>`;
     }

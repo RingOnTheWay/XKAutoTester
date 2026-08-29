@@ -14,7 +14,7 @@ const AdbProgressMonitor = require('../AdbProgressMonitor');
 const pathHelper = require('../../utils/pathHelper');
 const { ProcessRunner } = require('../spawnHelper');
 
-const DEFAULT_INSTALL_TIMEOUT_MS = 600000;  // 10 分钟
+const DEFAULT_INSTALL_TIMEOUT_MS = 600000; // 10 分钟
 
 class ApkInstaller {
   /**
@@ -56,12 +56,13 @@ class ApkInstaller {
    * @returns {Promise<{success: boolean, error?: string, output?: string}>}
    */
   async install(apkPath, deviceId, eventSender) {
+    // P2-7: 临时路径提到方法级, finally 清理可访问
+    const tempFileName = `temp_${Date.now()}.apk`;
+    const tempRemotePath = `/data/local/tmp/${tempFileName}`;
+
     try {
       const stats = this._fs.statSync(apkPath);
       const fileSizeInBytes = stats.size;
-
-      const tempFileName = `temp_${Date.now()}.apk`;
-      const tempRemotePath = `/data/local/tmp/${tempFileName}`;
 
       const monitor = this._monitorFactory({
         remotePath: tempRemotePath,
@@ -79,9 +80,7 @@ class ApkInstaller {
       monitor.emit(0, 'preparing', this._i18n.t('fileManager.preparingInstall'));
 
       // 步骤1: adb push
-      const pushArgs = deviceId
-        ? ['-s', deviceId, 'push', apkPath, tempRemotePath]
-        : ['push', apkPath, tempRemotePath];
+      const pushArgs = deviceId ? ['-s', deviceId, 'push', apkPath, tempRemotePath] : ['push', apkPath, tempRemotePath];
 
       // 复用 pathHelper.getAdbPath 统一解析入口 (与 ADBService 同一 projectRoot)
       const adbPath = pathHelper.getAdbPath(this._projectRoot, true);
@@ -93,14 +92,23 @@ class ApkInstaller {
       const pushRaw = await this._runner.execute({
         command: adbPath,
         args: pushArgs,
-        onStdout: (chunk) => { pushStdout += chunk; },
-        onStderr: (chunk) => { pushStderr += chunk; },
+        onStdout: (chunk) => {
+          pushStdout += chunk;
+        },
+        onStderr: (chunk) => {
+          pushStderr += chunk;
+        },
       });
       monitor.stop();
 
       // 还原原 pushResult 结构: close → {success, stdout, stderr, code}; error → {success:false, stdout, stderr, error}
       const pushResult = pushRaw.errorObject
-        ? { success: false, stdout: pushStdout, stderr: pushStderr, error: pushRaw.errorObject.message }
+        ? {
+            success: false,
+            stdout: pushStdout,
+            stderr: pushStderr,
+            error: pushRaw.errorObject.message,
+          }
         : {
             success: pushRaw.code === 0 || pushStderr.includes('file pushed') || pushStdout.includes('file pushed'),
             stdout: pushStdout,
@@ -127,19 +135,13 @@ class ApkInstaller {
         command: adbPath,
         args: installArgs,
         timeout: this._installTimeoutMs,
-        onStdout: (chunk) => { installStdout += chunk; },
-        onStderr: (chunk) => { installStderr += chunk; },
+        onStdout: (chunk) => {
+          installStdout += chunk;
+        },
+        onStderr: (chunk) => {
+          installStderr += chunk;
+        },
       });
-
-      // 步骤3: 清理临时文件 (无论成功失败都尝试)
-      try {
-        const rmArgs = deviceId
-          ? ['-s', deviceId, 'shell', 'rm', tempRemotePath]
-          : ['shell', 'rm', tempRemotePath];
-        await this._executor.execute(rmArgs, { timeoutMs: 5000 });
-      } catch {
-        // 清理失败不影响主流程
-      }
 
       // 判断结果 (保持原 close/error/timeout 三分支行为 + monitor.emit 序列)
       if (installRaw.errorObject) {
@@ -162,6 +164,15 @@ class ApkInstaller {
       return { success: false, error: errorMsg, output: installStdout };
     } catch (error) {
       return { success: false, error: error.message };
+    } finally {
+      // P2-7: 无论 push/install 成败均清理设备端临时 APK
+      // (原实现仅主流程清理, push 失败提前 return 会在 /data/local/tmp/ 残留 temp_*.apk)
+      try {
+        const rmArgs = deviceId ? ['-s', deviceId, 'shell', 'rm', tempRemotePath] : ['shell', 'rm', tempRemotePath];
+        await this._executor.execute(rmArgs, { timeoutMs: 5000 });
+      } catch {
+        // 清理失败不影响主流程
+      }
     }
   }
 }

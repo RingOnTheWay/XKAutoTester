@@ -58,7 +58,7 @@ function getAdbPath(projectRoot, useCache = true) {
 
   const possiblePaths = [
     path.join(projectRoot, 'env', 'android-sdk', 'platform-tools', 'adb.exe'),
-    path.join(projectRoot, 'env', 'scrcpy', 'adb.exe')
+    path.join(projectRoot, 'env', 'scrcpy', 'adb.exe'),
   ];
 
   for (const adbPath of possiblePaths) {
@@ -89,7 +89,7 @@ function getAapt2Path(projectRoot, useCache = true) {
 
   const possiblePaths = [
     path.join(projectRoot, 'env', 'android-sdk', 'build-tools', 'aapt2.exe'),
-    path.join(projectRoot, 'env', 'android-tools', 'aapt2.exe')
+    path.join(projectRoot, 'env', 'android-tools', 'aapt2.exe'),
   ];
 
   for (const aapt2Path of possiblePaths) {
@@ -157,7 +157,7 @@ function fixPyvenvCfg(projectRoot, homePath) {
 
   try {
     let content = fs.readFileSync(pyvenvCfgPath, 'utf8');
-    const homeLine = content.split('\n').find(line => line.trim().startsWith('home'));
+    const homeLine = content.split('\n').find((line) => line.trim().startsWith('home'));
     if (!homeLine) return false;
 
     const currentHome = homeLine.split('=')[1].trim();
@@ -165,7 +165,7 @@ function fixPyvenvCfg(projectRoot, homePath) {
 
     content = content.replace(/home\s*=\s*.*/, `home = ${homePath}`);
     fs.writeFileSync(pyvenvCfgPath, content, 'utf8');
-    console.log(`[pathHelper] Fixed pyvenv.cfg home: ${homePath}`);
+    console.warn(`[pathHelper] Fixed pyvenv.cfg home: ${homePath}`);
     return true;
   } catch (error) {
     console.error('[pathHelper] Failed to fix pyvenv.cfg:', error);
@@ -193,5 +193,5 @@ module.exports = {
   getPythonConfig,
   setPythonConfig,
   getVenvSitePackagesPath,
-  fixPyvenvCfg
+  fixPyvenvCfg,
 };

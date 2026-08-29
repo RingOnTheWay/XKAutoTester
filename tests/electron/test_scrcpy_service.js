@@ -88,6 +88,41 @@ test('buildScrcpyArgs always_on_top falsy 不加', () => {
   assert.deepStrictEqual(buildScrcpyArgs({ always_on_top: 0 }), []);
 });
 
+// P1-2: 恶意载荷过滤 (命令注入面修复)
+test('P1-2 buildScrcpyArgs 恶意数值参数被丢弃 (含 cmd 元字符)', () => {
+  const args = buildScrcpyArgs({
+    max_size: '1920" & calc.exe',
+    video_bit_rate: '8M & calc.exe',
+    max_fps: '60|calc',
+    video_codec: 'h264" & whoami',
+    always_on_top: true,
+  });
+  // 全部非法值被过滤, 仅剩合法 always_on_top
+  assert.deepStrictEqual(args, ['--always-on-top']);
+});
+
+test('P1-2 buildScrcpyArgs 合法参数保留', () => {
+  const args = buildScrcpyArgs({
+    max_size: '1920',
+    video_bit_rate: '8M',
+    max_fps: '60',
+    video_codec: 'H265',  // 大写归一化为小写枚举
+    always_on_top: true,
+  });
+  assert.deepStrictEqual(args, [
+    '--max-size', '1920',
+    '--video-bit-rate', '8M',
+    '--max-fps', '60',
+    '--video-codec', 'h265',
+    '--always-on-top',
+  ]);
+});
+
+test('P1-2 buildScrcpyArgs 非法 video_codec 丢弃', () => {
+  const args = buildScrcpyArgs({ video_codec: 'vp9; rm -rf /' });
+  assert.deepStrictEqual(args, []);
+});
+
 // ── constructor ────────────────────────────────────────
 
 test('constructor 收 4 factory + 4 实例建 + _mainWindow=null', () => {
@@ -128,6 +163,34 @@ test('setMainWindow 设置 _mainWindow', () => {
 
 // ── startScrcpy ────────────────────────────────────────
 
+test('P1-2 startScrcpy 恶意 deviceId 拒绝 (不 spawn)', async () => {
+  const spawner = makeFakeSpawner();
+  const svc = new ScrcpyService('/proj', makeFakeI18n(), {
+    processSpawnerFactory: () => spawner,
+    pathResolverFactory: () => makeFakePathResolver('/usr/bin/scrcpy'),
+    loggerFactory: () => makeFakeLogger(),
+  });
+
+  const result = await svc.startScrcpy('dev" & calc.exe', {});
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.error, 'invalid_device_id');
+  assert.strictEqual(spawner.calls.length, 0, '恶意 deviceId 不应触发 spawn');
+});
+
+test('P1-2 startScrcpy 非字符串 deviceId 拒绝', async () => {
+  const spawner = makeFakeSpawner();
+  const svc = new ScrcpyService('/proj', makeFakeI18n(), {
+    processSpawnerFactory: () => spawner,
+    pathResolverFactory: () => makeFakePathResolver('/usr/bin/scrcpy'),
+    loggerFactory: () => makeFakeLogger(),
+  });
+
+  const result = await svc.startScrcpy(null, {});
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.error, 'invalid_device_id');
+  assert.strictEqual(spawner.calls.length, 0);
+});
+
 test('startScrcpy 路径未找到返 {success:false, error:i18n.t}', async () => {
   const svc = new ScrcpyService('/proj', makeFakeI18n(), {
     processSpawnerFactory: () => makeFakeSpawner(),
@@ -142,7 +205,7 @@ test('startScrcpy 路径未找到返 {success:false, error:i18n.t}', async () =>
   assert.match(result.error, /env.*scrcpy.*scrcpy\.exe/);
 });
 
-test('startScrcpy win32 调 spawner.spawn("cmd.exe", ["/c", scrcpyPath, ...args])', async () => {
+test('P1-2 startScrcpy win32 直接 spawn scrcpyPath (不再经 cmd.exe)', async () => {
   const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
   Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
@@ -158,9 +221,8 @@ test('startScrcpy win32 调 spawner.spawn("cmd.exe", ["/c", scrcpyPath, ...args]
 
     assert.strictEqual(result.success, true);
     assert.strictEqual(spawner.calls.length, 1);
-    assert.strictEqual(spawner.calls[0].cmd, 'cmd.exe');
+    assert.strictEqual(spawner.calls[0].cmd, '/proj/env/scrcpy/scrcpy.exe');  // 不再是 cmd.exe
     assert.deepStrictEqual(spawner.calls[0].args, [
-      '/c', '/proj/env/scrcpy/scrcpy.exe',
       '-s', 'dev:5555',
       '--max-size', '1920',
       '--max-fps', '60',
@@ -191,7 +253,7 @@ test('startScrcpy 非 win32 调 spawner.spawn(scrcpyPath, args)', async () => {
       '-s', 'dev:5555',
       '--video-codec', 'h264',
     ]);
-    assert.strictEqual(spawner.calls[0].opts.windowsHide, undefined);
+    assert.strictEqual(spawner.calls[0].opts.windowsHide, true);  // P1-2: 统一传, 非 win32 平台被 Node 忽略
   } finally {
     Object.defineProperty(process, 'platform', originalPlatform);
   }
@@ -341,8 +403,11 @@ test('H2: child close 在 CRASH_WINDOW 内非 0 退出触发 notifier.notify({er
 });
 
 test('H2: child close 在 CRASH_WINDOW 外退出不触发 notifier', async () => {
+  const { mock } = require('node:test');
   const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
   Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+  // P2-9: fake Date 推进时间 (原真实等待 2050ms, 拖慢全量)
+  mock.timers.enable({ apis: ['Date'] });
 
   try {
     const fakeChild = new EventEmitter();
@@ -359,12 +424,13 @@ test('H2: child close 在 CRASH_WINDOW 外退出不触发 notifier', async () =>
 
     await svc.startScrcpy('dev:5555', {});
 
-    // 等待超过 SCRCPY_CRASH_WINDOW_MS 再触发 close
-    await new Promise(resolve => setTimeout(resolve, SCRCPY_CRASH_WINDOW_MS + 50));
+    // P2-9: 推进超过 SCRCPY_CRASH_WINDOW_MS 再触发 close (原 setTimeout 真实等待)
+    mock.timers.tick(SCRCPY_CRASH_WINDOW_MS + 50);
     fakeChild.emit('close', 1, null);
 
     assert.strictEqual(notifier.calls.length, 0, '超时退出不视为 crash, 不触发 notify');
   } finally {
+    mock.timers.reset();
     Object.defineProperty(process, 'platform', originalPlatform);
   }
 });

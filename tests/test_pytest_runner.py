@@ -11,6 +11,7 @@
 
 通过 monkeypatch XKAUTOTESTER_USER_DATA 隔离 fs, FakePytestProcess 隔离子进程。
 """
+
 from __future__ import annotations
 
 from pathlib import Path

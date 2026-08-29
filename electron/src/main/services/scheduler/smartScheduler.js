@@ -118,6 +118,18 @@ class SmartScheduler {
 
     const now = this._now();
     const planTime = new Date(nextPlan.scheduledTime).getTime();
+    // P1-5: 无效 scheduledTime 兜底 — NaN delay 会让 setTimeout(NaN)≈0ms 自旋烧 CPU。
+    // 运行期 addPlan 传入脏数据时 (入库校验被绕过/文件被手动编辑), 标记过期并调度下一个。
+    if (Number.isNaN(planTime)) {
+      this.planQueue.dequeue();
+      try {
+        await this._markAsExpired(nextPlan);
+      } catch (error) {
+        this._logger.error('P1-5 标记脏计划过期失败:', error);
+      }
+      await this._startSmartScheduling();
+      return;
+    }
     const timeUntilPlan = planTime - now;
 
     if (timeUntilPlan <= 0) {
@@ -209,6 +221,8 @@ class SmartScheduler {
     const gen = this._generation;
     const now = this._now();
     const planTime = new Date(plan.scheduledTime).getTime();
+    // P1-5: 无效时间放弃倒计时 (不创建 0ms 定时器)
+    if (Number.isNaN(planTime)) return;
     const remaining = planTime - now;
 
     if (remaining <= 0) {
@@ -369,11 +383,9 @@ class SmartScheduler {
    * @returns {Promise<void>}
    */
   _enqueueRefresh(refreshFn) {
-    this._refreshChain = this._refreshChain
-      .then(refreshFn)
-      .catch((error) => {
-        this._logger.error('刷新调度计划失败:', error);
-      });
+    this._refreshChain = this._refreshChain.then(refreshFn).catch((error) => {
+      this._logger.error('刷新调度计划失败:', error);
+    });
     return this._refreshChain;
   }
 

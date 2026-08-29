@@ -612,3 +612,235 @@ test('ADBService 通过 pathHelper.getAdbPath 获取 adb 路径', async () => {
     restoreElectron();
   }
 });
+
+// ── P1-6: 危险命令黑名单加固 ─────────────────────────────
+
+test('P1-6 normalizeShellCommand 剥离引号/反斜杠', () => {
+  const ADBService = loadAdbService();
+  assert.strictEqual(ADBService.normalizeShellCommand(`re'boot'`), 'reboot');
+  assert.strictEqual(ADBService.normalizeShellCommand(`re"boot"`), 'reboot');
+  assert.strictEqual(ADBService.normalizeShellCommand('r\\eboot'), 'reboot');
+  assert.strictEqual(ADBService.normalizeShellCommand('pm list packages'), 'pm list packages');
+});
+
+test('P1-6 黑名单拒绝系统级破坏命令 (含引号绕过)', async () => {
+  const spawnMock = function () {
+    throw new Error('黑名单命中不应 spawn');
+  };
+  const restoreCp = setupChildProcessMock({ spawn: spawnMock });
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { spawnFn: spawnMock });
+
+    const blockedCmds = [
+      'reboot',
+      `re'boot'`,                    // 引号拆分绕过 (P1-6 堵住)
+      `re"boot"`,
+      'rm -rf /data',
+      'rm -rf /system/app',
+      'rm -rf /sdcard',
+      `rm -rf "/sdcard"`,
+      'factory reset',
+      'wipe data',
+      'pm clear com.android.settings',
+      'pm uninstall com.android.settings',
+      'dd if=/dev/zero of=/dev/block/sda',
+      'su',
+      'chmod 777 /system/bin/sh',
+    ];
+    for (const cmd of blockedCmds) {
+      const result = await svc.executeAdbCommand(cmd, 'dev1');
+      assert.strictEqual(result.success, false, `应拒绝: ${cmd}`);
+      assert.match(result.error, /security policy/);
+    }
+  } finally {
+    restoreElectron();
+    restoreCp();
+  }
+});
+
+test('P1-6 合法命令放行 (查询类; mv/rm 已全面拦截走专用通道)', async () => {
+  let spawnCount = 0;
+  const spawnMock = function (cmd, args, opts) {
+    spawnCount++;
+    const closeCbs = [];
+    return {
+      stdout: { on: () => {} },
+      stderr: { on: () => {} },
+      on: (evt, cb) => { if (evt === 'close') closeCbs.push(cb); },
+      kill: () => {},
+      pid: 1,
+      _triggerClose: (code) => closeCbs.forEach(cb => cb(code)),
+    };
+  };
+  const restoreCp = setupChildProcessMock({ spawn: spawnMock });
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { spawnFn: spawnMock });
+
+    const allowedCmds = [
+      'getprop ro.build.version.release',     // 查询
+      'dumpsys battery',
+      'pm list packages',
+      'connect 192.168.1.100:5555',
+      'tcpip 5555',
+    ];
+    for (const cmd of allowedCmds) {
+      const promise = svc.executeAdbCommand(cmd, 'dev1');
+      await new Promise(resolve => setTimeout(resolve, 5));
+      promise.then(() => {}).catch(() => {});
+    }
+    assert.ok(spawnCount >= allowedCmds.length, `合法命令均应 spawn (实际 ${spawnCount}/${allowedCmds.length})`);
+
+    // P1-6 根治: rm/mv 全面拦截 (文件操作走 deleteRemoteFile/renameRemoteFile 专用通道)
+    const blocked = [
+      'rm "/sdcard/DCIM/a.jpg"',
+      'rm -rf "/sdcard/DCIM/tmp/"',
+      'mv "/sdcard/DCIM/a.jpg" "/sdcard/DCIM/b.jpg"',
+    ];
+    for (const cmd of blocked) {
+      const result = await svc.executeAdbCommand(cmd, 'dev1');
+      assert.strictEqual(result.success, false, `应拒绝: ${cmd}`);
+    }
+  } finally {
+    restoreElectron();
+    restoreCp();
+  }
+});
+
+// ── P1-6 根治: 专用文件操作通道 ──────────────────────────
+
+test('P1-6 deleteRemoteFile 删除文件: shell rm -f + 设备序列号', async () => {
+  let capturedArgs = null;
+  const spawnMock = function (cmd, args, opts) {
+    capturedArgs = args;
+    const closeCbs = [];
+    return {
+      stdout: { on: () => {} },
+      stderr: { on: () => {} },
+      on: (evt, cb) => { if (evt === 'close') closeCbs.push(cb); },
+      kill: () => {},
+      pid: 1,
+      _triggerClose: (code) => closeCbs.forEach(cb => cb(code)),
+    };
+  };
+  const restoreCp = setupChildProcessMock({ spawn: spawnMock });
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { spawnFn: spawnMock });
+
+    const promise = svc.deleteRemoteFile('/sdcard/DCIM/a.jpg', 'dev1', false);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    promise.then(() => {}).catch(() => {});
+    assert.ok(capturedArgs.includes('shell'));
+    assert.ok(capturedArgs.includes('rm'));
+    assert.ok(capturedArgs.includes('-f'));
+    assert.strictEqual(capturedArgs[capturedArgs.length - 1], '/sdcard/DCIM/a.jpg');
+  } finally {
+    restoreElectron();
+    restoreCp();
+  }
+});
+
+test('P1-6 deleteRemoteFile 目录删除用 rm -rf', async () => {
+  let capturedArgs = null;
+  const spawnMock = function (cmd, args) {
+    capturedArgs = args;
+    const closeCbs = [];
+    return {
+      stdout: { on: () => {} }, stderr: { on: () => {} },
+      on: (evt, cb) => { if (evt === 'close') closeCbs.push(cb); },
+      kill: () => {}, pid: 1,
+    };
+  };
+  const restoreCp = setupChildProcessMock({ spawn: spawnMock });
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { spawnFn: spawnMock });
+    const promise = svc.deleteRemoteFile('/sdcard/DCIM/tmp', 'dev1', true);
+    promise.then(() => {}).catch(() => {});
+    assert.ok(capturedArgs.includes('rm'));
+    assert.ok(capturedArgs.includes('-rf'));
+  } finally {
+    restoreElectron();
+    restoreCp();
+  }
+});
+
+test('P1-6 deleteRemoteFile 恶意路径 (shell 元字符) 拒绝且不 spawn', async () => {
+  let spawnCount = 0;
+  const spawnMock = function () {
+    spawnCount++;
+    return { stdout: { on: () => {} }, stderr: { on: () => {} }, on: () => {}, kill: () => {}, pid: 1 };
+  };
+  const restoreCp = setupChildProcessMock({ spawn: spawnMock });
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { spawnFn: spawnMock });
+    const evilPaths = ['/sdcard/x;reboot', '/sdcard/$(reboot)', '/sdcard/a" & whoami', '/sdcard/a`reboot`', '/sdcard/a&reboot', '/sdcard/a|reboot'];
+    for (const p of evilPaths) {
+      const result = await svc.deleteRemoteFile(p, 'dev1', false);
+      assert.strictEqual(result.success, false, `应拒绝: ${p}`);
+      assert.strictEqual(result.error, 'invalid_remote_path');
+    }
+    assert.strictEqual(spawnCount, 0, '恶意路径不得 spawn');
+  } finally {
+    restoreElectron();
+    restoreCp();
+  }
+});
+
+test('P1-6 renameRemoteFile 同目录改名: mv + 新路径拼接', async () => {
+  let capturedArgs = null;
+  const spawnMock = function (cmd, args) {
+    capturedArgs = args;
+    const closeCbs = [];
+    return {
+      stdout: { on: () => {} }, stderr: { on: () => {} },
+      on: (evt, cb) => { if (evt === 'close') closeCbs.push(cb); },
+      kill: () => {}, pid: 1,
+    };
+  };
+  const restoreCp = setupChildProcessMock({ spawn: spawnMock });
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { spawnFn: spawnMock });
+    const promise = svc.renameRemoteFile('/sdcard/DCIM/a.jpg', 'b.jpg', 'dev1');
+    promise.catch(() => {});
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.ok(capturedArgs && capturedArgs.includes('mv'), `capturedArgs 应为 mv args, 实际: ${JSON.stringify(capturedArgs)}`);
+    assert.strictEqual(capturedArgs[capturedArgs.length - 1], '/sdcard/DCIM/b.jpg');
+  } finally {
+    restoreElectron();
+    restoreCp();
+  }
+});
+
+test('P1-6 renameRemoteFile 新名含路径/元字符拒绝', async () => {
+  let spawnCount = 0;
+  const spawnMock = function () {
+    spawnCount++;
+    return { stdout: { on: () => {} }, stderr: { on: () => {} }, on: () => {}, kill: () => {}, pid: 1 };
+  };
+  const restoreCp = setupChildProcessMock({ spawn: spawnMock });
+  const restoreElectron = setupElectronMock();
+  try {
+    const ADBService = loadAdbService();
+    const svc = new ADBService(PROJECT_ROOT, i18nMock, { spawnFn: spawnMock });
+    const result = await svc.renameRemoteFile('/sdcard/DCIM/a.jpg', '../evil.jpg', 'dev1');
+    assert.strictEqual(result.success, false);
+    assert.strictEqual(result.error, 'invalid_remote_path');
+    const result2 = await svc.renameRemoteFile('/sdcard/DCIM/a.jpg', 'x;reboot', 'dev1');
+    assert.strictEqual(result2.success, false);
+    assert.strictEqual(spawnCount, 0);
+  } finally {
+    restoreElectron();
+    restoreCp();
+  }
+});

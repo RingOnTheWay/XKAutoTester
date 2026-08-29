@@ -42,6 +42,17 @@ function isSameMinutePlan(time1, time2) {
   return formatDateToMinute(time1) === formatDateToMinute(time2);
 }
 
+/**
+ * P1-5: scheduledTime 合法性校验 (new Date 可解析且非 Invalid Date)
+ * @param {*} value
+ * @returns {boolean}
+ */
+function isValidScheduledTime(value) {
+  if (value === undefined || value === null) return false;
+  const t = new Date(value).getTime();
+  return !Number.isNaN(t);
+}
+
 const defaultLoggerFactory = () => ({ error: (msg) => console.error(msg) });
 
 class ScheduledPlanService extends JsonFileCrudService {
@@ -51,7 +62,7 @@ class ScheduledPlanService extends JsonFileCrudService {
    */
   constructor(userConfigPath, opts = {}) {
     const scheduledPlansPath = path.join(userConfigPath, 'scheduled_plans.json');
-    super(scheduledPlansPath, [], opts);  // 透传 opts.asyncFsFactory + opts.idGenerator 给 base (filePath 由基类持有)
+    super(scheduledPlansPath, [], opts); // 透传 opts.asyncFsFactory + opts.idGenerator 给 base (filePath 由基类持有)
     this._loggerFactory = opts.loggerFactory || defaultLoggerFactory;
     this._logger = this._loggerFactory();
   }
@@ -69,17 +80,21 @@ class ScheduledPlanService extends JsonFileCrudService {
     // read-modify-write 包进 withLock, 防并发丢更新
     return this.withLock(async () => {
       try {
+        // P1-5: scheduledTime 合法性校验 — 脏时间入库后 smartScheduler 会
+        // 算出 NaN delay 触发 setTimeout(NaN)≈0ms 忙循环烧 CPU
+        if (!isValidScheduledTime(planData.scheduledTime)) {
+          return { success: false, error: 'invalid_scheduled_time' };
+        }
         let existingPlans = await this.getData();
         const newPlan = {
           id: planData.id || this._generateId(),
           name: planData.name,
           testPlans: planData.testPlans || [],
-          testPlanNames: planData.testPlanNames ||
-            (planData.testPlans ? planData.testPlans.map(p => p.name) : []),
+          testPlanNames: planData.testPlanNames || (planData.testPlans ? planData.testPlans.map((p) => p.name) : []),
           scheduledTime: planData.scheduledTime,
           status: 'pending',
           created: planData.created || new Date().toISOString(),
-          lastRun: null
+          lastRun: null,
         };
         existingPlans.push(newPlan);
         await this.saveData(existingPlans);
@@ -96,16 +111,21 @@ class ScheduledPlanService extends JsonFileCrudService {
     return this.withLock(async () => {
       try {
         let existingPlans = await this.getData();
-        const index = existingPlans.findIndex(p => p.id === planData.id);
+        const index = existingPlans.findIndex((p) => p.id === planData.id);
         if (index >= 0) {
+          // P1-5: 更新 scheduledTime 时同样校验
+          if (planData.scheduledTime !== undefined && !isValidScheduledTime(planData.scheduledTime)) {
+            return { success: false, error: 'invalid_scheduled_time' };
+          }
           const originalPlan = existingPlans[index];
           existingPlans[index] = {
             ...originalPlan,
             ...planData,
             id: originalPlan.id,
             created: originalPlan.created,
-            testPlanNames: planData.testPlanNames ||
-              (planData.testPlans ? planData.testPlans.map(p => p.name) : originalPlan.testPlanNames || [])
+            testPlanNames:
+              planData.testPlanNames ||
+              (planData.testPlans ? planData.testPlans.map((p) => p.name) : originalPlan.testPlanNames || []),
           };
           await this.saveData(existingPlans);
           return { success: true };
@@ -124,7 +144,7 @@ class ScheduledPlanService extends JsonFileCrudService {
     return this.withLock(async () => {
       try {
         let existingPlans = await this.getData();
-        const index = existingPlans.findIndex(p => p.id === planId);
+        const index = existingPlans.findIndex((p) => p.id === planId);
         if (index >= 0) {
           existingPlans.splice(index, 1);
           await this.saveData(existingPlans);
@@ -148,8 +168,13 @@ class ScheduledPlanService extends JsonFileCrudService {
         if (excludeId && plan.id === excludeId) continue;
         // P2-11: 终态计划不再参与冲突检测 (原仅跳过 cancelled,
         // 已完成/失败/过期计划仍会误挡新建)
-        if (plan.status === 'cancelled' || plan.status === 'completed'
-          || plan.status === 'failed' || plan.status === 'expired') continue;
+        if (
+          plan.status === 'cancelled' ||
+          plan.status === 'completed' ||
+          plan.status === 'failed' ||
+          plan.status === 'expired'
+        )
+          continue;
 
         const planTime = new Date(plan.scheduledTime);
         if (isSameMinutePlan(newTime, planTime)) {
@@ -164,4 +189,9 @@ class ScheduledPlanService extends JsonFileCrudService {
   }
 }
 
-module.exports = { ScheduledPlanService, formatDateToMinute, isSameMinutePlan };
+module.exports = {
+  ScheduledPlanService,
+  formatDateToMinute,
+  isSameMinutePlan,
+  isValidScheduledTime,
+};

@@ -69,9 +69,10 @@ class I18nService {
       // 走 pathHelper.getLocalesPath (SSOT): 与 PythonTestService._buildSpawnEnv 注入 Python 的路径一致.
       // 开发模式: projectRoot/electron/locales; 打包模式: resources/locales (extraResources 提取)
       const localesPath = pathHelper.getLocalesPath(projectRoot, isPackaged);
-      const resources = await this._localesLoader(localesPath);  // 步骤 1: 加载 locales
-      const savedLanguage = await this._languageResolver(userConfigPath, projectRoot);  // 步骤 2: 解析语言
-      await this.i18n.init({  // 步骤 3: 配置 i18next
+      const resources = await this._localesLoader(localesPath); // 步骤 1: 加载 locales
+      const savedLanguage = await this._languageResolver(userConfigPath, projectRoot); // 步骤 2: 解析语言
+      await this.i18n.init({
+        // 步骤 3: 配置 i18next
         lng: savedLanguage,
         fallbackLng: 'zh-CN',
         resources,

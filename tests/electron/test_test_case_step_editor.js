@@ -395,6 +395,31 @@ describe('StepEditor updateStepSelect - 基础前缀路由', () => {
     assert.strictEqual(s.config.systemConfig.operationType, 'pressBack');
   });
 
+  test('P1-1 tc-nav-click-count 更新 systemConfig.clickCount 且不污染 operationType', async () => {
+    setupI18n();
+    const StepEditor = await loadStepEditor();
+    const se = new StepEditor();
+    const s = se.addStep();
+    s.config.systemConfig = { operationType: 'navigation' };
+
+    se.updateStepSelect('tc-nav-click-count-1', '3', s.id);
+    assert.strictEqual(s.config.systemConfig.clickCount, 3);
+    assert.strictEqual(s.config.systemConfig.operationType, 'navigation'); // 不再被覆盖
+  });
+
+  test('P1-1 tc-nav-click-count 非法值回退 1', async () => {
+    setupI18n();
+    const StepEditor = await loadStepEditor();
+    const se = new StepEditor();
+    const s = se.addStep();
+
+    se.updateStepSelect('tc-nav-click-count-1', 'abc', s.id);
+    assert.strictEqual(s.config.systemConfig.clickCount, 1);
+
+    se.updateStepSelect('tc-nav-click-count-1', '0', s.id);
+    assert.strictEqual(s.config.systemConfig.clickCount, 1);
+  });
+
   test('tc-page-operation-type 更新 operationType', async () => {
     setupI18n();
     const StepEditor = await loadStepEditor();

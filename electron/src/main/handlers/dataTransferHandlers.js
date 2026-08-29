@@ -14,9 +14,7 @@ function register(ipcMain, services) {
   registerHandler(ipcMain, IPC_CHANNELS.SELECT_EXPORT_PATH, async (options) => {
     const type = options?.type || 'config';
     const timestamp = getTimestamp();
-    const defaultName = type === 'logs'
-      ? `XKAutoTester_Logs_${timestamp}.zip`
-      : `XKAutoTester_Config_${timestamp}.zip`;
+    const defaultName = type === 'logs' ? `XKAutoTester_Logs_${timestamp}.zip` : `XKAutoTester_Config_${timestamp}.zip`;
 
     // 上次保存位置 (目录) + 本次文件名; 无记忆时保持原默认 (仅文件名, 系统默认目录)
     const rememberedDir = await lastDialogPaths.getDefaultPath(IPC_CHANNELS.SELECT_EXPORT_PATH);
@@ -27,8 +25,8 @@ function register(ipcMain, services) {
       defaultPath,
       filters: [
         { name: 'ZIP Archive', extensions: ['zip'] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
+        { name: 'All Files', extensions: ['*'] },
+      ],
     });
 
     if (!result.canceled && result.filePath) {
@@ -44,7 +42,7 @@ function register(ipcMain, services) {
       properties: ['openFile'],
       filters: [
         { name: 'ZIP Archive', extensions: ['zip'] },
-        { name: 'All Files', extensions: ['*'] }
+        { name: 'All Files', extensions: ['*'] },
       ],
       ...(defaultPath ? { defaultPath } : {}),
     });

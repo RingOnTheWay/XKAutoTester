@@ -14,6 +14,7 @@
 
 纯函数,无 IO/线程/i18n,完全可测。
 """
+
 from __future__ import annotations
 
 import re

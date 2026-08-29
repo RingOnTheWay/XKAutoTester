@@ -46,8 +46,6 @@ target-version = "py310"
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]
 ignore = ["E501"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
+# P2-11: pytest 配置单一源 = config/pytest.ini (随包分发 + pytest_runner 用 -c 引用)。
+# 此段曾与 config/pytest.ini 重复定义, 行为分裂 (裸 pytest 无 markers 注册)。
+# 统一命令: pytest -c config/pytest.ini

@@ -83,9 +83,13 @@ export class PagePackageView {
       return;
     }
 
-    optionsContainer.innerHTML = apps.map(app => `
+    optionsContainer.innerHTML = apps
+      .map(
+        (app) => `
       <div class="cascade-select__option ${selectedId === app.id ? 'selected' : ''}" data-id="${this.escapeHtml(app.id)}">${this.escapeHtml(app.name)}</div>
-    `).join('');
+    `
+      )
+      .join('');
   }
 
   renderPageOptions(pages, hasSelectedApp, selectedId) {
@@ -106,9 +110,13 @@ export class PagePackageView {
       return;
     }
 
-    optionsContainer.innerHTML = pages.map(page => `
+    optionsContainer.innerHTML = pages
+      .map(
+        (page) => `
       <div class="cascade-select__option ${selectedId === page.id ? 'selected' : ''}" data-id="${this.escapeHtml(page.id)}">${this.escapeHtml(page.name)}</div>
-    `).join('');
+    `
+      )
+      .join('');
   }
 
   renderElementOptions(elements, hasSelectedPage, selectedId) {
@@ -129,9 +137,13 @@ export class PagePackageView {
       return;
     }
 
-    optionsContainer.innerHTML = elements.map(element => `
+    optionsContainer.innerHTML = elements
+      .map(
+        (element) => `
       <div class="cascade-select__option ${selectedId === element.id ? 'selected' : ''}" data-id="${this.escapeHtml(element.id)}">${this.escapeHtml(element.name)}</div>
-    `).join('');
+    `
+      )
+      .join('');
   }
 
   renderFilteredOptions(type, items, selectedId) {
@@ -146,9 +158,13 @@ export class PagePackageView {
       return;
     }
 
-    optionsContainer.innerHTML = items.map(item => `
+    optionsContainer.innerHTML = items
+      .map(
+        (item) => `
       <div class="cascade-select__option ${selectedId === item.id ? 'selected' : ''}" data-id="${this.escapeHtml(item.id)}">${this.escapeHtml(item.name)}</div>
-    `).join('');
+    `
+      )
+      .join('');
   }
 
   // ─── Selection Display ─────────────────────────────────────────
@@ -192,7 +208,7 @@ export class PagePackageView {
   highlightOption(wrapperId, selectedId) {
     const wrapper = document.getElementById(wrapperId);
     if (!wrapper) return;
-    wrapper.querySelectorAll('.cascade-select__option').forEach(opt => {
+    wrapper.querySelectorAll('.cascade-select__option').forEach((opt) => {
       opt.classList.toggle('selected', opt.dataset.id === selectedId);
     });
   }
@@ -207,7 +223,7 @@ export class PagePackageView {
       textSpan.textContent = window.i18n.t('pagePackage.selectApp');
       textSpan.classList.add('placeholder');
     }
-    wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
+    wrapper.querySelectorAll('.cascade-select__option').forEach((opt) => opt.classList.remove('selected'));
     this.els.appCard?.classList.remove('selected');
     this.els.pageCard?.classList.remove('selected');
     this.els.elementCard?.classList.remove('selected');
@@ -222,7 +238,7 @@ export class PagePackageView {
       textSpan.classList.add('placeholder');
     }
     wrapper.querySelector('.cascade-select')?.classList.add('disabled');
-    wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
+    wrapper.querySelectorAll('.cascade-select__option').forEach((opt) => opt.classList.remove('selected'));
     this.els.pageCard?.classList.remove('selected');
     this.els.elementCard?.classList.remove('selected');
   }
@@ -236,7 +252,7 @@ export class PagePackageView {
       textSpan.classList.add('placeholder');
     }
     wrapper.querySelector('.cascade-select')?.classList.add('disabled');
-    wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
+    wrapper.querySelectorAll('.cascade-select__option').forEach((opt) => opt.classList.remove('selected'));
     this.els.elementCard?.classList.remove('selected');
   }
 
@@ -263,7 +279,7 @@ export class PagePackageView {
         textSpan.textContent = window.i18n.t(`pagePackage.select${type.charAt(0).toUpperCase() + type.slice(1)}`);
         textSpan.classList.add('placeholder');
       }
-      wrapper.querySelectorAll('.cascade-select__option').forEach(opt => opt.classList.remove('selected'));
+      wrapper.querySelectorAll('.cascade-select__option').forEach((opt) => opt.classList.remove('selected'));
     };
 
     if (type === 'app') {
@@ -330,8 +346,8 @@ export class PagePackageView {
   // ─── Sub Tab Switch ────────────────────────────────────────────
 
   switchSubTab(targetTab) {
-    this.els.ppTabs.forEach(t => t.classList.remove('active'));
-    this.els.ppContents.forEach(c => c.classList.remove('active'));
+    this.els.ppTabs.forEach((t) => t.classList.remove('active'));
+    this.els.ppContents.forEach((c) => c.classList.remove('active'));
     const targetContent = document.getElementById(`pp-${targetTab}-content`);
     if (targetContent) targetContent.classList.add('active');
   }
@@ -391,9 +407,15 @@ export class PagePackageView {
 
   closeModal(type) {
     switch (type) {
-      case 'app': this.closeAppModal(); break;
-      case 'page': this.closePageModal(); break;
-      case 'element': this.closeElementModal(); break;
+      case 'app':
+        this.closeAppModal();
+        break;
+      case 'page':
+        this.closePageModal();
+        break;
+      case 'element':
+        this.closeElementModal();
+        break;
     }
   }
 
@@ -450,7 +472,7 @@ export class PagePackageView {
     const optionsEl = document.getElementById(`${wrapperId}-options`);
     if (!optionsEl) return wrapperId === 'pp-platform-wrapper' ? 'android' : 'id';
     const selectedOption = optionsEl.querySelector('.custom-select__option.selected');
-    return selectedOption ? selectedOption.dataset.value : (wrapperId === 'pp-platform-wrapper' ? 'android' : 'id');
+    return selectedOption ? selectedOption.dataset.value : wrapperId === 'pp-platform-wrapper' ? 'android' : 'id';
   }
 
   setCustomSelectValue(wrapperId, value) {
@@ -458,7 +480,7 @@ export class PagePackageView {
     if (!wrapper) return;
     const optionsEl = document.getElementById(`${wrapperId}-options`);
     if (optionsEl) {
-      optionsEl.querySelectorAll('.custom-select__option').forEach(opt => {
+      optionsEl.querySelectorAll('.custom-select__option').forEach((opt) => {
         opt.classList.toggle('selected', opt.dataset.value === value);
       });
     }
@@ -511,7 +533,10 @@ export class PagePackageView {
       const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
       let resolved = false;
       const resolveOnce = (value) => {
-        if (!resolved) { resolved = true; resolve(value); }
+        if (!resolved) {
+          resolved = true;
+          resolve(value);
+        }
       };
 
       // 确认 = 清除数据启动 (noReset=false), 关闭弹窗继续流程
@@ -527,7 +552,12 @@ export class PagePackageView {
         resolveOnce(true);
       };
 
-      const escHandler = (e) => { if (e.key === 'Escape') { cleanup(); resolveOnce(true); } };
+      const escHandler = (e) => {
+        if (e.key === 'Escape') {
+          cleanup();
+          resolveOnce(true);
+        }
+      };
       const overlayClickHandler = (e) => {
         if (e.target === overlay) {
           cleanup();
@@ -605,7 +635,7 @@ export class PagePackageView {
    * @param {Element|null} exceptSelect - 不需要关闭的 select 元素
    */
   closeOtherCascadeSelects(exceptSelect = null) {
-    document.querySelectorAll('.cascade-select.open').forEach(s => {
+    document.querySelectorAll('.cascade-select.open').forEach((s) => {
       if (s !== exceptSelect) {
         s.classList.remove('open');
         const otherCard = s.closest('.pp-card');
@@ -656,9 +686,9 @@ export class PagePackageView {
    * @param {Element} targetContent - 目标 content 元素
    */
   setActiveSubTab(activeTab, targetContent) {
-    this.els.ppTabs.forEach(t => t.classList.remove('active'));
+    this.els.ppTabs.forEach((t) => t.classList.remove('active'));
     if (activeTab) activeTab.classList.add('active');
-    this.els.ppContents.forEach(c => c.classList.remove('active'));
+    this.els.ppContents.forEach((c) => c.classList.remove('active'));
     if (targetContent) targetContent.classList.add('active');
   }
 

@@ -10,12 +10,11 @@ function mapToAllureLanguage(appLanguage) {
 }
 
 function register(ipcMain, services) {
-  const { allureService, notificationService, electronApp, i18nService, userDataService, testPlanService } = services;
+  const { allureService, notificationService, electronApp, i18nService, testPlanService } = services;
 
   // i18n 文案封装: i18nService 不可用时回退默认文案
-  const t = (key, fallback) => (i18nService && typeof i18nService.t === 'function'
-    ? i18nService.t(key, { defaultValue: fallback })
-    : fallback);
+  const t = (key, fallback) =>
+    i18nService && typeof i18nService.t === 'function' ? i18nService.t(key, { defaultValue: fallback }) : fallback;
 
   async function getAppTheme() {
     const configPath = path.join(electronApp.userConfigPath, 'config.json');
@@ -44,11 +43,15 @@ function register(ipcMain, services) {
       openReport((options) => allureService.openReportByPath(reportPath, options)),
     [IPC_CHANNELS.GET_ALLURE_SERVER_STATUS]: () => allureService.getAllureServerStatus(),
     [IPC_CHANNELS.CLEAR_ALLURE_REPORTS]: () => allureService.clearAllureReports(),
-    [IPC_CHANNELS.DELETE_REPORT_RUN]: ({ testPlanName, reportPath }) => testPlanService.deleteReportRun(testPlanName, reportPath),
+    [IPC_CHANNELS.DELETE_REPORT_RUN]: ({ testPlanName, reportPath }) =>
+      testPlanService.deleteReportRun(testPlanName, reportPath),
     [IPC_CHANNELS.CLEAR_ALL_LOGS]: () => allureService.clearAllLogs(),
     [IPC_CHANNELS.SEND_DINGTALK_NOTIFICATION]: async (notificationData) => {
       if (!notificationData || typeof notificationData !== 'object' || Array.isArray(notificationData)) {
-        return { success: false, error: t('errors.invalidNotification', '无效的通知数据') };
+        return {
+          success: false,
+          error: t('errors.invalidNotification', '无效的通知数据'),
+        };
       }
       // 从配置中读取 dingtalk access_token 和 secret，注入到 notificationData
       const configPath = path.join(electronApp.userConfigPath, 'config.json');
@@ -59,7 +62,7 @@ function register(ipcMain, services) {
         notificationData.secret = dingtalkConfig.secret;
       }
       return notificationService.sendDingTalkNotification(notificationData);
-    }
+    },
   });
 }
 

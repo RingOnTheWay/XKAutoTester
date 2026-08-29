@@ -377,3 +377,49 @@ test('P1-4 连续 addPlan: 串行链刷新不互相覆盖 timer', async () => {
   assert.strictEqual(sched.state.mode, 'precise');
   assert.ok(sched.currentTimer !== null, '刷新后必须持有倒计时 timer');
 });
+
+// ── P1-5: 无效 scheduledTime 兜底 (防 NaN setTimeout 忙循环) ──
+
+test('P1-5 initialize 脏计划 (无效时间) → 标记 expired + idle, 无 0ms 定时器', async () => {
+  const dirtyPlan = { id: 'bad1', name: 'bad', scheduledTime: 'garbage-time', status: 'pending' };
+  const { sched, planSvc, timer } = makeScheduler({ plans: [dirtyPlan], now: 1000 });
+
+  await sched.initialize();
+
+  assert.deepStrictEqual(planSvc.updates[0], { id: 'bad1', status: 'expired' });
+  assert.strictEqual(sched.state.mode, 'idle');
+  // 不得创建 0ms/NaN 忙循环定时器 (仅 idle 轮询 interval)
+  assert.strictEqual(timer.timeouts.length, 0, '不得有 setTimeout(0) 忙循环');
+  assert.strictEqual(timer.intervals.length, 1, '仅 idle 轮询');
+  assert.strictEqual(timer.intervals[0].ms, IDLE_CHECK_INTERVAL);
+});
+
+test('P1-5 运行期 addPlan 脏计划 → 标记过期 + 队列清空, 无 NaN 忙循环', async () => {
+  const NOW = 1000000;
+  const { sched, planSvc, timer } = makeScheduler({ now: NOW });
+
+  await sched.initialize(); // idle
+
+  const dirtyPlan = { id: 'bad2', name: 'bad', scheduledTime: 'not-a-date', status: 'pending' };
+  sched.addPlan(dirtyPlan);
+  await sched._refreshChain;
+
+  assert.strictEqual(sched.planQueue.size(), 0, '脏计划应被出队');
+  assert.deepStrictEqual(planSvc.updates[0], { id: 'bad2', status: 'expired' });
+  assert.strictEqual(sched.state.mode, 'idle');
+  // 无 0ms timeout (原 NaN → setTimeout(NaN)≈0ms 自旋)
+  assert.ok(timer.timeouts.every((t) => t.ms > 0), '不得有 0ms 定时器');
+});
+
+test('P1-5 _finalCountdown 脏计划直接放弃 (不创建 0ms 定时器)', async () => {
+  const NOW = 1000000;
+  const { sched, timer } = makeScheduler({ now: NOW });
+
+  await sched.initialize();
+  const timeoutsBefore = timer.timeouts.length;
+
+  const dirtyPlan = { id: 'bad3', name: 'bad', scheduledTime: 'garbage' };
+  sched._finalCountdown(dirtyPlan);
+
+  assert.strictEqual(timer.timeouts.length, timeoutsBefore, '脏计划倒计时不新增定时器');
+});
