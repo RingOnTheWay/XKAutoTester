@@ -28,7 +28,10 @@ function installFatalErrorHandlers(electronApp = app) {
   };
 }
 
-if (require.main === module) {
+// R27 修复: 原 require.main === module 守卫 — electron-vite dev 下 electron 的
+// require.main 指向 electron 可执行本身 (entry=false), 启动逻辑被整体跳过 → 无窗口。
+// 改判 process.versions.electron (仅 electron 主进程存在), node 测试 require 不受影响。
+if (process.versions.electron) {
   installFatalErrorHandlers();
   new ApplicationService().run();
 }
