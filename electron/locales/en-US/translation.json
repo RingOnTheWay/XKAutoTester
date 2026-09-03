@@ -156,6 +156,7 @@
       "ssl_failed": "SSL certificate verification failed, please check system time or network proxy",
       "missing_hash": "Update package missing SHA256 hash, download/install refused (security closure)"
     },
+        "downloadCancelled": "Download cancelled",
     "downloadUpdate": "Download Update",
     "downloading": "Downloading",
     "clickToUpdate": "Click to Update",

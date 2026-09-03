@@ -156,6 +156,7 @@
       "ssl_failed": "SSL 证书验证失败，请检查系统时间或网络代理",
       "missing_hash": "更新包缺少 SHA256 校验值，拒绝下载/安装 (安全闭环)"
     },
+        "downloadCancelled": "已取消下载",
     "downloadUpdate": "下载更新",
     "downloading": "下载中",
     "clickToUpdate": "点击以更新",

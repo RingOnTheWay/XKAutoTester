@@ -397,9 +397,17 @@ export class SettingsController {
       }
     });
 
-    // 更新弹窗 - 关闭按钮 / 取消按钮 (R27: 下载中点取消/叉 → 真正 abort 下载, 非仅关弹窗)
-    const handleUpdateCancel = () => {
-      this.#model.cancelDownload().catch(() => {});
+    // 更新弹窗 - 关闭按钮 / 取消按钮 (R27: 下载中点取消/叉 → 真正 abort 下载 + toast 提示)
+    const handleUpdateCancel = async () => {
+      try {
+        const result = await this.#model.cancelDownload();
+        // 仅下载中取消弹 toast; 就绪态点取消 (无活跃下载) = 推迟安装, 不打扰
+        if (result && result.success) {
+          Toast.success(window.i18n.t('settings.downloadCancelled'));
+        }
+      } catch (e) {
+        /* 取消失败不阻塞关窗 */
+      }
       this.#view.hideUpdateModal();
     };
     this.#bindClick('update-modal-close-btn', handleUpdateCancel);
