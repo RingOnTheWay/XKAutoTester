@@ -25,6 +25,7 @@ export class SettingsModel extends EventEmitter {
     checkForUpdate: 'checkForUpdate',
     checkForUpdateRaw: 'checkForUpdateRaw',
     downloadUpdate: 'downloadUpdate',
+    cancelUpdateDownload: 'cancelUpdateDownload', // R27: UI 取消进行中下载
     installUpdate: 'installUpdate',
     clearAllureReports: 'clearAllureReports',
     clearAllLogs: 'clearAllLogs',
@@ -348,6 +349,10 @@ export class SettingsModel extends EventEmitter {
       if (result && result.filePath) {
         this.#set('updatePendingFilePath', result.filePath, 'update-downloaded');
       }
+      // R27: 取消下载 (cancelled) → 状态复位, UI 已由取消按钮关闭
+      else if (result && result.cancelled) {
+        this.emit('update-download-cancelled');
+      }
       return result;
     } catch (error) {
       if (this.#state.removeUpdateProgressListener) {
@@ -355,6 +360,18 @@ export class SettingsModel extends EventEmitter {
         this.#state.removeUpdateProgressListener = null;
       }
       this.emit('error', { source: 'downloadUpdate', error });
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * R27: 取消进行中的更新下载 (abort 主进程下载 + 清临时文件)
+   */
+  async cancelDownload() {
+    try {
+      return await this.#api.cancelUpdateDownload();
+    } catch (error) {
+      this.emit('error', { source: 'cancelDownload', error });
       return { success: false, error: error.message };
     }
   }

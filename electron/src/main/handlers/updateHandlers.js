@@ -47,6 +47,9 @@ function register(ipcMain, services) {
     { withEvent: true }
   );
 
+  // R27: UI 取消下载 — abort 活跃下载 + 清临时文件 (下载真正中止, 非仅关弹窗)
+  registerHandler(ipcMain, IPC_CHANNELS.CANCEL_UPDATE_DOWNLOAD, () => updateService.cancelDownload());
+
   registerHandler(ipcMain, IPC_CHANNELS.INSTALL_UPDATE, (filePath) => {
     if (typeof filePath !== 'string' || filePath.trim() === '') {
       return {

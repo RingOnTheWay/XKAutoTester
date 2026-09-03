@@ -91,14 +91,18 @@ function makeFakeUpdateSource(release = null, error = null) {
 }
 
 function makeFakeDownloadStrategy(result = null, error = null) {
-  const calls = { download: [] };
+  const calls = { download: [], cancel: 0 };
   return {
     calls,
     async download(downloadUrl, filePath, eventSender) {
       calls.download.push({ downloadUrl, filePath, eventSender });
       if (error) throw error;
       return result || { success: true, filePath, message: 'Download completed' };
-    }
+    },
+    cancelDownload() {
+      calls.cancel++;
+      return { success: true };
+    },
   };
 }
 
@@ -1227,4 +1231,27 @@ test('P3-2 asset 块内无 hash → null, 不跨块取别的 asset hash', () => 
 test('P3-2 无 asset 标记 (旧格式单 hash) 仍回退首个 SHA256', () => {
   const hash = 'ab'.repeat(32);
   assert.strictEqual(parseSha256FromBody(`Release\nSHA256: ${hash}\n`, 'SomeFile.exe'), hash);
+});
+
+// ── R27: 下载取消 (UI 取消/叉 → abort) ──
+
+test('R27 cancelDownload 代理到 downloadStrategy', async () => {
+  const { svc, downloadStrategy } = makeFakeApp();
+  const r = await svc.cancelDownload();
+  assert.strictEqual(r.success, true);
+  assert.strictEqual(downloadStrategy.calls.cancel, 1, 'service 代理应调 strategy.cancelDownload');
+});
+
+test('R27 downloadUpdate 收到 cancelled 结果 → 短路返回, 不报 SHA 校验失败', async () => {
+  const { svc } = makeFakeApp({
+    expectedSha256: 'a'.repeat(64),
+    downloadResult: { success: false, cancelled: true },
+  });
+  const result = await svc.downloadUpdate(
+    'https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/XKAutoTester Setup v2.0.0.exe',
+    'XKAutoTester Setup v2.0.0.exe',
+    null
+  );
+  assert.strictEqual(result.cancelled, true, 'cancelled 原样返回');
+  assert.ok(!result.filePath, '取消不产生安装文件');
 });

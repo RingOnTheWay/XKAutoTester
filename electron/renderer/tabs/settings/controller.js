@@ -397,15 +397,13 @@ export class SettingsController {
       }
     });
 
-    // 更新弹窗 - 关闭按钮
-    this.#bindClick('update-modal-close-btn', () => {
+    // 更新弹窗 - 关闭按钮 / 取消按钮 (R27: 下载中点取消/叉 → 真正 abort 下载, 非仅关弹窗)
+    const handleUpdateCancel = () => {
+      this.#model.cancelDownload().catch(() => {});
       this.#view.hideUpdateModal();
-    });
-
-    // 更新弹窗 - 取消按钮
-    this.#bindClick('update-cancel-btn', () => {
-      this.#view.hideUpdateModal();
-    });
+    };
+    this.#bindClick('update-modal-close-btn', handleUpdateCancel);
+    this.#bindClick('update-cancel-btn', handleUpdateCancel);
 
     // GitHub 链接
     this.#bindClick('github-repo-link', () => {

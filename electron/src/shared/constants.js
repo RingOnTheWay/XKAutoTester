@@ -71,6 +71,7 @@ const IPC_CHANNELS = {
   // 更新
   CHECK_FOR_UPDATE: 'check-for-update',
   DOWNLOAD_UPDATE: 'download-update',
+  CANCEL_UPDATE_DOWNLOAD: 'cancel-update-download', // R27: UI 取消下载 (abort + 清临时文件)
   INSTALL_UPDATE: 'install-update',
   ON_DOWNLOAD_PROGRESS: 'on-download-progress',
 

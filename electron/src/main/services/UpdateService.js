@@ -287,6 +287,8 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
     }
 
     const controller = new AbortController();
+    // R27: 保存活跃下载控制器 — UI 取消 (cancelDownload) 可 abort; 完成/失败/超时后清引用
+    this._activeDownloadController = controller;
     const timer = setTimeout(() => controller.abort(), 300000);
     let response;
     try {
@@ -338,6 +340,9 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
       const cleanup = () => {
         clearInterval(speedInterval);
         clearTimeout(timer);
+        if (this._activeDownloadController === controller) {
+          this._activeDownloadController = null;
+        }
       };
 
       (async () => {
@@ -375,6 +380,11 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
           try {
             fs.unlinkSync(filePath);
           } catch (e) {}
+          // R27: UI 取消 (abort) → 归为"已取消"结果而非下载失败, 渲染层不弹失败提示
+          if (err && err.name === 'AbortError') {
+            resolve({ success: false, cancelled: true, message: 'Download cancelled' });
+            return;
+          }
           reject(err);
         }
       })();
@@ -387,6 +397,21 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
         reject(err);
       });
     });
+  },
+
+  /**
+   * R27: 取消进行中的更新下载 (UI 取消/叉掉) — abort 流 + 临时文件由 download catch 清理
+   */
+  cancelDownload() {
+    if (this._activeDownloadController) {
+      try {
+        this._activeDownloadController.abort();
+      } catch (e) {
+        /* ignore */
+      }
+      return { success: true, message: 'Download cancellation requested' };
+    }
+    return { success: false, error: 'no_active_download' };
   },
 });
 
@@ -603,6 +628,15 @@ class UpdateService {
     };
   }
 
+  /**
+   * R27: 取消进行中的更新下载 — 代理到 downloadStrategy (维护活跃 abort controller)
+   */
+  cancelDownload() {
+    return this._downloadStrategy && typeof this._downloadStrategy.cancelDownload === 'function'
+      ? this._downloadStrategy.cancelDownload()
+      : { success: false, error: 'no_download_strategy' };
+  }
+
   async downloadUpdate(downloadUrl, fileName, eventSender) {
     try {
       this._ensureInitialized(); // 懒初始化触发
@@ -653,6 +687,11 @@ class UpdateService {
       }
 
       const result = await this._downloadStrategy.download(downloadUrl, filePath, eventSender);
+
+      // R27: UI 取消 (abort) — 临时文件已清, 直接返回, 跳过 SHA 校验防误报下载失败
+      if (result && result.cancelled) {
+        return result;
+      }
 
       // 下载完成后校验 SHA256: 防止下载不完整/中间人篡改
       const postDownloadError = await this._verifySha256IfExists(filePath);
