@@ -369,3 +369,20 @@ class TestStartSessionPortRecovery:
 
         assert result["success"] is False
         assert "4725" in result["error"] or "占用" in result["error"]
+
+
+class TestNewCommandTimeoutKeepAlive:
+    """R27: newCommandTimeout 保活 — Appium 默认 60s 空闲回收 session → 长空闲后刷新慢几十秒"""
+
+    def test_start_session_sets_long_new_command_timeout(self):
+        """start_session 设置 newCommandTimeout=1800 (30min), 非默认 60s"""
+        service, _, _ = _make_service()
+
+        service.start_session("dev:5555", "com.x.app", ".MainActivity")
+
+        assert service.driver is not None
+        caps = service.driver._options
+        # UiAutomator2Options 通过 get_capability 读回
+        assert caps.get_capability("newCommandTimeout") == 1800, (
+            "inspector 会话应设长空闲超时, 防 >1min 未操作会话被回收"
+        )

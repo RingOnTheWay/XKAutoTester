@@ -279,13 +279,6 @@ class ElectronApp {
       }
     });
 
-    app.on('before-quit', () => {
-      if (this.allureWindow && !this.allureWindow.isDestroyed()) {
-        this.allureWindow.destroy();
-        this.allureWindow = null;
-      }
-    });
-
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         this.createSplashWindow();
@@ -346,9 +339,19 @@ class ElectronApp {
     });
 
     app.on('before-quit', () => {
+      // P3-3: 单一 before-quit — 原 L282 (allureWindow destroy) 与 L348 (服务清理)
+      // 两个监听器合并为一处, 避免重复注册/执行顺序依赖
       // 持有子进程/会话的 service 必须在退出前同步释放, 避免孤儿进程
       // 对称: schedulerService.destroy() + allureService.cleanupSync() (will-quit)
       // catch 块加 console.error 可观测性: 静默吞异常致资源泄漏不可排查
+      try {
+        if (this.allureWindow && !this.allureWindow.isDestroyed()) {
+          this.allureWindow.destroy();
+          this.allureWindow = null;
+        }
+      } catch (e) {
+        console.error('[before-quit] allureWindow.destroy failed:', e);
+      }
       try {
         this.services.schedulerService && this.services.schedulerService.destroy();
       } catch (e) {
@@ -368,6 +371,14 @@ class ElectronApp {
         this.services.inspectorService && this.services.inspectorService.dispose();
       } catch (e) {
         console.error('[before-quit] inspectorService.dispose failed:', e);
+      }
+      // P3-3: 退出链补 stopPreventSleep — 释放 powerSaveBlocker (restorePreventSleepSetting
+      // 启动时可能已 start, 若不停止, 防睡眠锁残留到下次会话)
+      try {
+        const { stopPreventSleep } = require('./handlers/powerHandlers');
+        stopPreventSleep();
+      } catch (e) {
+        console.error('[before-quit] stopPreventSleep failed:', e);
       }
     });
 

@@ -22,6 +22,7 @@
 //   handleGetSerialPorts()                — 1-liner 委托 environmentService
 
 const fs = require('fs');
+const path = require('path');
 const { spawn } = require('child_process');
 const { IPC_CHANNELS } = require('../../shared/constants');
 
@@ -202,13 +203,29 @@ class EnvironmentStartupService {
   }
 
   /**
-   * INSTALL_DRIVER 入口: 委托 driverInstaller port (fs 校验 + PowerShell)
+   * INSTALL_DRIVER 入口: 白名单校验 + 委托 driverInstaller port (fs 校验 + PowerShell)
+   * R25 P2-4: 安装程序必须位于 <projectRoot>/env/CP210x_Windows_Drivers/ 内。
+   * 原实现仅 fs.existsSync 校验, 渲染层被攻破可启动任意存在的 exe (任意程序启动)。
    * @param {string} installerPath
    * @returns {Promise<{success: boolean, message: string}>}
    */
   async handleInstallDriver(installerPath) {
     this._ensureInitialized();
-    return this._installDriver(installerPath);
+
+    if (typeof installerPath !== 'string' || !installerPath.trim()) {
+      return { success: false, message: '无效的安装程序路径' };
+    }
+    const projectRoot = this._electronApp && this._electronApp.projectRoot;
+    if (!projectRoot) {
+      return { success: false, message: '项目根目录不可用' };
+    }
+    const driversRoot = path.join(projectRoot, 'env', 'CP210x_Windows_Drivers');
+    const resolved = path.resolve(installerPath);
+    const rel = path.relative(driversRoot, resolved);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      return { success: false, message: '安装程序路径不在驱动目录内' };
+    }
+    return this._installDriver(resolved);
   }
 
   /**

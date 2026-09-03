@@ -88,4 +88,78 @@ describe('AndroidConnectionView renderEllipsis HTML 转义 (防 XSS)', () => {
     const html = v.els.ellipsisDropdown.innerHTML;
     assert.ok(html.includes('folder/子目录'), '正常文本不被破坏');
   });
+
+  test('R25 P1-4: view 无 showConfirmDialog (confirm 全仓唯一实现 = core/confirmModal.js)', async () => {
+    // 防回潮: 第三套 confirm 实现 (写全局 __XKAT_CONFIRM_CALLBACK__ 且确认路径不
+    // close 弹窗, 需二次点击) 已删除, controller 改调 core/utils/confirmModal.js。
+    assert.strictEqual(
+      typeof ViewClass.prototype.showConfirmDialog,
+      'undefined',
+      'android-connection view 不得再实现 confirm 弹窗 (统一走 core 版)'
+    );
+  });
+});
+// ── P3-7/P3-8: modifiedTime/createdAt 转义 + CSS.escape ─────
+
+describe('P3-7/P3-8 文件行 XSS + 属性选择器安全', () => {
+  before(async () => {
+    setupJsdm();
+    // jsdom 无 CSS.escape (真实 Chromium 有), 测试用等价 polyfill
+    global.CSS = {
+      escape: (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => '\\' + c),
+    };
+    await loadView();
+  });
+  after(() => {
+    teardownJsdm();
+    delete global.CSS;
+  });
+
+  test('P3-7 displayFileList 渲染时 modifiedTime/createdAt 转义', () => {
+    // 构造文件列表容器 (displayFileList 需要 DOM 容器)
+    const listContainer = document.createElement('div');
+    listContainer.id = 'file-list';
+    document.body.appendChild(listContainer);
+    const v = new ViewClass();
+    v.els = { fileList: listContainer };
+
+    const evil = '<img src=x onerror=alert(1)>';
+    const files = [
+      {
+        name: 'a.txt',
+        path: '/sdcard/a.txt',
+        isDirectory: false,
+        size: '10',
+        modifiedTime: evil,
+        createdAt: evil,
+      },
+    ];
+
+    v.displayFileList(files, [], () => {}, () => {}, () => {});
+
+    const html = listContainer.innerHTML;
+    assert.ok(!html.includes('<img src=x onerror'), '不得直插未转义的 img onerror');
+    assert.ok(html.includes('&lt;img'), '应转义为实体');
+    assert.ok(html.includes('&gt;'), '应转义闭合尖括号');
+    assert.strictEqual(listContainer.querySelectorAll('img[onerror]').length, 0, 'DOM 中无注入元素');
+  });
+
+  test('P3-8 toggleFileSelection 含引号路径不抛异常', () => {
+    const listContainer = document.createElement('div');
+    listContainer.id = 'file-list';
+    document.body.appendChild(listContainer);
+    const v = new ViewClass();
+    v.els = { fileList: listContainer };
+
+    // 构造含引号路径的 DOM 行 (与 displayFileList 生成的结构一致)
+    const evilPath = '/sdcard/it"s "weird.txt';
+    const row = document.createElement('div');
+    row.className = 'file-item';
+    row.setAttribute('data-path', evilPath);
+    listContainer.appendChild(row);
+
+    // 修复前: querySelector(`[data-path="${evilPath}"]`) 语法错误抛异常
+    assert.doesNotThrow(() => v.toggleFileSelection({ path: evilPath }, true), '含引号路径不得抛异常');
+    assert.ok(row.classList.contains('selected'), '选中态应正确切换');
+  });
 });

@@ -37,15 +37,22 @@ class _LogPump:
     全权拥有日志文件句柄 + 读取线程. AppiumServer 不再直接管理这些资源.
     """
 
-    def __init__(self, log_file_path: Path, process: subprocess.Popen):
+    def __init__(
+        self,
+        log_file_path: Path,
+        process: subprocess.Popen,
+        poll_interval: float = 0.1,  # P3-13: 空行读取间隔 (测试注入小值提速)
+    ):
         """打开日志文件 (utf-8, w 模式). 不启动线程.
 
         Args:
             log_file_path: 日志文件路径
             process: Appium 子进程对象 (需有 stdout/poll)
+            poll_interval: readline 空行时的休眠秒数
         """
         self._log_file_path = log_file_path
         self._process = process
+        self._poll_interval = poll_interval
         self._file = open(log_file_path, "w", encoding="utf-8")
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
@@ -64,7 +71,7 @@ class _LogPump:
                     break
                 line = self._process.stdout.readline()
                 if not line:
-                    time.sleep(0.1)
+                    time.sleep(self._poll_interval)
                     continue
                 self._write_clean_log(line)
         except Exception as e:
@@ -91,6 +98,10 @@ class _LogPump:
             self._file.close()
         except Exception as e:
             logger.error(f"关闭日志文件时出错: {e}")
+
+
+# R26 P2-10: 允许清理的进程名 (Appium 由 node 运行; Windows 下 node.exe / 直接 appium.exe)
+_APPIUM_PROCESS_NAMES = {"node.exe", "node", "appium.exe", "appium"}
 
 
 def _kill_port_windows(port: int, subprocess_module=subprocess) -> None:
@@ -144,7 +155,11 @@ def _extract_listening_pids(netstat_output: str, port: int) -> list[str]:
 
 
 def _taskkill_pid(pid: str, subprocess_module=subprocess) -> None:
-    """taskkill /F /PID {pid}。"""
+    """taskkill /F /PID {pid} — R26 P2-10: 先验证进程归属 (node/appium), 非 Appium 占用不误杀。"""
+    proc_name = _get_process_name(pid, subprocess_module)
+    if proc_name and proc_name not in _APPIUM_PROCESS_NAMES:
+        logger.warning(f"端口占用进程 {pid} ({proc_name}) 非 Appium/node, 跳过清理 (防误杀)")
+        return
     try:
         logger.info(f"开始终止进程ID {pid}")
         kill_result = subprocess_module.run(
@@ -163,6 +178,27 @@ def _taskkill_pid(pid: str, subprocess_module=subprocess) -> None:
         logger.info(f"已终止进程ID {pid}")
     except Exception as e:
         logger.error(f"终止进程ID {pid}时出错: {e}")
+
+
+def _get_process_name(pid: str, subprocess_module=subprocess) -> str:
+    """查询 PID 对应进程名 (tasklist /FI, CSV 输出), 查不到返空串。"""
+    try:
+        result = subprocess_module.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            encoding="gbk",
+            errors="replace",
+            timeout=10,
+        )
+        for line in (result.stdout or "").strip().split("\n"):
+            parts = line.strip().strip('"').split('","')
+            if parts and parts[0].strip() == str(pid):
+                return parts[1].strip().lower() if len(parts) > 1 else ""
+        return ""
+    except Exception as e:
+        logger.error(f"查询进程 {pid} 名称失败: {e}")
+        return ""
 
 
 def _kill_port_unix(port: int, subprocess_module=subprocess) -> None:
@@ -222,6 +258,7 @@ class AppiumServer(SubprocessHandle):
         log_level: str = "info",
         *,
         subprocess_module=subprocess,
+        server_poll_interval: float = _SERVER_POLL_INTERVAL_S,  # P3-13: 就绪轮询间隔 (测试注入小值提速)
     ):
         """初始化Appium服务器配置. 不启动服务器.
 
@@ -230,10 +267,12 @@ class AppiumServer(SubprocessHandle):
             port: 服务器端口
             log_level: 日志级别
             subprocess_module: subprocess 模块 (测试注入, 默认用真实 subprocess)
+            server_poll_interval: is_server_running 轮询间隔秒数
         """
         self.host = host
         self.port = port
         self.log_level = log_level
+        self._server_poll_interval = server_poll_interval
         self._process: subprocess.Popen | None = None
         self._subprocess = subprocess_module
         self._log_pump: _LogPump | None = None
@@ -322,12 +361,17 @@ class AppiumServer(SubprocessHandle):
             if self.is_server_running():
                 logger.info(f"Appium服务器已在运行: {self.server_url}")
                 # P1-6: 复用外部实例, 标记非本对象创建 (stop() 不得杀它)
-                self._started_by_us = False
+                # R27 P3-9: 仅当本对象未创建进程时置 False — 原无条件覆写, 本对象二次
+                # start() (已有实例) 会被误标外部 → stop() 跳过端口清理兜底
+                if self._process is None:
+                    self._started_by_us = False
                 return True
 
-            # 构建启动命令 - Appium 3.x需要使用server子命令
+            # 构建启动命令 - Appium 3.x 必需 server 子命令 (R26 P2-9: 原注释明写但 cmd 漏加,
+            # 3.x 下 `appium --address...` 只打 help → start 必超时失败; Appium 2.x 亦接受 server 子命令)
             cmd = [
                 self.appium_executable,
+                "server",
                 "--address",
                 self.host,
                 "--port",
@@ -363,7 +407,7 @@ class AppiumServer(SubprocessHandle):
                 if self.is_server_running():
                     logger.info(f"Appium服务器启动成功: {self.server_url}")
                     return True
-                time.sleep(_SERVER_POLL_INTERVAL_S)
+                time.sleep(self._server_poll_interval)
 
             # 超时处理
             logger.error(f"Appium服务器启动超时 ({timeout}秒)")

@@ -63,7 +63,9 @@ class LogcatProcess(SubprocessHandle):
         self._process = self._adapter.popen_stream(
             ["-s", self._device_name, "logcat", "-v", "threadtime"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            # R27 P2-9: stderr 改 DEVNULL — 原 stderr=PIPE 无人读取, adb 持续写 stderr
+            # (设备断连/服务器错误) 时 64KB 管道缓冲填满 → readline 卡死 → 监控静默停摆
+            stderr=subprocess.DEVNULL,
         )
 
     def readline(self) -> bytes | None:

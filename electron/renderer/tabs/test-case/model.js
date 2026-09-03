@@ -42,6 +42,8 @@ export class TestCaseModel extends EventEmitter {
   #stepEditor;
   /** @type {TestCaseEditor} 用例编辑器状态机深模块 */
   #testCaseEditor;
+  /** R26 P3-9: 子模块事件转发 unsub 集合 (destroy 时显式 off) */
+  #forwardUnsubs = [];
 
   constructor() {
     super();
@@ -59,12 +61,16 @@ export class TestCaseModel extends EventEmitter {
       stepEditor: this.#stepEditor,
     });
 
+    // R26 P3-9: 转发 listener 记录 unsub, destroy() 显式 off — 原依赖 GC, listener 闭包
+    // 引用 this.emit 生命周期, 防模块重建时旧实例监听残留
+    // (字段已在类体声明 #forwardUnsubs = [])
+
     // 转发 FileBrowser 事件，保持 Controller 监听不变
     const fbEvents = ['directory-changed', 'files-changed', 'json-exists-changed', 'selected-file-changed'];
     for (const evt of fbEvents) {
-      this.#fileBrowser.on(evt, (...args) => this.emit(evt, ...args));
+      this.#forward(this.#fileBrowser, evt);
     }
-    this.#fileBrowser.on('error', (err) => this.emit('error', err));
+    this.#forward(this.#fileBrowser, 'error');
 
     // 转发 OptionPanel 事件
     const opEvents = [
@@ -76,14 +82,14 @@ export class TestCaseModel extends EventEmitter {
       'markers-changed',
     ];
     for (const evt of opEvents) {
-      this.#optionPanel.on(evt, (...args) => this.emit(evt, ...args));
+      this.#forward(this.#optionPanel, evt);
     }
-    this.#optionPanel.on('error', (err) => this.emit('error', err));
+    this.#forward(this.#optionPanel, 'error');
 
     // 转发 StepEditor 事件
     const seEvents = ['steps-changed', 'step-updated', 'dragged-step-changed'];
     for (const evt of seEvents) {
-      this.#stepEditor.on(evt, (...args) => this.emit(evt, ...args));
+      this.#forward(this.#stepEditor, evt);
     }
 
     // 转发 TestCaseEditor 事件
@@ -99,9 +105,16 @@ export class TestCaseModel extends EventEmitter {
       'case-deleted',
     ];
     for (const evt of tceEvents) {
-      this.#testCaseEditor.on(evt, (...args) => this.emit(evt, ...args));
+      this.#forward(this.#testCaseEditor, evt);
     }
-    this.#testCaseEditor.on('error', (err) => this.emit('error', err));
+    this.#forward(this.#testCaseEditor, 'error');
+  }
+
+  /** R26 P3-9: 转发子模块事件到本实例, 记录 unsub 供 destroy 清理 */
+  #forward(emitter, evt) {
+    const fn = (...args) => this.emit(evt, ...args);
+    emitter.on(evt, fn);
+    this.#forwardUnsubs.push(() => emitter.off(evt, fn));
   }
 
   // ── Deep Module Accessors ─────────────────────────────────────
@@ -411,6 +424,11 @@ export class TestCaseModel extends EventEmitter {
 
   /** @see TestCaseEditor.destroy */
   destroy() {
+    // R26 P3-9: 先清理转发监听 (防子模块事件在 destroy 后仍触发 emit)
+    for (const unsub of this.#forwardUnsubs) {
+      unsub();
+    }
+    this.#forwardUnsubs = [];
     this.#testCaseEditor.destroy();
   }
 }

@@ -15,7 +15,7 @@ function mockLogger() {
   return {
     info: async () => {},
     error: async () => {},
-    warning: async () => {},
+    warn: async () => {}, // R27: 对齐真实 Logger 方法名 (原 warning 不存在)
     ensureLogDir: async () => {},
     resetLogPath: () => {}
   };

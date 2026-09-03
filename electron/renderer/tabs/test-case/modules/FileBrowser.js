@@ -110,9 +110,11 @@ export class FileBrowser extends EventEmitter {
     if (!directory) return;
     try {
       const files = await this.#api.scanTestFiles(directory);
-      this.#set('testFiles', files || [], 'files-changed');
+      const safeFiles = files || [];
+      this.#set('testFiles', safeFiles, 'files-changed');
       this.#set('searchQuery', '');
-      await this.batchCheckJsonExists((files || []).map((f) => f.name.replace(/\.[^/.]+$/, '')));
+      // R26 P2-6: filter(Boolean) 防列表含 null 条目时 f.name 抛 TypeError
+      await this.batchCheckJsonExists(safeFiles.filter(Boolean).map((f) => f.name.replace(/\.[^/.]+$/, '')));
     } catch (error) {
       this.emit('error', { source: 'scanTestFiles', error });
     }

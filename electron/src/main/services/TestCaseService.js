@@ -109,10 +109,11 @@ class TestCaseService {
   // P1-3: 用例名清洗 — path.basename 剥离路径 + 去 .json 后缀 + 字符白名单。
   // 渲染进程可控 fileName 传 '..\\..\\config\\config.json' 时, 只能读到
   // 'config.json' 本身 (且在 testCasesDir 下不存在则 ENOENT), 无法穿越目录。
+  // R27: 兼容 '.py' 后缀 — scanTestFiles 条目 name 带 .py, 删除入口可能直接透传
   _sanitizeTestCaseName(raw) {
     if (typeof raw !== 'string' || !raw.trim()) return null;
     const base = path.basename(raw);
-    const withoutExt = base.replace(/\.json$/i, '');
+    const withoutExt = base.replace(/\.json$/i, '').replace(/\.py$/i, '');
     if (!withoutExt || !/^[a-zA-Z0-9_\u4e00-\u9fa5-]+$/.test(withoutExt)) return null;
     return withoutExt;
   }
@@ -379,10 +380,19 @@ class TestCaseService {
       if (pyFilePath) {
         // P1-3: pyFilePath 必须位于 userConfigPath 内 (test_cases 子目录 + 用户数据根下的
         // .py 输出均为合法), 阻止任意路径文件删除
-        if (!this._isPathInside(this.userConfigPath, pyFilePath)) {
-          return { success: false, error: 'invalid_py_path' };
+        if (this._isPathInside(this.userConfigPath, pyFilePath)) {
+          await this._deleteFile(pyFilePath); // 吞 ENOENT
+        } else {
+          // R27b: JSON 缺失用例 (仅 .py, 用户从任意目录浏览/导入) 删除支持 —
+          // 仅当 ① 对象显式传 pyFilePath ② 基名(去 .py) 与用例名精确匹配 时放行。
+          // 目录不限但文件身份被钉死 (只能删与用例同名的 .py), 任意路径删除面不打开。
+          const explicitObject = param && typeof param === 'object';
+          const pyName = path.basename(pyFilePath).replace(/\.py$/i, '');
+          if (!explicitObject || pyName !== safeName) {
+            return { success: false, error: 'invalid_py_path' };
+          }
+          await this._deleteFile(pyFilePath); // 吞 ENOENT
         }
-        await this._deleteFile(pyFilePath); // 吞 ENOENT
       }
 
       return { success: true };

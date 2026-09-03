@@ -6,7 +6,7 @@
 
 # XKAutoTester v0.1.6-dev.1
 
-**发布日期**: 2026-08-28
+**发布日期**: 2026-09-03
 
 ## 📦 下载
 
@@ -74,3 +74,60 @@ SHA256: （待版本定稿后填写）
 - **可维护性：flaky 测试改造**：4 个测试文件的固定 `setTimeout` 等待改条件等待（正向断言轮询等待，负向保留短等待+注释），消除 CI 慢机器超时风险。
 - **测试基建扩容**：新增 8 个测试文件共 34 用例（captcha_recognizer / paths / logger / scheduler_effects / confirm_modal / appium_port / i18n_keys / pytest_process 超时），覆盖此前零测试模块；全量 Electron **1125 pass**、Python 相关 51 pass。
 - **文档同步**：AGENTS.md 版本/技术栈/新模块记录更新至当前（0.1.6-dev.1 / Vite 7.3.6 / electron-vite 5.0.0）。
+
+---
+
+## 🐛 修复（R25–R28 收尾 + 真机回归批次）
+
+> 本段为 2026-08-29 起的 R25–R28 多轮 hardening（P1×4 + P2×13 + P3×17 + CI 漏洞扫描 + axios 链替代 = 36 项闭环）与 9 月真机回归修复的发布说明汇总。逐轮细节见 `dev-records/`。
+
+### 进程与超时
+- **pytest 卡死用例看门狗（多次假绿后根治）**：stdout 读取移入独立线程、管道改真实阻塞语义（原 `readline()` 主线程阻塞使超时检查永不可达、Fake 假绿），卡死用例超时强制终止且保留超时前输出。
+- **spawn/编译错误态锁死根治**：`pythonProcess.on('error')` / 编译异常原只置 `_state='error'` 不清理，测试功能永久不可用（只能重启）；现统一清理复位回 idle，4 处同类锁死一并收敛。
+- **环境探测统一 15s 超时**：损坏/挂起的 python.exe 会使 splash 环境检查永久阻塞；所有 `_cmd` 探测默认注入超时，超时返回不卡界面。
+- **钉钉请求 10s 超时**：NotificationService 原 axios 无超时，API 不响应时回调链永久 pending；现超时异常归一为失败结果。
+
+### 更新与版本
+- **dev 版收不到同号正式 release 修复**：semver 比较把 `dev.1` 拆成数字段误判 dev 版更新；现剥离 prerelease 段比较 + `release > prerelease` 权重，dev 用户可正常升级同号正式版。
+
+### 安全加固
+- **.py 生成目录越权写入根治**：生成入口补系统保护目录黑名单（Windows system32/syswow64 等 / POSIX etc/boot/usr/bin 等），同时不破坏用户自选测试目录功能。
+- **Allure 报告越界拦截**：`OPEN_REPORT_BY_PATH` 的 reportPath 现校验必须位于 allure-reports 根内，杜绝任意目录托管。
+- **驱动安装入口白名单**：installerPath 必须位于受控目录，防渲染层启动任意 exe。
+- **渲染层注入/XSS 面收敛**：文件列表字段 `escapeHtml`、属性选择器 `CSS.escape()`、设备路径 shell 元字符清洗等 P3 安全项全量落地。
+- **runTests 防重入守卫**：双击/校验 await 窗口可并发启动多个 pytest 进程，现守卫置位堵死窗口。
+
+### 打包与依赖
+- **打包后 undici 缺失崩溃修复**：main/preload 运行时依赖须显式入 dependencies（electron-builder 只打 production deps）；`Cannot find module undici` 不再发生。
+- **axios 依赖链整体移除（CVE）**：全仓 httpClientFactory 注入改 Node 原生 fetch + undici dispatcher，allowInsecureSSL 场景同步适配。
+- **allure npm 依赖恢复**：R25 移除 axios 时连带误删 `allure`（历史一直在 dependencies），导致报告生成无 CLI 回退 npx；已恢复 `allure@3.16.0`。
+- **logger 方法名对齐**：主进程 Logger 方法为 `warn`，AllureService/AllureCliInvoker 误调 `logger.warning` → 任何无 CLI 回退路径即 TypeError（报告目录建好但空）；全仓 `warning→warn` 收敛。
+- **依赖治理扫描**：CI 增 `npm audit` + `uv audit`，漏洞即失败；build 与 build-lite 配置分离可复现。
+
+### 真机回归修复（2026-09-02 批次）
+- **安卓文件重命名/删除 "is not a function"**：android-connection model 的 ApiBridge bind specs 漏配 `deleteRemoteFile`/`renameRemoteFile`（preload/主进程/常量均有），补映射打通。
+- **删除测试用例失败**：文件扫描条目 `name` 带 `.py` 后缀且无 pyFilePath，服务端名称白名单拒绝含点 → 渲染层传基名 + py 全路径，服务端兼容剥离 `.py`。
+- **删除 JSON 缺失用例失败**：JSON 缺失用例的 .py 位于用户浏览目录（配置根外），服务端 `_isPathInside(userConfigPath)` 硬约束拒绝 → 放宽为「对象显式传 pyFilePath + 基名与用例名精确匹配」即放行（文件身份钉死，任意路径删除面不打开）。
+- **JSON 缺失用例应用/平台卡片未禁用**：禁用 selector 只覆盖 input/select/textarea/button，漏 div 自绘 custom-select；补 `.custom-select-wrapper` + 禁用态样式。
+- **Inspector 空闲后刷新慢几十秒**：Appium 默认 `newCommandTimeout=60s`，空闲超 1 分钟会话被回收，再刷新走 appium 重启 + 驱动重连；现设 1800s 会话保活，刷新始终秒回。
+- **Allure 报告空目录/历史"已删除"**：报告生成链 `logger.warning is not a function` 崩溃 + allure npm 依赖缺失 → 已修（见上"打包与依赖"），`allure generate` 正常走本地 CLI。
+- **清除 Allure 数据未清 allure-results**：清除按钮原只清 `allure-reports`；现 `allure-results`（原始结果）一并清空。allure-results 是报告生成的输入源，生成成功后程序本就自动整目录清理（Python 端每轮运行前自动重建），失败时保留便于重试。
+
+### 真机回归修复（2026-09-03 批次）
+- **Lite 包依赖检查"无法检查"**：Lite 版依赖系统 Python，依赖探测脚本失败即笼统报错；现回退 `pip list --format=freeze` 通道列出真实缺失，双失败才报错且留痕 pythonPath/stderr。
+- **重命名含括号/空格文件报 invalid_remote_path**：路径清洗黑名单误伤 Android 合法文件名；rm/mv 参数改 AdbPathQuoter 单引号整体包裹（设备 shell 内安全），黑名单收窄为真正危险集。
+- **元素识别预览遮挡（二次进入失效）**：ResizeObserver 仅构造时注册、close 销毁后 open 不复建 → 第二次进入选中元素后面板增高不再触发 canvas 重算；现每次 open 幂等重建观察。
+- **定时计划选中后"开始执行"无反应**：执行按钮只认测试计划；新增定时计划手动立即执行（逐个跑绑定测试计划，不改计划状态/下次调度）。
+- **定时计划序列停止失效**：逐计划循环无判停，手动停止只停当前计划；runTests 返回 `stopped/completed` 状态，序列据此终止。
+- **datetime 时间选择器选中日期背景消失**：`.today` 定义晚于 `.selected` 覆盖选中实色背景；补 `.selected.today` 复合规则。
+- **手动停止测试误报"循环失败"+ 发聚合通知**：渲染层识别主进程 `stopped` 结果 → 提示"已手动停止测试"、跳过聚合信息/统计输出、不发钉钉通知、移除聚合块不等长尾线。
+- **设置页构建日期联动**：构建日期原 tab.html 硬编码永不更新；现绑定 version.json `buildDate`，脚本更新版本号自动同步当日。
+
+## 🔧 优化与测试基建（R25–R28 + 9 月批次）
+
+- **ESLint 9 flat config 迁移项目根**：base path 覆盖 tests，`npm run lint` 全仓 `--max-warnings 0`；tests 目录豁免 `no-unused-vars`（既有测试惯用法 48 处）。
+- **测试基建大幅扩容**：新增 android-connection model / test-case controller / device handlers / adb handlers / main index / electron app / execution model / version compare / sync_version / logger / paths / subprocess handle 等测试文件；修复的 bug 全部补回归用例。
+- **回归基线**：Electron 全量 **1222 pass / 0 fail**、Python 相关测试通过、ESLint 0 / Ruff 全过。
+- **apiBridge bind specs 全覆盖校验**：扫描 5 个 model 的 bind 映射与全部调用点交叉核对，无同类漏配。
+- **shell 拼接点引号核查**：经设备 shell 的用户可控路径参数全部单引号包裹，无注入遗漏点。
+

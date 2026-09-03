@@ -151,12 +151,23 @@ class DeviceConnectionService:
 
             for line in result.stdout.split("\n"):
                 line = line.strip()
-                if line.startswith(device_identifier):
-                    if "unauthorized" in line:
+                # P2-13: 精确比较首列 (adb devices 格式: <serial>\t<status>),
+                # 对齐 list_devices 的 _DEVICE_LINE_RE。原 startswith 前缀比较会命中
+                # 同前缀更长串 (USB 序列号 '12345' 匹配 '123456 device'),
+                # 导致连接/授权状态误判 → 初始化时序错乱。
+                if not line:
+                    continue
+                serial = line.split()[0]
+                if serial == device_identifier:
+                    # R27 P3-13: 状态列精确匹配 (adb devices 第 2 列) — 原整行 substring,
+                    # "no permissions" 等未知状态落入 not_found 信息失真
+                    parts = line.split()
+                    status = parts[1] if len(parts) > 1 else ""
+                    if status == "unauthorized":
                         return False, "unauthorized"
-                    if "device" in line:
+                    if status == "device":
                         return True, "device"
-                    if "offline" in line:
+                    if status == "offline":
                         return False, "offline"
             return False, "not_found"
         except Exception as e:
@@ -222,7 +233,14 @@ class DeviceConnectionService:
             devices_result = self._executor.execute(["devices"], timeout=5)
             logger.info(t("python.adbManager.reconnectDeviceListStdout", output=devices_result.stdout))
 
-            if device_address in devices_result.stdout:
+            # P2-13: 精确匹配首列 (原 `device_address in stdout` 子串匹配会命中
+            # IP:55555 等含目标前缀的行, 误判连接/授权状态)
+            device_found = any(
+                ln.strip().split()[0] == device_address
+                for ln in devices_result.stdout.split("\n")
+                if ln.strip()
+            )
+            if device_found:
                 if "unauthorized" in devices_result.stdout or auth_failed:
                     logger.warning(t("python.adbManager.deviceUnauthorized", device=self._device_name))
                     return self._wait_for_usb_authorization()

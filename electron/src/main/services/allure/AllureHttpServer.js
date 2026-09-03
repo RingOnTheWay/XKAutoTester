@@ -132,9 +132,10 @@ class AllureHttpServer {
 
         // 对 index.html 返回注入后的内容
         if (resolvedPath === path.join(resolvedReportDir, 'index.html')) {
+          // R27 P2-3: 移除 Access-Control-Allow-Origin: * — Allure 报告纯静态无跨源需求,
+          // `*` 允许任意网页跨域读取本地报告 (信息泄露面)
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
-            'Access-Control-Allow-Origin': '*',
           });
           res.end(indexHtmlContent);
           return;
@@ -144,7 +145,6 @@ class AllureHttpServer {
         readStream.on('open', () => {
           res.writeHead(200, {
             'Content-Type': contentType,
-            'Access-Control-Allow-Origin': '*',
           });
           readStream.pipe(res);
         });

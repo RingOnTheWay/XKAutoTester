@@ -139,47 +139,58 @@ class PytestProcess(SubprocessHandle):
         stderr_thread = Thread(target=_read_stderr, daemon=True)
         stderr_thread.start()
 
-        # 主线程读取 stdout
+        # R25 P1-1: stdout 读取线程化 — 原实现在主线程 readline(), 子进程存活且无新输出时
+        # 永久阻塞, 超时检查不可达 (R24 P1-4 修复无效)。现 stdout 读放独立线程 (镜像
+        # stderr_thread), 主线程按 time.monotonic() 轮询超时 + 子进程退出。
         stdout_lines: list[str] = []
         assert process.stdout is not None
-        # R24 P1-4: 看门狗移入读循环 — 原实现先 readline() 阻塞 (子进程存活且无新输出时
-        # 永不返回), 导致下方 process.wait(timeout=timeout) 永远执行不到, 死锁用例让
-        # 整链路永久挂起 (P1-9 声称已修复实则失效)。现改为循环内按耗时检查, 超时即终止。
-        start_time = time.monotonic() if timeout is not None else None
-        while True:
-            if timeout is not None and time.monotonic() - start_time > timeout:
-                self.stop()
-                stderr_thread.join(timeout=5)
-                self._process = None
-                return PytestRunResult(
-                    exit_code=-1,
-                    stdout="\n".join(stdout_lines),
-                    stderr="\n".join(stderr_lines) + f"\n[pytest 执行超时 ({timeout}s), 已强制终止]",
-                )
-            line = process.stdout.readline()
-            if not line and process.poll() is not None:
-                break
-            if line:
-                clean = clean_ansi_escape(line).rstrip()
-                stdout_lines.append(clean)
-                if clean.strip():
-                    # 直接写父进程 stdout (黑字), 实时转发 pytest stdout (banner/PASSED/FAILED)
-                    sys.stdout.write(clean + "\n")
-                    sys.stdout.flush()
 
-        # 获取退出码 + 等 stderr 线程结束 (管道关闭后线程自然退出, 加 5s 超时保险)
-        # KeyboardInterrupt 显式 stop() 终止子进程, 避免孤儿
-        # R24 P1-4: 超时已在读循环内拦截并 return, 此处 wait() 无需再带 timeout —
-        # 读循环 break 时子进程已退出 (poll() is not None), wait() 立即返回。
+        def _read_stdout() -> None:
+            while True:
+                line = process.stdout.readline()
+                if not line and process.poll() is not None:
+                    break
+                if line:
+                    clean = clean_ansi_escape(line).rstrip()
+                    stdout_lines.append(clean)
+                    if clean.strip():
+                        # 直接写父进程 stdout (黑字), 实时转发 pytest stdout (banner/PASSED/FAILED)
+                        sys.stdout.write(clean + "\n")
+                        sys.stdout.flush()
+
+        stdout_thread = Thread(target=_read_stdout, daemon=True)
+        stdout_thread.start()
+
+        # 主线程: 轮询超时 / 子进程退出, 收尾 join 两个读线程
+        # (超时标记先置再 break, 避免在 join 前构造返回值拿到不完整 stdout)
+        start_time = time.monotonic() if timeout is not None else None
+        timed_out = False
         try:
+            while True:
+                if process.poll() is not None:
+                    break
+                if timeout is not None and time.monotonic() - start_time > timeout:
+                    timed_out = True
+                    self.stop()
+                    break
+                time.sleep(0.05)
+            # poll() 非 None 后 wait() 立即返回; KeyboardInterrupt 显式 stop() 避免孤儿
             exit_code = process.wait()
         except KeyboardInterrupt:
             self.stop()
             raise
         finally:
+            # stop() 杀进程 → 管道关闭 → 读线程 readline 返回 EOF 自然退出; join(5) 兜底
+            stdout_thread.join(timeout=5)
             stderr_thread.join(timeout=5)
             self._process = None
 
+        if timed_out:
+            return PytestRunResult(
+                exit_code=-1,
+                stdout="\n".join(stdout_lines),
+                stderr="\n".join(stderr_lines) + f"\n[pytest 执行超时 ({timeout}s), 已强制终止]",
+            )
         return PytestRunResult(
             exit_code=exit_code,
             stdout="\n".join(stdout_lines),

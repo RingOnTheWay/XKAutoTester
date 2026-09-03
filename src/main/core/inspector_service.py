@@ -286,6 +286,10 @@ class InspectorService:
             options.app_activity = app_activity
             options.no_reset = no_reset
             options.set_capability("dontStopAppOnReset", no_reset)
+            # R27: 会话保活 — Appium 默认 newCommandTimeout=60s, 元素识别属交互式使用,
+            # 超过 1 分钟未操作 (看页面/想下一步) 会话即被自动关闭 → 再刷新走 appium
+            # 重启 + 驱动重连, 慢几十秒。设 30 分钟: 长空闲后刷新仍秒回。
+            options.set_capability("newCommandTimeout", 1800)
             AppiumServer.apply_default_capabilities(options)
 
             server_url = self.appium_server.server_url

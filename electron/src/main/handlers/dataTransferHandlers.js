@@ -54,15 +54,26 @@ function register(ipcMain, services) {
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.EXPORT_CONFIG, async (outputPath) => {
+    // P2-10: IPC 边界拒绝非绝对路径 (渲染层透传相对路径/裸文件名可写任意 cwd)
+    if (typeof outputPath !== 'string' || !path.isAbsolute(outputPath)) {
+      return { success: false, error: 'invalid export path' };
+    }
     // mainWindow 由 ElectronApp.createWindow 集中注入, handler 不再重复 setMainWindow
     return await dataTransferService.exportConfig(outputPath);
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.EXPORT_LOGS, async (outputPath) => {
+    if (typeof outputPath !== 'string' || !path.isAbsolute(outputPath)) {
+      return { success: false, error: 'invalid export path' };
+    }
     return await dataTransferService.exportLogs(outputPath);
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.IMPORT_CONFIG, async (zipPath) => {
+    // P2-10: zipPath 必须为绝对路径 (防读任意 cwd 文件)
+    if (typeof zipPath !== 'string' || !path.isAbsolute(zipPath)) {
+      return { success: false, error: 'invalid import path' };
+    }
     return await dataTransferService.importConfig(zipPath);
   });
 }

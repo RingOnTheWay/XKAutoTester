@@ -96,7 +96,9 @@ class AllureCliInvoker {
       // 回退: 尝试系统 npx
       command = 'npx';
       args = ['allure', 'generate', resultsDir, '-o', outputDir];
-      await this.logger.warning('Allure npm package not found, falling back to npx');
+      // R27 修复: logger 方法名是 warn (原 warning 不存在 → 任何回退路径即 TypeError
+      // "warning is not a function" → generate 崩 → 报告目录建好但空)
+      await this.logger.warn('Allure npm package not found, falling back to npx');
     }
 
     const result = await this._runner.execute({

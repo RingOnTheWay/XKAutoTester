@@ -151,6 +151,10 @@ class UserDataService {
     if (!newPath) {
       return { success: false, error: '目标路径不能为空' };
     }
+    // R27 P2-1: 必须绝对路径 — 渲染层可控, 相对路径可在任意 cwd 下建目录 (信息/文件污染)
+    if (typeof newPath !== 'string' || !path.isAbsolute(newPath)) {
+      return { success: false, error: '目标路径必须是绝对路径' };
+    }
 
     // 如果选择的目录名不是 XKAutoTester，自动追加 XKAutoTester 子目录
     // 防止迁移时误删同级其他文件

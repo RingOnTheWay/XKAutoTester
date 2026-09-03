@@ -239,9 +239,9 @@ export class TestCaseView {
       // 移除 JSON 缺失警告
       const existingWarning = document.getElementById('tc-json-missing-warning');
       if (existingWarning) existingWarning.remove();
-      // 启用所有表单输入
+      // 启用所有表单输入 (含 div 自绘 custom-select, R27: jsonMissing 曾残留禁用态须清)
       if (editorForm) {
-        editorForm.querySelectorAll('input, select, textarea, button').forEach((el) => {
+        editorForm.querySelectorAll('input, select, textarea, button, .custom-select-wrapper').forEach((el) => {
           el.disabled = false;
           el.classList.remove('disabled');
         });
@@ -262,10 +262,13 @@ export class TestCaseView {
         saveBtn.disabled = true;
         saveBtn.classList.add('disabled');
       }
-      // 禁用所有表单输入（除删除和取消按钮）
+      // 禁用所有表单输入（除删除和取消按钮）— 含 div 自绘 custom-select (platform/app
+      // 下拉), R27: 原 selector 只覆盖 input/select/textarea/button, 平台/应用卡片漏禁
       if (editorForm) {
         editorForm
-          .querySelectorAll('input, select, textarea, button:not(#tc-delete-btn):not(#tc-cancel-btn)')
+          .querySelectorAll(
+            'input, select, textarea, button:not(#tc-delete-btn):not(#tc-cancel-btn), .custom-select-wrapper'
+          )
           .forEach((el) => {
             el.disabled = true;
             el.classList.add('disabled');
@@ -290,9 +293,9 @@ export class TestCaseView {
       // 移除 JSON 缺失警告
       const existingWarning = document.getElementById('tc-json-missing-warning');
       if (existingWarning) existingWarning.remove();
-      // 启用所有表单输入
+      // 启用所有表单输入 (含 div 自绘 custom-select)
       if (editorForm) {
-        editorForm.querySelectorAll('input, select, textarea, button').forEach((el) => {
+        editorForm.querySelectorAll('input, select, textarea, button, .custom-select-wrapper').forEach((el) => {
           el.disabled = false;
           el.classList.remove('disabled');
         });

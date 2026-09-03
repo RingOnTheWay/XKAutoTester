@@ -81,13 +81,14 @@ export const deviceModalScanMixin = {
 
       // 移除已断开的设备
       removedIds.forEach((deviceId) => {
-        const el = deviceListElement.querySelector(`.device-item[data-device-id="${deviceId}"]`);
+        // P3-8: CSS.escape 防设备 ID 含引号时 querySelector 抛异常
+        const el = deviceListElement.querySelector(`.device-item[data-device-id="${CSS.escape(deviceId)}"]`);
         if (el) el.remove();
       });
 
       // 状态变化的设备原地替换 DOM 元素
       statusChanged.forEach((d) => {
-        const oldEl = deviceListElement.querySelector(`.device-item[data-device-id="${d.id}"]`);
+        const oldEl = deviceListElement.querySelector(`.device-item[data-device-id="${CSS.escape(d.id)}"]`);
         if (oldEl) {
           const newEl = this.createDeviceItemElement(d);
           oldEl.replaceWith(newEl);

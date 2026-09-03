@@ -15,10 +15,15 @@ const AdbCommandExecutor = require('./adb/AdbCommandExecutor');
 const RemoteStatService = require('./adb/RemoteStatService');
 const FileTransferService = require('./adb/FileTransferService');
 const ApkInstaller = require('./adb/ApkInstaller');
+const AdbPathQuoter = require('./adb/AdbPathQuoter');
 const TarExtractor = require('./TarExtractor');
 
 // 不需要 shell 前缀的 adb 子命令 (直接 adb <cmd>, 不经过 device shell)
 const NO_SHELL_COMMANDS = ['connect', 'disconnect', 'devices', 'kill-server', 'start-server', 'version', 'tcpip'];
+
+// P3-4: 设备序列号白名单 (对齐 ScrcpyService.js:75 同名校验)。
+// USB 序列号 (字母数字/._) 与 TCP IP:端口 均覆盖; 长度上限防超长参数。
+const DEVICE_SERIAL_RE = /^[A-Za-z0-9._:-]{1,64}$/;
 
 // 危险命令黑名单: 阻止 XSS 攻击者通过 executeAdbCommand 执行破坏性操作
 // P1-6: 匹配前先经 normalizeShellCommand 剥离引号/反斜杠, 堵 re'boot' / re"boot" / r\eboot 绕过;
@@ -62,6 +67,8 @@ function normalizeShellCommand(cmd) {
 const ADB_DEVICES_TIMEOUT_MS = 5000; // getConnectedDevices 常规 devices
 const ADB_DEVICES_FIRST_TIMEOUT_MS = 10000; // 首次 devices (可能触发 daemon 冷启动, 给足时间)
 const ADB_COMMAND_TIMEOUT_MS = 5000; // executeAdbCommand
+// R27 P2-4: 命令输出累积上限 (防长输出命令内存膨胀), 保留最新 MAX 字节
+const MAX_ADB_OUTPUT_BYTES = 5 * 1024 * 1024;
 const ADB_START_SERVER_TIMEOUT_MS = 20000; // adb start-server (daemon 冷启动可能较慢)
 const ADB_KILL_SERVER_TIMEOUT_MS = 5000; // adb kill-server (清理损坏 server)
 const ADB_DEVICES_RETRY_COUNT = 3; // server 就绪后 devices 轮询重试次数
@@ -281,6 +288,12 @@ class ADBService {
         }
       }
 
+      // P3-4: deviceId 复用 DEVICE_SERIAL_RE 校验 — 渲染层可控, 原未校验直接作
+      // `-s` 参数 (任意字符串可被注入 adb 参数面; preload 只有非空校验, 主进程是最后防线)
+      if (deviceId != null && (typeof deviceId !== 'string' || !DEVICE_SERIAL_RE.test(deviceId))) {
+        return { success: false, error: 'invalid_device_id' };
+      }
+
       const adbPath = pathHelper.getAdbPath(this.projectRoot, true);
       const cmdParts = cmd.split(/\s+/).filter((part) => part.trim() !== '');
 
@@ -315,6 +328,8 @@ class ADBService {
 
         adbProcess.stdout.on('data', (data) => {
           stdout += data.toString();
+          // R27 P2-4: 输出上限 (防长输出命令内存膨胀), 保留尾部 (连接判定/tcpip 特征在尾部)
+          if (stdout.length > MAX_ADB_OUTPUT_BYTES) stdout = stdout.slice(-MAX_ADB_OUTPUT_BYTES);
 
           // tcpip 特殊: 检测到 'restarting in TCP mode port:' 立即成功返回
           if (firstCmd === 'tcpip' && stdout.includes('restarting in TCP mode port:')) {
@@ -329,6 +344,7 @@ class ADBService {
 
         adbProcess.stderr.on('data', (data) => {
           stderr += data.toString();
+          if (stderr.length > MAX_ADB_OUTPUT_BYTES) stderr = stderr.slice(-MAX_ADB_OUTPUT_BYTES);
         });
 
         adbProcess.on('close', (code) => {
@@ -408,7 +424,11 @@ class ADBService {
     if (!safe) {
       return { success: false, error: 'invalid_remote_path' };
     }
-    const rmArgs = isDirectory ? ['rm', '-rf', safe] : ['rm', '-f', safe];
+    // R27: 参数经 AdbPathQuoter 单引号包裹 (adb shell 拼串后在设备 sh 内安全,
+    // 允许空格/括号等合法字符; 单引号内 $()/反引号不展开)
+    const rmArgs = isDirectory
+      ? ['rm', '-rf', AdbPathQuoter.quote(safe)]
+      : ['rm', '-f', AdbPathQuoter.quote(safe)];
     return this._executeDeviceCommand(rmArgs, deviceId);
   }
 
@@ -424,12 +444,18 @@ class ADBService {
     const safe = this._sanitizeRemotePath(remotePath);
     // 新名仅取 basename, 且不含路径分隔/元字符 (防改写到其他目录/注入)
     const safeName = this._sanitizeRemotePath(String(newName || ''));
-    // R24 P1-2: 拒绝 '..'/'.' 特殊名, 防 mv 到父目录/当前目录改名逃逸
+    // R24 P1-2: 拒绝 '..'/'.' 特殊名 + '/' — newName 语义必须是单文件名 (不含路径),
+    // '../evil' 等相对穿越必须拒; 括号/分号/空格等合法字符经 quote 后放行
     if (!safe || !safeName || safeName.includes('/') || safeName === '..' || safeName === '.') {
       return { success: false, error: 'invalid_remote_path' };
     }
-    const newPath = path.posix.join(path.posix.dirname(safe), safeName);
-    return this._executeDeviceCommand(['mv', safe, newPath], deviceId);
+    // R27: mv 两参 (完整源/目标路径) 整体单引号包裹 — 空格/括号等合法字符设备端安全,
+    // 无需在 newName 上预先拒括号 (原 _sanitize 字符黑名单误伤合法文件名)
+    const targetPath = path.posix.join(path.posix.dirname(safe), safeName);
+    return this._executeDeviceCommand(
+      ['mv', AdbPathQuoter.quote(safe), AdbPathQuoter.quote(targetPath)],
+      deviceId
+    );
   }
 
   /**
@@ -439,8 +465,11 @@ class ADBService {
    */
   _sanitizeRemotePath(p) {
     if (typeof p !== 'string' || p.trim() === '') return null;
-    // 拒绝: ; & | $ ` " ' ( ) { } < > \ 及换行/控制字符 (引号包裹无法防 $() 与 ` 等)
-    if (/[;&|$`"'(){}<>\\\x00-\x1f]/.test(p)) return null;
+    // R27: 收窄字符黑名单 — 调用方 (delete/renameRemoteFile) 现对参数整体单引号包裹
+    // (AdbPathQuoter), 单引号内 $()/反引号不展开、空格/括号/分号等均安全。
+    // 仅保留真正危险的: $ ` " ' \ (双引号内 $()/` 展开; 反斜杠破坏单引号转义链) +
+    // 换行/控制字符 (破坏 adb 命令帧)。括号等 Android 合法文件名不再误伤。
+    if (/[$`"'\\\x00-\x1f]/.test(p)) return null;
     // R24 P1-2: 规范化路径 + 拒绝裸根/系统分区 — 防止删除/重命名专用通道绕过
     // executeAdbCommand 黑名单 (该黑名单明确挡 rm -rf /data 及子路径、裸根 /sdcard|/storage)。
     // 例: '/sdcard' → rm -rf 全盘; '/sdcard/../../system' 可解析到系统分区, 均在此拦截;
@@ -460,6 +489,11 @@ class ADBService {
    * @returns {Promise<{success: boolean, error?: string, output?: string}>}
    */
   _executeDeviceCommand(shellArgs, deviceId) {
+    // R26 P2-2: deviceId 复用 DEVICE_SERIAL_RE 校验 — R25 P3-4 只覆盖 executeAdbCommand,
+    // deleteRemoteFile/renameRemoteFile 专用通道漏检 (渲染层可控, 原直接作 `-s` 参数)
+    if (deviceId != null && (typeof deviceId !== 'string' || !DEVICE_SERIAL_RE.test(deviceId))) {
+      return Promise.resolve({ success: false, error: 'invalid_device_id' });
+    }
     const adbPath = pathHelper.getAdbPath(this.projectRoot, true);
     const args = [];
     if (deviceId) args.push('-s', deviceId);
@@ -487,9 +521,12 @@ class ADBService {
 
       adbProcess.stdout.on('data', (data) => {
         stdout += data.toString();
+        // R27 P2-4: 输出上限 (防长输出命令内存膨胀)
+        if (stdout.length > MAX_ADB_OUTPUT_BYTES) stdout = stdout.slice(-MAX_ADB_OUTPUT_BYTES);
       });
       adbProcess.stderr.on('data', (data) => {
         stderr += data.toString();
+        if (stderr.length > MAX_ADB_OUTPUT_BYTES) stderr = stderr.slice(-MAX_ADB_OUTPUT_BYTES);
       });
       adbProcess.on('close', (code) => {
         if (code !== 0) {

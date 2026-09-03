@@ -306,8 +306,12 @@ export class SettingsController {
         if (!ok) return;
         // wrapper 已处理 IPC 失败,错误由 model 层 catch emit + 外层 try-catch 接
         const importResult = await this.#model.importConfig(result.filePaths[0]);
-        Toast?.success(window.i18n.t('settings.importConfigSuccess'));
-        if (importResult?.needRestart) {
+        // R27 P2-6: 检查 success — 失败时 model 已 emit error toast, 原无条件弹成功造成
+        // "失败 + 成功"双 toast 误导
+        if (importResult?.success) {
+          Toast?.success(window.i18n.t('settings.importConfigSuccess'));
+        }
+        if (importResult?.success && importResult.needRestart) {
           // R24 P1-6: 链式确认用嵌套 await (原 _keepModalOpen 标记已随 view 桥接删除)
           const okRestart = await showConfirmModal(
             window.i18n.t('settings.restartRequired'),

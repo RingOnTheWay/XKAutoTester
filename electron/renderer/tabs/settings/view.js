@@ -67,6 +67,8 @@ export class SettingsView {
 
       // 版本信息
       appVersionInfo: document.getElementById('app-version-info'),
+      // R27 修复: 构建日期绑定 version.json buildDate (原 tab.html 硬编码 2026-04-15)
+      appBuildDate: document.getElementById('app-build-date'),
       githubRepoLink: document.getElementById('github-repo-link'),
 
       // 更新弹窗
@@ -479,6 +481,9 @@ export class SettingsView {
     if (this.els.appVersionInfo) {
       const version = versionInfo.fullVersion || versionInfo.version || '-';
       this.els.appVersionInfo.textContent = `v${version}`;
+    }
+    if (this.els.appBuildDate) {
+      this.els.appBuildDate.textContent = versionInfo.buildDate || '-';
     }
   }
 

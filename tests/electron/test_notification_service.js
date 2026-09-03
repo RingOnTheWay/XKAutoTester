@@ -12,6 +12,7 @@ const {
   buildSignString,
   buildRequestBody,
   buildSignedUrl,
+  DINGTALK_REQUEST_TIMEOUT,
 } = require(NOTIFICATION_SERVICE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
@@ -136,7 +137,10 @@ test('sendDingTalkNotification 调 httpClient.post + 返 {success:true, data}', 
     text: { content: 'hello dingtalk' },
     msgtype: 'text',
   });
-  assert.deepStrictEqual(call.opts, { headers: { 'Content-Type': 'application/json' } });
+  assert.deepStrictEqual(call.opts, {
+    headers: { 'Content-Type': 'application/json' },
+    timeout: DINGTALK_REQUEST_TIMEOUT,
+  });
 });
 
 test('sendDingTalkNotification httpClient.post 抛错 catch 返 {success:false, error}', async () => {
@@ -180,4 +184,84 @@ test('sendDingTalkNotification 集成验证: 调 buildSignString + buildRequestB
   assert.match(call.url, /sign=.+/);
   // 验证 body 是 buildRequestBody 输出
   assert.deepStrictEqual(call.body, buildRequestBody('msg_Z'));
+});
+
+// ─── P2-6: 钉钉请求携带 HTTP 超时 (防通知链路永久挂起) ─────────
+
+test('P2-6 post 调用携带默认 10s timeout', async () => {
+  const http = makeFakeHttpClient();
+  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
+    httpClientFactory: () => http,
+    loggerFactory: () => makeFakeLogger(),
+  });
+
+  await svc.sendDingTalkNotification({
+    accessToken: 'TOKEN123',
+    secret: 'SECtest',
+    message: 'timeout check',
+  });
+
+  assert.strictEqual(http.calls.length, 1);
+  assert.strictEqual(http.calls[0].opts.timeout, DINGTALK_REQUEST_TIMEOUT, 'post 应携带默认 10s 超时');
+});
+
+test('P2-6 超时异常被 catch 归一为 {success:false, error}', async () => {
+  // axios 超时抛 ECONNABORTED 错误
+  const http = {
+    post: async () => {
+      const err = new Error('timeout of 10000ms exceeded');
+      err.code = 'ECONNABORTED';
+      throw err;
+    },
+  };
+  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
+    httpClientFactory: () => http,
+    loggerFactory: () => makeFakeLogger(),
+  });
+
+  const result = await svc.sendDingTalkNotification({
+    accessToken: 'TOKEN',
+    secret: 'SEC',
+    message: 'hi',
+  });
+
+  assert.strictEqual(result.success, false);
+  assert.match(result.error, /timeout/);
+});
+
+// ── R27 P1-1: 钉钉业务 errcode 校验 ─────────────────────────
+
+test('P1-1 钉钉 errcode!=0 (token 失效/被拒) → success:false', async () => {
+  const http = {
+    calls: [],
+    post: async (url, body, opts) => {
+      http.calls.push({ url, body, opts });
+      // 钉钉业务错误: HTTP 200 但 errcode!=0 (如 310000 token 失效)
+      return { data: { errcode: 310000, errmsg: 'invalid access token' } };
+    },
+  };
+  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, { httpClientFactory: () => http });
+
+  const result = await svc.sendDingTalkNotification({
+    accessToken: 'tok',
+    secret: 'sec',
+    message: 'hi',
+  });
+
+  assert.strictEqual(result.success, false, 'errcode!=0 应判失败');
+  assert.match(result.error, /310000/, '错误含 errcode');
+  assert.match(result.error, /invalid access token/, '错误含 errmsg');
+});
+
+test('P1-1 钉钉 errcode=0 → success:true', async () => {
+  const http = makeFakeHttpClient();
+  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, { httpClientFactory: () => http });
+
+  const result = await svc.sendDingTalkNotification({
+    accessToken: 'tok',
+    secret: 'sec',
+    message: 'hi',
+  });
+
+  assert.strictEqual(result.success, true);
 });

@@ -11,6 +11,10 @@ const SERVICE_PATH = path.join(
 const EnvironmentStartupService = require(SERVICE_PATH);
 const { buildDriverInstallCommand } = EnvironmentStartupService;
 
+// R25 P2-4: 驱动安装白名单根 = <projectRoot>/env/CP210x_Windows_Drivers
+const PROJECT_ROOT = path.join(__dirname, '..', '..');
+const DRIVERS_ROOT = path.join(PROJECT_ROOT, 'env', 'CP210x_Windows_Drivers');
+
 function decodeCommand(encoded) {
   return Buffer.from(encoded, 'base64').toString('utf16le');
 }
@@ -21,7 +25,7 @@ function makeService(opts = {}) {
     testCaseService: opts.testCaseService || {},
     userDataService: null,
     i18nService: { t: (k) => k },
-    electronApp: {},
+    electronApp: { projectRoot: PROJECT_ROOT },
     driverInstallerFactory: opts.driverInstallerFactory,
     ...opts.extra,
   });
@@ -64,7 +68,8 @@ test('P2-6 非字符串路径不抛错 (String 化)', () => {
 test('P2-6 安装程序路径不存在 → 失败且不 spawn', async () => {
   const svc = makeService();
   await svc._ensureInitialized();
-  const result = await svc.handleInstallDriver('C:\\missing\\driver.exe');
+  // R25 P2-4: 路径须在驱动目录白名单内 — 用根内不存在的文件测"不存在"分支
+  const result = await svc.handleInstallDriver(path.join(DRIVERS_ROOT, 'missing-driver.exe'));
   assert.strictEqual(result.success, false);
   assert.match(result.message, /不存在/);
 });
@@ -78,7 +83,33 @@ test('P2-6 handleInstallDriver 委托注入的 driverInstallerFactory', async ()
     },
   });
   await svc._ensureInitialized();
-  const result = await svc.handleInstallDriver('C:\\Drivers\\cp210x.exe');
+  // R25 P2-4: 白名单内合法路径 (真实驱动安装包)
+  const result = await svc.handleInstallDriver(
+    path.join(DRIVERS_ROOT, 'CP210xVCPInstaller_x64.exe')
+  );
   assert.strictEqual(result.success, true);
-  assert.deepStrictEqual(calls, ['C:\\Drivers\\cp210x.exe']);
+  assert.deepStrictEqual(calls, [path.join(DRIVERS_ROOT, 'CP210xVCPInstaller_x64.exe')]);
+});
+
+test('R25 P2-4: 白名单外路径拒绝 (防启动任意 exe)', async () => {
+  const calls = [];
+  const svc = makeService({
+    driverInstallerFactory: () => async (installerPath) => {
+      calls.push(installerPath);
+      return { success: true, message: 'ok' };
+    },
+  });
+  await svc._ensureInitialized();
+  const outsidePaths = [
+    'C:\\Windows\\System32\\cmd.exe',          // 系统目录
+    path.join(PROJECT_ROOT, 'env', 'python', 'python.exe'), // 驱动目录外 (env 其他子目录)
+    path.join(DRIVERS_ROOT, '..', '..', '..', 'x'),          // 相对回溯
+    '',                                                  // 空串
+    null,                                                // 非字符串
+  ];
+  for (const p of outsidePaths) {
+    const result = await svc.handleInstallDriver(p);
+    assert.strictEqual(result.success, false, `应拒绝: ${p}`);
+  }
+  assert.strictEqual(calls.length, 0, '白名单外路径不得进入 driverInstaller');
 });

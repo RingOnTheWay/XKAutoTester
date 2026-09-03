@@ -13,6 +13,8 @@ import datetime
 import logging
 import logging.handlers
 import sys
+import threading
+from pathlib import Path
 
 from main.utils.config import get_config_manager
 from main.utils.paths import get_logs_path
@@ -53,8 +55,34 @@ def _get_shared_file_handler():
         logging.warning(f"读取日志配置失败, 使用默认值: {e}")
     _shared_formatter = logging.Formatter(log_format)
 
-    _shared_log_dir = get_logs_path("XKAT")
-    _shared_log_dir.mkdir(parents=True, exist_ok=True)
+    # P2-11: 真正消费 LOG_CONFIG.file_path (原键漂移: 用户改 file_path 期望改日志目录完全无效,
+    # 日志目录被硬编码为 get_logs_path("XKAT"))。
+    # 语义: 空串 / "." / "./" 视为未配置, 回退默认 user_data/logs/XKAT;
+    # 其他值视为日志目录 (相对路径基于 cwd, ~ 展开), 目录自动创建。
+    configured_log_dir = str(log_config.get("file_path") or "").strip()
+    if configured_log_dir in ("", ".", "./"):
+        _shared_log_dir = get_logs_path("XKAT")
+    else:
+        try:
+            _shared_log_dir = Path(configured_log_dir).expanduser()
+        except Exception as e:
+            logging.warning(f"无效的日志目录配置 {configured_log_dir!r}, 回退默认: {e}")
+            _shared_log_dir = get_logs_path("XKAT")
+    # R26 P2-8: mkdir 守卫 — file_path 用户可控后, 配置指向已存在文件/无权限路径时
+    # FileExistsError/PermissionError 不再冒泡 (docstring 承诺"创建失败回退默认, 不崩")
+    try:
+        _shared_log_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logging.warning(f"日志目录创建失败 {_shared_log_dir}, 回退默认: {e}")
+        _shared_log_dir = get_logs_path("XKAT")
+        try:
+            _shared_log_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e2:
+            logging.warning(f"默认日志目录创建也失败, 仅保留控制台输出: {e2}")
+            _shared_log_dir = None
+
+    if _shared_log_dir is None:
+        return None  # 目录不可用, 跳过文件 handler (仅控制台)
 
     current_time = datetime.datetime.now().strftime(DATETIME_FORMAT)
     log_file_path = _shared_log_dir / f"XKAT-{current_time}.log"
@@ -74,6 +102,11 @@ def _get_shared_file_handler():
     return _shared_file_handler
 
 
+# R27 P2-7: 初始化锁 (对齐 config.py _config_lock 模式) — 多线程并发首次 get_logger
+# (PytestProcess 双线程 + _LogPump 线程) 原重复 handlers.clear()+addHandler → root 挂重复 handler 日志翻倍
+_logger_lock = threading.Lock()
+
+
 def _setup_root_logger():
     """配置 root logger（仅执行一次）。
 
@@ -83,44 +116,49 @@ def _setup_root_logger():
     if _root_configured:
         return
 
-    log_level = _DEFAULT_LOG_LEVEL
-    log_format = _DEFAULT_LOG_FORMAT
-    try:
-        log_config = get_config_manager().get("LOG_CONFIG", {})
-        log_level = log_config.get("level", _DEFAULT_LOG_LEVEL)
-        log_format = log_config.get("format", _DEFAULT_LOG_FORMAT)
-    except Exception as e:
-        logging.warning(f"读取日志级别/格式失败, 使用默认值: {e}")
+    # R27 P2-7: 加锁 + double-check
+    with _logger_lock:
+        if _root_configured:
+            return
 
-    root_logger = logging.getLogger()
-    try:
-        root_logger.setLevel(getattr(logging, log_level))
-    except (AttributeError, ValueError):
-        logging.warning(f"无效的日志级别: {log_level}, 回退 {_DEFAULT_LOG_LEVEL}")
-        root_logger.setLevel(logging.getLevelName(_DEFAULT_LOG_LEVEL))
-    # 清除已有 handler（避免重复）
-    root_logger.handlers.clear()
+        log_level = _DEFAULT_LOG_LEVEL
+        log_format = _DEFAULT_LOG_FORMAT
+        try:
+            log_config = get_config_manager().get("LOG_CONFIG", {})
+            log_level = log_config.get("level", _DEFAULT_LOG_LEVEL)
+            log_format = log_config.get("format", _DEFAULT_LOG_FORMAT)
+        except Exception as e:
+            logging.warning(f"读取日志级别/格式失败, 使用默认值: {e}")
 
-    # 文件 handler (创建失败时 _get_shared_file_handler 返回 None, 跳过)
-    file_handler = _get_shared_file_handler()
-    if file_handler is not None:
-        root_logger.addHandler(file_handler)
+        root_logger = logging.getLogger()
+        try:
+            root_logger.setLevel(getattr(logging, log_level))
+        except (AttributeError, ValueError, TypeError):
+            logging.warning(f"无效的日志级别: {log_level!r}, 回退 {_DEFAULT_LOG_LEVEL}")
+            root_logger.setLevel(logging.getLevelName(_DEFAULT_LOG_LEVEL))
+        # 清除已有 handler（避免重复）
+        root_logger.handlers.clear()
 
-    # 控制台 handler (写 sys.stderr, 实时输出。
-    # StreamHandler() 默认捕获 sys.stderr。cli.py _wrap_stdio 包装 stderr 为 utf-8 TextIOWrapper
-    # (line_buffering=True), 写入无延迟。PytestProcess 用 logger.info/error 实时转发 pytest 输出。)
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(logging.Formatter(log_format))
-    root_logger.addHandler(console_handler)
+        # 文件 handler (创建失败时 _get_shared_file_handler 返回 None, 跳过)
+        file_handler = _get_shared_file_handler()
+        if file_handler is not None:
+            root_logger.addHandler(file_handler)
 
-    # 确保 stdout 用 utf-8
-    try:
-        if sys.stdout.encoding != "utf-8":
-            sys.stdout = codecs.getwriter("utf-8")(sys.stdout.buffer)
-    except Exception as exc:  # pragma: no cover - 初始化早期无可靠日志通道
-        logging.warning("stdout utf-8 包装失败: %s", exc)
+        # 控制台 handler (写 sys.stderr, 实时输出。
+        # StreamHandler() 默认捕获 sys.stderr。cli.py _wrap_stdio 包装 stderr 为 utf-8 TextIOWrapper
+        # (line_buffering=True), 写入无延迟。PytestProcess 用 logger.info/error 实时转发 pytest 输出。)
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(logging.Formatter(log_format))
+        root_logger.addHandler(console_handler)
 
-    _root_configured = True
+        # 确保 stdout 用 utf-8
+        try:
+            if sys.stdout.encoding != "utf-8":
+                sys.stdout = codecs.getwriter("utf-8")(sys.stdout.buffer)
+        except Exception as exc:  # pragma: no cover - 初始化早期无可靠日志通道
+            logging.warning("stdout utf-8 包装失败: %s", exc)
+
+        _root_configured = True
 
 
 def get_logger(name=None):

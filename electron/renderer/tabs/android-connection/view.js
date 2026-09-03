@@ -242,7 +242,8 @@ export class AndroidConnectionView {
 
     // 恢复选中状态
     if (modalSelectedDeviceId) {
-      const selectedEl = deviceList.querySelector(`.device-item[data-device-id="${modalSelectedDeviceId}"]`);
+      // P3-8: CSS.escape 防设备 ID 含引号时 querySelector 抛异常
+      const selectedEl = deviceList.querySelector(`.device-item[data-device-id="${CSS.escape(modalSelectedDeviceId)}"]`);
       if (selectedEl) {
         selectedEl.classList.add('selected');
         const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
@@ -587,8 +588,8 @@ export class AndroidConnectionView {
           </div>
         </td>
         <td class="file-size">${sizeDisplay}</td>
-        <td class="file-date">${file.modifiedTime || ''}</td>
-        <td class="file-date">${file.createdAt || ''}</td>
+        <td class="file-date">${this.escapeHtml(file.modifiedTime || '')}</td>
+        <td class="file-date">${this.escapeHtml(file.createdAt || '')}</td>
         <td class="file-actions">
           <button class="file-actions-btn" data-path="${this.escapeHtml(file.path)}">
             ${this.getIconHtml('more_vert')}
@@ -791,7 +792,8 @@ export class AndroidConnectionView {
   }
 
   toggleFileSelection(file, isSelected) {
-    const row = document.querySelector(`.file-item[data-path="${file.path}"]`);
+    // P3-8: CSS.escape 防路径含引号时 querySelector 抛异常
+    const row = document.querySelector(`.file-item[data-path="${CSS.escape(file.path)}"]`);
     if (row) {
       row.classList.toggle('selected', isSelected);
     }
@@ -1188,65 +1190,5 @@ export class AndroidConnectionView {
   getRenameInputValue() {
     const { renameInput } = this.els;
     return renameInput?.value?.trim() || '';
-  }
-
-  /**
-   * 显示通用确认弹窗，返回 Promise<boolean>
-   * @param {string} title - 标题
-   * @param {string} message - 消息
-   * @returns {Promise<boolean>} 用户是否确认
-   */
-  showConfirmDialog(title, message) {
-    return new Promise((resolve) => {
-      const titleElement = document.getElementById('confirm-modal-title');
-      const messageElement = document.getElementById('confirm-modal-message');
-
-      if (titleElement) titleElement.textContent = title;
-      if (messageElement) messageElement.textContent = message;
-
-      // 重置确认按钮状态
-      const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
-      if (confirmBtn) {
-        confirmBtn.disabled = false;
-        confirmBtn.classList.remove('loading');
-        // 清除旧的 originalText，使用当前语言重新翻译
-        delete confirmBtn.dataset.originalText;
-        const i18nKey = confirmBtn.getAttribute('data-i18n');
-        confirmBtn.innerHTML = i18nKey ? window.i18n.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
-      }
-
-      window.__XKAT_CONFIRM_CALLBACK__ = () => {
-        window.__XKAT_CONFIRM_CALLBACK__ = null;
-        resolve(true);
-      };
-
-      // 绑定一次性确认按钮点击（确保 callback 在 close 前被调用）
-      const handleConfirmClick = () => {
-        resolve(true);
-      };
-      if (confirmBtn)
-        confirmBtn.addEventListener('click', handleConfirmClick, {
-          once: true,
-        });
-
-      // 取消按钮 → reject
-      const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
-      const handleCancelClick = (e) => {
-        e.stopPropagation();
-        if (confirmBtn) confirmBtn.removeEventListener('click', handleConfirmClick);
-        window.__XKAT_CONFIRM_CALLBACK__ = null;
-        resolve(false);
-      };
-      if (cancelBtn) cancelBtn.addEventListener('click', handleCancelClick, { once: true });
-
-      const confirmModal = window.__XKAT_MODALS__?.confirm;
-      if (confirmModal) {
-        confirmModal.open();
-      } else {
-        // 降级处理
-        const ok = window.confirm(message);
-        resolve(ok);
-      }
-    });
   }
 }

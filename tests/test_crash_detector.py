@@ -76,3 +76,27 @@ class TestHasCrashKeyword:
     def test_no_keyword(self):
         assert has_crash_keyword("normal log message") is False
         assert has_crash_keyword("") is False
+
+
+class TestKillingIsNotCrash:
+    """R27 P2-10: Killing (LMK/后台回收) 不再判崩溃"""
+
+    def test_lmk_reclaim_not_crash(self):
+        """ActivityManager Killing (adj 900 后台回收) → 非崩溃"""
+        line = "08-31 10:00:00.123  1234  1234 E ActivityManager: Killing 9999:com.example.background (adj 900)"
+        assert is_crash_line(line) is False, "LMK 后台回收不得误报崩溃"
+
+    def test_killing_any_pid_not_crash(self):
+        """任意 Killing 行 (缓存回收) → 非崩溃"""
+        line = "08-31 10:00:00.123  1234  1234 E ActivityManager: Killing 8888:com.other.app (cached)"
+        assert is_crash_line(line) is False
+
+    def test_process_died_still_crash(self):
+        """has died 仍是崩溃 (P2-10 保留真崩溃语义)"""
+        line = "08-31 10:00:00.123  1234  1234 E AndroidRuntime: Process com.example.app (pid 9999) has died"
+        assert is_crash_line(line) is True
+
+    def test_has_crash_keyword_no_killing(self):
+        """关键词集合不再含 Killing"""
+        assert has_crash_keyword("Killing 1234:com.x") is False, "Killing 不再算崩溃关键词"
+        assert has_crash_keyword("has died") is True

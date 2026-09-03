@@ -257,7 +257,7 @@ class TestFactoryInjection:
         adb.connection.connect.return_value = connect
         adb.bluetooth.ensure_enabled.return_value = True
         adb.app.force_stop.return_value = None
-        adb.app.get_pid.return_value = "1234"
+        adb.app.get_pid.return_value = 1234  # R26 P1-3: 对齐真实接口 (get_pid 返回 int)
         adb.app.get_dumpsys_window.return_value = "window_state"
         adb.app.ensure_closed.return_value = True
         adb.update_logcat_pid.return_value = None
@@ -470,3 +470,54 @@ class TestFactoryInjection:
         assert clock.slept == [2, 0]
         # time.time 应被调 (start_time + elapsed_time)
         assert clock.now > 1000.0
+
+
+class TestWaitAppLoadPidContract:
+    """R26 P1-3: _wait_app_load 的 app_pid 契约 (get_pid 返 int, app_pid 保持 str)"""
+
+    def _make_initializer(self, adb, driver) -> TestInitializer:
+        init = TestInitializer(
+            config=_make_real_config(),
+            logger=logging.getLogger("test-pid-contract"),
+            adb_manager_factory=lambda d, p: adb,
+            ble_device_factory=lambda cfg: MagicMock(spec=BLEDevice),
+            appium_server_factory=lambda h, p: MagicMock(spec=AppiumServer),
+            driver_factory=lambda url, options: driver,
+            crash_monitor_factory=lambda a, r, lg: MagicMock(spec=CrashMonitor),
+            faker_factory=lambda: MagicMock(spec=Faker),
+            time_provider=FakeClock(),
+        )
+        # _wait_app_load 直接读 self.adb_manager.app / self.driver, 需先注入 (真实流程由 init 步骤设置)
+        init.adb_manager = adb
+        init.driver = driver
+        return init
+
+    def test_pid_unchanged_no_false_alert(self) -> None:
+        """PID 未变 (int 与 str 同值) → 不误报 appPidChanged, 不重复 update_logcat_pid"""
+        adb = MagicMock(spec=ADBManager)
+        adb.app.get_pid.return_value = 1234  # int
+        adb.update_logcat_pid = MagicMock()
+        driver = MagicMock(spec=webdriver.Remote)
+        driver.current_activity = ".MainActivity"
+        init = self._make_initializer(adb, driver)
+        init.app_pid = "1234"  # R25 契约: str
+
+        init._wait_app_load()
+
+        adb.update_logcat_pid.assert_not_called(), "PID 未变不得误报"
+        assert init.app_pid == "1234", "app_pid 保持 str"
+
+    def test_pid_changed_keeps_str_contract(self) -> None:
+        """PID 变化 → 更新, app_pid 保持 str, update_logcat_pid 收 str"""
+        adb = MagicMock(spec=ADBManager)
+        adb.app.get_pid.return_value = 5678  # int (新 PID)
+        adb.update_logcat_pid = MagicMock()
+        driver = MagicMock(spec=webdriver.Remote)
+        driver.current_activity = ".MainActivity"
+        init = self._make_initializer(adb, driver)
+        init.app_pid = "1234"
+
+        init._wait_app_load()
+
+        assert init.app_pid == "5678", "新 PID 以 str 存储 (契约保持)"
+        adb.update_logcat_pid.assert_called_once_with("5678"), "logcat 更新收 str (logcat parser 按 str 比较)"

@@ -25,20 +25,27 @@ function register(ipcMain, services) {
     }
   });
 
-  registerHandler(ipcMain, IPC_CHANNELS.DOWNLOAD_UPDATE, (downloadUrl, fileName) => {
-    if (
-      typeof downloadUrl !== 'string' ||
-      downloadUrl.trim() === '' ||
-      typeof fileName !== 'string' ||
-      fileName.trim() === ''
-    ) {
-      return {
-        success: false,
-        error: t('errors.updateUrlMissing', '未提供下载地址或文件名'),
-      };
-    }
-    return updateService.downloadUpdate(downloadUrl, fileName);
-  });
+  registerHandler(
+    ipcMain,
+    IPC_CHANNELS.DOWNLOAD_UPDATE,
+    (downloadUrl, fileName, event) => {
+      if (
+        typeof downloadUrl !== 'string' ||
+        downloadUrl.trim() === '' ||
+        typeof fileName !== 'string' ||
+        fileName.trim() === ''
+      ) {
+        return {
+          success: false,
+          error: t('errors.updateUrlMissing', '未提供下载地址或文件名'),
+        };
+      }
+      // R26 P2-1: 原未传 event.sender → downloadUpdate 的进度事件 (ON_DOWNLOAD_PROGRESS)
+      // 永不发出, UI 进度条卡死。补 withEvent 透传。
+      return updateService.downloadUpdate(downloadUrl, fileName, event.sender);
+    },
+    { withEvent: true }
+  );
 
   registerHandler(ipcMain, IPC_CHANNELS.INSTALL_UPDATE, (filePath) => {
     if (typeof filePath !== 'string' || filePath.trim() === '') {

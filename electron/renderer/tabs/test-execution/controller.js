@@ -334,9 +334,12 @@ export class TestExecutionController {
         },
         (run) => {
           // 删除按钮回调: 弹确认框 (R24 P1-6: 统一 core Promise 版)
-          showConfirmModal(window.i18n.t('reportModal.delete'), window.i18n.t('reportModal.deleteConfirm')).then((ok) => {
-            if (ok) model.deleteReportRun(run);
-          });
+          // R26 P3-7: 补 catch — confirmModal 当前无 reject 路径, 防御性兜底
+          showConfirmModal(window.i18n.t('reportModal.delete'), window.i18n.t('reportModal.deleteConfirm'))
+            .then((ok) => {
+              if (ok) model.deleteReportRun(run);
+            })
+            .catch((e) => console.error('[confirm] delete run failed:', e));
         }
       );
       // 初始禁用"打开"按钮（选择运行记录后启用）
@@ -351,9 +354,11 @@ export class TestExecutionController {
           model.selectReportRun(run);
         },
         (run) => {
-          showConfirmModal(window.i18n.t('reportModal.delete'), window.i18n.t('reportModal.deleteConfirm')).then((ok) => {
-            if (ok) model.deleteReportRun(run);
-          });
+          showConfirmModal(window.i18n.t('reportModal.delete'), window.i18n.t('reportModal.deleteConfirm'))
+            .then((ok) => {
+              if (ok) model.deleteReportRun(run);
+            })
+            .catch((e) => console.error('[confirm] delete scheduled run failed:', e));
         }
       );
       view.enableViewReportButton(false);
@@ -630,6 +635,13 @@ export class TestExecutionController {
   }
 
   handleRunTests() {
+    // R27: 选中定时计划时"开始执行"= 立即执行该计划 (非调度到点, 不改计划状态);
+    // 未选中定时计划则走普通测试计划执行
+    const scheduledPlan = this.model.currentScheduledPlan;
+    if (scheduledPlan) {
+      this.model.runScheduledPlanNow(scheduledPlan);
+      return;
+    }
     this.model.runTests();
   }
 
@@ -788,7 +800,8 @@ export class TestExecutionController {
       status: 'pending',
     };
 
-    // 检查时间冲突
+    // 检查时间冲突 (R26 P2-5: 新建路径的 planData 无 excludeId 键, || null 恒为 null;
+    // 保留签名兼容编辑路径复用此流程时的 excludeId 语义)
     const conflictResult = await this.model.checkTimeConflict(planData.scheduledTime, planData.excludeId || null);
     if (conflictResult?.hasConflict) {
       const override = await this.showConfirmDialog(

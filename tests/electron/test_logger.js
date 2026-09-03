@@ -69,3 +69,29 @@ test('Logger 目录缺失时 log 不抛 (流错误兜底不 crash)', async () =>
   await new Promise((r) => setTimeout(r, 30));
   logger.close();
 });
+
+// ── P3-5: 超长截断 + 背压丢弃 ─────────────────────────────
+
+test('P3-5 超长消息截断 (防巨行撑爆缓冲)', async () => {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'xkat-logger-'));
+  const logger = new Logger(dir, 'Test');
+  await logger.log('x'.repeat(20000));
+  const content = await readLogFile(logger._resolveLogPath());
+  assert.match(content, /\[truncated\]/, '超长消息应带截断标记');
+  assert.ok(content.length < 10000, `截断后总长受限, 实际 ${content.length}`);
+  await fsp.rm(dir, { recursive: true, force: true });
+});
+
+test('P3-5 背压 (write 返回 false) → 丢弃计数, 不抛错', async () => {
+  const logger = new Logger('/tmp/xkat-logger-backpressure', 'Test');
+  // mock WriteStream: write 返回 false 模拟背压
+  logger._getStream = () => ({
+    write: () => false,
+  });
+
+  await logger.log('high frequency stdout line');
+  await logger.log('another line');
+
+  assert.strictEqual(logger._droppedEntries, 2, '两条背压日志均被丢弃计数');
+  logger.close();
+});

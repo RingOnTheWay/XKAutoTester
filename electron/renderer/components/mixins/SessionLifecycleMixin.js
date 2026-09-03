@@ -121,6 +121,9 @@ export const SessionLifecycleMixin = {
     if (!this._overlay) return;
 
     this.resetState();
+    // R27: close() 已销毁 ResizeObserver — 每次 open 重建, 否则第二次进入后
+    // canvasContainer 高度变化不再触发 canvas 重算 (底部面板遮挡预览回归)
+    this._initResizeObserver();
     this._sessionParams = { deviceName, appPackage, appActivity, noReset };
     this._overlay.classList.remove('hidden');
     this._addEscListener();
@@ -152,6 +155,12 @@ export const SessionLifecycleMixin = {
 
   close() {
     if (!this._overlay) return;
+
+    // P3-10: 清理搜索防抖 timer — 关闭后 timer 仍会触发 searchTree 访问已关闭的 DOM
+    if (this._searchTimer) {
+      clearTimeout(this._searchTimer);
+      this._searchTimer = null;
+    }
 
     this._removeEscListener();
     this._unsubscribeProgress();

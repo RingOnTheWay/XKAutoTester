@@ -14,6 +14,7 @@
 //   - checkPythonEnvironment (用纯函数)
 //   - checkNodeModules (用 isPackagedGetter + fileSystem port)
 //   - runEnvironmentChecks (编排 + IPC 进度推送)
+//   - P2-5: 所有 this._cmd 探测统一注入默认 15s timeout + 显式覆盖
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
@@ -29,6 +30,7 @@ const {
   buildPythonConfig,
   IGNORED_MISSING_PACKAGES,
   REQUIRED_PYTHON_VERSION,
+  DEFAULT_CMD_TIMEOUT,
 } = require(ENV_SERVICE_PATH);
 
 const i18nMock = {
@@ -243,7 +245,8 @@ test('懒初始化: constructor 不触发 factory 调用, 首次 configurePython
   await svc.configurePythonEnvironment();
 
   assert.strictEqual(fsFactoryCalled, 1, '首次调用触发 fileSystemFactory');
-  assert.strictEqual(cmdFactoryCalled, 2, '首次调用触发 commandRunnerFactory (spawnHelper + cmd)');
+  // R26 P3-5: commandRunner 一次创建复用 (原两处调用 spawnHelper + cmd → 两实例, 已收敛为 1)
+  assert.strictEqual(cmdFactoryCalled, 1, '首次调用触发 commandRunnerFactory 一次 (spawnHelper 与 _cmd 共用)');
   assert.strictEqual(dcFactoryCalled, 1, '首次调用触发 driverCheckerFactory');
   assert.strictEqual(phFactoryCalled, 1, '首次调用触发 pathHelperFactory');
   assert.strictEqual(ipFactoryCalled, 1, '首次调用触发 isPackagedGetterFactory');
@@ -710,4 +713,153 @@ test('runEnvironmentChecks 必需检查失败时填 required 数组', async () =
   const results = await svc.runEnvironmentChecks('/fake/root', null);
   // Android SDK 必需检查失败 + Python 环境必需检查失败
   assert.ok(results.required.length >= 1, '必需检查失败应填 required');
+});
+
+
+// ─── P2-5: 探测命令统一注入默认 timeout (防挂起 splash) ───────
+
+test('P2-5 configurePythonEnvironment venv 探测携带 timeout', async () => {
+  const setCalls = [];
+  const { svc, commandRunner } = makeFakeApp({
+    pathHelper: {
+      getVenvPythonPath: () => '/fake/venv/python.exe',
+      setPythonConfig: (cfg) => setCalls.push(cfg),
+    },
+    commandResponses: [{ code: 0, stdout: 'Python 3.12.4', stderr: '' }],
+  });
+
+  await svc.configurePythonEnvironment();
+
+  assert.strictEqual(commandRunner.calls.length, 1);
+  assert.strictEqual(
+    commandRunner.calls[0].opts.timeout,
+    DEFAULT_CMD_TIMEOUT,
+    '--version 探测应携带默认 15s 超时'
+  );
+});
+
+test('P2-5 findSystemPython where/--version 均携带 timeout', async () => {
+  const { svc, commandRunner } = makeFakeApp({
+    commandResponses: [
+      { code: 0, stdout: 'C:\\Python\\python.exe', stderr: '' },
+      { code: 0, stdout: 'Python 3.12.4', stderr: '' },
+    ],
+  });
+
+  await svc.findSystemPython();
+
+  assert.strictEqual(commandRunner.calls.length, 2);
+  for (const call of commandRunner.calls) {
+    assert.strictEqual(call.opts.timeout, DEFAULT_CMD_TIMEOUT, '每次探测均应携带默认超时');
+  }
+});
+
+test('P2-5 checkCommandExists where 调用携带 timeout', async () => {
+  const { svc, commandRunner } = makeFakeApp({
+    commandResponses: [{ code: 0, stdout: 'C:\\Python\\python.exe', stderr: '' }],
+  });
+
+  const exists = await svc.checkCommandExists('python');
+  assert.strictEqual(exists, true);
+  assert.strictEqual(commandRunner.calls[0].opts.timeout, DEFAULT_CMD_TIMEOUT);
+});
+
+test('P2-5 checkPythonEnvironment --version 与 -c 探测均携带 timeout', async () => {
+  const pyprojectPath = path.join('/fake/root', 'pyproject.toml');
+  const { svc, commandRunner } = makeFakeApp({
+    pathHelper: {
+      getPythonConfig: () => ({
+        pythonPath: '/fake/python.exe',
+        sourceLabel: '(内置)',
+        isSystem: false,
+      }),
+    },
+    fileSystem: {
+      files: {
+        [pyprojectPath]: `dependencies = [\n  "pytest>=8.0",\n]`,
+      },
+    },
+    commandResponses: [
+      { code: 0, stdout: 'Python 3.12.4', stderr: '' },
+      { code: 0, stdout: 'pytest==8.4.2', stderr: '' },
+    ],
+  });
+
+  await svc.checkPythonEnvironment('/fake/root');
+
+  assert.strictEqual(commandRunner.calls.length, 2);
+  for (const call of commandRunner.calls) {
+    assert.strictEqual(call.opts.timeout, DEFAULT_CMD_TIMEOUT, '--version 与 pip list 探测均应携带超时');
+  }
+});
+
+test('P2-5 调用处可传 opts.timeout 覆盖默认值', async () => {
+  const { svc, commandRunner } = makeFakeApp({
+    commandResponses: [{ code: 0, stdout: 'ok', stderr: '' }],
+  });
+
+  await svc._ensureInitialized();
+  commandRunner.calls.length = 0;
+
+  await svc._cmd('where', ['adb'], { timeout: 0 });
+  assert.strictEqual(commandRunner.calls[0].opts.timeout, 0, '显式 timeout 0 应覆盖默认 15s');
+});
+
+// ── R27: 依赖探测 importlib 失败 → pip list 回退 (Lite/系统 Python 场景) ──
+
+test('R27 checkPythonEnvironment importlib 失败回退 pip list 仍可列缺失', async () => {
+  const pyprojectPath = path.join('/fake/root', 'pyproject.toml');
+  const { svc } = makeFakeApp({
+    pathHelper: {
+      getPythonConfig: () => ({
+        pythonPath: '/fake/python.exe',
+        sourceLabel: '(系统)',
+        isSystem: true,
+      }),
+    },
+    fileSystem: {
+      files: {
+        [pyprojectPath]: `dependencies = [\n  "pytest>=8.0",\n  "missing-pkg>=1.0",\n]`,
+      },
+    },
+    commandResponses: [
+      // python --version
+      { code: 0, stdout: 'Python 3.14.2', stderr: '' },
+      // importlib.metadata 探测失败 (个别环境 metadata 异常)
+      { code: 1, stdout: '', stderr: 'Traceback ...' },
+      // 回退 pip list --format=freeze 成功
+      { code: 0, stdout: 'pytest==8.4.2', stderr: '' },
+    ],
+  });
+
+  const result = await svc.checkPythonEnvironment('/fake/root');
+  assert.strictEqual(result.status, 'warning');
+  assert.ok(result.message.includes('missingPackages'), '回退后应能列出缺失包, 而非笼统"无法检查"');
+});
+
+test('R27 checkPythonEnvironment importlib 与 pip 双失败才报 cannotCheckPackages', async () => {
+  const pyprojectPath = path.join('/fake/root', 'pyproject.toml');
+  const { svc } = makeFakeApp({
+    pathHelper: {
+      getPythonConfig: () => ({
+        pythonPath: '/fake/python.exe',
+        sourceLabel: '(系统)',
+        isSystem: true,
+      }),
+    },
+    fileSystem: {
+      files: {
+        [pyprojectPath]: `dependencies = [\n  "pytest>=8.0",\n]`,
+      },
+    },
+    commandResponses: [
+      { code: 0, stdout: 'Python 3.14.2', stderr: '' },
+      { code: 1, stdout: '', stderr: 'importlib failed' },
+      { code: 1, stdout: '', stderr: 'pip failed' },
+    ],
+  });
+
+  const result = await svc.checkPythonEnvironment('/fake/root');
+  assert.strictEqual(result.status, 'warning');
+  assert.ok(result.message.includes('cannotCheckPackages'));
 });

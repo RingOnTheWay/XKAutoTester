@@ -385,6 +385,7 @@
     "noSelectedTestPlan": "No test plan selected",
     "testRunCompleted": "Test run completed!",
     "testRunFailed": "Test run failed",
+    "alreadyRunning": "A test is already running. Stop it before starting a new one.",
     "deviceSelection": {
       "title": "Device Selection",
       "selectDeviceForTest": "Please select execution device",

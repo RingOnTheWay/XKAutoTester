@@ -9,6 +9,9 @@ const SMART_SCHEDULER_PATH = path.join(
   __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'scheduler', 'smartScheduler.js'
 );
 const { SmartScheduler } = require(SMART_SCHEDULER_PATH);
+const { ScheduledPlanQueue } = require(path.join(
+  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'scheduler', 'planQueue.js'
+));
 const { SCHEDULE_STRATEGY, SAFETY_THRESHOLD, IDLE_CHECK_INTERVAL } = require(path.join(
   __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'scheduler', 'strategies.js'
 ));
@@ -336,6 +339,34 @@ test('P1-4 双计划并发到期: 串行链依次执行, 不静默丢弃 (原 is
   assert.strictEqual(planSvc.planQueueSize, undefined);
   // 队列应被清空 (两个都 dequeue)
   assert.strictEqual(sched.planQueue.size(), 0);
+});
+
+test('P2-9 排队期间队列重建: 以 dequeue 新队首为准, 不"通知了 A 实际跑的是 B"', async () => {
+  const NOW = 1000000;
+  const planB = planAt('pB', 30 * 60 * 1000, NOW);
+  const planC = planAt('pC', 30 * 60 * 1000, NOW);
+  const { sched, sent, planSvc } = makeScheduler({ plans: [], now: NOW });
+
+  await sched.initialize(); // idle, 空队列
+
+  // 旧队列持有 planB, _executePlan 将其排入串行链 (排队执行)
+  sched.planQueue.enqueue(planB);
+  const chain = sched._executePlan(planB);
+
+  // 链执行前, _handlePlansFileChange 整体重建队列: 新队首为 planC, planB 已不在新队列
+  sched.planQueue = new ScheduledPlanQueue();
+  sched.planQueue.enqueue(planC);
+
+  await chain;
+
+  // 身份信息必须以 dequeued (planC) 为准
+  const running = planSvc.updates.find((u) => u.status === 'running');
+  assert.strictEqual(running.id, 'pC', '状态更新应使用实际执行的 plan (dequeue 结果), 而非闭包过期引用');
+  const starts = sent.filter((s) => s.channel === 'scheduled-test-start');
+  assert.strictEqual(starts.length, 1);
+  assert.strictEqual(starts[0].payload.planId, 'pC', 'SCHEDULED_TEST_START 应通知实际执行的 plan');
+  assert.strictEqual(starts[0].payload.planName, 'plan-pC');
+  assert.strictEqual(sched.planQueue.size(), 0, '新队列队首应被 dequeue');
 });
 
 test('P1-4 删除倒计时中的计划: generation 令牌使旧回调失效, 不执行已删计划', async () => {

@@ -21,11 +21,14 @@ import re
 
 FATAL_EXCEPTION_PATTERN = re.compile(r"FATAL\s+EXCEPTION")
 PROCESS_DIED_PATTERN = re.compile(r"Process\s+.+\(pid\s+\d+\)\s+has\s+died")
-PROCESS_KILL_PATTERN = re.compile(r"Killing\s+\d+:.+?:\s+")
 NATIVE_SIGNAL_PATTERN = re.compile(r"signal\s+\d+\s+\(SIG\w+\)")
 ANR_PATTERN = re.compile(r"ANR\s+in\s+.+|Application\s+Not\s+Responding|anr\s+in", re.IGNORECASE)
 
-_CRASH_KEYWORDS = ("has died", "Killing", "FATAL", "crash", "ANR", "not responding")
+# R27 P2-10: 移除 PROCESS_KILL_PATTERN — `Killing <pid>:<pkg> (adj NNN)` 是 ActivityManager
+# 的 LMK/后台回收 (正常行为), 并非崩溃; 真崩溃语义由 PROCESS_DIED_PATTERN (has died) 覆盖。
+# 原 Killing 判定使任意进程被回收 (全量 dump 场景) 都误报崩溃。
+
+_CRASH_KEYWORDS = ("has died", "FATAL", "crash", "ANR", "not responding")
 
 
 def is_crash_line(line: str) -> bool:
@@ -40,7 +43,6 @@ def is_crash_line(line: str) -> bool:
     return bool(
         FATAL_EXCEPTION_PATTERN.search(line)
         or PROCESS_DIED_PATTERN.search(line)
-        or PROCESS_KILL_PATTERN.search(line)
         or NATIVE_SIGNAL_PATTERN.search(line)
         or ANR_PATTERN.search(line)
     )

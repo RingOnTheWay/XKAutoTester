@@ -155,6 +155,34 @@ class TestDeviceConnectionService:
         assert found is False
         assert status == "not_found"
 
+    # ── P2-13: 前缀比较误判回归 ─────────────────────────────
+
+    def test_check_device_in_list_prefix_collision_not_matched(self):
+        """P2-13 回归: USB 序列号 '12345' 不得匹配同前缀更长串 '123456 device'。"""
+        svc, adapter = self._make_service(device="12345")
+        adapter.when(
+            ["devices"],
+            AdbResult(0, "List of devices attached\n123456\tdevice\n", ""),
+        )
+
+        found, status = svc._check_device_in_list()
+
+        assert found is False, "同前缀更长串不得命中短标识设备"
+        assert status == "not_found"
+
+    def test_check_device_in_list_exact_usb_serial_matches(self):
+        """P2-13: 精确序列号仍正常命中 (无冒号 USB 序列号)。"""
+        svc, adapter = self._make_service(device="12345")
+        adapter.when(
+            ["devices"],
+            AdbResult(0, "List of devices attached\n12345\tdevice\n", ""),
+        )
+
+        found, status = svc._check_device_in_list()
+
+        assert found is True
+        assert status == "device"
+
     # ── connect USB ──────────────────────────────────────────
 
     def test_connect_usb_device_ready(self):
@@ -254,6 +282,69 @@ class TestDeviceConnectionService:
         ok, _ = svc.connect()
 
         assert ok is False
+
+    def test_connect_tcp_port_prefix_collision_not_matched(self):
+        """P2-13 回归: '192.168.1.100:5555' 不得命中同前缀端口 '192.168.1.100:55555'。"""
+        svc, adapter = self._make_service(device="192.168.1.100:5555")
+        # adb connect 成功 → 进入 reauth 流程
+        adapter.when(
+            ["connect", "192.168.1.100:5555"],
+            AdbResult(0, "connected to 192.168.1.100:5555", ""),
+        )
+        # adb devices (第一次)
+        adapter.when(
+            ["devices"],
+            AdbResult(0, "List of devices attached\n192.168.1.100:55555\tdevice\n", ""),
+        )
+        # adb disconnect
+        adapter.when(
+            ["disconnect", "192.168.1.100:5555"],
+            AdbResult(0, "disconnected", ""),
+        )
+        # adb connect (reconnect)
+        adapter.when(
+            ["connect", "192.168.1.100:5555"],
+            AdbResult(0, "already connected", ""),
+        )
+        # adb devices (第二次): 只有同前缀更长端口的设备 → 不应误判为目标设备
+        adapter.when(
+            ["devices"],
+            AdbResult(0, "List of devices attached\n192.168.1.100:55555\tdevice\n", ""),
+        )
+
+        with patch("main.core.adb.device_connection.time.sleep"):
+            ok, _ = svc.connect()
+
+        assert ok is False, "同前缀更长端口不得误判为连接成功"
+
+    def test_connect_tcp_exact_port_matches(self):
+        """P2-13: 精确 IP:端口 仍正常命中 (TCP 设备)。"""
+        svc, adapter = self._make_service(device="192.168.1.100:5555")
+        adapter.when(
+            ["connect", "192.168.1.100:5555"],
+            AdbResult(0, "connected to 192.168.1.100:5555", ""),
+        )
+        adapter.when(
+            ["devices"],
+            AdbResult(0, "List of devices attached\n192.168.1.100:5555\tdevice\n", ""),
+        )
+        adapter.when(
+            ["disconnect", "192.168.1.100:5555"],
+            AdbResult(0, "disconnected", ""),
+        )
+        adapter.when(
+            ["connect", "192.168.1.100:5555"],
+            AdbResult(0, "already connected", ""),
+        )
+        adapter.when(
+            ["devices"],
+            AdbResult(0, "List of devices attached\n192.168.1.100:5555\tdevice\n", ""),
+        )
+
+        with patch("main.core.adb.device_connection.time.sleep"):
+            ok, _ = svc.connect()
+
+        assert ok is True
 
     # ── _show_unauthorized_dialog ───────────────────────────
 

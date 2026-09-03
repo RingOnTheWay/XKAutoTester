@@ -22,6 +22,8 @@ export class TestCaseController {
   #searchLoadingTimer = null;
   #isSearchLoading = false;
   #destroyed = false;
+  #fileListBound = false; // P2-8: 文件列表容器级一次绑定标志 (bindFileListClick 已有 __tcClickBound, 此处防 controller 层重复 push unbind)
+  #isSaving = false; // P3-12: 保存中防重入标志
 
   /**
    * @param {import('./model.js').TestCaseModel} model
@@ -95,6 +97,18 @@ export class TestCaseController {
   }
   set searchLoadingTimer(v) {
     this.#searchLoadingTimer = v;
+  }
+  get fileListBound() {
+    return this.#fileListBound;
+  }
+  set fileListBound(v) {
+    this.#fileListBound = v;
+  }
+  get isSaving() {
+    return this.#isSaving;
+  }
+  set isSaving(v) {
+    this.#isSaving = v;
   }
 
   // ─── Model 事件 → View 渲染 ──────────────────────────────
@@ -321,6 +335,11 @@ export class TestCaseController {
   // ─── 文件列表事件绑定 ────────────────────────────────────
 
   bindFileListEvents() {
+    // P2-8: bindFileListClick 内部已有 __tcClickBound 防重复 addEventListener (后续调用返回 no-op),
+    // 但 controller 层每次调用 (搜索 loading 重渲染后 L708) 都 push 新闭包到 this.unbinds → 无界增长。
+    // 文件列表容器是常驻 DOM, 事件委托一次绑定即可, 首次绑定后不再 push。
+    if (this.fileListBound) return;
+    this.fileListBound = true;
     this.unbinds.push(this.view.bindFileListClick((file, fileItem) => this.handleFileSelect(file, fileItem)));
   }
 
@@ -333,8 +352,10 @@ export class TestCaseController {
       this.bindSingleStepCardEvents(card, stepId);
     });
 
-    // 拖拽排序
-    this.unbinds.push(
+    // 拖拽排序 (P2-8: 从 this.unbinds 移到 this.stepCardUnbinds — unbindStepCardEvents
+    // 在每次 renderSteps 重渲染前清理上一轮的拖拽监听; 否则 unbinds 无界增长,
+    // 且返回的 unbind 闭包持有旧 container + 旧 cards (已 innerHTML='' 移除) 阻止 GC)
+    this.stepCardUnbinds.push(
       this.view.bindStepDragDrop(() => {
         this.syncStepOrdersFromDOM();
         this.view.updateMoveButtonsState();
@@ -764,11 +785,18 @@ export class TestCaseController {
   }
 
   async handleSave() {
-    const caseData = this.model.collectFormData({
-      inputs: this.view.collectFormInputs(),
-      steps: this.view.collectStepCardsData(this.model.get('steps')),
-    });
-    await this.model.saveCase(caseData);
+    // P3-12: 保存中防重入 — 双击保存按钮可并发触发两次 saveCase → 两次写文件
+    if (this.isSaving) return;
+    this.isSaving = true;
+    try {
+      const caseData = this.model.collectFormData({
+        inputs: this.view.collectFormInputs(),
+        steps: this.view.collectStepCardsData(this.model.get('steps')),
+      });
+      await this.model.saveCase(caseData);
+    } finally {
+      this.isSaving = false;
+    }
   }
 
   handleDelete() {
@@ -786,7 +814,10 @@ export class TestCaseController {
     showConfirmModal(title, message).then((ok) => {
       if (ok) {
         const file = this.model.get('selectedFile');
-        this.model.deleteCase(file?.name, file?.pyFilePath);
+        // R27 修复: scan 条目 name 带 .py 后缀且无 pyFilePath 字段 — 传基名 (去 .py)
+        // + py 全路径 (file.path), 否则服务端 _sanitize 拒绝含点名称 → 删除失败
+        const baseName = typeof file?.name === 'string' ? file.name.replace(/\.py$/i, '') : file?.name;
+        this.model.deleteCase(baseName, file?.path || file?.pyFilePath);
       }
     });
   }

@@ -316,9 +316,22 @@ export class TestExecutionModel extends EventEmitter {
       return;
     }
 
+    // P2-7: 防重入守卫 — isRunning 在 await 校验前置位。按钮禁用依赖
+    // isRunning-changed 事件存在一帧延迟, 双击可在 checkAndroidDeviceConfig/
+    // checkBlePortConfig 的 await 窗口内两次通过校验, 并行启动多个 pytest 进程
+    // (资源翻倍/输出交错/统计混乱)。守卫 + 提前置位堵死该窗口。
+    if (this._state.isRunning) {
+      this.emit('run-warning', {
+        message: window.i18n.t('testExecution.alreadyRunning'),
+      });
+      return;
+    }
+    this._set('isRunning', true, 'isRunning-changed');
+
     // 检查安卓用例是否已填写设备信息
     const deviceCheckResult = await this.checkAndroidDeviceConfig();
     if (!deviceCheckResult.valid) {
+      this._set('isRunning', false, 'isRunning-changed');
       this.emit('run-warning', { message: deviceCheckResult.message });
       return;
     }
@@ -326,12 +339,12 @@ export class TestExecutionModel extends EventEmitter {
     // 检查蓝牙用例是否已填写端口信息
     const blePortCheckResult = await this.checkBlePortConfig();
     if (!blePortCheckResult.valid) {
+      this._set('isRunning', false, 'isRunning-changed');
       this.emit('run-warning', { message: blePortCheckResult.message });
       return;
     }
 
-    // 设置运行状态
-    this._set('isRunning', true, 'isRunning-changed');
+    // 设置运行状态 (isRunning 已在守卫后置位, 此处不重复触发)
     this._set('runningTestPlanName', testPlan.name, 'runningTestPlanName-changed');
     if (scheduledPlanInfo) {
       this._set('runningScheduledPlanId', scheduledPlanInfo.id, 'runningScheduledPlanId-changed');
@@ -349,7 +362,11 @@ export class TestExecutionModel extends EventEmitter {
         ': ' +
         (testPlan.description || window.i18n.t('common.none'))
     );
-    const testFileNames = this._state.selectedTestFiles.map((f) => f.name || f.path).join(', ');
+    // R27 P3-8: 字符串条目兼容 (同 P1-3 根因) — f.name||f.path 对字符串条目输出 "undefined"
+    const testFileNames = this._state.selectedTestFiles
+      .map((f) => (typeof f === 'string' ? f : (f && (f.name || f.path)) || ''))
+      .filter(Boolean)
+      .join(', ');
     this.appendOutput(
       '>>> ' + window.i18n.t('testExecution.testFiles') + ': ' + (testFileNames || window.i18n.t('common.none'))
     );
@@ -422,6 +439,13 @@ export class TestExecutionModel extends EventEmitter {
         lastResult = await this._api.runPythonTests(testConfig);
 
         if (lastResult) {
+          // R27: 手动暂停 (主进程 stopping → stopped:true) — 非执行失败:
+          // 提示暂停, 不计入失败/统计, 直接停止后续循环
+          if (lastResult.stopped) {
+            this.appendOutput(`>>> ${window.i18n.t('testExecution.testManuallyStopped')}`);
+            stoppedEarly = true;
+            break;
+          }
           if (!lastResult.success) {
             hasFailure = true;
             loopResults.push({
@@ -470,100 +494,104 @@ export class TestExecutionModel extends EventEmitter {
       // 而 TEST_ERROR 已实时转发, 重复显示无意义
       this.appendError(`>>> ${window.i18n.t('testExecution.testRunFailed')}`);
     } finally {
-      // 输出统计摘要
-      this.appendOutput('>>> ========== ' + window.i18n.t('testExecution.summaryInfo') + ' ==========');
-      let passRate = '0.00';
-      let passedLoops = 0;
-      if (loopCount > 1) {
-        passedLoops = loopResults.filter((r) => r.success).length;
-        passRate = loopResults.length > 0 ? ((passedLoops / loopResults.length) * 100).toFixed(2) : '0.00';
-        this.appendOutput('>>> ' + window.i18n.t('testExecution.totalLoops') + ': ' + loopResults.length);
-        this.appendOutput('>>> ' + window.i18n.t('testExecution.passedLoops') + ': ' + passedLoops);
-        this.appendOutput('>>> ' + window.i18n.t('testExecution.passRate') + ': ' + passRate + '%');
-      } else {
-        const lastLoopResult = loopResults[loopResults.length - 1];
-        if (lastLoopResult && lastLoopResult.success) {
-          passedLoops = 1;
-          passRate = '100.00';
+      // R27: 手动暂停 (stoppedEarly) → 跳过聚合信息/状态/平台通知输出
+      // testStatus 提到 finally 顶层: emit run-complete 需要 (手动暂停语义='stopped')
+      let testStatus = 'stopped';
+      if (!stoppedEarly) {
+        // 输出统计摘要
+        this.appendOutput('>>> ========== ' + window.i18n.t('testExecution.summaryInfo') + ' ==========');
+        let passRate = '0.00';
+        let passedLoops = 0;
+        if (loopCount > 1) {
+          passedLoops = loopResults.filter((r) => r.success).length;
+          passRate = loopResults.length > 0 ? ((passedLoops / loopResults.length) * 100).toFixed(2) : '0.00';
+          this.appendOutput('>>> ' + window.i18n.t('testExecution.totalLoops') + ': ' + loopResults.length);
+          this.appendOutput('>>> ' + window.i18n.t('testExecution.passedLoops') + ': ' + passedLoops);
+          this.appendOutput('>>> ' + window.i18n.t('testExecution.passRate') + ': ' + passRate + '%');
+        } else {
+          const lastLoopResult = loopResults[loopResults.length - 1];
+          if (lastLoopResult && lastLoopResult.success) {
+            passedLoops = 1;
+            passRate = '100.00';
+          }
         }
-      }
 
-      // 用例级统计
-      const effectiveTotal = aggregatedStats.passed + aggregatedStats.failed + aggregatedStats.broken;
-      const casePassRate = effectiveTotal > 0 ? ((aggregatedStats.passed / effectiveTotal) * 100).toFixed(2) : '0.00';
-      if (aggregatedStats.total > 0) {
-        this.appendOutput(
-          '>>> ' +
-            window.i18n.t('testExecution.caseStats') +
-            ': ' +
-            window.i18n.t('testExecution.casePassed') +
-            ' ' +
-            aggregatedStats.passed +
-            ', ' +
-            window.i18n.t('testExecution.caseFailed') +
-            ' ' +
-            aggregatedStats.failed +
-            ', ' +
-            window.i18n.t('testExecution.caseSkipped') +
-            ' ' +
-            aggregatedStats.skipped +
-            ', ' +
-            window.i18n.t('testExecution.caseBroken') +
-            ' ' +
-            aggregatedStats.broken +
-            ', ' +
-            window.i18n.t('testExecution.caseTotal') +
-            ' ' +
-            aggregatedStats.total
-        );
-        this.appendOutput('>>> ' + window.i18n.t('testExecution.casePassRate') + ': ' + casePassRate + '%');
-      }
+        // 用例级统计
+        const effectiveTotal = aggregatedStats.passed + aggregatedStats.failed + aggregatedStats.broken;
+        const casePassRate = effectiveTotal > 0 ? ((aggregatedStats.passed / effectiveTotal) * 100).toFixed(2) : '0.00';
+        if (aggregatedStats.total > 0) {
+          this.appendOutput(
+            '>>> ' +
+              window.i18n.t('testExecution.caseStats') +
+              ': ' +
+              window.i18n.t('testExecution.casePassed') +
+              ' ' +
+              aggregatedStats.passed +
+              ', ' +
+              window.i18n.t('testExecution.caseFailed') +
+              ' ' +
+              aggregatedStats.failed +
+              ', ' +
+              window.i18n.t('testExecution.caseSkipped') +
+              ' ' +
+              aggregatedStats.skipped +
+              ', ' +
+              window.i18n.t('testExecution.caseBroken') +
+              ' ' +
+              aggregatedStats.broken +
+              ', ' +
+              window.i18n.t('testExecution.caseTotal') +
+              ' ' +
+              aggregatedStats.total
+          );
+          this.appendOutput('>>> ' + window.i18n.t('testExecution.casePassRate') + ': ' + casePassRate + '%');
+        }
 
-      // 测试状态判断
-      let testStatus = 'passed';
-      if (aggregatedStats.total === 0) {
-        testStatus = 'noTests';
-      } else if (aggregatedStats.failed > 0 || aggregatedStats.broken > 0) {
-        testStatus = aggregatedStats.passed > 0 ? 'partialPassed' : 'failed';
-      } else if (aggregatedStats.skipped > 0 && aggregatedStats.passed === 0) {
-        testStatus = 'skipped';
-      } else if (aggregatedStats.skipped > 0 && aggregatedStats.passed > 0) {
-        testStatus = 'partialPassed';
-      }
-      const lastLoopResult = loopResults[loopResults.length - 1];
-      if (lastLoopResult && !lastLoopResult.success && aggregatedStats.total === 0) {
-        testStatus = 'noTests';
-      }
+        // 测试状态判断
+        testStatus = 'passed';
+        if (aggregatedStats.total === 0) {
+          testStatus = 'noTests';
+        } else if (aggregatedStats.failed > 0 || aggregatedStats.broken > 0) {
+          testStatus = aggregatedStats.passed > 0 ? 'partialPassed' : 'failed';
+        } else if (aggregatedStats.skipped > 0 && aggregatedStats.passed === 0) {
+          testStatus = 'skipped';
+        } else if (aggregatedStats.skipped > 0 && aggregatedStats.passed > 0) {
+          testStatus = 'partialPassed';
+        }
+        const lastLoopResult = loopResults[loopResults.length - 1];
+        if (lastLoopResult && !lastLoopResult.success && aggregatedStats.total === 0) {
+          testStatus = 'noTests';
+        }
 
-      const statusMessages = {
-        passed: window.i18n.t('testExecution.testPassed'),
-        failed: window.i18n.t('testExecution.testFailed'),
-        skipped: window.i18n.t('testExecution.testSkipped'),
-        partialPassed: window.i18n.t('testExecution.testPartialPassed'),
-        noTests: window.i18n.t('testExecution.noTests'),
-      };
-      this.appendOutput('>>> ' + (statusMessages[testStatus] || statusMessages.passed));
-      this.appendOutput('>>> ==================================\n');
-
-      // 发送钉钉通知
-      const notificationInfo = {
-        testPlanName: testPlan?.name || '',
-        testFileNames: testFileNames,
-        testTypes: testTypes,
-        loopCount: loopCount,
-        totalLoops: loopResults.length,
-        passRate: passRate,
-        hasFailure: hasFailure,
-        stoppedEarly: stoppedEarly,
-        testStatus: testStatus,
-        aggregatedStats: aggregatedStats,
-        casePassRate: casePassRate,
-      };
-      if (scheduledPlanInfo) {
-        notificationInfo.scheduledPlanName = scheduledPlanInfo.name;
-        notificationInfo.scheduledPlanExecutionTime = scheduledPlanInfo.executionTime;
-      }
-      await this.sendTestNotification(notificationInfo);
+        const statusMessages = {
+          passed: window.i18n.t('testExecution.testPassed'),
+          failed: window.i18n.t('testExecution.testFailed'),
+          skipped: window.i18n.t('testExecution.testSkipped'),
+          partialPassed: window.i18n.t('testExecution.testPartialPassed'),
+          noTests: window.i18n.t('testExecution.noTests'),
+        };
+        this.appendOutput('>>> ' + (statusMessages[testStatus] || statusMessages.passed));
+        // R27: 移除聚合块尾部长线 (= 与首行 "========== 聚合信息 ==========" 不等长, 视觉不协调)
+        // 发送钉钉通知 (外层 !stoppedEarly 已 guard)
+        const notificationInfo = {
+          testPlanName: testPlan?.name || '',
+          testFileNames: testFileNames,
+          testTypes: testTypes,
+          loopCount: loopCount,
+          totalLoops: loopResults.length,
+          passRate: passRate,
+          hasFailure: hasFailure,
+          stoppedEarly: stoppedEarly,
+          testStatus: testStatus,
+          aggregatedStats: aggregatedStats,
+          casePassRate: casePassRate,
+        };
+        if (scheduledPlanInfo) {
+          notificationInfo.scheduledPlanName = scheduledPlanInfo.name;
+          notificationInfo.scheduledPlanExecutionTime = scheduledPlanInfo.executionTime;
+        }
+        await this.sendTestNotification(notificationInfo);
+      } // R27: 聚合输出/通知 guard 关闭 (手动暂停时不输出)
 
       this._set('isRunning', false, 'isRunning-changed');
       this._set('runningTestPlanName', null, 'runningTestPlanName-changed');
@@ -576,6 +604,9 @@ export class TestExecutionModel extends EventEmitter {
         aggregatedStats,
       });
     }
+    // R27: 返回结束状态供定时计划序列判断 — 'stopped'=用户手动停止(终止后续 plan),
+    // 'completed'=正常完成(继续下一个); 守卫/校验早退路径不经过此(undefined)
+    return stoppedEarly ? 'stopped' : 'completed';
   }
 
   async stopTests() {
@@ -786,11 +817,14 @@ export class TestExecutionModel extends EventEmitter {
     const unconfiguredFiles = [];
 
     for (const file of this._state.selectedTestFiles) {
-      let fileName = file.name || file.path;
-      if (fileName.endsWith('.py')) fileName = fileName.slice(0, -3);
-      if (fileName.includes('/') || fileName.includes('\\')) fileName = fileName.split(/[\\/]/).pop();
+      // R27 P1-3: 条目可为纯字符串 (scanTestFiles 返回字符串数组) — 原 file.name||file.path
+      // 对字符串条目得 undefined → endsWith TypeError 逃逸 (try 外) → runTests 的
+      // isRunning 置位后 finally 不执行 → 运行状态永久卡死。名称处理一并移入 try。
+      let fileName = typeof file === 'string' ? file : (file && (file.name || file.path)) || '';
 
       try {
+        if (fileName.endsWith('.py')) fileName = fileName.slice(0, -3);
+        if (fileName.includes('/') || fileName.includes('\\')) fileName = fileName.split(/[\\/]/).pop();
         // wrapper 已处理 IPC 失败,此处直接判断 data 字段
         const result = await this._api.testCaseGet(fileName);
         if (result && result.data) {
@@ -833,11 +867,14 @@ export class TestExecutionModel extends EventEmitter {
     const unconfiguredFiles = [];
 
     for (const file of this._state.selectedTestFiles) {
-      let fileName = file.name || file.path;
-      if (fileName.endsWith('.py')) fileName = fileName.slice(0, -3);
-      if (fileName.includes('/') || fileName.includes('\\')) fileName = fileName.split(/[\\/]/).pop();
+      // R27 P1-3: 条目可为纯字符串 (scanTestFiles 返回字符串数组) — 原 file.name||file.path
+      // 对字符串条目得 undefined → endsWith TypeError 逃逸 (try 外) → runTests 的
+      // isRunning 置位后 finally 不执行 → 运行状态永久卡死。名称处理一并移入 try。
+      let fileName = typeof file === 'string' ? file : (file && (file.name || file.path)) || '';
 
       try {
+        if (fileName.endsWith('.py')) fileName = fileName.slice(0, -3);
+        if (fileName.includes('/') || fileName.includes('\\')) fileName = fileName.split(/[\\/]/).pop();
         // wrapper 已处理 IPC 失败,此处直接判断 data 字段
         const result = await this._api.testCaseGet(fileName);
         if (result && result.data) {
@@ -1114,7 +1151,7 @@ export class TestExecutionModel extends EventEmitter {
   }
 
   /**
-   * 处理定时计划触发执行事件
+   * 处理定时计划触发执行事件 (调度到点 → 渲染层执行其绑定的测试计划序列)
    */
   async handleScheduledTestStart(data) {
     const message = window.i18n.t('scheduledPlan.testStarting', {
@@ -1125,36 +1162,7 @@ export class TestExecutionModel extends EventEmitter {
     await this.loadScheduledPlans();
 
     try {
-      const testPlansResult = await this._api.getTestPlans();
-      const allTestPlans = testPlansResult?.data || testPlansResult || [];
-
-      if (!data.testPlans || data.testPlans.length === 0) {
-        this.appendError('>>> ' + window.i18n.t('testExecution.scheduledNoTestPlans'));
-        return;
-      }
-
-      for (const testPlanObj of data.testPlans) {
-        const testPlanId = typeof testPlanObj === 'string' ? testPlanObj : testPlanObj.id;
-        const testPlan = allTestPlans.find((p) => p.id === testPlanId);
-
-        if (!testPlan) {
-          this.appendError(`>>> ${window.i18n.t('testExecution.testPlanNotExist')}: ${testPlanId}`);
-          continue;
-        }
-
-        this.appendOutput(`>>> ${window.i18n.t('testExecution.executingTestPlan')}: ${testPlan.name}`);
-
-        // 设置当前测试计划
-        this._set('currentTestPlan', testPlan, 'currentTestPlan-changed');
-
-        const scheduledPlanInfo = {
-          id: data.planId,
-          name: data.planName,
-          executionTime: data.executionTime || new Date().toLocaleString(),
-        };
-
-        await this.runTests(scheduledPlanInfo);
-      }
+      await this._executeScheduledPlanPlans(data);
     } catch (error) {
       console.error('执行定时计划失败:', error);
       this.appendError('>>> ' + window.i18n.t('testExecution.executeScheduledPlanFailed') + ': ' + error.message);
@@ -1169,6 +1177,70 @@ export class TestExecutionModel extends EventEmitter {
       }
       // 执行完成后重新加载定时计划列表，显示"已完成"状态
       await this.loadScheduledPlans();
+    }
+  }
+
+  /**
+   * R27: 执行定时计划绑定的测试计划序列 (调度触发与手动立即执行共用)。
+   * 不落 scheduledTestComplete — 状态通知由调用方决定 (调度: handleScheduledTestStart;
+   * 手动: runScheduledPlanNow 不改变计划状态/下次调度)
+   * @param {{planId?:string, planName:string, testPlans:Array, executionTime?:string}} data
+   */
+  async _executeScheduledPlanPlans(data) {
+    const testPlansResult = await this._api.getTestPlans();
+    const allTestPlans = testPlansResult?.data || testPlansResult || [];
+
+    if (!data.testPlans || data.testPlans.length === 0) {
+      this.appendError('>>> ' + window.i18n.t('testExecution.scheduledNoTestPlans'));
+      return;
+    }
+
+    for (const testPlanObj of data.testPlans) {
+      const testPlanId = typeof testPlanObj === 'string' ? testPlanObj : testPlanObj.id;
+      const testPlan = allTestPlans.find((p) => p.id === testPlanId);
+
+      if (!testPlan) {
+        this.appendError(`>>> ${window.i18n.t('testExecution.testPlanNotExist')}: ${testPlanId}`);
+        continue;
+      }
+
+      this.appendOutput(`>>> ${window.i18n.t('testExecution.executingTestPlan')}: ${testPlan.name}`);
+
+      // 设置当前测试计划
+      this._set('currentTestPlan', testPlan, 'currentTestPlan-changed');
+
+      const scheduledPlanInfo = {
+        id: data.planId,
+        name: data.planName,
+        executionTime: data.executionTime || new Date().toLocaleString(),
+      };
+
+      // R27: runTests 返回 'stopped' 表示用户手动停止 → 终止整个序列,
+      // 否则仅停当前 plan, 循环继续启动下一个 (停止对定时计划失效)
+      const runStatus = await this.runTests(scheduledPlanInfo);
+      if (runStatus === 'stopped') break;
+    }
+  }
+
+  /**
+   * R27: 手动立即执行选中的定时计划 ("开始执行"按钮, 非调度到点)。
+   * 只跑绑定的测试计划序列 — 不调 scheduledTestComplete, 不改变计划状态/下次调度
+   * @param {Object} plan - 定时计划对象 (含 id/name/testPlans)
+   */
+  async runScheduledPlanNow(plan) {
+    if (!plan) return;
+    const message = window.i18n.t('scheduledPlan.testStarting', { name: plan.name });
+    this.appendOutput(`\n>>> ${message}`);
+    try {
+      await this._executeScheduledPlanPlans({
+        planId: plan.id,
+        planName: plan.name,
+        testPlans: plan.testPlans || [],
+        executionTime: new Date().toLocaleString(),
+      });
+    } catch (error) {
+      console.error('立即执行定时计划失败:', error);
+      this.appendError('>>> ' + window.i18n.t('testExecution.executeScheduledPlanFailed') + ': ' + error.message);
     }
   }
 

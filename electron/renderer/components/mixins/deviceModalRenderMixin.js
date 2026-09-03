@@ -82,8 +82,9 @@ export const deviceModalRenderMixin = {
 
       // 恢复选中状态
       if (this.modalSelectedDeviceId) {
+        // R27 P3-4: CSS.escape 防设备 ID 含引号时 querySelector 抛错 (对齐 scanMixin)
         const deviceToSelect = deviceListElement.querySelector(
-          `.device-item[data-device-id="${this.modalSelectedDeviceId}"]`
+          `.device-item[data-device-id="${CSS.escape(this.modalSelectedDeviceId)}"]`
         );
         if (deviceToSelect) {
           deviceToSelect.classList.add('selected');

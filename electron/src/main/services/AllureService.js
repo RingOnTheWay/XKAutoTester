@@ -12,6 +12,8 @@ const Logger = require('../utils/logger');
 const { getTimestamp, getLogsPath } = require('../utils/pathHelper');
 const AllureHttpServer = require('./allure/AllureHttpServer');
 const AllureCliInvoker = require('./allure/AllureCliInvoker');
+// R25 P2-3: 报告路径约束复用 TestPlanService 的 isPathInside (无循环依赖: TestPlanService 不 require 本模块)
+const { isPathInside } = require('./TestPlanService');
 
 /** @typedef {Object} AllureServiceOptions
  * @property {() => object} [loggerFactory] - 默认 `() => new Logger(this._getLogsPath('XKAT'), 'Electron')`
@@ -68,7 +70,7 @@ class AllureService {
       const resultFiles = await this._asyncFs.readdir(allureResultsDir);
       const jsonFiles = resultFiles.filter((f) => f.endsWith('-result.json') || f.endsWith('.json'));
       if (jsonFiles.length === 0) {
-        await this.logger.warning('No allure result files found');
+        await this.logger.warn('No allure result files found');
         return { success: false, error: 'allure-results目录中没有结果文件' };
       }
 
@@ -100,7 +102,7 @@ class AllureService {
             });
             await this.logger.info('Cleaned up allure-results directory');
           } catch (e) {
-            await this.logger.warning(`Failed to clean allure-results: ${e.message}`);
+            await this.logger.warn(`Failed to clean allure-results: ${e.message}`);
           }
 
           return { success: true, reportPath: allureReportDir };
@@ -132,7 +134,11 @@ class AllureService {
    * @private
    */
   async _findLatestReportDir(testPlanName) {
+    const reportsRoot = this._getLogsPath('Allure', 'allure-reports');
     const testPlanDir = this._getLogsPath('Allure', 'allure-reports', testPlanName);
+    // R25 P2-3: 防 testPlanName 含 ../ 等路径成分跳出报告根 — 否则 readdir 可
+    // 读到任意目录, 后续成为 HTTP 托管根 (信息泄露)
+    if (!isPathInside(reportsRoot, testPlanDir)) return null;
     const subItems = await this._asyncFs.readdir(testPlanDir);
     const timestampDirs = [];
 
@@ -220,7 +226,14 @@ class AllureService {
 
   async openReportByPath(reportPath, options = {}) {
     try {
-      if (!reportPath || !(await this._asyncFs.exists(reportPath))) {
+      const reportsRoot = this._getLogsPath('Allure', 'allure-reports');
+      // R25 P2-3: reportPath 必须严格位于报告根内 — 原实现零校验, 渲染层被攻破时
+      // 可传任意存在的目录成为 AllureHttpServer 托管根, 同源 http://localhost:PORT
+      // 下读取本机任意文件 (信息泄露)
+      if (typeof reportPath !== 'string' || !isPathInside(reportsRoot, reportPath)) {
+        return { success: false, error: 'invalid_report_path' };
+      }
+      if (!(await this._asyncFs.exists(reportPath))) {
         return { success: false, error: '报告路径不存在' };
       }
 
@@ -285,33 +298,43 @@ class AllureService {
     }
   }
 
+  /**
+   * R27: 清空目录内容 (保留目录本身 — allure-results/reports 目录需持续存在供生成/写入)
+   * @returns {Promise<number>} 删除项数
+   */
+  async _emptyAllureDir(dir) {
+    if (!(await this._asyncFs.exists(dir))) return 0;
+    const items = await this._asyncFs.readdir(dir);
+    let deletedCount = 0;
+    for (const item of items) {
+      const itemPath = path.join(dir, item);
+      try {
+        const stat = await this._asyncFs.stat(itemPath);
+        if (stat.isDirectory()) {
+          await this._asyncFs.rm(itemPath, { recursive: true, force: true });
+        } else {
+          await this._asyncFs.unlink(itemPath);
+        }
+        deletedCount++;
+      } catch (e) {
+        await this.logger.error(`删除 ${itemPath} 失败: ${e.message}`);
+      }
+    }
+    return deletedCount;
+  }
+
   async clearAllureReports() {
     try {
       const allureReportsDir = this._getLogsPath('Allure', 'allure-reports');
+      // R27: 原只清 allure-reports, allure-results (原始结果) 残留累积 —
+      // 该目录仅在报告生成成功后自动清理, 生成失败/跳过时不落盘清理 → 一并清空
+      const allureResultsDir = this._getLogsPath('Allure', 'allure-results');
 
-      if (!(await this._asyncFs.exists(allureReportsDir))) {
-        return { success: true, message: 'Allure报告目录不存在' };
-      }
+      const reportCount = await this._emptyAllureDir(allureReportsDir);
+      const resultsCount = await this._emptyAllureDir(allureResultsDir);
+      const total = reportCount + resultsCount;
 
-      const items = await this._asyncFs.readdir(allureReportsDir);
-      let deletedCount = 0;
-
-      for (const item of items) {
-        const itemPath = path.join(allureReportsDir, item);
-        try {
-          const stat = await this._asyncFs.stat(itemPath);
-          if (stat.isDirectory()) {
-            await this._asyncFs.rm(itemPath, { recursive: true, force: true });
-          } else {
-            await this._asyncFs.unlink(itemPath);
-          }
-          deletedCount++;
-        } catch (e) {
-          await this.logger.error(`删除 ${itemPath} 失败: ${e.message}`);
-        }
-      }
-
-      return { success: true, message: `已清空 ${deletedCount} 个报告` };
+      return { success: true, message: `已清空 ${total} 项 (报告 ${reportCount} / 结果 ${resultsCount})` };
     } catch (error) {
       await this.logger.error(`清空Allure报告数据失败: ${error.message}`);
       return { success: false, error: error.message };

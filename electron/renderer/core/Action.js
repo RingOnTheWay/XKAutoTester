@@ -53,30 +53,4 @@ export class Action {
     el.addEventListener(eventType, handler);
     return () => el.removeEventListener(eventType, handler);
   }
-
-  /**
-   * 声明式批量绑定带确认的事件
-   * @param {Object} bindings - 选择器到 { handler, confirm } 的映射
-   * @returns {Function} 取消所有绑定的函数
-   */
-  static bindWithConfirm(bindings) {
-    const cleanups = [];
-
-    for (const [selector, { handler, confirm: confirmMsg }] of Object.entries(bindings)) {
-      const el = document.querySelector(selector);
-      if (!el) {
-        console.warn(`Action.bindWithConfirm: element not found: ${selector}`);
-        continue;
-      }
-
-      const wrappedHandler = () => {
-        if (confirmMsg && !window.confirm(confirmMsg)) return;
-        handler();
-      };
-      el.addEventListener('click', wrappedHandler);
-      cleanups.push(() => el.removeEventListener('click', wrappedHandler));
-    }
-
-    return () => cleanups.forEach((fn) => fn());
-  }
 }

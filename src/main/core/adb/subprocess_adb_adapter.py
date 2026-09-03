@@ -63,6 +63,10 @@ class SubprocessAdbAdapter:
                 cmd,
                 capture_output=capture_output,
                 text=text,
+                # R27 P2-8: 显式 UTF-8 — text=True 默认用 locale 编码 (Windows cp936),
+                # adb 输出 UTF-8 中文 (logcat -d/dumpsys) 解码抛 UnicodeDecodeError → 静默丢失
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout,
             )
             return AdbResult(

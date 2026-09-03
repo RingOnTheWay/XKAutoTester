@@ -26,6 +26,10 @@ export class AndroidConnectionModel extends EventEmitter {
     selectFiles: 'selectFiles',
     uploadFile: 'uploadFile',
     downloadFile: 'downloadFile',
+    // R27 修复: 漏配两映射 → this._api.deleteRemoteFile/renameRemoteFile undefined
+    // ("is not a function") — preload/主进程/常量均有, 唯独 bind specs 缺
+    deleteRemoteFile: 'deleteRemoteFile',
+    renameRemoteFile: 'renameRemoteFile',
     installApk: 'installApk',
     getSerialPorts: 'getSerialPorts',
     checkPathExists: 'checkPathExists',
@@ -436,9 +440,19 @@ export class AndroidConnectionModel extends EventEmitter {
   async loadFileList() {
     if (!this._state.selectedDevice) return;
 
+    // P3-11: currentPath 渲染层可控 (面包屑/地址输入), 拼接进命令字符串前清洗 —
+    // 拒绝 shell 元字符 (主进程 executeAdbCommand 无 shell 但按空白 split,
+    // 元字符/控制字符会导致参数错位或注入面残留)
+    const safePath = this.sanitizeRemotePath(this._state.currentPath);
+    if (!safePath) {
+      this.emit('error', { source: 'loadFileList', error: new Error('invalid path') });
+      this.emit('file-list-error', 'invalid path');
+      return;
+    }
+
     this.emit('file-list-loading');
     try {
-      const cmd = `ls -la ${this._state.currentPath}`;
+      const cmd = `ls -la ${safePath}`;
       // wrapper 失败已抛错进 catch,走到这里即成功
       const result = await this.executeAdbCommand(cmd, this._state.selectedDevice);
 
@@ -449,6 +463,18 @@ export class AndroidConnectionModel extends EventEmitter {
       this.emit('error', { source: 'loadFileList', error });
       this.emit('file-list-error', error.message);
     }
+  }
+
+  /**
+   * P3-11: 远程路径清洗 — 拒绝 shell 元字符 + 控制字符 (对齐主进程 _sanitizeRemotePath 语义)
+   * @param {string} p
+   * @returns {string|null}
+   */
+  sanitizeRemotePath(p) {
+    if (typeof p !== 'string' || p.trim() === '') return null;
+    // 拒绝: ; & | $ ` " ' ( ) { } < > \ 及换行/控制字符
+    if (/[;&|$`"'(){}<>\\\x00-\x1f]/.test(p)) return null;
+    return p.trim();
   }
 
   async navigateToPath(path) {
@@ -591,7 +617,14 @@ export class AndroidConnectionModel extends EventEmitter {
 
   async downloadFile(file, downloadDir) {
     try {
-      const localPath = `${downloadDir}/${file.name}`;
+      // P3-11: 设备文件名 basename 清洗 — 设备侧文件可命名为 ../../evil 或绝对路径,
+      // 直接拼接本地下载路径会路径穿越写任意位置; 拒绝 '.'/'..' 与空名
+      const rawName = typeof file.name === 'string' ? file.name : '';
+      const safeName = rawName.replace(/\\/g, '/').split('/').pop() || '';
+      if (!safeName || safeName === '.' || safeName === '..') {
+        return { success: false, error: 'invalid file name' };
+      }
+      const localPath = `${downloadDir}/${safeName}`;
       const result = await this._api.downloadFile(file.path, localPath, this._state.selectedDevice);
       return result;
     } catch (error) {

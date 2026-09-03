@@ -14,7 +14,6 @@
 //   installUpdate()             — fileSystem.exists 检查 + installStrategy.install
 //   deleteUpdateFile()          — fileSystem.exists + fileSystem.unlink
 
-const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -37,6 +36,18 @@ const TRUSTED_DOWNLOAD_HOSTS = ['github.com', 'objects.githubusercontent.com'];
 
 /** 更新包扩展名白名单 (P0-4: 防写入任意文件类型) */
 const UPDATE_FILE_EXTENSIONS = ['.exe', '.zip'];
+
+/**
+ * P3-1: 判断 targetPath 是否严格位于 baseDir 内 (防 `..` 回溯 / 绝对路径逃逸)。
+ * @param {string} baseDir - 限定根目录
+ * @param {string} targetPath - 待校验路径
+ * @returns {boolean}
+ */
+function isPathInside(baseDir, targetPath) {
+  if (typeof targetPath !== 'string' || !targetPath) return false;
+  const rel = path.relative(baseDir, targetPath);
+  return rel === '' || (rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel));
+}
 
 /**
  * 清洗更新文件名 (P0-4: 防路径穿越)。
@@ -168,10 +179,16 @@ function parseSha256FromBody(body, fileName) {
   if (fileName) {
     // 转义 fileName 中的正则特殊字符 (如 . + ( ))
     const escapedName = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // 匹配 `**<fileName>**` 后 (允许任意字符含换行) 的首个 SHA256 行
-    const assetPattern = new RegExp(`\\*\\*${escapedName}\\*\\*[\\s\\S]*?SHA256:\\s*([a-fA-F0-9]{64})\\b`, 'i');
+    // R26 P3-2: 块边界 `(?:(?!\*\*)[\s\S])*?` 防跨 asset 块误配 — 原 `[\s\S]*?` 非贪婪
+    // 会取到下一个 asset 块的 SHA256 (A 块无 hash 时误配 B 块的 hash); [\s\S] 允许跨换行
+    const assetPattern = new RegExp(
+      `\\*\\*${escapedName}\\*\\*(?:(?!\\*\\*)[\\s\\S])*?SHA256:\\s*([a-fA-F0-9]{64})\\b`,
+      'i'
+    );
     const assetMatch = body.match(assetPattern);
     if (assetMatch) return assetMatch[1].toLowerCase();
+    // R26 P3-2: body 含该 asset 标记但块内无 hash → 明确 null (不跨块/回退到别的 asset hash 误配)
+    if (body.includes(`**${fileName}**`)) return null;
   }
 
   // 回退: 取首个 SHA256 行 (兼容旧格式单 hash Release)
@@ -205,18 +222,45 @@ const defaultFileSystemFactory = () => ({
   createWriteStream: (p) => fs.createWriteStream(p),
 });
 
+// R25: axios → Node 22 全局 fetch + undici Agent (allowInsecureSSL 场景跳过证书校验)。
+// 消除 axios 漏洞链 (npm audit 10 条 advisory: formDataToJSON 递归 DoS / 原型污染 / NO_PROXY 绕过等)。
+// undici 随 electron 依赖安装, fetch 的 dispatcher 选项接受 undici Agent (不兼容 https.Agent)。
+const { Agent: UndiciAgent } = require('undici');
+
+/** 构建 fetch dispatcher: allowInsecureSSL 时跳过证书校验, 否则 undefined (默认校验) */
+/**
+ * R26 P3-1: httpsAgent 参数语义 — fetch 化后仅作"是否跳过证书校验"布尔开关
+ * (原 https.Agent 类型不兼容 fetch dispatcher, 由 undici Agent 承担实际连接)。
+ * @param {object|undefined} httpsAgent - 非空 = allowInsecureSSL (跳过证书校验)
+ * @returns {import('undici').Agent|undefined}
+ */
+function buildFetchDispatcher(httpsAgent) {
+  return httpsAgent ? new UndiciAgent({ connect: { rejectUnauthorized: false } }) : undefined;
+}
+
 const defaultUpdateSourceFactory = (httpsAgent) => ({
   async fetchLatestRelease() {
+    const dispatcher = buildFetchDispatcher(httpsAgent);
     try {
-      const response = await axios.get(GITHUB_API_URL, {
-        headers: {
-          Accept: 'application/vnd.github.v3+json',
-          'User-Agent': 'XKAutoTester-Update-Checker',
-        },
-        timeout: 15000,
-        ...(httpsAgent ? { httpsAgent } : {}),
-      });
-      const releases = response.data;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      let response;
+      try {
+        response = await fetch(GITHUB_API_URL, {
+          headers: {
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'XKAutoTester-Update-Checker',
+          },
+          signal: controller.signal,
+          ...(dispatcher ? { dispatcher } : {}),
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      if (!response.ok) {
+        throw new Error(`GitHub API 请求失败: HTTP ${response.status}`);
+      }
+      const releases = await response.json();
       if (!Array.isArray(releases) || releases.length === 0) return null;
       // 本项目仅发布 dev/prerelease, 若过滤 prerelease 会找不到任何候选导致永远"已是最新"。
       // 故仅排除 draft, 新旧统一交由 compareVersions 按 tag 语义版本判定, 取最高者。
@@ -231,6 +275,7 @@ const defaultUpdateSourceFactory = (httpsAgent) => ({
 
 const defaultDownloadStrategyFactory = (httpsAgent) => ({
   async download(downloadUrl, filePath, eventSender) {
+    const dispatcher = buildFetchDispatcher(httpsAgent);
     const headers = {
       Accept: 'application/octet-stream',
       'User-Agent': 'XKAutoTester-Update-Checker',
@@ -241,16 +286,25 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
       headers['Authorization'] = `Bearer ${githubToken}`;
     }
 
-    const response = await axios({
-      method: 'GET',
-      url: downloadUrl,
-      headers,
-      responseType: 'stream',
-      timeout: 300000,
-      ...(httpsAgent ? { httpsAgent } : {}),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 300000);
+    let response;
+    try {
+      response = await fetch(downloadUrl, {
+        headers,
+        signal: controller.signal,
+        ...(dispatcher ? { dispatcher } : {}),
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      throw err;
+    }
+    if (!response.ok || !response.body) {
+      clearTimeout(timer);
+      throw new Error(`下载请求失败: HTTP ${response.status}`);
+    }
 
-    const totalLength = parseInt(response.headers['content-length'], 10);
+    const totalLength = parseInt(response.headers.get('content-length') || '0', 10);
     let downloadedLength = 0;
     let lastReportedPercent = -1;
     let lastSpeedTime = Date.now();
@@ -281,42 +335,52 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
     }, 1000);
 
     return new Promise((resolve, reject) => {
-      response.data.on('data', (chunk) => {
-        downloadedLength += chunk.length;
-        if (totalLength > 0 && eventSender) {
-          const percent = Math.floor((downloadedLength / totalLength) * 100);
-          if (percent !== lastReportedPercent) {
-            lastReportedPercent = percent;
-            sendProgress();
-          }
-        }
-      });
-
-      response.data.pipe(writer);
-
-      writer.on('finish', () => {
+      const cleanup = () => {
         clearInterval(speedInterval);
-        // 下载完整性校验: 防下载不完整的 .exe 被执行; 完整 SHA256 校验需业务决策 hash 存储位置
-        if (totalLength > 0 && downloadedLength !== totalLength) {
+        clearTimeout(timer);
+      };
+
+      (async () => {
+        try {
+          const reader = response.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (!writer.write(Buffer.from(value))) {
+              await new Promise((r) => writer.once('drain', r));
+            }
+            downloadedLength += value.length;
+            if (totalLength > 0 && eventSender) {
+              const percent = Math.floor((downloadedLength / totalLength) * 100);
+              if (percent !== lastReportedPercent) {
+                lastReportedPercent = percent;
+                sendProgress();
+              }
+            }
+          }
+          writer.end();
+          await new Promise((r) => writer.once('finish', r));
+          // 下载完整性校验: 防下载不完整的 .exe 被执行
+          if (totalLength > 0 && downloadedLength !== totalLength) {
+            try {
+              fs.unlinkSync(filePath);
+            } catch (e) {}
+            reject(new Error(`下载不完整: 预期 ${totalLength} 字节, 实际 ${downloadedLength} 字节`));
+            return;
+          }
+          cleanup();
+          resolve({ success: true, filePath, message: 'Download completed' });
+        } catch (err) {
+          cleanup();
           try {
             fs.unlinkSync(filePath);
           } catch (e) {}
-          reject(new Error(`下载不完整: 预期 ${totalLength} 字节, 实际 ${downloadedLength} 字节`));
-          return;
+          reject(err);
         }
-        resolve({ success: true, filePath, message: 'Download completed' });
-      });
+      })();
 
       writer.on('error', (err) => {
-        clearInterval(speedInterval);
-        try {
-          fs.unlinkSync(filePath);
-        } catch (e) {}
-        reject(err);
-      });
-
-      response.data.on('error', (err) => {
-        clearInterval(speedInterval);
+        cleanup();
         try {
           fs.unlinkSync(filePath);
         } catch (e) {}
@@ -380,7 +444,24 @@ class UpdateService {
     this._fileSystem = this._fileSystemFactory();
     this._hashCalculator = this._hashCalculatorFactory();
     // checkForUpdate 解析 Release body 后存此处, 供 download/install 校验
+    // P3-2: 全局单值改按文件名 Map — 两次 checkForUpdate (完整/Lite) 交替时
+    // 旧文件不再被新 hash 误拒; 单文件场景回退 _expectedSha256 兼容
+    this._expectedSha256Map = new Map();
     this._expectedSha256 = null;
+  }
+
+  /**
+   * P3-2: 按文件名取预期 SHA256 — Map 优先 (checkForUpdate 按 asset 名绑定),
+   * 回退 _expectedSha256 (直接注入/旧行为兼容)。
+   * @param {string|null} fileName
+   * @returns {string|null}
+   */
+  _getExpectedSha256(fileName) {
+    if (fileName) {
+      const hit = this._expectedSha256Map.get(fileName);
+      if (hit !== undefined) return hit;
+    }
+    return this._expectedSha256;
   }
 
   /**
@@ -500,6 +581,11 @@ class UpdateService {
     // 解析 Release body 中的 SHA256, 按 fileName 匹配 asset 专属 hash
     // 完整版用户匹配完整包 hash, Lite 版用户匹配 Lite 包 hash, 互不干扰
     const sha256 = parseSha256FromBody(latestRelease.body || '', fileName);
+    // P3-2: 按文件名绑定 hash (Map), 旧 _expectedSha256 保留最近一次值兼容
+    const mapKey = sanitizeUpdateFileName(fileName) || fileName;
+    if (mapKey) {
+      this._expectedSha256Map.set(mapKey, sha256);
+    }
     this._expectedSha256 = sha256;
 
     return {
@@ -521,14 +607,6 @@ class UpdateService {
     try {
       this._ensureInitialized(); // 懒初始化触发
 
-      // 严格拒绝无 hash 版本, 防供应链攻击。
-      // _expectedSha256 为 null 表示 checkForUpdate 未调 或 Release 未预埋 hash, 一律拒绝下载。
-      if (!this._expectedSha256) {
-        const err = new Error('Release 缺少 SHA256 hash, 拒绝下载 (安全闭环)');
-        err.code = 'missing_hash';
-        throw err;
-      }
-
       // P0-4: 文件名清洗 + 下载 URL 域名校验, 防路径穿越/任意文件删除写入。
       // 渲染进程可传任意 fileName/downloadUrl, 此处做最后一次强制校验。
       const safeFileName = sanitizeUpdateFileName(fileName);
@@ -540,6 +618,15 @@ class UpdateService {
       if (!isTrustedDownloadUrl(downloadUrl)) {
         const err = new Error('非法下载地址, 拒绝下载');
         err.code = 'invalid_download_url';
+        throw err;
+      }
+
+      // 严格拒绝无 hash 版本, 防供应链攻击。
+      // P3-2: 按清洗后的文件名查 hash (Map 优先); 未查到表示 checkForUpdate 未调
+      // 或 Release 未预埋 hash, 一律拒绝下载。
+      if (!this._getExpectedSha256(safeFileName)) {
+        const err = new Error('Release 缺少 SHA256 hash, 拒绝下载 (安全闭环)');
+        err.code = 'missing_hash';
         throw err;
       }
 
@@ -590,11 +677,16 @@ class UpdateService {
 
   async installUpdate(filePath) {
     try {
+      // R26 P2-3: filePath 必须位于 updateDir 内 — 与 deleteUpdateFile 对称。
+      // 渲染层可控, 原无约束: 任意路径文件 hash 匹配即被 spawn 执行 (--force-run)
+      if (typeof filePath !== 'string' || !isPathInside(this.updateDir, filePath)) {
+        throw new Error('path outside update directory');
+      }
       if (!this._fileSystem.exists(filePath)) {
         throw new Error('Update file not found');
       }
-      // 严格拒绝无 hash 版本安装。
-      if (!this._expectedSha256) {
+      // 严格拒绝无 hash 版本安装。 (P3-2: 按文件 basename 查 hash)
+      if (!this._getExpectedSha256(path.basename(filePath))) {
         const err = new Error('Release 缺少 SHA256 hash, 拒绝安装 (安全闭环)');
         err.code = 'missing_hash';
         throw err;
@@ -614,29 +706,36 @@ class UpdateService {
   }
 
   /**
-   * 校验文件 SHA256, 仅当 _expectedSha256 非空时执行。
-   * downloadUpdate/installUpdate 入口已严格拒绝 _expectedSha256=null,
-   * 此处保留 null 跳过分支仅作防御性兜底 (例如直接调 _verifySha256IfExists 的内部测试)。
+   * 校验文件 SHA256, 仅当该文件有预期 hash 时执行。
+   * downloadUpdate/installUpdate 入口已严格拒绝无 hash,
+   * 此处保留跳过分支仅作防御性兜底 (例如直接调 _verifySha256IfExists 的内部测试)。
    * @param {string} filePath - 待校验文件路径
    * @returns {Promise<string|null>} null=通过/跳过; string=失败原因
    */
   async _verifySha256IfExists(filePath) {
-    if (!this._expectedSha256) return null; // 防御性兜底 (入口已拒绝)
+    // P3-2: 按文件 basename 查 hash (Map 优先)
+    const expectedSha256 = this._getExpectedSha256(path.basename(filePath));
+    if (!expectedSha256) return null; // 防御性兜底 (入口已拒绝)
     let actualHash;
     try {
       actualHash = await this._hashCalculator.compute(filePath);
     } catch (e) {
       return `计算 hash 失败: ${e.message}`;
     }
-    if (actualHash !== this._expectedSha256) {
-      return `预期 ${this._expectedSha256}, 实际 ${actualHash}`;
+    if (actualHash !== expectedSha256) {
+      return `预期 ${expectedSha256}, 实际 ${actualHash}`;
     }
     return null;
   }
 
   async deleteUpdateFile(filePath) {
     try {
-      if (filePath && this._fileSystem.exists(filePath)) {
+      // P3-1: 仅允许删除 updateDir 内文件 — filePath 渲染层可控,
+      // 一旦经 IPC 暴露即任意文件删除 (当前无暴露, 防御性收口)
+      if (typeof filePath !== 'string' || !filePath || !isPathInside(this.updateDir, filePath)) {
+        return { success: false, error: 'path outside update directory' };
+      }
+      if (this._fileSystem.exists(filePath)) {
         this._fileSystem.unlink(filePath);
       }
       return { success: true };
@@ -654,4 +753,5 @@ module.exports = {
   computeFileSha256,
   sanitizeUpdateFileName,
   isTrustedDownloadUrl,
+  isPathInside,
 };

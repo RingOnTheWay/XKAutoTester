@@ -36,6 +36,9 @@ const { compareVersions } = require('../utils/versionCompare');
 // ── module-level 常量 (对称 UpdateService GITHUB_OWNER/REPO) ──────────
 
 const REQUIRED_PYTHON_VERSION = '3.12.4';
+// P2-5: 探测命令默认超时 (ms)。损坏/挂起的 python.exe 会使 splash 环境检查永久阻塞,
+// 统一注入 15s 兜底, 超时后 spawnHelper 返回 { code: -1, timedOut: true }。
+const DEFAULT_CMD_TIMEOUT = 15000;
 const PYTHON_EMBEDDABLE_ZIP = 'python312.zip';
 const PTH_CONFIG_MARKER = '# XKAutoTester configured';
 const WINDOWSAPPS_MARKER = 'windowsapps';
@@ -161,9 +164,14 @@ class EnvironmentService {
   _ensureInitialized() {
     if (this._initialized) return;
 
-    const spawnHelper = { executeCommand: this._commandRunnerFactory() };
+    // R26 P3-5: commandRunner 一次创建复用 (原 _commandRunnerFactory 调两次 → 两个实例,
+    // 测试注入 spy 被调用两次且 spawnHelper/_cmd 非同一 runner)
+    const commandRunner = this._commandRunnerFactory();
+    const spawnHelper = { executeCommand: commandRunner };
     this._fs = this._fileSystemFactory();
-    this._cmd = this._commandRunnerFactory();
+    // P2-5: 所有 this._cmd 探测 (python --version / where / -c 脚本) 统一注入默认 15s 超时,
+    // 调用处可传 opts.timeout 覆盖 (0 = 禁超时)。防损坏 python.exe 挂起 splash 环境检查。
+    this._cmd = (cmd, args, opts = {}) => commandRunner(cmd, args, { timeout: DEFAULT_CMD_TIMEOUT, ...opts });
     this._pathHelper = this._pathHelperFactory();
     this._isPackaged = this._isPackagedGetterFactory();
     this._driverChecker = this._driverCheckerFactory(this.i18nService, this.projectRoot, spawnHelper);
@@ -501,13 +509,27 @@ class EnvironmentService {
       if (this._fs.existsSync(requirementsPath)) {
         const listScript =
           "import importlib.metadata; dists = importlib.metadata.distributions(); [print(d.metadata['Name'] + '==' + d.version) for d in dists]";
-        const pipResult = await this._cmd(pythonConfig.pythonPath, ['-c', listScript]);
+        let pipResult = await this._cmd(pythonConfig.pythonPath, ['-c', listScript]);
 
         if (pipResult.code !== 0) {
-          return {
-            status: 'warning',
-            message: versionMessage + ' - ' + this.i18nService.t('splash.checks.cannotCheckPackages'),
-          };
+          // R27: importlib.metadata 探测失败 (个别环境 distributions() 抛错/metadata 异常) 时
+          // 回退 pip list --format=freeze (输出 pkg==ver 与 checkMissingPackages 匹配兼容),
+          // 两个通道都失败才笼统报"无法检查"; 失败细节 console 留痕 (splash 期诊断用)
+          pipResult = await this._cmd(pythonConfig.pythonPath, ['-m', 'pip', 'list', '--format=freeze']);
+          if (pipResult.code !== 0) {
+            console.error(
+              '[EnvironmentService] 依赖探测失败: pythonPath=',
+              pythonConfig.pythonPath,
+              'stdout=',
+              (pipResult.stdout || '').slice(0, 500),
+              'stderr=',
+              (pipResult.stderr || '').slice(0, 500)
+            );
+            return {
+              status: 'warning',
+              message: versionMessage + ' - ' + this.i18nService.t('splash.checks.cannotCheckPackages'),
+            };
+          }
         }
 
         const installedPackages = new Set(
@@ -731,4 +753,5 @@ module.exports = {
   buildPythonConfig,
   IGNORED_MISSING_PACKAGES,
   REQUIRED_PYTHON_VERSION,
+  DEFAULT_CMD_TIMEOUT,
 };

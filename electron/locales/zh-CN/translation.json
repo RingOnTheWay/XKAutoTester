@@ -385,6 +385,7 @@
     "noSelectedTestPlan": "没有选中的测试计划",
     "testRunCompleted": "测试运行完成！",
     "testRunFailed": "测试运行失败",
+    "alreadyRunning": "测试已在运行中，请先停止当前测试",
     "deviceSelection": {
       "title": "设备选择",
       "selectDeviceForTest": "请选择执行设备",

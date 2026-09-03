@@ -21,6 +21,7 @@
  *  - 区块按生成阶段分隔 (// ─── 区块名 ───)。
  */
 const fs = require('fs').promises;
+const fsSync = require('fs'); // 同步 API (isSafeOutputDir 目录存在性检查, 单次调用开销可忽略)
 const path = require('path');
 
 // ─── P0-1 安全转义函数族 (渲染进程输入 → Python 源码) ───
@@ -114,6 +115,38 @@ const defaultFileSystemFactory = () => ({
   writeFile: (p, content, enc) => fs.writeFile(p, content, enc),
 });
 
+// R25 P1-3: Windows + POSIX 系统关键目录黑名单 (防渲染层被攻破时向系统分区写 .py)
+const SYSTEM_PROTECTED_DIRS = new Set([
+  // Windows
+  'windows', 'system32', 'syswow64', 'program files', 'program files (x86)',
+  'programdata', 'recovery', '$recycle.bin', 'system volume information',
+  // POSIX
+  'etc', 'usr', 'bin', 'sbin', 'boot', 'dev', 'proc', 'sys', 'var',
+]);
+
+/**
+ * R25 P1-3: outputDir 目录级安全检查。
+ * 约束: 目录必须已存在 (防任意目录创建/写入) 且非系统关键目录 (防写系统分区)。
+ * 不约束"用户数据目录内" — outputDir 语义是用户选择的测试目录 (test-execution 的
+ * selectedDirectory / 文件浏览器的 currentPath), 可能是任意用户目录, 白名单根会破坏功能。
+ * @param {string} resolvedDir path.resolve 后的绝对目录
+ * @returns {boolean}
+ */
+function isSafeOutputDir(resolvedDir) {
+  let stat;
+  try {
+    stat = fsSync.statSync(resolvedDir);
+  } catch {
+    return false; // 目录不存在
+  }
+  if (!stat.isDirectory()) return false;
+
+  const segments = path.resolve(resolvedDir).replace(/[\\/]+$/, '').split(/[\\/]/).filter(Boolean);
+  if (segments.length <= 1) return false; // 盘根 (C:) / POSIX 根 (/)
+  const rootSeg = segments[1] ? segments[1].toLowerCase() : '';
+  return !(rootSeg && SYSTEM_PROTECTED_DIRS.has(rootSeg));
+}
+
 // 默认 templateLoader factory: 返 async () => string, 闭包捕获 templatePath
 const defaultTemplateLoaderFactory = (templatePath) => async () => fs.readFile(templatePath, 'utf8');
 
@@ -177,6 +210,10 @@ class TestCaseCodeGenerator {
         return { success: false, error: 'invalid_output_dir' };
       }
       const resolvedDir = path.resolve(outputDir);
+      // R25 P1-3: 目录级约束 — 必须已存在且非系统关键目录 (R24 P1-3 只做了 fileName 清洗 + isAbsolute)
+      if (!isSafeOutputDir(resolvedDir)) {
+        return { success: false, error: 'invalid_output_dir' };
+      }
 
       const pagePackageData = await this.loadPagePackageData();
 

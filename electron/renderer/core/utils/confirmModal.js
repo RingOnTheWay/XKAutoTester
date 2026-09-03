@@ -21,7 +21,6 @@ export function showConfirmModal(title, message) {
     _pendingResolve = null;
   }
   return new Promise((resolve) => {
-    _pendingResolve = resolve;
     const titleEl = document.getElementById('confirm-modal-title');
     const messageEl = document.getElementById('confirm-modal-message');
     if (titleEl) titleEl.textContent = title || '';
@@ -30,6 +29,15 @@ export function showConfirmModal(title, message) {
     const overlay = document.getElementById('confirm-modal-overlay');
     const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
     const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
+
+    // R26 P2-7: modal DOM 缺失 (页面未含 confirm-modal) → 立即 resolve(false):
+    // 原实现 Promise 仅靠按钮/Esc 解析, DOM 缺失则永久挂起 + _pendingResolve 被占用,
+    // 后续所有 confirm 立即返 false。缺失时不占 _pendingResolve。
+    if (!overlay || !confirmBtn || !cancelBtn) {
+      resolve(false);
+      return;
+    }
+    _pendingResolve = resolve;
 
     let resolved = false;
     const resolveOnce = (value) => {

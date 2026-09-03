@@ -574,6 +574,26 @@ describe('generatePythonFile 端到端', () => {
     assert.strictEqual(r2.error, 'invalid_output_dir');
   });
 
+  test('R25 P1-3 outputDir 系统关键目录/盘根拒绝', async (t) => {
+    if (!gen) return t.skip('模板文件不存在，跳过 e2e');
+    const sysDirs =
+      process.platform === 'win32'
+        ? ['C:\\', 'C:\\Windows', 'C:\\Windows\\System32', 'C:\\Program Files', 'C:\\Program Files (x86)']
+        : ['/', '/etc', '/usr/bin', '/var'];
+    for (const dir of sysDirs) {
+      const result = await gen.generatePythonFile({ fileName: 'test_a', name: 'X' }, dir);
+      assert.strictEqual(result.success, false, `应拒绝系统目录: ${dir}`);
+      assert.strictEqual(result.error, 'invalid_output_dir');
+    }
+  });
+
+  test('R25 P1-3 outputDir 用户目录放行 (不破坏 test-execution 自定义目录)', async (t) => {
+    if (!gen) return t.skip('模板文件不存在，跳过 e2e');
+    const result = await gen.generatePythonFile({ fileName: 'test_a', name: 'X' }, outputDir);
+    assert.strictEqual(result.success, true, result.error || '');
+    assert.ok(result.path.startsWith(outputDir), `路径应落在 outputDir 内: ${result.path}`);
+  });
+
   test('R24 P1-3 caseData 非对象拒绝', async (t) => {
     if (!gen) return t.skip('模板文件不存在，跳过 e2e');
     const r = await gen.generatePythonFile(null, outputDir);

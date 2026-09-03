@@ -366,11 +366,13 @@ export class PagePackageModel extends EventEmitter {
    */
   filterOptions(type, keyword) {
     const kw = keyword.toLowerCase();
+    // R27 P3-6: name 可能非字符串 (脏数据) — String() 兜底防 toLowerCase 抛错
+    const nameOf = (item) => String((item && item.name) || '').toLowerCase();
     switch (type) {
       case 'app':
-        return this.#state.apps.filter((app) => app.name.toLowerCase().includes(kw));
+        return this.#state.apps.filter((app) => nameOf(app).includes(kw));
       case 'page':
-        return this.#state.pages.filter((page) => page.name.toLowerCase().includes(kw));
+        return this.#state.pages.filter((page) => nameOf(page).includes(kw));
       case 'element':
         return this.#state.elements.filter(
           (element) =>

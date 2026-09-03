@@ -4,6 +4,9 @@ const AdmZip = require('adm-zip');
 
 // ── module-level 纯函数 (对称 H1 TestPlanService parsePytestIni/extractMarkersFromContent/inferTestType) ──
 
+// R26 P2-4: 导入解压总大小上限 (默认 512MB, 构造可注入小值供测试)
+const MAX_EXTRACT_BYTES = 512 * 1024 * 1024;
+
 /**
  * 构建 manifest (从 exportConfig L66-72 + exportLogs L164-170 两处重复提取)
  * @param {'config'|'logs'} type
@@ -49,6 +52,15 @@ function buildProgress(phase, current, total, currentFile, message) {
  */
 function isValidManifest(manifest, expectedType) {
   return !!(manifest && manifest.app === 'XKAutoTester' && manifest.type === expectedType);
+}
+
+/**
+ * P2-10: 导出/导入路径必须是绝对路径 (防渲染层透传相对路径/裸文件名写任意 cwd 或读任意 zip)
+ * @param {*} p
+ * @returns {boolean}
+ */
+function isAbsolutePath(p) {
+  return typeof p === 'string' && p.length > 0 && path.isAbsolute(p);
 }
 
 /**
@@ -101,6 +113,7 @@ class DataTransferService {
    * @param {Function} [opts.fileSystemFactory] - 默认包装 fs 4 async 方法
    * @param {Function} [opts.zipFactory] - 默认包装 AdmZip create/open
    * @param {Function} [opts.mainWindowProvider] - 默认返 null (测试注入 fake win)
+   * @param {number} [opts.maxExtractBytes] - R26 P2-4: 导入解压总大小上限 (默认 512MB, 测试注入小值)
    */
   constructor(userDataService, i18nService, versionService, opts = {}) {
     this.userDataService = userDataService;
@@ -111,6 +124,7 @@ class DataTransferService {
     this._fileSystemFactory = opts.fileSystemFactory || defaultFileSystemFactory;
     this._zipFactory = opts.zipFactory || defaultZipFactory;
     this._mainWindowProvider = opts.mainWindowProvider || defaultMainWindowProvider;
+    this._maxExtractBytes = opts.maxExtractBytes || MAX_EXTRACT_BYTES;
   }
 
   // 懒初始化 (消除构造期 I/O, 对称 H1 _ensureInitialized)
@@ -130,6 +144,7 @@ class DataTransferService {
 
   async exportConfig(outputPath) {
     return this._exportPath(this.userDataService.userConfigPath, 'config', outputPath, 'on-export-progress', {
+      failed: this.i18nService.t('settings.exportConfigFailed'),
       notFound: this.i18nService.t('settings.exportConfigFailed') + ': config path not found',
       empty: this.i18nService.t('settings.exportConfigFailed') + ': no files to export',
       packing: this.i18nService.t('settings.exportingConfig'),
@@ -144,6 +159,7 @@ class DataTransferService {
       outputPath,
       'on-export-progress',
       {
+        failed: this.i18nService.t('settings.exportLogsFailed'),
         notFound: this.i18nService.t('settings.noLogsToExport'),
         empty: this.i18nService.t('settings.noLogsToExport'),
         packing: this.i18nService.t('settings.exportingLogs'),
@@ -156,6 +172,13 @@ class DataTransferService {
     this._ensureInitialized();
     const channel = 'on-import-progress';
     try {
+      // P2-10: zipPath 必须为绝对路径 (防渲染层透传相对路径/任意 cwd 文件)
+      if (!isAbsolutePath(zipPath)) {
+        return {
+          success: false,
+          error: this.i18nService.t('settings.importConfigFailed') + ': invalid zip path',
+        };
+      }
       if (!(await this._fs.exists(zipPath))) {
         return {
           success: false,
@@ -211,9 +234,25 @@ class DataTransferService {
         buildProgress('extracting', 0, totalItems, '', this.i18nService.t('settings.importingConfig'))
       );
 
+      // R26 P2-4: 解压总大小上限 — 恶意 zip 含超大条目可写满磁盘 (zip 压缩比攻击)。
+      // 按未压缩字节累计, 超限即中止。
+      let extractedBytes = 0;
+
       for (let i = 0; i < entriesToExtract.length; i++) {
         const entry = entriesToExtract[i];
         const current = i + 1;
+        const entryData = entry.getData();
+        extractedBytes += entryData.length;
+        if (extractedBytes > this._maxExtractBytes) {
+          this._sendProgress(
+            channel,
+            buildProgress('error', 0, 0, entry.entryName, 'Archive too large: ' + entry.entryName)
+          );
+          return {
+            success: false,
+            error: this.i18nService.t('settings.importConfigFailed') + ': archive too large',
+          };
+        }
         // zip-slip 防线: 拒绝 `..`/绝对路径/盘符 条目名 (对称 TarExtractor._sanitizeFileName)
         if (!isSafeRelativePath(entry.entryName)) {
           this._sendProgress(
@@ -241,7 +280,7 @@ class DataTransferService {
         if (!(await this._fs.exists(targetDir))) {
           await this._fs.mkdir(targetDir);
         }
-        await this._fs.writeFile(targetPath, entry.getData());
+        await this._fs.writeFile(targetPath, entryData);
         this._sendProgress(
           channel,
           buildProgress(
@@ -282,6 +321,10 @@ class DataTransferService {
   async _exportPath(sourcePath, manifestType, outputPath, progressChannel, msgs) {
     this._ensureInitialized();
     try {
+      // P2-10: outputPath 必须为绝对路径 (防渲染层透传相对路径/裸文件名写任意 cwd)
+      if (!isAbsolutePath(outputPath)) {
+        return { success: false, error: msgs.failed + ': invalid output path' };
+      }
       if (!(await this._fs.exists(sourcePath))) {
         return { success: false, error: msgs.notFound };
       }
@@ -385,4 +428,5 @@ module.exports = {
   buildProgress,
   isValidManifest,
   isSafeRelativePath,
+  isAbsolutePath,
 };

@@ -1093,3 +1093,138 @@ test('P0-4 downloadUpdate 路径穿越文件名被裁剪为 basename', async () 
   assert.ok(!call.filePath.includes('..'), '下载路径不得包含路径穿越');
   assert.ok(call.filePath.endsWith('victim.exe'), '应使用裁剪后的文件名 (basename)');
 });
+
+// ── P3-1: deleteUpdateFile 路径约束 ─────────────────────────
+
+test('P3-1 deleteUpdateFile updateDir 内文件 → unlink 成功', async () => {
+  const filePath = path.join('/fake/config', 'updates', 'setup.exe');
+  const { svc, fileSystem } = makeFakeApp({
+    fileSystem: { existsResults: { [filePath]: true } },
+  });
+  svc._ensureInitialized();
+
+  const result = await svc.deleteUpdateFile(filePath);
+
+  assert.strictEqual(result.success, true);
+  assert.deepStrictEqual(fileSystem.calls.unlink, [filePath], '应 unlink 目标文件');
+});
+
+test('P3-1 deleteUpdateFile 越界路径 (.. 回溯) → 拒绝 + 不 unlink', async () => {
+  const { svc, fileSystem } = makeFakeApp({});
+  svc._ensureInitialized();
+
+  const result = await svc.deleteUpdateFile(path.join('/fake/config', 'updates', '..', '..', 'victim.exe'));
+
+  assert.strictEqual(result.success, false);
+  assert.ok(result.error.includes('outside update directory'));
+  assert.strictEqual(fileSystem.calls.unlink.length, 0, '越界路径不得 unlink');
+});
+
+test('P3-1 deleteUpdateFile 任意路径/非字符串 → 拒绝', async () => {
+  const { svc, fileSystem } = makeFakeApp({});
+  svc._ensureInitialized();
+
+  const r1 = await svc.deleteUpdateFile('/etc/passwd');
+  assert.strictEqual(r1.success, false, '绝对路径越界拒绝');
+
+  const r2 = await svc.deleteUpdateFile(123);
+  assert.strictEqual(r2.success, false, '非字符串拒绝');
+
+  const r3 = await svc.deleteUpdateFile('');
+  assert.strictEqual(r3.success, false, '空串拒绝');
+  assert.strictEqual(fileSystem.calls.unlink.length, 0, '全部拒绝, 不 unlink');
+});
+
+// ── P3-2: SHA256 按文件名绑定 (Map) ─────────────────────────
+
+test('P3-2 _getExpectedSha256: Map 优先, 全局值回退', async () => {
+  const { svc } = makeFakeApp({});
+  svc._expectedSha256Map.set('a.exe', 'HASH_A');
+  svc._expectedSha256 = 'FALLBACK';
+
+  assert.strictEqual(svc._getExpectedSha256('a.exe'), 'HASH_A', 'Map 命中优先');
+  assert.strictEqual(svc._getExpectedSha256('b.exe'), 'FALLBACK', '未命中回退全局值');
+  assert.strictEqual(svc._getExpectedSha256(null), 'FALLBACK', 'null 回退');
+  assert.strictEqual(svc._getExpectedSha256(''), 'FALLBACK', '空串回退');
+});
+
+test('P3-2 两次 checkForUpdate 不同 asset → 各自 hash 按文件名保留', async () => {
+  const hashFull = 'a'.repeat(64);
+  const hashLite = 'b'.repeat(64);
+  const releaseFull = makeRelease({
+    assets: [{ name: 'XKAutoTester Setup v2.0.0.exe', browser_download_url: 'https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/full.exe', size: 1 }],
+    body: `Release notes\nSHA256: ${hashFull}`,
+  });
+  const releaseLite = makeRelease({
+    assets: [{ name: 'XKAutoTester Setup v2.0.0 Lite.exe', browser_download_url: 'https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/lite.exe', size: 1 }],
+    body: `Release notes\nSHA256: ${hashLite}`,
+  });
+  const { svc } = makeFakeApp({});
+  svc._isFullInstall = () => true;
+  svc._updateSource = { fetchLatestRelease: async () => releaseFull };
+  await svc.checkForUpdate();
+
+  svc._isFullInstall = () => false;  // 模拟切换 Lite 版
+  svc._updateSource = { fetchLatestRelease: async () => releaseLite };
+  await svc.checkForUpdate();
+
+  // 完整包 hash 不被 Lite 覆盖 (旧实现全局单值会被覆盖 → 完整包下载被误拒)
+  assert.strictEqual(
+    svc._getExpectedSha256('XKAutoTester Setup v2.0.0.exe'),
+    hashFull,
+    '完整包 hash 应按文件名保留'
+  );
+  assert.strictEqual(
+    svc._getExpectedSha256('XKAutoTester Setup v2.0.0 Lite.exe'),
+    hashLite,
+    'Lite 包 hash 已绑定'
+  );
+});
+
+// ── R26 P2-3: installUpdate updateDir 路径约束 ──────────────
+
+test('P2-3 installUpdate updateDir 外路径 → 拒绝 + 不调 installStrategy', async () => {
+  const outsidePath = '/tmp/evil-setup.exe';
+  const { svc, installStrategy } = makeAppWithSha256({
+    expectedHash: '9'.repeat(64),
+    existsResults: { [outsidePath]: true },
+  });
+  await svc.checkForUpdate();
+
+  await assert.rejects(
+    svc.installUpdate(outsidePath),
+    /outside update directory/
+  );
+  assert.strictEqual(installStrategy.calls.install.length, 0, '越界路径不得安装');
+});
+
+test('P2-3 installUpdate updateDir 内路径 → 正常安装', async () => {
+  const insidePath = path.join('/fake/config', 'updates', 'setup.exe');
+  const { svc, installStrategy } = makeAppWithSha256({
+    expectedHash: 'a'.repeat(64),
+    existsResults: { [insidePath]: true },
+  });
+  await svc.checkForUpdate();
+
+  await svc.installUpdate(insidePath);
+
+  assert.strictEqual(installStrategy.calls.install.length, 1, 'updateDir 内正常安装');
+});
+
+// ── R26 P3-2: asset 块边界防跨块误配 ────────────────────────
+
+test('P3-2 asset 块内无 hash → null, 不跨块取别的 asset hash', () => {
+  const liteHash = 'f'.repeat(64);
+  const fullFileName = 'XKAutoTester Setup v2.0.0.exe';
+  const liteFileName = 'XKAutoTester Setup v2.0.0 Lite.exe';
+  // full 块无 hash, lite 块有 → 匹配 full 应返 null (防误配 lite 的 hash)
+  const body = `**${fullFileName}**\n(no hash here)\n\n**${liteFileName}**\nSHA256: ${liteHash}\n`;
+
+  assert.strictEqual(parseSha256FromBody(body, fullFileName), null, '块内无 hash 不跨块误配');
+  assert.strictEqual(parseSha256FromBody(body, liteFileName), liteHash, '有 hash 的块正常匹配');
+});
+
+test('P3-2 无 asset 标记 (旧格式单 hash) 仍回退首个 SHA256', () => {
+  const hash = 'ab'.repeat(32);
+  assert.strictEqual(parseSha256FromBody(`Release\nSHA256: ${hash}\n`, 'SomeFile.exe'), hash);
+});

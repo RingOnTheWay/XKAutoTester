@@ -262,29 +262,33 @@ class SmartScheduler {
     this.isExecuting = true;
 
     try {
-      this.planQueue.dequeue();
+      // P2-9: 以 dequeue 的实际 plan 为准 — 排队期间 _handlePlansFileChange (L365-371)
+      // 会重建 planQueue (整体替换为新队列), 闭包捕获的 plan 引用过期: dequeue 弹出的是
+      // 新队首, 若按旧 plan 更新状态/发 SCHEDULED_TEST_START 会"通知了 A 实际跑的是 B"。
+      // 因此所有身份信息 (id/name/testPlans/scheduledTime) 一律取自 dequeued。
+      const dequeued = this.planQueue.dequeue();
+      const activePlan = dequeued || plan;
       this.state.activePlanCount = this.planQueue.size();
 
       await this.scheduledPlanService.updateScheduledPlan({
-        id: plan.id,
+        id: activePlan.id,
         status: 'running',
         lastRun: new Date(this._now()).toISOString(),
       });
 
       this._notifier.send(IPC_CHANNELS.SCHEDULED_TEST_START, {
-        planId: plan.id,
-        planName: plan.name,
-        testPlans: plan.testPlans,
-        scheduledTime: plan.scheduledTime,
+        planId: activePlan.id,
+        planName: activePlan.name,
+        testPlans: activePlan.testPlans,
+        scheduledTime: activePlan.scheduledTime,
         executionTime: new Date(this._now()).toLocaleString(),
       });
 
-      // 启动执行超时看门狗。若渲染进程未就绪/被关闭, N 分钟内不会收到
-      // SCHEDULED_TEST_COMPLETE 回调, 看门狗自动将 plan 标记 failed, 避免永停 'running'。
-      this._startExecutionWatchdog(plan.id);
+      // 启动执行超时看门狗 (按实际执行的 plan)
+      this._startExecutionWatchdog(activePlan.id);
     } catch (error) {
       this._logger.error('执行定时计划失败:', error);
-      // catch 写 'failed' (原 'completed' 误标完成)
+      // catch 写 'failed' (原 'completed' 误标完成); dequeue 抛错等异常场景用闭包 plan 兜底
       await this.scheduledPlanService.updateScheduledPlan({
         id: plan.id,
         status: 'failed',

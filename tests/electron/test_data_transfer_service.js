@@ -9,7 +9,7 @@ const path = require('path');
 const SERVICE_PATH = path.join(
   __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'DataTransferService.js'
 );
-const { DataTransferService, buildManifest, buildProgress, isValidManifest, isSafeRelativePath } = require(SERVICE_PATH);
+const { DataTransferService, buildManifest, buildProgress, isValidManifest, isSafeRelativePath, isAbsolutePath } = require(SERVICE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
 
@@ -452,4 +452,77 @@ test('_exportPath catch 错误 → 发 error phase 进度 + 返 {success:false}'
   const errorEvents = mainWindow.sent.filter(s => s.data.phase === 'error');
   assert.ok(errorEvents.length > 0, '发了 error phase 进度');
   assert.strictEqual(errorEvents[0].data.message, 'disk failure');
+});
+
+// ── P2-10: 导出/导入路径必须为绝对路径 ─────────────────────
+
+test('P2-10 isAbsolutePath 纯函数: 绝对路径 true / 相对路径 false', () => {
+  assert.strictEqual(isAbsolutePath('/out.zip'), true, 'POSIX 绝对路径');
+  assert.strictEqual(isAbsolutePath('C:\\out\\config.zip'), true, 'Windows 绝对路径');
+  assert.strictEqual(isAbsolutePath('out.zip'), false, '相对路径拒绝');
+  assert.strictEqual(isAbsolutePath('sub/out.zip'), false, '相对子路径拒绝');
+  assert.strictEqual(isAbsolutePath(''), false, '空串拒绝');
+  assert.strictEqual(isAbsolutePath(null), false, 'null 拒绝');
+  assert.strictEqual(isAbsolutePath(123), false, '非字符串拒绝');
+});
+
+test('P2-10 exportConfig 相对路径 → invalid output path, 不触发打包', async () => {
+  const { svc, zip } = makeFakeApp({
+    fileSystem: { dirs: { '/fake/config': [{ name: 'config.json', isDirectory: () => false }] } },
+  });
+
+  const result = await svc.exportConfig('out.zip');
+
+  assert.strictEqual(result.success, false);
+  assert.ok(result.error.includes('invalid output path'));
+  assert.strictEqual(zip.createCalls.writeZip.length, 0, '相对路径不得触发 writeZip');
+});
+
+test('P2-10 exportLogs 非字符串路径 → invalid output path', async () => {
+  const { svc, zip } = makeFakeApp({
+    fileSystem: { dirs: { '/fake/data/logs': [{ name: 'app.log', isDirectory: () => false }] } },
+  });
+
+  const result = await svc.exportLogs(undefined);
+
+  assert.strictEqual(result.success, false);
+  assert.ok(result.error.includes('invalid output path'));
+  assert.strictEqual(zip.createCalls.writeZip.length, 0);
+});
+
+test('P2-10 importConfig 相对路径 zip → invalid zip path, 不打开 zip', async () => {
+  const { svc, zip } = makeFakeApp();
+
+  const result = await svc.importConfig('relative.zip');
+
+  assert.strictEqual(result.success, false);
+  assert.ok(result.error.includes('invalid zip path'));
+  assert.strictEqual(zip.openCalls.getEntries, 0, '相对路径不得打开 zip');
+});
+
+// ── R26 P2-4: importConfig 解压总大小上限 ───────────────────
+
+test('P2-4 importConfig 解压超限 → archive too large + 不落盘', async () => {
+  const manifest = Buffer.from(JSON.stringify({ app: 'XKAutoTester', type: 'config' }));
+  const bigContent = Buffer.alloc(1024, 'x');
+  const { svc, fileSystem } = makeFakeApp({
+    fileSystem: {
+      dirs: { '/fake/config': [] },
+      files: { '/test.zip': 'fake-zip' },
+    },
+    zip: {
+      entries: [
+        { entryName: 'manifest.json', isDirectory: false, getData: () => manifest },
+        { entryName: 'config.json', isDirectory: false, getData: () => bigContent },
+      ],
+    },
+  });
+  // 注入 512 字节上限 (默认 512MB 构造超大 buffer 不现实) → 1KB 条目超限
+  svc._maxExtractBytes = 512;
+
+  const result = await svc.importConfig('/test.zip');
+
+  assert.strictEqual(result.success, false);
+  assert.ok(result.error.includes('archive too large'), '超限返 archive too large');
+  assert.strictEqual(fileSystem.calls.writeFile.length, 0, '超限不得落盘');
 });

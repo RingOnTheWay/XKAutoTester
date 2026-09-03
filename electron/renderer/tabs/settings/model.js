@@ -320,7 +320,8 @@ export class SettingsModel extends EventEmitter {
   async downloadUpdate() {
     try {
       // 注册下载进度监听
-      if (this.#state.removeUpdateProgressListener) {
+      // R27 P3-7: 仅当为函数才调用 — 旧 preload 兼容可能存非函数真值 → 原调抛 TypeError
+      if (typeof this.#state.removeUpdateProgressListener === 'function') {
         this.#state.removeUpdateProgressListener();
       }
       const removeListener = ApiBridge.api.onUpdateDownloadProgress((progress) => {

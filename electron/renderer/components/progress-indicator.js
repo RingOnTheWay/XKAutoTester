@@ -18,6 +18,11 @@ export class ProgressIndicator {
     }
   }
 
+  /** R27 P1-2: HTML 转义 — R25 XSS 修复 showError 引用本方法但类未定义, 失败时 TypeError 崩溃 */
+  escapeHtml(str) {
+    return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   show(message = window.i18n.t('environment.preparing'), type = 'download') {
     this.type = type;
     const progressContainer = document.getElementById('download-progress-container');

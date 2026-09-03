@@ -6,7 +6,7 @@ XKAutoTester 是一个基于 Electron + Python 的自动化测试平台，用于
 
 - **版本**: 0.1.6-dev.1
 - **技术栈**: Electron 43 + Node.js + Python 3.10+（内置 3.12）+ Vite 7.3.6 / electron-vite 5.0.0 + Appium + Pytest + Allure
-- **工程化**: ESLint 9 (flat, `--max-warnings 0`) + Prettier + Ruff + GitHub Actions CI（Electron/Python 双 job）
+- **工程化**: ESLint 9 (flat, `--max-warnings 0`) + Prettier + Ruff + GitHub Actions CI（Electron/Python 双 job，含 npm audit + uv audit 依赖漏洞扫描）
 - **打包工具**: electron-builder (NSIS 安装程序，含 lite 版本)
 - **Python 包管理**: uv
 - **国际化**: i18next (zh-CN / en-US)
@@ -19,6 +19,10 @@ XKAutoTester 是一个基于 Electron + Python 的自动化测试平台，用于
 
 ```
 XKAutoTester/
+├── eslint.config.mjs                    # ESLint 9 flat config（R25 P3-17: 位于项目根, base path 覆盖 electron/ + tests/）
+├── pyproject.toml                       # Python 项目配置 (uv)
+├── uv.lock                              # uv 锁文件
+├── tests/                               # 测试（electron 单测 node:test + unit Python pytest）
 ├── config/                              # 配置文件目录（随安装包分发）
 │   ├── config.json                      # 应用设置（日志/投屏/主题/语言/通知/更新）
 │   ├── ble_device.json                  # 蓝牙设备配置
@@ -561,7 +565,6 @@ python -m main --test-paths <paths> --markers <markers> --test-plan <name>
 | 包 | 版本 | 用途 |
 |----|------|------|
 | pytest | 8.4.2 | 测试框架 |
-| pytest-html | 4.1.1 | HTML 测试报告 |
 | allure-pytest | 2.15.0 | Allure 报告集成 |
 | allure-python-commons | 2.15.0 | Allure 公共库 |
 | Appium-Python-Client | 5.2.4 | Appium 驱动 |
@@ -569,13 +572,11 @@ python -m main --test-paths <paths> --markers <markers> --test-plan <name>
 | pytest-playwright | 0.7.1 | Playwright pytest 插件 |
 | ddddocr | 1.5.6 | 验证码 OCR |
 | Faker | 37.11.0 | 测试数据生成 |
-| PyYAML | 6.0.3 | YAML 配置解析 |
-| openpyxl | 3.1.5 | Excel 操作 |
 | requests | 2.32.5 | HTTP 请求 |
 | pyserial | 3.5 | 串口通信（蓝牙设备） |
 | Pillow | 10.4.0 | 图像处理（R7 安全修复升级，9.5.0 含 CVE） |
 
-> Python 端测试依赖：`pytest>=8.0.0`, `pytest-html>=4.0.0`, `pytest-cov>=5.0.0`
+> Python 端测试依赖：`pytest>=8.0.0`, `pytest-cov>=5.0.0`（R25 P3-15: 移除无引用依赖 pytest-html/PyYAML/openpyxl）
 > Lint：`ruff>=0.1.0`（line-length=120, target=py310，select=E/F/W/I/N/UP/B/C4，ignore=E501）
 
 ***

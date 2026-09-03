@@ -102,7 +102,9 @@ class AppLifecycleService:
             )
             if result.success and result.stdout.strip():
                 try:
-                    pid = int(result.stdout.strip())
+                    # R27 P3-11: pidof 多进程输出 "123 456" — 取首个 token (主进程 PID),
+                    # 原 int(整串) 抛 ValueError → 多进程 app 拿不到 PID
+                    pid = int(result.stdout.strip().split()[0])
                     logger.info(t("python.adbManager.gotAppPid", pid=pid))
                     return pid
                 except ValueError:

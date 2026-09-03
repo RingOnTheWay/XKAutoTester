@@ -464,3 +464,72 @@ test('cleanupOrphanedFiles 清理孤立 json + 探测 orphaned py', async () => 
   assert.ok(results.cleanedJson.includes('test_orphan.json'), '清理孤立 json (对应 .py 丢失)');
   assert.ok(results.orphanedPy.some(o => o.fileName === 'test_nojson'), '探测到 orphaned py');
 });
+
+// ── R27: deleteTestCase 兼容 scan 条目的 .py 后缀名 (删文件失败修复) ──
+
+test('R27 deleteTestCase 传 .py 后缀名 (scanTestFiles 条目) 正常删除', async () => {
+  const jsonPath = path.join('/fake/config/test_cases', 'test_demo.json');
+  const pyPath = path.join('/fake/config/out', 'test_demo.py');
+  const { svc, fileSystem } = makeFakeApp({
+    fileSystem: {
+      files: {
+        [jsonPath]: JSON.stringify({ id: 'tc_1', fileName: 'test_demo', pyOutputDir: '/fake/config/out' }),
+        [pyPath]: 'print(1)'
+      }
+    }
+  });
+
+  // 模拟删除入口直接透传 scan 的 name ('test_demo.py') — 原 _sanitize 白名单不含点 → invalid_file_name
+  const result = await svc.deleteTestCase({ fileName: 'test_demo.py', pyFilePath: pyPath });
+
+  assert.strictEqual(result.success, true, '.py 后缀名应清洗为 test_demo 并删除成功');
+  assert.ok(fileSystem.calls.unlink.includes(jsonPath), 'json 删除');
+  assert.ok(fileSystem.calls.unlink.includes(pyPath), 'py 删除');
+});
+
+test('R27 deleteTestCase .py 路径穿越仍被 basename 收拢', async () => {
+  const { svc, fileSystem } = makeFakeApp();
+  const result = await svc.deleteTestCase(path.join('..', '..', 'config', 'evil.py'));
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(fileSystem.calls.unlink.length, 0, '穿越 .py 名无删除');
+});
+
+// ── R27b: JSON 缺失用例 (目录外 .py) 删除支持 ──
+
+test('R27b deleteTestCase json 缺失 + 目录外同名 .py 可删除', async () => {
+  const externalPy = path.join('/fake/user-browse/tests', 'test_demo.py');
+  const { svc, fileSystem } = makeFakeApp({
+    fileSystem: { files: { [externalPy]: 'print(1)' } }
+  });
+
+  // json 不存在 + 对象显式 pyFilePath 目录外 → 基名匹配放行
+  const result = await svc.deleteTestCase({ fileName: 'test_demo.py', pyFilePath: externalPy });
+
+  assert.strictEqual(result.success, true, 'json 缺失 + 目录外同名 py 应删除成功');
+  assert.ok(fileSystem.calls.unlink.includes(externalPy), '目录外同名 py 被删除');
+});
+
+test('R27b deleteTestCase json 缺失 + 目录外异名 py 拒绝 (文件身份钉死)', async () => {
+  const externalPy = path.join('/fake/user-browse/tests', 'other_case.py');
+  const { svc, fileSystem } = makeFakeApp({
+    fileSystem: { files: { [externalPy]: 'print(1)' } }
+  });
+
+  const result = await svc.deleteTestCase({ fileName: 'test_demo.py', pyFilePath: externalPy });
+
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.error, 'invalid_py_path');
+  assert.ok(!fileSystem.calls.unlink.includes(externalPy), '异名 py 不得删除');
+});
+
+test('R27b deleteTestCase 字符串 fileName + 目录外 json 文件仍拒 (非 .py 身份)', async () => {
+  // 渲染层被攻破时传 fileName=config + pyFilePath=config.json 不能删任意 config.json
+  const victimJson = path.join('/fake', 'config.json');
+  const { svc, fileSystem } = makeFakeApp({
+    fileSystem: { files: { [victimJson]: '{}' } }
+  });
+
+  const result = await svc.deleteTestCase(path.join('..', 'config.json'));
+  assert.strictEqual(result.success, false);
+  assert.ok(!fileSystem.calls.unlink.includes(victimJson), 'config.json 不得被字符串调用删除');
+});

@@ -37,6 +37,11 @@ jobs:
       - name: Lint (JS) — 强制, 违规即失败
         run: npm run lint
 
+      # R25: 依赖漏洞扫描 — 先扫描不阻断 (当前残留为 axios 链, 待 R25 遗留项 fetch 替代后收紧为强制)
+      - name: npm audit (依赖漏洞扫描) — 先扫描不阻断
+        continue-on-error: true
+        run: npm audit --omit=dev
+
       - name: Electron 版本货币提醒 (不阻断)
         continue-on-error: true
         run: |
@@ -70,6 +75,11 @@ jobs:
 
       - name: Ruff check — 强制, 违规即失败
         run: uv run ruff check src tests
+
+      # R25: Python 依赖漏洞扫描 (uv audit, 0.11+ 支持) — 先扫描不阻断, 清零后收紧为强制
+      - name: uv audit (依赖漏洞扫描) — 先扫描不阻断
+        continue-on-error: true
+        run: uv audit
 
       - name: Upload Allure results (失败时可下载排查)
         if: failure()

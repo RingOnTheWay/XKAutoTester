@@ -361,7 +361,10 @@ class TestInitializer:
         从原 appium_init L235-246 提取。
         """
         self.logger.info(t("python.testInitializer.gettingAppPid"))
-        self.app_pid = self.adb_manager.app.get_pid()
+        # P3-16: get_pid 返回 int, 下游 (crash_monitor/logcat_parser/check_crash_logs)
+        # 均按 str 比较 (logcat pid 是字符串), 显式 str() 保持 app_pid: str | None 标注一致
+        pid = self.adb_manager.app.get_pid()
+        self.app_pid = str(pid) if pid is not None else None
         if self.app_pid:
             self.logger.info(t("python.testInitializer.gotAppPid", pid=self.app_pid))
             self.reporter.attach(
@@ -383,11 +386,14 @@ class TestInitializer:
 
         # 等待后重新获取 PID（app 可能在加载期间崩溃重启，PID 已变化）
         new_pid = self.adb_manager.app.get_pid()
-        if new_pid and new_pid != self.app_pid:
+        # R26 P1-3: get_pid 返回 int, app_pid 为 str (R25 P3-16 契约) — 直接 `int != str` 恒 True:
+        # PID 未变也误报 appPidChanged, 且赋值回 int 破坏 str|None 契约。
+        # 统一 str() 比较与赋值; logcat parser 按字符串比较 pid, update_logcat_pid 亦传 str。
+        if new_pid and str(new_pid) != self.app_pid:
             self.logger.info(t("python.testInitializer.appPidChanged", old_pid=self.app_pid, new_pid=new_pid))
-            self.app_pid = new_pid
+            self.app_pid = str(new_pid)
             # 更新 logcat monitor 的 PID
-            self.adb_manager.update_logcat_pid(new_pid)
+            self.adb_manager.update_logcat_pid(str(new_pid))
 
         current_activity = self.driver.current_activity
         self.logger.info(t("python.testInitializer.currentActivity", activity=current_activity))

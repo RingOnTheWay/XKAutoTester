@@ -137,6 +137,8 @@ class PythonTestService {
 
     /** @type {import('child_process').ChildProcess|null} */
     this.currentPythonProcess = null;
+    // R26 P3-4: py_compile 子进程集合 — stop() 时终止, 防跑完 30s 超时
+    this._compileChildren = new Set();
     // 显式状态机 idle/running/stopping, stop() 后 close 回调走 run-stopped 分支
     /** @type {'idle'|'running'|'stopping'|'error'} */
     this._state = 'idle';
@@ -236,6 +238,14 @@ class PythonTestService {
         // 即使代码生成端转义有遗漏, 语法非法的注入文件也会在此被拒绝, 不会被执行。
         // 注意: 异步校验期间保持 _state = 'running' 防止重复触发 (stop() 仍可终止)。
         const compileError = await this._verifyTestFilesCompile(pythonCmd, testConfig.testPaths);
+        // P3-6: compile 校验期间用户 stop() → _state 已被置 'stopping' (进程未 spawn,
+        // stop() 无进程可 kill, 原实现返回失败且 compile 完成后照常启动测试 —
+        // 用户以为已停实际继续执行)。此处短路放弃 spawn。
+        if (this._state !== 'running') {
+          this._dialogMonitor.stop();
+          resolve(this._buildStoppedResult(testPlanName));
+          return;
+        }
         if (compileError) {
           this._state = 'idle';
           this._dialogMonitor.stop();
@@ -267,17 +277,25 @@ class PythonTestService {
               resolve(result);
             }
           } catch (err) {
-            this._state = 'error';
+            // R25 P1-2: 结果构建失败 (stats/allure) 复位 idle — _cleanupAfterRun 已
+            // 清理资源, 仅状态需复位, 否则 run() 守卫锁死后续执行
+            this._state = 'idle';
             reject(err);
           }
         });
 
         pythonProcess.on('error', (err) => {
-          this._state = 'error';
+          // R25 P1-2: spawn 失败 (python 缺失/损坏/权限错误) 后必须清理复位 —
+          // 原实现只置 _state='error' 不清理, _cleanupAfterRun 也不复位 error 态,
+          // _state 永停 'error' → 后续 run() 入口守卫 (L212) 全拒 → 测试功能锁死,
+          // 只能重启应用恢复。错误语义经 reject 传递给调用方, 状态复位回 idle 允许重试。
+          this._cleanupAfterRun();
           reject(err);
         });
       })().catch((err) => {
-        this._state = 'error';
+        // R25 P1-2: async IIFE 内异常 (spawn 同步抛错 / compile 校验抛错等) 同样走
+        // 完整清理复位 — 原实现只置 error 态, 状态机锁死导致后续 run() 全被拒
+        this._cleanupAfterRun();
         reject(err);
       });
     });
@@ -302,14 +320,34 @@ class PythonTestService {
           success: true,
           message: this.i18nService.t('testExecution.testManuallyStopped'),
         };
-      } else {
+      }
+      // P3-6: py_compile 校验阶段 (state=running 但进程未 spawn) — stop() 无进程可
+      // kill, 原实现落入 else 分支返失败, compile 完成后测试照常启动。
+      // 此处置 'stopping' 并停 dialog monitor, run() 的 compile 后短路检查据此放弃 spawn。
+      if (this._state === 'running') {
+        this._state = 'stopping';
+        this._dialogMonitor.stop();
+        // R26 P3-4: 立即终止所有 py_compile 子进程, 防其跑完 30s 超时
+        for (const child of this._compileChildren) {
+          try {
+            child.kill();
+          } catch (e) {
+            /* 已退出 */
+          }
+        }
+        this._compileChildren.clear();
         return {
-          success: false,
-          message: this.i18nService.t('testExecution.noSelectedTestPlan'),
+          success: true,
+          message: this.i18nService.t('testExecution.testManuallyStopped'),
         };
       }
+      return {
+        success: false,
+        message: this.i18nService.t('testExecution.noSelectedTestPlan'),
+      };
     } catch (error) {
-      this._state = 'error';
+      // R25 P1-2: stop 失败后复位 idle (原 error 态不清理 → run() 守卫锁死)
+      this._state = 'idle';
       console.error('Stop test failed:', error);
       return {
         success: false,
@@ -367,6 +405,8 @@ class PythonTestService {
             const child = this._spawn(pythonCmd.command, ['-m', 'py_compile', file], {
               stdio: ['ignore', 'pipe', 'pipe'],
             });
+            // R26 P3-4: compile 子进程登记 — stop() 可立即终止, 防其跑完 30s 超时
+            this._compileChildren.add(child);
             let errOut = '';
             if (child.stderr) {
               child.stderr.on('data', (d) => {
@@ -377,9 +417,13 @@ class PythonTestService {
               child.kill();
               resolve({ file, ok: false, error: '语法校验超时' });
             }, 30000);
+            const done = (result) => {
+              this._compileChildren.delete(child);
+              resolve(result);
+            };
             child.on('close', (code) => {
               clearTimeout(timer);
-              resolve({
+              done({
                 file,
                 ok: code === 0,
                 error: code === 0 ? '' : errOut.trim() || '语法错误',
@@ -387,7 +431,7 @@ class PythonTestService {
             });
             child.on('error', (e) => {
               clearTimeout(timer);
-              resolve({ file, ok: false, error: e.message });
+              done({ file, ok: false, error: e.message });
             });
           })
       )
@@ -437,9 +481,13 @@ class PythonTestService {
       const decoded = data.toString('utf8');
       // P1-5: 缓冲设上限 (防死循环打印 OOM), 始终保留最新 MAX 字节 (stats 从末尾解析),
       // 截断标记置于头部且不重复。
+      // R27 P2-5: slice 前先剥离已有 marker — 原实现 slice 可能把 marker 切半,
+      // startsWith 失败 → 重复拼接半截 marker + 最终 buffer 从半截 marker 开始致 stats 解析错位。
       buffers.output += decoded;
       if (buffers.output.length > MAX_OUTPUT_BUFFER) {
-        buffers.output = buffers.output.slice(-MAX_OUTPUT_BUFFER);
+        let body = buffers.output;
+        if (body.startsWith(OUTPUT_TRUNCATED_MARKER)) body = body.slice(OUTPUT_TRUNCATED_MARKER.length);
+        buffers.output = body.slice(-MAX_OUTPUT_BUFFER);
         if (!buffers.output.startsWith(OUTPUT_TRUNCATED_MARKER)) {
           buffers.output = OUTPUT_TRUNCATED_MARKER + buffers.output;
         }
@@ -451,7 +499,10 @@ class PythonTestService {
       const decoded = data.toString('utf8');
       buffers.errorOutput += decoded;
       if (buffers.errorOutput.length > MAX_OUTPUT_BUFFER) {
-        buffers.errorOutput = buffers.errorOutput.slice(-MAX_OUTPUT_BUFFER);
+        // R27 P2-5: 同 stdout 剥离 marker 再截断
+        let body = buffers.errorOutput;
+        if (body.startsWith(OUTPUT_TRUNCATED_MARKER)) body = body.slice(OUTPUT_TRUNCATED_MARKER.length);
+        buffers.errorOutput = body.slice(-MAX_OUTPUT_BUFFER);
         if (!buffers.errorOutput.startsWith(OUTPUT_TRUNCATED_MARKER)) {
           buffers.errorOutput = OUTPUT_TRUNCATED_MARKER + buffers.errorOutput;
         }
@@ -461,12 +512,13 @@ class PythonTestService {
     });
   }
 
-  /** close 后清理 (L154-155 提取) */
+  /** close/error 后清理 (L154-155 提取) */
   _cleanupAfterRun() {
     this._dialogMonitor.stop();
     this.currentPythonProcess = null;
-    // 清理后回到 idle (stopping/error 已被 close 回调消费, 这里兜底)
-    if (this._state === 'running' || this._state === 'stopping') {
+    // 清理后回到 idle (stopping/error 已被 close/error 回调消费, 这里兜底)
+    // R25 P1-2: error 态一并复位 — spawn error 后不清理会导致状态机锁死
+    if (this._state === 'running' || this._state === 'stopping' || this._state === 'error') {
       this._state = 'idle';
     }
   }

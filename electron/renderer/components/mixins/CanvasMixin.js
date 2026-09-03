@@ -81,6 +81,13 @@ export const CanvasMixin = {
   },
 
   _initResizeObserver() {
+    // R27: 幂等重建 — close() 会 _destroyResizeObserver() 断开, 第二次 open() 若不复建则
+    // canvasContainer 高度变化 (选中元素 → 底部 locator 面板增高) 不再触发 canvas 重算,
+    // 旧大图保持 → 视觉上"预览被底部面板遮挡/失效" (仅首次进入正常)
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
     if (!this._canvasContainer) return;
     this._resizeObserver = new ResizeObserver(() => {
       this._updateCanvasAndHighlighter();

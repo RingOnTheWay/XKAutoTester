@@ -173,7 +173,8 @@ class BLEDevice:
                 logger.error("串口打开失败")
                 self.close()
                 return False
-                # 通过AT指令设置蓝牙名称，并检查响应
+
+            # 通过AT指令设置蓝牙名称，并检查响应 (R26 P3-10: 原注释缩进在 return False 后成死注释)
             if self.ble_name:
                 if not self.set_ble_name(self.ble_name):
                     logger.error("蓝牙名称设置失败")
