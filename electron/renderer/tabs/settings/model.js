@@ -291,7 +291,9 @@ export class SettingsModel extends EventEmitter {
         this.#set(
           'updateData',
           {
-            version: data.latestVersion,
+            // R27: 显示保留 'v' 前缀 (latestVersionDisplay 带 v, 与 tag 一致);
+            // latestVersion 仍可访问用于 semver 比较 (无 v)
+            version: data.latestVersionDisplay || data.latestVersion,
             releaseNotes: data.releaseNotes,
             releaseName: data.releaseName,
             downloadUrl: data.downloadUrl,

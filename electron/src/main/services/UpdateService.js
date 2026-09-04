@@ -629,6 +629,8 @@ class UpdateService {
       hasUpdate,
       currentVersion,
       latestVersion,
+      // R27: UI 显示保留 'v' 前缀 (与 tag_name 一致) — latestVersion 给比较器用 (semver 需剥 v)
+      latestVersionDisplay: latestRelease.tag_name,
       releaseNotes: latestRelease.body || '',
       releaseName: latestRelease.name || '',
       downloadUrl,
