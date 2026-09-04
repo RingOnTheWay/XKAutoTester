@@ -103,4 +103,4 @@ refactor-rfcs
 
 # --- npm 本地缓存 (CI/构建临时) ---
 .npm-cache/
-/scripts/release-body-v0.1.6-dev.1.md
+/scripts/release-body-v*.md
