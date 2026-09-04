@@ -1,6 +1,6 @@
 {
   "name": "xkautotester-electron",
-  "version": "0.1.6-dev.2",
+  "version": "0.1.6-dev.3",
   "description": "XKAutoTester - 基于Electron+Python的自动化测试平台",
   "main": "src/main/index.js",
   "scripts": {
