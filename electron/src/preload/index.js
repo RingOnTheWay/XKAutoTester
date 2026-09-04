@@ -226,6 +226,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdate: () => invokeWithCheck(IPC_CHANNELS.CHECK_FOR_UPDATE),
   checkForUpdateRaw: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATE),
   downloadUpdate: (downloadUrl, fileName) => invokeWithCheck(IPC_CHANNELS.DOWNLOAD_UPDATE, downloadUrl, fileName),
+  // R27: 取消下载 (constants/handler/渲染层均有, 此层漏暴露 → ApiBridge: API not found)
+  cancelUpdateDownload: () => invokeWithCheck(IPC_CHANNELS.CANCEL_UPDATE_DOWNLOAD),
   installUpdate: (filePath) => invokeWithCheck(IPC_CHANNELS.INSTALL_UPDATE, filePath),
   onUpdateDownloadProgress: (callback) => {
     const listener = (event, progress) => callback(progress);
