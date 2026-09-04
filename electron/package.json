@@ -57,7 +57,8 @@
     "nanoid": "^5.1.16"
   },
   "build": {
-    "appId": "com.ring.xkautotester",
+        "electronDist": "node_modules/electron/dist",
+"appId": "com.ring.xkautotester",
     "productName": "XKAutoTester",
     "artifactName": "${productName} Setup v${version}.${ext}",
     "directories": {
