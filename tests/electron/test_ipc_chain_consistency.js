@@ -59,3 +59,14 @@ test('IPC 四层链一致: constants / preload expose / main handler / renderer 
     );
   }
 });
+
+// R27: 进度事件字段契约 — main 发送字段与 renderer 读取字段必须一致
+// (bytesPerSecond 旧名被 speed 取代后 renderer 仍读旧名 → 速度空白 bug)
+test('进度事件字段契约: UpdateService 发送 speed, settings view 读取 speed', () => {
+  const us = read(path.join(ROOT, 'electron', 'src', 'main', 'services', 'UpdateService.js'));
+  const view = read(path.join(ROOT, 'electron', 'renderer', 'tabs', 'settings', 'view.js'));
+  // main 侧事件负载含 speed 字段
+  assert.ok(/speed:\s*currentSpeed/.test(us), 'UpdateService 进度事件应含 speed: currentSpeed');
+  // renderer 侧优先读取 progress.speed
+  assert.ok(/progress\.speed/.test(view), 'settings view 应读取 progress.speed');
+});

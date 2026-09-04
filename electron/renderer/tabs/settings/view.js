@@ -557,7 +557,11 @@ export class SettingsView {
       this.els.updateProgressText.textContent = `${percent.toFixed(1)}%`;
     }
     if (this.els.updateProgressSpeed) {
-      this.els.updateProgressSpeed.textContent = SettingsModel.formatDownloadSpeed(progress.bytesPerSecond);
+      // R27: main 进度事件字段为 speed (bytesPerSecond 是旧名) — 只读 bytesPerSecond
+      // 会 undefined → 速度区空白。优先 speed, 兼容旧名。
+      this.els.updateProgressSpeed.textContent = SettingsModel.formatDownloadSpeed(
+        progress.speed ?? progress.bytesPerSecond
+      );
     }
   }
 
