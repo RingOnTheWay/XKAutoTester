@@ -1,6 +1,6 @@
 {
   "name": "xkautotester-electron",
-  "version": "0.1.6-dev.1",
+  "version": "0.1.6-dev.2",
   "description": "XKAutoTester - 基于Electron+Python的自动化测试平台",
   "main": "src/main/index.js",
   "scripts": {
@@ -57,8 +57,8 @@
     "nanoid": "^5.1.16"
   },
   "build": {
-        "electronDist": "node_modules/electron/dist",
-"appId": "com.ring.xkautotester",
+    "electronDist": "node_modules/electron/dist",
+    "appId": "com.ring.xkautotester",
     "productName": "XKAutoTester",
     "artifactName": "${productName} Setup v${version}.${ext}",
     "directories": {
