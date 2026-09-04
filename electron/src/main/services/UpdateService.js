@@ -109,8 +109,17 @@ function normalizeUpdateError(error) {
         errorMessage = `HTTP error ${status}`;
         break;
     }
-  } else if (error.code) {
-    switch (error.code) {
+  } else {
+    // R27: fetch 化后底层错误包在 error.cause (fetch 的 TypeError/AggregateError) —
+    // axios 时代 error.code 顶层语义失效 → 递归提取 cause 链的 code
+    let code = error.code;
+    if (!code && error.cause) {
+      code = error.cause.code;
+      if (!code && error.cause.errors && error.cause.errors[0]) {
+        code = error.cause.errors[0].code;
+      }
+    }
+    switch (code) {
       case 'ECONNREFUSED':
         errorCode = 'connection_refused';
         errorMessage = 'Connection refused';
@@ -142,8 +151,11 @@ function normalizeUpdateError(error) {
         errorMessage = 'SSL certificate verification failed';
         break;
       default:
-        errorCode = `network_${error.code}`;
-        errorMessage = `Network error: ${error.code}`;
+        // R27: code 为空 (无 response/code/cause) → 保持 unknown 兜底, 不造 network_undefined
+        if (code) {
+          errorCode = `network_${code}`;
+          errorMessage = `Network error: ${code}`;
+        }
         break;
     }
   }

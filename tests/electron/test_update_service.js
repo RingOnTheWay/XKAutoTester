@@ -1255,3 +1255,25 @@ test('R27 downloadUpdate 收到 cancelled 结果 → 短路返回, 不报 SHA �
   assert.strictEqual(result.cancelled, true, 'cancelled 原样返回');
   assert.ok(!result.filePath, '取消不产生安装文件');
 });
+
+// ── R27: fetch 化错误分类回归 — 底层错误在 error.cause, 原只看 error.code → 全落 unknown ──
+
+test('R27 normalizeUpdateError fetch cause 内 SSL 错误 → ssl_failed (非 unknown)', () => {
+  // Node fetch 的 SSL 失败: TypeError('fetch failed') cause=AggregateError [UNABLE_TO_VERIFY...]
+  const raw = new TypeError('fetch failed');
+  raw.cause = { errors: [{ code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', message: 'unable to verify' }] };
+  const result = normalizeUpdateError(raw);
+  assert.strictEqual(result.code, 'ssl_failed');
+});
+
+test('R27 normalizeUpdateError fetch cause 直接 code (undici) 分类', () => {
+  const raw = new TypeError('fetch failed');
+  raw.cause = { code: 'ENOTFOUND', message: 'getaddrinfo' };
+  const result = normalizeUpdateError(raw);
+  assert.strictEqual(result.code, 'dns_failed');
+});
+
+test('R27 normalizeUpdateError 无 response/code/cause → unknown 兜底', () => {
+  const result = normalizeUpdateError(new Error('something weird'));
+  assert.strictEqual(result.code, 'unknown');
+});
