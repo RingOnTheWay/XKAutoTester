@@ -15,6 +15,21 @@ async function readLogFile(logPath) {
   return fsp.readFile(logPath, 'utf8');
 }
 
+// R27: 条件轮询等待 — WriteStream 写入是异步缓冲, 固定 sleep 在全量并发慢机下不足 → 间歇 fail
+async function waitForContent(logPath, pattern, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const content = await fsp.readFile(logPath, 'utf8');
+      if (pattern.test(content)) return content;
+    } catch (e) {
+      /* 文件可能尚未创建/秒级滚动 */
+    }
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  return fsp.readFile(logPath, 'utf8');
+}
+
 test('Logger _resolveLogPath 生成 XKAT-YYYY-MM-DD-HH-MM-SS.log', async () => {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'xkat-logger-'));
   const logger = new Logger(dir, 'Test');
@@ -47,7 +62,7 @@ test('Logger resetLogPath 重置路径并关旧流 (下次 log 可继续写)', a
   logger.resetLogPath();
   // 秒级时间戳: 同秒内 reset 后路径可能相同, 关键在旧流已关、可继续写入
   await logger.log('second');
-  const content = await readLogFile(firstPath);
+  const content = await waitForContent(firstPath, /second/);
   assert.match(content, /second/, 'reset 后日志仍能写入');
   await fsp.rm(dir, { recursive: true, force: true });
 });
