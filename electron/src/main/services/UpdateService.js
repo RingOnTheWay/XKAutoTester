@@ -413,6 +413,8 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
 
   /**
    * R27: 取消进行中的更新下载 (UI 取消/叉掉) — abort 流 + 临时文件由 download catch 清理
+   * 无活跃下载视为"已无下载"幂等成功 (下载已完成/失败后取消不报错打扰 UI):
+   * action = 'cancelled' (真实中止) | 'no_active' (无活跃下载)
    */
   cancelDownload() {
     if (this._activeDownloadController) {
@@ -421,9 +423,9 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
       } catch (e) {
         /* ignore */
       }
-      return { success: true, message: 'Download cancellation requested' };
+      return { success: true, action: 'cancelled', message: 'Download cancellation requested' };
     }
-    return { success: false, error: 'no_active_download' };
+    return { success: true, action: 'no_active', message: 'No active download' };
   },
 });
 

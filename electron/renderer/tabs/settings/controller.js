@@ -401,8 +401,9 @@ export class SettingsController {
     const handleUpdateCancel = async () => {
       try {
         const result = await this.#model.cancelDownload();
-        // 仅下载中取消弹 toast; 就绪态点取消 (无活跃下载) = 推迟安装, 不打扰
-        if (result && result.success) {
+        // R27: 仅真实中止 (action='cancelled') 弹 toast; 无活跃下载 (action='no_active',
+        // 如下载已完成/就绪态点取消=推迟安装) 静默关窗, 不报 no_active_download 打扰
+        if (result && result.success && result.action === 'cancelled') {
           Toast.success(window.i18n.t('settings.downloadCancelled'));
         }
       } catch (e) {

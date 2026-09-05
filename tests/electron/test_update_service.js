@@ -1767,3 +1767,21 @@ test("R27 checkForUpdate latestVersionDisplay 与 latestVersion 同步时返回�
   assert.strictEqual(result.latestVersionDisplay, "v2.0.0");
   assert.strictEqual(result.latestVersion, "2.0.0");
 });
+
+// ── R27: 取消下载无活跃 → 幂等成功 (no_active), 不报 no_active_download 打扰 UI ──
+
+test("R27 cancelDownload 无活跃下载幂等成功 (action=no_active)", async () => {
+  // 用默认 downloadStrategyFactory (真实 strategy, 无网络/fs 触发): 初始无活跃下载
+  const svc = new UpdateService(
+    makeFakeVersionService("1.0.0"),
+    makeFakeUserDataService("/fake/config"),
+    {},
+  );
+  const result = svc.cancelDownload();
+  assert.strictEqual(result.success, true, "无活跃下载取消应幂等成功");
+  assert.strictEqual(
+    result.action,
+    "no_active",
+    "无活跃应标 no_active (非错误)",
+  );
+});
