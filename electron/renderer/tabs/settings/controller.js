@@ -398,13 +398,19 @@ export class SettingsController {
     });
 
     // 更新弹窗 - 关闭按钮 / 取消按钮 (R27: 下载中点取消/叉 → 真正 abort 下载 + toast 提示)
+    // R27: 双 toast 防护 — close/cancel 两按钮若连点/冒泡会并发触发两次, 加 800ms 去重锁
+    let lastCancelToastAt = 0;
     const handleUpdateCancel = async () => {
       try {
         const result = await this.#model.cancelDownload();
         // R27: 仅真实中止 (action='cancelled') 弹 toast; 无活跃下载 (action='no_active',
         // 如下载已完成/就绪态点取消=推迟安装) 静默关窗, 不报 no_active_download 打扰
         if (result && result.success && result.action === 'cancelled') {
-          Toast.success(window.i18n.t('settings.downloadCancelled'));
+          const now = Date.now();
+          if (now - lastCancelToastAt > 800) {
+            lastCancelToastAt = now;
+            Toast.success(window.i18n.t('settings.downloadCancelled'));
+          }
         }
       } catch (e) {
         /* 取消失败不阻塞关窗 */
