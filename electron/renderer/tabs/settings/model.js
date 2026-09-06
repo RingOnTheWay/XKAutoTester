@@ -373,7 +373,8 @@ export class SettingsModel extends EventEmitter {
     try {
       return await this.#api.cancelUpdateDownload();
     } catch (error) {
-      this.emit('error', { source: 'cancelDownload', error });
+      // R27: 取消失败静默 (取消为尽力而为, IPC 异常不打扰用户) — 不再 emit error
+      // (原路径会触发 controller 错误 toast, 与成功 toast 叠加成双 toast)
       return { success: false, error: error.message };
     }
   }
