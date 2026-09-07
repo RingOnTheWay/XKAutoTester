@@ -6,7 +6,6 @@ export class ToastManager {
   constructor() {
     this.containers = new Map();
     this.activeToasts = new Set();
-    this.lastMessageMap = new Map(); // R27: 同文案 500ms 防重 (多源重复调用兜底)
     this.defaultOptions = {
       type: 'info',
       duration: 3000,
@@ -25,12 +24,6 @@ export class ToastManager {
    * @param {number} options.duration - 显示时长(ms)
    */
   show(message, type = 'info', options = {}) {
-    // R27: 同文案 500ms 防重 — 多调用源同时弹相同消息 (如取消双触发) 只显示一条
-    const now = Date.now();
-    const lastAt = this.lastMessageMap.get(message) || 0;
-    if (now - lastAt < 500) return null;
-    this.lastMessageMap.set(message, now);
-
     const config = { ...this.defaultOptions, ...options, type };
     const container = this.getOrCreateContainer(config.container, config.position);
 

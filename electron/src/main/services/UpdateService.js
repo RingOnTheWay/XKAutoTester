@@ -184,6 +184,17 @@ function normalizeUpdateError(error) {
  * @param {string} [fileName] - asset 文件名 (可选, 多 asset 时按名匹配)
  * @returns {string|null} 64位小写 hex hash, 未找到返 null
  */
+/**
+ * R27: 下载进度百分比 (1 位小数, 0.0 → 0.1 → ... 平滑; 整数会 0.0 直接跳 1.0)
+ * @param {number} downloaded - 已下载字节
+ * @param {number} total - 总字节 (0/未知 → 0)
+ * @returns {number} 0~100 一位小数
+ */
+function calcProgressPercent(downloaded, total) {
+  if (!total || total <= 0) return 0;
+  return Math.min(Math.round((downloaded / total) * 1000) / 10, 100);
+}
+
 function parseSha256FromBody(body, fileName) {
   if (typeof body !== 'string' || body.length === 0) return null;
 
@@ -331,7 +342,8 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
       if (!eventSender) return;
       try {
         eventSender.send(IPC_CHANNELS.ON_DOWNLOAD_PROGRESS, {
-          percent: Math.min(Math.floor((downloadedLength / totalLength) * 100), 100),
+          // R27: 保留 1 位小数进度 (0.0 → 0.1 → ... 平滑), 整数会 0.0 直接跳 1.0
+          percent: calcProgressPercent(downloadedLength, totalLength),
           downloaded: downloadedLength,
           total: totalLength,
           speed: currentSpeed,
@@ -368,7 +380,7 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
             }
             downloadedLength += value.length;
             if (totalLength > 0 && eventSender) {
-              const percent = Math.floor((downloadedLength / totalLength) * 100);
+              const percent = calcProgressPercent(downloadedLength, totalLength);
               if (percent !== lastReportedPercent) {
                 lastReportedPercent = percent;
                 sendProgress();
@@ -812,6 +824,7 @@ module.exports = {
   UpdateService,
   normalizeUpdateError,
   parseSha256FromBody,
+  calcProgressPercent,
   computeFileSha256,
   sanitizeUpdateFileName,
   isTrustedDownloadUrl,

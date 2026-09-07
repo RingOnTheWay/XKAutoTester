@@ -1785,3 +1785,21 @@ test("R27 cancelDownload 无活跃下载幂等成功 (action=no_active)", async 
     "无活跃应标 no_active (非错误)",
   );
 });
+
+// ── R27: 下载进度 1 位小数 (0.0 → 0.1 → ... 平滑, 不 0.0 直跳 1.0) ──────────────
+
+test("R27 calcProgressPercent 保留 1 位小数 (中间进度有小数)", async () => {
+  const mod = await import("../../electron/src/main/services/UpdateService.js");
+  const { calcProgressPercent } = mod;
+  assert.strictEqual(calcProgressPercent(0, 1000), 0, "0 字节 = 0");
+  assert.strictEqual(
+    calcProgressPercent(1, 1000),
+    0.1,
+    "千分之一 = 0.1% (非 0)",
+  );
+  assert.strictEqual(calcProgressPercent(5, 1000), 0.5, "0.5% 中间态");
+  assert.strictEqual(calcProgressPercent(500, 1000), 50, "50%");
+  assert.strictEqual(calcProgressPercent(1000, 1000), 100, "完成 = 100");
+  assert.strictEqual(calcProgressPercent(1500, 1000), 100, "超 100 截断");
+  assert.strictEqual(calcProgressPercent(100, 0), 0, "未知总量 = 0");
+});

@@ -115,8 +115,6 @@ export class SettingsController {
 
     this.#on(model, 'error', (err) => {
       const source = err.source || '';
-      // R27: 取消失败源不弹错误 toast (取消尽力而为, 防与成功 toast 双弹)
-      if (source === 'cancelDownload') return;
       const failedKey = `settings.${source}Failed`;
       const translated = source ? window.i18n.t(failedKey) : '';
       let msg;
@@ -388,9 +386,8 @@ export class SettingsController {
       }
     });
 
-    // 更新弹窗 - 下载/安装按钮 (R27: 复用 cancelHandling 锁, 防止与取消按钮同瞬态窗口并发)
+    // 更新弹窗 - 下载/安装按钮
     this.#bindClick('update-download-btn', async () => {
-      if (cancelHandling) return; // 取消流程中, 避免下载/安装按钮 click 重复触发
       const pendingFile = this.#model.updatePendingFilePath;
       if (pendingFile) {
         await this.#model.installUpdate(pendingFile);
@@ -401,27 +398,18 @@ export class SettingsController {
     });
 
     // 更新弹窗 - 关闭按钮 / 取消按钮 (R27: 下载中点取消/叉 → 真正 abort 下载 + toast 提示)
-    // R27: 双 toast 防护 — 进入即占锁 (await 前检查+置位), 并发/连点只允许一次取消 toast
-    let cancelHandling = false;
-    let lastCancelToastAt = 0;
+    // 双 toast 已在源头修复 (主进程 abort 后 writer error 不 reject + 渲染层取消窗口静默),
+    // 无需调用侧去重锁
     const handleUpdateCancel = async () => {
-      if (cancelHandling) return;
-      cancelHandling = true;
       try {
         const result = await this.#model.cancelDownload();
         // R27: 仅真实中止 (action='cancelled') 弹 toast; 无活跃下载 (action='no_active',
         // 如下载已完成/就绪态点取消=推迟安装) 静默关窗, 不报 no_active_download 打扰
         if (result && result.success && result.action === 'cancelled') {
-          const now = Date.now();
-          if (now - lastCancelToastAt > 800) {
-            lastCancelToastAt = now;
-            Toast.success(window.i18n.t('settings.downloadCancelled'));
-          }
+          Toast.success(window.i18n.t('settings.downloadCancelled'));
         }
       } catch (e) {
         /* 取消失败不阻塞关窗 */
-      } finally {
-        cancelHandling = false;
       }
       this.#view.hideUpdateModal();
     };
