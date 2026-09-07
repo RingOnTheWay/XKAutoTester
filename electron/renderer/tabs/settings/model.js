@@ -357,11 +357,15 @@ export class SettingsModel extends EventEmitter {
       }
       return result;
     } catch (error) {
-      if (this.#state.removeUpdateProgressListener) {
-        this.#state.removeUpdateProgressListener();
-        this.#state.removeUpdateProgressListener = null;
+      // R27: AbortError = 用户主动取消 (主进程 abort 触发 writer error reject) → 静默
+      // 不 emit error (避免 controller 弹红色 'Download cancelled' 错误 toast 与成功 toast 双弹)
+      if (!error || error.name !== 'AbortError') {
+        if (this.#state.removeUpdateProgressListener) {
+          this.#state.removeUpdateProgressListener();
+          this.#state.removeUpdateProgressListener = null;
+        }
+        this.emit('error', { source: 'downloadUpdate', error });
       }
-      this.emit('error', { source: 'downloadUpdate', error });
       return { success: false, error: error.message };
     }
   }
