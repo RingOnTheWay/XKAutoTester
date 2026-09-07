@@ -32,6 +32,8 @@ export class SettingsModel extends EventEmitter {
     setPreventSleep: 'setPreventSleep',
   });
 
+  #cancelWindowUntil = 0; // R27: 取消窗口截止时间 — cancelDownload 后 1s 内下载错误静默
+
   #state = {
     config: null,
     darkMode: false,
@@ -357,9 +359,12 @@ export class SettingsModel extends EventEmitter {
       }
       return result;
     } catch (error) {
-      // R27: AbortError = 用户主动取消 (主进程 abort 触发 writer error reject) → 静默
-      // 不 emit error (避免 controller 弹红色 'Download cancelled' 错误 toast 与成功 toast 双弹)
-      if (!error || error.name !== 'AbortError') {
+      // R27: 用户取消 (AbortError 或取消窗口内任何流错误) → 静默, 不 emit error
+      // (否则 controller 弹红色 'Download cancelled' 错误 toast 与成功 toast 双弹)
+      const inCancelWindow = Date.now() < this.#cancelWindowUntil;
+      const isAbort =
+        (error && (error.name === 'AbortError' || /abort|cancel/i.test(String(error.message || '')))) || inCancelWindow;
+      if (!isAbort) {
         if (this.#state.removeUpdateProgressListener) {
           this.#state.removeUpdateProgressListener();
           this.#state.removeUpdateProgressListener = null;
@@ -372,8 +377,11 @@ export class SettingsModel extends EventEmitter {
 
   /**
    * R27: 取消进行中的更新下载 (abort 主进程下载 + 清临时文件)
+   * 取消窗口: cancelDownload 后 1s 内 downloadUpdate 的任何错误都视为取消副产物, 静默
+   * (主进程 abort 后 writer error / stream destroy 等非 AbortError 错误的双 toast 兜底)
    */
   async cancelDownload() {
+    this.#cancelWindowUntil = Date.now() + 1000;
     try {
       return await this.#api.cancelUpdateDownload();
     } catch (error) {

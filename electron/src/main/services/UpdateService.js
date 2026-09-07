@@ -406,6 +406,13 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
         try {
           fs.unlinkSync(filePath);
         } catch (e) {}
+        // R27: 用户/超时取消 (abort) 已由主 catch 走 resolve cancelled — writer error 是
+        // abort 的副产物 (ERR_STREAM_* 而非 AbortError)。若再 reject → IPC reject →
+        // 渲染层 downloadUpdate catch 误判下载失败弹红色错误 toast (与取消成功 toast 双弹)。
+        // 已 abort 时忽略 writer error (promise 已结算, 无需二次 reject)。
+        if (controller.signal.aborted) {
+          return;
+        }
         reject(err);
       });
     });
