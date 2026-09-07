@@ -1,5 +1,3 @@
-const path = require('path');
-
 // ── 默认轮询间隔 ────────────────────────────────────────────
 const DEFAULT_POLL_INTERVAL_MS = 500;
 
@@ -59,9 +57,11 @@ class AdbProgressMonitor {
    */
   start(intervalMs = DEFAULT_POLL_INTERVAL_MS) {
     if (!this.eventSender) return;
-    this.stopped = false;  // 允许 stop 后重启
+    this.stopped = false; // 允许 stop 后重启
     this.intervalId = setInterval(() => {
-      this._pollStat().catch(() => { /* 忽略监控错误 */ });
+      this._pollStat().catch(() => {
+        /* 忽略监控错误 */
+      });
     }, intervalMs);
   }
 
@@ -86,7 +86,7 @@ class AdbProgressMonitor {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
     const value = bytes / Math.pow(1024, i);
-    const digits = i === 0 ? 0 : (value >= 100 ? 0 : (value >= 10 ? 1 : 2));
+    const digits = i === 0 ? 0 : value >= 100 ? 0 : value >= 10 ? 1 : 2;
     return value.toFixed(digits) + ' ' + units[i];
   }
 
@@ -128,15 +128,8 @@ class AdbProgressMonitor {
 
     const transferredBytes = parseInt(sizeMatch[1], 10);
     const ratio = transferredBytes / this.fileStats.size;
-    const percentage = Math.min(
-      this.maxPercentage,
-      Math.round(ratio * this.maxPercentage)
-    );
-    this.emit(
-      percentage,
-      this.pollingStatus,
-      this.i18nService.t(this.pollingMessageKey)
-    );
+    const percentage = Math.min(this.maxPercentage, Math.round(ratio * this.maxPercentage));
+    this.emit(percentage, this.pollingStatus, this.i18nService.t(this.pollingMessageKey));
   }
 }
 

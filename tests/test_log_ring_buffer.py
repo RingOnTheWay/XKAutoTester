@@ -9,6 +9,7 @@
 
 纯数据结构,无 IO/线程。
 """
+
 from __future__ import annotations
 
 from main.core.logcat.crash_detector import is_crash_line

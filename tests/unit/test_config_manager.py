@@ -11,12 +11,28 @@
 
 import json
 import os
+import sys
 from unittest import mock
 
 import pytest
 
 from main.utils import config as config_module
 from main.utils.config import ConfigManager
+
+# Windows SetEnvironmentVariable 上限 32767 字符。某些工具 (如 IDE) 会注入
+# 超长环境变量 (例如 ACC_PRODUCT_CONFIG_V3 可达 48 万字符), 导致
+# mock.patch.dict 退出恢复 os.environ 时抛 ValueError, 与业务逻辑无关。
+# 此类变量对被测逻辑无影响, 测试进程内剔除即可。
+_OVERSIZED_ENV_THRESHOLD = 30000
+
+
+@pytest.fixture(autouse=True)
+def _drop_oversized_env_vars():
+    """剔除超长环境变量, 避免 Windows os.environ 32767 限制在 patch 恢复时崩溃"""
+    if sys.platform == "win32":
+        for key in [k for k, v in os.environ.items() if len(v) > _OVERSIZED_ENV_THRESHOLD]:
+            os.environ.pop(key, None)
+    yield
 
 
 @pytest.mark.unit

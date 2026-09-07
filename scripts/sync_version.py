@@ -11,15 +11,13 @@
     python scripts/sync_version.py --build-date       # 只更新构建日期
 """
 
-import json
 import argparse
+import json
 import sys
-import os
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 if sys.platform == 'win32':
-    import locale
     if sys.stdout.encoding != 'utf-8':
         sys.stdout.reconfigure(encoding='utf-8')
     if sys.stderr.encoding != 'utf-8':
@@ -36,8 +34,8 @@ def read_version_json(project_root):
     version_file = project_root / "version.json"
     if not version_file.exists():
         return None
-    
-    with open(version_file, 'r', encoding='utf-8') as f:
+
+    with open(version_file, encoding='utf-8') as f:
         return json.load(f)
 
 
@@ -53,8 +51,8 @@ def read_package_json(project_root):
     package_file = project_root / "electron" / "package.json"
     if not package_file.exists():
         return None
-    
-    with open(package_file, 'r', encoding='utf-8') as f:
+
+    with open(package_file, encoding='utf-8') as f:
         return json.load(f)
 
 
@@ -67,12 +65,11 @@ def write_package_json(project_root, package_data):
 
 def read_pyproject_toml(project_root):
     """读取 pyproject.toml 文件"""
-    import re
     pyproject_file = project_root / "pyproject.toml"
     if not pyproject_file.exists():
         return None
-    
-    with open(pyproject_file, 'r', encoding='utf-8') as f:
+
+    with open(pyproject_file, encoding='utf-8') as f:
         return f.read()
 
 
@@ -104,8 +101,8 @@ def read_package_lock_json(project_root):
     lock_file = project_root / "electron" / "package-lock.json"
     if not lock_file.exists():
         return None
-    
-    with open(lock_file, 'r', encoding='utf-8') as f:
+
+    with open(lock_file, encoding='utf-8') as f:
         return json.load(f)
 
 
@@ -135,7 +132,7 @@ def sync_to_uv_lock(project_root, version):
     if not lock_file.exists():
         return False
 
-    with open(lock_file, 'r', encoding='utf-8') as f:
+    with open(lock_file, encoding='utf-8') as f:
         content = f.read()
 
     # 匹配 [[package]] 块中 name = "xkauto-tester" 紧随的 version = "..."
@@ -193,14 +190,14 @@ def update_build_date(version_data):
 def update_version(version_data, new_version, prerelease=None):
     """更新版本号"""
     version_data['version'] = new_version
-    
+
     if prerelease:
         version_data['prerelease'] = prerelease
         version_data['fullVersion'] = f"{new_version}-{prerelease}"
     else:
         version_data['prerelease'] = ""
         version_data['fullVersion'] = new_version
-    
+
     return version_data
 
 
@@ -220,29 +217,32 @@ def verify_versions(project_root):
     if not version_data:
         print("❌ version.json 文件不存在")
         return False
-    
+
     package_data = read_package_json(project_root)
     if not package_data:
         print("❌ electron/package.json 文件不存在")
         return False
-    
+
     version_json_version = version_data.get('version')
     package_json_version = package_data.get('version')
     full_version = version_data.get('fullVersion', version_json_version)
-    
-    print(f"📋 版本信息:")
+
+    print("📋 版本信息:")
     print(f"  version.json: {version_json_version}")
     print(f"  fullVersion: {full_version}")
     print(f"  electron/package.json: {package_json_version}")
-    
+
     pyproject_content = read_pyproject_toml(project_root)
+    # P2-12: match 提前赋值 None — 原实现仅 pyproject 存在且正则命中时才定义 match,
+    # pyproject 存在但无 ^version 行时 L270 `if pyproject_content and match:` 抛 NameError
+    match = None
     if pyproject_content:
         import re
         match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', pyproject_content, re.MULTILINE)
         if match:
             pyproject_version = match.group(1)
             print(f"  pyproject.toml: {pyproject_version}")
-    
+
     lock_data = read_package_lock_json(project_root)
     if lock_data:
         lock_version = lock_data.get('version')
@@ -281,7 +281,7 @@ def verify_versions(project_root):
         if uv_lock_version != version_json_version:
             print("⚠️  uv.lock (xkauto-tester) 版本号不一致!")
             all_match = False
-    
+
     if all_match:
         print("✅ 所有版本号一致")
         return True
@@ -302,21 +302,21 @@ def main():
   %(prog)s --build-date                 只更新构建日期
         """
     )
-    
+
     parser.add_argument('version', nargs='?', help='新版本号 (例如: 0.2.0)')
     parser.add_argument('--prerelease', help='预发布标识 (例如: beta.1, dev.5)')
     parser.add_argument('--sync', action='store_true', help='从 version.json 同步到其他文件')
     parser.add_argument('--verify', action='store_true', help='验证所有版本号是否一致')
     parser.add_argument('--build-date', action='store_true', help='只更新构建日期')
-    
+
     args = parser.parse_args()
-    
+
     project_root = get_project_root()
-    
+
     if args.verify:
         success = verify_versions(project_root)
         sys.exit(0 if success else 1)
-    
+
     if args.build_date:
         version_data = read_version_json(project_root)
         if version_data:
@@ -327,29 +327,29 @@ def main():
         else:
             print("❌ version.json 文件不存在")
             sys.exit(1)
-    
+
     if args.sync:
         version_data = read_version_json(project_root)
         if version_data:
             full_version = version_data.get('fullVersion', version_data['version'])
             version = version_data.get('version')
-            
+
             success_count = 0
-            
+
             if sync_to_package_json(project_root, version_data):
-                print(f"✅ 已同步到 electron/package.json")
+                print("✅ 已同步到 electron/package.json")
                 success_count += 1
-            
+
             if sync_to_pyproject_toml(project_root, version):
-                print(f"✅ 已同步到 pyproject.toml")
+                print("✅ 已同步到 pyproject.toml")
                 success_count += 1
-            
+
             if sync_to_package_lock_json(project_root, full_version):
-                print(f"✅ 已同步到 electron/package-lock.json")
+                print("✅ 已同步到 electron/package-lock.json")
                 success_count += 1
 
             if sync_to_uv_lock(project_root, version):
-                print(f"✅ 已同步到 uv.lock")
+                print("✅ 已同步到 uv.lock")
                 success_count += 1
 
             if sync_to_readme_badges(project_root, full_version):
@@ -364,7 +364,7 @@ def main():
         else:
             print("❌ version.json 文件不存在")
             sys.exit(1)
-    
+
     if args.version:
         version_data = read_version_json(project_root)
         if not version_data:
@@ -374,35 +374,35 @@ def main():
                 'prerelease': '',
                 'fullVersion': '0.0.0'
             }
-        
+
         version_data = update_version(version_data, args.version, args.prerelease)
         version_data = update_build_date(version_data)
         write_version_json(project_root, version_data)
-        
-        print(f"✅ 版本号已更新:")
+
+        print("✅ 版本号已更新:")
         print(f"  version: {version_data['version']}")
         print(f"  fullVersion: {version_data['fullVersion']}")
         print(f"  buildDate: {version_data['buildDate']}")
-        
+
         full_version = version_data.get('fullVersion', version_data['version'])
         version = version_data.get('version')
-        
+
         if sync_to_package_json(project_root, version_data):
-            print(f"✅ 已同步到 electron/package.json")
-        
+            print("✅ 已同步到 electron/package.json")
+
         if sync_to_pyproject_toml(project_root, version):
-            print(f"✅ 已同步到 pyproject.toml")
-        
+            print("✅ 已同步到 pyproject.toml")
+
         if sync_to_package_lock_json(project_root, full_version):
-            print(f"✅ 已同步到 electron/package-lock.json")
+            print("✅ 已同步到 electron/package-lock.json")
 
         if sync_to_uv_lock(project_root, version):
-            print(f"✅ 已同步到 uv.lock")
+            print("✅ 已同步到 uv.lock")
 
         sync_to_readme_badges(project_root, full_version)
 
         sys.exit(0)
-    
+
     parser.print_help()
     sys.exit(1)
 

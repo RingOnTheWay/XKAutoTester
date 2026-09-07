@@ -58,6 +58,7 @@ const SETTINGS_HTML = `<!DOCTYPE html><html><body>
   <input id="prevent-sleep-toggle" type="checkbox">
   <button id="check-update-btn"></button>
   <span id="app-version-info">v0.0.0</span>
+  <span id="app-build-date">-</span>
   <a id="github-repo-link"></a>
   <div id="update-modal-overlay" class="hidden"></div>
   <div id="update-current-version"></div>
@@ -388,21 +389,6 @@ describe('SettingsView 全局 click 事件委托', () => {
     assert.strictEqual(outsideClicks, 1);
     unbind();
   });
-
-  test('bindGlobalClickForConfirmModal 应分发 onConfirm / onCancel', () => {
-    const v = new ViewClass();
-    let confirmCalls = 0;
-    let cancelCalls = 0;
-    const unbind = v.bindGlobalClickForConfirmModal({
-      onConfirm: () => { confirmCalls++; },
-      onCancel: () => { cancelCalls++; },
-    });
-    document.getElementById('confirm-modal-confirm-btn').click();
-    assert.strictEqual(confirmCalls, 1);
-    document.getElementById('confirm-modal-cancel-btn').click();
-    assert.strictEqual(cancelCalls, 1);
-    unbind();
-  });
 });
 
 describe('SettingsView 渲染方法', () => {
@@ -416,6 +402,18 @@ describe('SettingsView 渲染方法', () => {
     const v = new ViewClass();
     v.renderVersionInfo({ fullVersion: '1.2.3' });
     assert.strictEqual(v.els.appVersionInfo.textContent, 'v1.2.3');
+  });
+
+  test('R27 renderVersionInfo 应填充构建日期 (绑定 version.json buildDate)', () => {
+    const v = new ViewClass();
+    v.renderVersionInfo({ fullVersion: '1.2.3', buildDate: '2026-09-02' });
+    assert.strictEqual(v.els.appBuildDate.textContent, '2026-09-02', 'buildDate 填充');
+  });
+
+  test('R27 renderVersionInfo buildDate 缺失 → 显示 -', () => {
+    const v = new ViewClass();
+    v.renderVersionInfo({ fullVersion: '1.2.3' });
+    assert.strictEqual(v.els.appBuildDate.textContent, '-');
   });
 
   test('renderDataPath 应填充 input + tooltip', () => {

@@ -8,72 +8,72 @@ const Aapt2OutputParser = require('./apk/Aapt2OutputParser');
 const LocaleLabelResolver = require('./apk/LocaleLabelResolver');
 
 class ApkParserService {
-    /**
-     * @param {string} projectRoot
-     * @param {object} [i18nService]
-     * @param {object} [collaborators] - 可选注入 (测试用, 对称 ADBService collaborators)
-     * @param {object} [collaborators.invoker]
-     * @param {object} [collaborators.parser]
-     * @param {object} [collaborators.labelResolver]
-     */
-    constructor(projectRoot, i18nService = null, collaborators = {}) {
-        this.projectRoot = projectRoot;
-        this.i18nService = i18nService;
-        this.aapt2Path = null;
-        this._invoker = collaborators.invoker || new Aapt2Invoker({ projectRoot, i18nService });
-        this._parser = collaborators.parser || new Aapt2OutputParser();
-        this._labelResolver = collaborators.labelResolver || new LocaleLabelResolver({ i18nService });
+  /**
+   * @param {string} projectRoot
+   * @param {object} [i18nService]
+   * @param {object} [collaborators] - 可选注入 (测试用, 对称 ADBService collaborators)
+   * @param {object} [collaborators.invoker]
+   * @param {object} [collaborators.parser]
+   * @param {object} [collaborators.labelResolver]
+   */
+  constructor(projectRoot, i18nService = null, collaborators = {}) {
+    this.projectRoot = projectRoot;
+    this.i18nService = i18nService;
+    this.aapt2Path = null;
+    this._invoker = collaborators.invoker || new Aapt2Invoker({ projectRoot, i18nService });
+    this._parser = collaborators.parser || new Aapt2OutputParser();
+    this._labelResolver = collaborators.labelResolver || new LocaleLabelResolver({ i18nService });
+  }
+
+  async initialize() {
+    this.aapt2Path = await this._invoker.resolvePath();
+  }
+
+  async parseApk(apkPath) {
+    if (!apkPath || typeof apkPath !== 'string') {
+      return { success: false, error: this._t('apkErrors.invalidPath') };
     }
 
-    async initialize() {
-        this.aapt2Path = await this._invoker.resolvePath();
+    if (!this.aapt2Path) {
+      return { success: false, error: this._t('apkErrors.aapt2NotFound') };
     }
 
-    async parseApk(apkPath) {
-        if (!apkPath || typeof apkPath !== 'string') {
-            return { success: false, error: this._t('apkErrors.invalidPath') };
-        }
-
-        if (!this.aapt2Path) {
-            return { success: false, error: this._t('apkErrors.aapt2NotFound') };
-        }
-
-        try {
-            const fileExists = await asyncFs.exists(apkPath);
-            if (!fileExists) {
-                return { success: false, error: this._t('apkErrors.fileNotFound') };
-            }
-        } catch (error) {
-            return { success: false, error: this._t('apkErrors.fileAccessError') };
-        }
-
-        const ext = path.extname(apkPath).toLowerCase();
-        if (ext !== '.apk') {
-            return { success: false, error: this._t('apkErrors.invalidFormat') };
-        }
-
-        const invokeResult = await this._invoker.dumpBadging(this.aapt2Path, apkPath);
-        if (!invokeResult.success) {
-            return { success: false, error: invokeResult.error };
-        }
-
-        try {
-            const parsed = this._parser.parse(invokeResult.output);
-            if (!parsed.packageName) {
-                return { success: false, error: this._t('apkErrors.noPackageName') };
-            }
-            parsed.applicationLabel = this._labelResolver.resolve(parsed.localeLabels, parsed.applicationLabel);
-            return { success: true, data: parsed };
-        } catch (parseError) {
-            return { success: false, error: this._t('apkErrors.parseError') };
-        }
+    try {
+      const fileExists = await asyncFs.exists(apkPath);
+      if (!fileExists) {
+        return { success: false, error: this._t('apkErrors.fileNotFound') };
+      }
+    } catch (error) {
+      return { success: false, error: this._t('apkErrors.fileAccessError') };
     }
 
-    _t(key, params) {
-        if (!this.i18nService) return key;
-        if (typeof this.i18nService.t === 'function') return this.i18nService.t(key, params);
-        return key;
+    const ext = path.extname(apkPath).toLowerCase();
+    if (ext !== '.apk') {
+      return { success: false, error: this._t('apkErrors.invalidFormat') };
     }
+
+    const invokeResult = await this._invoker.dumpBadging(this.aapt2Path, apkPath);
+    if (!invokeResult.success) {
+      return { success: false, error: invokeResult.error };
+    }
+
+    try {
+      const parsed = this._parser.parse(invokeResult.output);
+      if (!parsed.packageName) {
+        return { success: false, error: this._t('apkErrors.noPackageName') };
+      }
+      parsed.applicationLabel = this._labelResolver.resolve(parsed.localeLabels, parsed.applicationLabel);
+      return { success: true, data: parsed };
+    } catch (parseError) {
+      return { success: false, error: this._t('apkErrors.parseError') };
+    }
+  }
+
+  _t(key, params) {
+    if (!this.i18nService) return key;
+    if (typeof this.i18nService.t === 'function') return this.i18nService.t(key, params);
+    return key;
+  }
 }
 
 module.exports = ApkParserService;

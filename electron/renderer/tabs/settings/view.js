@@ -67,6 +67,8 @@ export class SettingsView {
 
       // 版本信息
       appVersionInfo: document.getElementById('app-version-info'),
+      // R27 修复: 构建日期绑定 version.json buildDate (原 tab.html 硬编码 2026-04-15)
+      appBuildDate: document.getElementById('app-build-date'),
       githubRepoLink: document.getElementById('github-repo-link'),
 
       // 更新弹窗
@@ -96,7 +98,9 @@ export class SettingsView {
     mainContent.classList.add('dropdown-open');
     if (!this.#scrollPreventHandler) {
       this.#scrollPreventHandler = (e) => e.preventDefault();
-      mainContent.addEventListener('wheel', this.#scrollPreventHandler, { passive: false });
+      mainContent.addEventListener('wheel', this.#scrollPreventHandler, {
+        passive: false,
+      });
     }
   }
 
@@ -143,13 +147,13 @@ export class SettingsView {
 
     // 更新主题色选项选中状态
     if (this.els.themeColorOptions) {
-      this.els.themeColorOptions.querySelectorAll('.theme-color-option').forEach(opt => {
+      this.els.themeColorOptions.querySelectorAll('.theme-color-option').forEach((opt) => {
         opt.classList.toggle('active', opt.dataset.color === color);
       });
     }
 
     // 更新按钮和进度条颜色
-    document.querySelectorAll('.btn-primary, .progress-fill').forEach(el => {
+    document.querySelectorAll('.btn-primary, .progress-fill').forEach((el) => {
       el.style.backgroundColor = color;
     });
   }
@@ -242,7 +246,7 @@ export class SettingsView {
 
     // 更新选项选中状态
     if (this.els.customLanguageOptions) {
-      this.els.customLanguageOptions.querySelectorAll('.custom-select__option').forEach(opt => {
+      this.els.customLanguageOptions.querySelectorAll('.custom-select__option').forEach((opt) => {
         opt.classList.toggle('selected', opt.dataset.value === language);
       });
     }
@@ -267,7 +271,9 @@ export class SettingsView {
         const textSpan = this.els.customLanguageSelected?.querySelector('.custom-select__text');
         if (textSpan) textSpan.textContent = option.querySelector('span')?.textContent || lang;
         // 更新选项选中状态
-        customLanguageOptions.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
+        customLanguageOptions
+          .querySelectorAll('.custom-select__option')
+          .forEach((opt) => opt.classList.remove('selected'));
         option.classList.add('selected');
       }
       customLanguageOptions.classList.remove('show');
@@ -321,13 +327,16 @@ export class SettingsView {
     if (this.els.customNotificationPlatformSelected) {
       const textSpan = this.els.customNotificationPlatformSelected.querySelector('.custom-select__text');
       if (textSpan) {
-        const labels = { 'none': window.i18n.t('settings.none'), 'dingtalk': window.i18n.t('settings.dingtalk') };
+        const labels = {
+          none: window.i18n.t('settings.none'),
+          dingtalk: window.i18n.t('settings.dingtalk'),
+        };
         textSpan.textContent = labels[platform] || platform;
       }
     }
 
     if (this.els.customNotificationPlatformOptions) {
-      this.els.customNotificationPlatformOptions.querySelectorAll('.custom-select__option').forEach(opt => {
+      this.els.customNotificationPlatformOptions.querySelectorAll('.custom-select__option').forEach((opt) => {
         opt.classList.toggle('selected', opt.dataset.value === platform);
       });
     }
@@ -369,7 +378,9 @@ export class SettingsView {
         // 更新选中显示
         const textSpan = this.els.customNotificationPlatformSelected?.querySelector('.custom-select__text');
         if (textSpan) textSpan.textContent = option.querySelector('span')?.textContent || platform;
-        customNotificationPlatformOptions.querySelectorAll('.custom-select__option').forEach(opt => opt.classList.remove('selected'));
+        customNotificationPlatformOptions
+          .querySelectorAll('.custom-select__option')
+          .forEach((opt) => opt.classList.remove('selected'));
         option.classList.add('selected');
       }
       customNotificationPlatformOptions.classList.remove('show');
@@ -384,7 +395,11 @@ export class SettingsView {
    */
   moveNotificationOptionsToBody() {
     const { customNotificationPlatformOptions, customNotificationPlatformSelected } = this.els;
-    if (customNotificationPlatformOptions && customNotificationPlatformSelected && !customNotificationPlatformOptions.dataset.moved) {
+    if (
+      customNotificationPlatformOptions &&
+      customNotificationPlatformSelected &&
+      !customNotificationPlatformOptions.dataset.moved
+    ) {
       document.body.appendChild(customNotificationPlatformOptions);
       customNotificationPlatformOptions.dataset.moved = 'true';
     }
@@ -467,6 +482,9 @@ export class SettingsView {
       const version = versionInfo.fullVersion || versionInfo.version || '-';
       this.els.appVersionInfo.textContent = `v${version}`;
     }
+    if (this.els.appBuildDate) {
+      this.els.appBuildDate.textContent = versionInfo.buildDate || '-';
+    }
   }
 
   // ─── Update Modal ──────────────────────────────────────────────
@@ -539,7 +557,16 @@ export class SettingsView {
       this.els.updateProgressText.textContent = `${percent.toFixed(1)}%`;
     }
     if (this.els.updateProgressSpeed) {
-      this.els.updateProgressSpeed.textContent = SettingsModel.formatDownloadSpeed(progress.bytesPerSecond);
+      // R27: main 进度事件字段为 speed (bytesPerSecond 是旧名) — 只读 bytesPerSecond
+      // 会 undefined → 速度区空白。优先 speed, 兼容旧名。
+      // 下载完成 (100%) 速度无意义 → 隐藏显示
+      const speedDone = percent >= 100;
+      this.els.updateProgressSpeed.style.display = speedDone ? 'none' : '';
+      if (!speedDone) {
+        this.els.updateProgressSpeed.textContent = SettingsModel.formatDownloadSpeed(
+          progress.speed ?? progress.bytesPerSecond
+        );
+      }
     }
   }
 
@@ -596,7 +623,12 @@ export class SettingsView {
     this.updateLanguageSelector(settings.language || 'zh-CN');
 
     // 通知
-    this.updateNotificationConfig(settings.notification || { platform: 'none', dingtalk: { access_token: '', secret: '' } });
+    this.updateNotificationConfig(
+      settings.notification || {
+        platform: 'none',
+        dingtalk: { access_token: '', secret: '' },
+      }
+    );
 
     // 自动检查更新
     if (this.els.autoCheckUpdateToggle) {
@@ -657,82 +689,10 @@ export class SettingsView {
     }
   }
 
-  // ─── Confirm Modal Bridge ──────────────────────────────────────
-
-  showConfirmModal(title, message, onConfirm) {
-    const titleElement = document.getElementById('confirm-modal-title');
-    const messageElement = document.getElementById('confirm-modal-message');
-
-    if (titleElement) titleElement.textContent = title;
-    if (messageElement) messageElement.textContent = message;
-
-    // 保存回调到全局，供 confirm 按钮事件委托使用（跨 tab 共享）
-    window.__XKAT_CONFIRM_CALLBACK__ = onConfirm;
-    this._confirmCallback = onConfirm;
-
-    // 重置确认按钮状态
-    const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
-    if (confirmBtn) {
-      confirmBtn.disabled = false;
-      confirmBtn.classList.remove('loading');
-      // 清除旧的 originalText，使用当前语言重新翻译
-      delete confirmBtn.dataset.originalText;
-      const i18nKey = confirmBtn.getAttribute('data-i18n');
-      confirmBtn.innerHTML = i18nKey ? window.i18n.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
-    }
-
-    const confirmModal = window.__XKAT_MODALS__?.confirm;
-    if (confirmModal) {
-      confirmModal.open();
-    } else {
-      if (window.confirm(message)) {
-        onConfirm();
-      }
-    }
-  }
-
-  setConfirmButtonLoading(loading) {
-    const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
-    if (!confirmBtn) return;
-
-    if (loading) {
-      // 保存原始文本
-      if (!confirmBtn.dataset.originalText) {
-        confirmBtn.dataset.originalText = confirmBtn.textContent;
-      }
-      confirmBtn.disabled = true;
-      confirmBtn.classList.add('loading');
-      confirmBtn.innerHTML = '<span class="btn-spinner"></span>';
-    } else {
-      confirmBtn.disabled = false;
-      confirmBtn.classList.remove('loading');
-      // 清除 originalText，使用当前语言重新翻译
-      delete confirmBtn.dataset.originalText;
-      const i18nKey = confirmBtn.getAttribute('data-i18n');
-      confirmBtn.innerHTML = i18nKey ? window.i18n.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
-    }
-  }
-
-  hideConfirmModal() {
-    if (this._keepModalOpen) {
-      this._keepModalOpen = false;
-      // 只重置按钮状态，不关闭 modal（callback 会重新 showConfirmModal）
-      const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
-      if (confirmBtn) {
-        confirmBtn.disabled = false;
-        confirmBtn.classList.remove('loading');
-        delete confirmBtn.dataset.originalText;
-        const i18nKey = confirmBtn.getAttribute('data-i18n');
-        confirmBtn.innerHTML = i18nKey ? window.i18n.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
-      }
-      return;
-    }
-    const confirmModal = window.__XKAT_MODALS__?.confirm;
-    if (confirmModal) confirmModal.close();
-    this._confirmCallback = null;
-    window.__XKAT_CONFIRM_CALLBACK__ = null;
-    this.setConfirmButtonLoading(false);
-  }
+  // R24 P1-6: Confirm Modal Bridge (showConfirmModal / setConfirmButtonLoading /
+  // hideConfirmModal / bindGlobalClickForConfirmModal) 已删 — 统一走
+  // core/utils/confirmModal.js Promise 版, 消除全局回调覆盖致 Promise 挂起与
+  // document 委托三份重复。
 
   // ─── 事件绑定辅助（Controller → View 迁移） ─────────────────────
 
@@ -744,7 +704,7 @@ export class SettingsView {
     if (mainContent) {
       mainContent.classList.remove('dropdown-open');
     }
-    document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+    document.querySelectorAll('.custom-select__options.show').forEach((opt) => {
       opt.classList.remove('show');
     });
   }
@@ -754,7 +714,7 @@ export class SettingsView {
    * @param {Element} [except] - 不需要隐藏的元素
    */
   hideAllCustomSelectOptions(except = null) {
-    document.querySelectorAll('.custom-select__options.show').forEach(opt => {
+    document.querySelectorAll('.custom-select__options.show').forEach((opt) => {
       if (opt !== except) opt.classList.remove('show');
     });
   }
@@ -785,7 +745,8 @@ export class SettingsView {
         return;
       }
       // 4. 检查是否点击了下拉选项（由各自 options handler 处理）
-      const isInCustomSelect = e.target.closest('.custom-select') ||
+      const isInCustomSelect =
+        e.target.closest('.custom-select') ||
         e.target.closest('.custom-select__options') ||
         e.target.closest('.custom-select__option') ||
         e.target.closest('.theme-color-options') ||
@@ -796,24 +757,6 @@ export class SettingsView {
     };
     document.addEventListener('click', handler, true);
     return () => document.removeEventListener('click', handler, true);
-  }
-
-  /**
-   * 绑定全局 click 用于 confirm modal 按钮事件委托
-   * @param {Object} handlers - { onConfirm, onCancel }
-   * @returns {Function} unbind 函数
-   */
-  bindGlobalClickForConfirmModal({ onConfirm, onCancel } = {}) {
-    const handler = (e) => {
-      if (e.target.id === 'confirm-modal-confirm-btn' || e.target.closest('#confirm-modal-confirm-btn')) {
-        onConfirm?.();
-      }
-      if (e.target.id === 'confirm-modal-cancel-btn' || e.target.closest('#confirm-modal-cancel-btn')) {
-        onCancel?.();
-      }
-    };
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
   }
 
   /**

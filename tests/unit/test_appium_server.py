@@ -8,11 +8,11 @@ import requests
 
 from main.core.appium_server import (
     AppiumServer,
-    _LogPump,
-    _extract_listening_pids,
     _kill_port_process,
     _kill_port_unix,
     _kill_port_windows,
+    _LogPump,
+    _taskkill_pid,  # R26 P2-10: 进程归属验证
 )
 
 # ── Fake 对象 ─────────────────────────────────────────────────
@@ -102,7 +102,7 @@ class TestLogPump:
         """__init__ 应打开日志文件 (utf-8, w 模式)"""
         log_path = tmp_path / "test.log"
         process = FakePopen()
-        pump = _LogPump(log_path, process)
+        pump = _LogPump(log_path, process, poll_interval=0.01)  # P3-13: 小间隔提速
         assert log_path.exists()
         assert pump._file is not None
         assert not pump._file.closed
@@ -111,7 +111,7 @@ class TestLogPump:
         """start() 应启动 daemon 线程"""
         log_path = tmp_path / "test.log"
         process = FakePopen(stdout_lines=["line1\n"])
-        pump = _LogPump(log_path, process)
+        pump = _LogPump(log_path, process, poll_interval=0.01)  # P3-13: 小间隔提速
         pump.start()
         assert pump._thread is not None
         assert pump._thread.daemon is True
@@ -121,9 +121,9 @@ class TestLogPump:
         """stop() 应 join 线程 + 关闭文件"""
         log_path = tmp_path / "test.log"
         process = FakePopen(stdout_lines=["line1\n"])
-        pump = _LogPump(log_path, process)
+        pump = _LogPump(log_path, process, poll_interval=0.01)  # P3-13: 小间隔提速
         pump.start()
-        time.sleep(0.1)
+        time.sleep(0.02)  # P3-13: 注入小 poll_interval 后等待缩短
         pump.stop()
         assert pump._file.closed
         assert not pump._thread.is_alive()
@@ -132,7 +132,7 @@ class TestLogPump:
         """stop() 多次调用应安全"""
         log_path = tmp_path / "test.log"
         process = FakePopen(stdout_lines=["line1\n"])
-        pump = _LogPump(log_path, process)
+        pump = _LogPump(log_path, process, poll_interval=0.01)  # P3-13: 小间隔提速
         pump.start()
         pump.stop()
         pump.stop()
@@ -144,9 +144,9 @@ class TestLogPump:
         log_path = tmp_path / "test.log"
         ansi_line = "\x1b[32mGREEN LINE\x1b[0m\n"
         process = FakePopen(stdout_lines=[ansi_line])
-        pump = _LogPump(log_path, process)
+        pump = _LogPump(log_path, process, poll_interval=0.01)  # P3-13: 小间隔提速
         pump.start()
-        time.sleep(0.2)
+        time.sleep(0.05)  # P3-13: 注入小 poll_interval 后等待缩短
         pump.stop()
         content = log_path.read_text(encoding="utf-8")
         assert "GREEN LINE" in content
@@ -156,12 +156,12 @@ class TestLogPump:
         """process.poll() 返非 None 时线程应退出"""
         log_path = tmp_path / "test.log"
         process = FakePopen(stdout_lines=[])
-        pump = _LogPump(log_path, process)
+        pump = _LogPump(log_path, process, poll_interval=0.01)  # P3-13: 小间隔提速
         pump.start()
-        time.sleep(0.1)
+        time.sleep(0.02)  # P3-13: 小间隔提速
         # 模拟进程退出
         process._terminated = True
-        time.sleep(0.3)
+        time.sleep(0.05)
         assert not pump._thread.is_alive()
         pump.stop()
 
@@ -272,27 +272,30 @@ class TestKillPortProcessDispatch:
 
     def test_dispatch_windows_calls_windows_func(self):
         """platform.system() == 'Windows' -> _kill_port_windows"""
-        with patch("main.core.appium_server.platform") as mock_platform, patch(
-            "main.core.appium_server._kill_port_windows"
-        ) as mock_win:
+        with (
+            patch("main.core.appium_server.platform") as mock_platform,
+            patch("main.core.appium_server._kill_port_windows") as mock_win,
+        ):
             mock_platform.system.return_value = "Windows"
             _kill_port_process(4723)
             mock_win.assert_called_once()
 
     def test_dispatch_linux_calls_unix_func(self):
         """platform.system() == 'Linux' -> _kill_port_unix"""
-        with patch("main.core.appium_server.platform") as mock_platform, patch(
-            "main.core.appium_server._kill_port_unix"
-        ) as mock_unix:
+        with (
+            patch("main.core.appium_server.platform") as mock_platform,
+            patch("main.core.appium_server._kill_port_unix") as mock_unix,
+        ):
             mock_platform.system.return_value = "Linux"
             _kill_port_process(4723)
             mock_unix.assert_called_once()
 
     def test_dispatch_darwin_calls_unix_func(self):
         """platform.system() == 'Darwin' -> _kill_port_unix"""
-        with patch("main.core.appium_server.platform") as mock_platform, patch(
-            "main.core.appium_server._kill_port_unix"
-        ) as mock_unix:
+        with (
+            patch("main.core.appium_server.platform") as mock_platform,
+            patch("main.core.appium_server._kill_port_unix") as mock_unix,
+        ):
             mock_platform.system.return_value = "Darwin"
             _kill_port_process(4723)
             mock_unix.assert_called_once()
@@ -328,7 +331,7 @@ class TestAppiumServerConstruction:
     def test_init_subprocess_module_injection(self, tmp_user_data):
         """subprocess_module 关键字参数注入"""
         fake_sub = FakeSubprocessModule()
-        server = AppiumServer(subprocess_module=fake_sub)
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)  # P3-13: 轮询提速
         assert server._subprocess is fake_sub
 
     def test_init_no_is_running_field(self, tmp_user_data):
@@ -428,7 +431,7 @@ class TestAppiumServerStart:
     def test_start_already_running_returns_true(self, tmp_user_data):
         """已在运行 -> 返 True, 不创建 process"""
         fake_sub = FakeSubprocessModule()
-        server = AppiumServer(subprocess_module=fake_sub)
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)  # P3-13: 轮询提速
         with patch.object(server, "is_server_running", return_value=True):
             result = server.start(timeout=1)
         assert result is True
@@ -437,7 +440,7 @@ class TestAppiumServerStart:
     def test_start_success_returns_true(self, tmp_user_data):
         """Popen + is_server_running True -> 返 True"""
         fake_sub = FakeSubprocessModule(popen_factory=lambda *a, **kw: FakePopen(stdout_lines=[]))
-        server = AppiumServer(subprocess_module=fake_sub)
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)  # P3-13: 轮询提速
         # 模拟: 第一次 is_server_running False (触发 Popen), 第二次 True (启动成功)
         with patch.object(server, "is_server_running", side_effect=[False, True]):
             result = server.start(timeout=5)
@@ -447,7 +450,7 @@ class TestAppiumServerStart:
     def test_start_timeout_auto_stop(self, tmp_user_data):
         """超时 -> 自动 stop() -> 返 False"""
         fake_sub = FakeSubprocessModule(popen_factory=lambda *a, **kw: FakePopen(stdout_lines=[]))
-        server = AppiumServer(subprocess_module=fake_sub)
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)  # P3-13: 轮询提速
         # is_server_running 永远 False -> 超时
         with patch.object(server, "is_server_running", return_value=False):
             with patch.object(server, "stop") as mock_stop:
@@ -462,7 +465,7 @@ class TestAppiumServerStart:
             raise OSError("spawn failed")
 
         fake_sub = FakeSubprocessModule(popen_factory=popen_raise)
-        server = AppiumServer(subprocess_module=fake_sub)
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)  # P3-13: 轮询提速
         with patch.object(server, "is_server_running", return_value=False):
             with patch.object(server, "stop") as mock_stop:
                 result = server.start(timeout=2)
@@ -480,7 +483,7 @@ class TestAppiumServerStop:
     def test_stop_idempotent(self, tmp_user_data):
         """多次 stop() 安全"""
         fake_sub = FakeSubprocessModule()
-        server = AppiumServer(subprocess_module=fake_sub)
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)  # P3-13: 轮询提速
         server.stop()
         server.stop()
         server.stop()
@@ -488,19 +491,33 @@ class TestAppiumServerStop:
     def test_stop_with_process_terminates(self, tmp_user_data):
         """有 process -> terminate + wait"""
         fake_sub = FakeSubprocessModule()
-        server = AppiumServer(subprocess_module=fake_sub)
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)  # P3-13: 轮询提速
         fake_process = FakePopen()
         server.process = fake_process
         server._log_pump = None  # 跳过 log pump
         server.stop()
         assert fake_process._terminated is True
 
-    def test_stop_no_process_still_port_cleanup(self, tmp_user_data):
-        """无 process (用别人 server) -> 仍调 port killer"""
+    def test_stop_no_process_not_owned_skip_port_cleanup(self, tmp_user_data):
+        """P1-6: 无 process 且非本对象创建 (复用外部 server) -> 不调 port killer (防误杀)"""
         fake_sub = FakeSubprocessModule(run_results=[FakeCompletedProcess(0, "", "")])
-        server = AppiumServer(subprocess_module=fake_sub)
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)  # P3-13: 轮询提速
         server.process = None
         server._log_pump = None
+        server._started_by_us = False  # 复用外部实例场景
+        with patch("main.core.appium_server.platform") as mock_platform:
+            mock_platform.system.return_value = "Windows"
+            server.stop()
+        # 外部实例不得被强杀 (taskkill /F 兜底必须跳过)
+        assert len(fake_sub.run_calls) == 0
+
+    def test_stop_owned_process_still_port_cleanup(self, tmp_user_data):
+        """P1-6: 本对象创建的进程 -> stop 仍做端口清理兜底"""
+        fake_sub = FakeSubprocessModule(run_results=[FakeCompletedProcess(0, "", "")])
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)  # P3-13: 轮询提速
+        server.process = FakePopen()
+        server._log_pump = None
+        server._started_by_us = True  # start() Popen 成功后置位
         with patch("main.core.appium_server.platform") as mock_platform:
             mock_platform.system.return_value = "Windows"
             server.stop()
@@ -510,7 +527,7 @@ class TestAppiumServerStop:
     def test_stop_terminate_timeout_kills(self, tmp_user_data):
         """terminate wait 超时 -> kill"""
         fake_sub = FakeSubprocessModule()
-        server = AppiumServer(subprocess_module=fake_sub)
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)  # P3-13: 轮询提速
         fake_process = FakePopen()
         fake_process._wait_timeout_raised = True
         server.process = fake_process
@@ -521,7 +538,7 @@ class TestAppiumServerStop:
     def test_stop_resets_process_to_none(self, tmp_user_data):
         """stop 后 process 应为 None"""
         fake_sub = FakeSubprocessModule()
-        server = AppiumServer(subprocess_module=fake_sub)
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)  # P3-13: 轮询提速
         server.process = FakePopen()
         server._log_pump = None
         server.stop()
@@ -599,3 +616,75 @@ class TestAppiumServerContextManager:
         with patch.object(server, "stop") as mock_stop:
             server.__exit__(None, None, None)
             mock_stop.assert_called_once()
+
+
+# ── R26 P2-9/P2-10: server 子命令 + 端口清理进程名验证 ──────
+
+
+@pytest.mark.unit
+class TestServerSubcommandAndKillGuard:
+    """P2-9: start() 的 cmd 含 server 子命令 (Appium 3.x 必需);
+    P2-10: _taskkill_pid 验证进程归属, 非 Appium 不误杀。"""
+
+    def test_start_cmd_contains_server_subcommand(self, tmp_user_data):
+        """Popen 收到的 cmd 第一个参数应为 'server' (Appium 3.x 必需, 2.x 兼容)"""
+        captured_cmd = {}
+
+        class FakePopenCapture:
+            def __init__(self, *a, **kw):
+                captured_cmd["cmd"] = a[0]
+                self.stdout = None
+                self.stderr = None
+                self.pid = 123
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+            def wait(self, timeout=None):
+                return 0
+
+            def kill(self):
+                pass
+
+        fake_sub = FakeSubprocessModule(popen_factory=lambda *a, **kw: FakePopenCapture(*a, **kw))
+        server = AppiumServer(subprocess_module=fake_sub, server_poll_interval=0.01)
+        with patch.object(server, "is_server_running", side_effect=[False, True]):
+            result = server.start(timeout=1)
+        assert result is True
+        assert captured_cmd["cmd"][1] == "server", f"cmd 应含 server 子命令, 实际: {captured_cmd['cmd']}"
+
+    def test_taskkill_skips_non_appium_process(self):
+        """占用进程非 node/appium → 跳过清理 (防误杀)"""
+        kill_calls = []
+
+        class FakeSub:
+            def run(self, cmd, **kwargs):
+                if cmd[0] == "tasklist":
+                    # CSV: PID, Name — 模拟用户程序 (非 node)
+                    return FakeCompletedProcess(0, '"9999","notepad.exe","Console","1","10,000 K"', "")
+                if cmd[0] == "taskkill":
+                    kill_calls.append(cmd)
+                    return FakeCompletedProcess(0, "", "")
+                return FakeCompletedProcess(0, "", "")
+
+        _taskkill_pid("9999", FakeSub())
+        assert kill_calls == [], "非 Appium 进程不得 taskkill"
+
+    def test_taskkill_kills_node_process(self):
+        """占用进程为 node.exe (Appium 运行时) → 正常清理"""
+        kill_calls = []
+
+        class FakeSub:
+            def run(self, cmd, **kwargs):
+                if cmd[0] == "tasklist":
+                    return FakeCompletedProcess(0, '"1234","node.exe","Console","1","20,000 K"', "")
+                if cmd[0] == "taskkill":
+                    kill_calls.append(cmd)
+                    return FakeCompletedProcess(0, "", "")
+                return FakeCompletedProcess(0, "", "")
+
+        _taskkill_pid("1234", FakeSub())
+        assert kill_calls == [["taskkill", "/F", "/PID", "1234"]], "node 进程应被清理"

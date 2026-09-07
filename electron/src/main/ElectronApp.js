@@ -10,9 +10,9 @@ class ElectronApp {
     this.allureWindow = null;
     this.isDev = process.argv.includes('--dev');
     this.isPackaged = app.isPackaged || false;
-    
+
     this.projectRoot = pathHelper.getProjectRoot(this.isPackaged, __dirname);
-    
+
     this.userConfigPath = null;
     this.userDataPath = null;
     this.services = {};
@@ -30,7 +30,7 @@ class ElectronApp {
       resizable: false,
       center: true,
       transparent: true,
-      backgroundColor: "#00000000",
+      backgroundColor: '#00000000',
       hasShadow: true,
       roundedCorners: true,
       titleBarStyle: 'hidden',
@@ -40,13 +40,13 @@ class ElectronApp {
         sandbox: false,
         preload: pathHelper.getPreloadPath(this.isPackaged, __dirname),
         // webSecurity: true — splash 仅加载本地文件; 关闭同源策略有 XSS 风险
-        webSecurity: true
-      }
+        webSecurity: true,
+      },
     });
 
     const splashPath = pathHelper.getSplashPath(this.isPackaged, __dirname);
     this.splashWindow.loadFile(splashPath);
-    
+
     this.splashWindow.once('ready-to-show', () => {
       if (this.splashWindow) {
         this.splashWindow.focus();
@@ -58,7 +58,7 @@ class ElectronApp {
         }, 100);
       }
     });
-    
+
     this.splashWindow.on('closed', () => {
       this.splashWindow = null;
     });
@@ -76,7 +76,7 @@ class ElectronApp {
         sandbox: false,
         preload: pathHelper.getPreloadPath(this.isPackaged, __dirname),
         // webSecurity: true — mainWindow 加载本地 renderer/; 关闭同源策略有 XSS 风险
-        webSecurity: true
+        webSecurity: true,
       },
       frame: false,
       transparent: true,
@@ -87,9 +87,9 @@ class ElectronApp {
       x: 100,
       y: 100,
       autoHideMenuBar: true,
-      thickFrame: false
+      thickFrame: false,
     });
-    
+
     this.mainWindow.setMenu(null);
 
     // 主窗口 CSP: 给默认 session 注入 Content-Security-Policy 响应头, 收紧 XSS 面
@@ -190,15 +190,17 @@ class ElectronApp {
         sandbox: false,
         // webSecurity: true — allure 报告与 HTTP server 同源 http://localhost:PORT; 关闭同源策略有 XSS 风险
         webSecurity: true,
-        partition: partitionName
+        partition: partitionName,
       },
-      autoHideMenuBar: true
+      autoHideMenuBar: true,
     });
 
     const ses = this.allureWindow.webContents.session;
 
     ses.webRequest.onBeforeRequest(
-      { urls: ['*://*.google-analytics.com/*', '*://*.googletagmanager.com/*'] },
+      {
+        urls: ['*://*.google-analytics.com/*', '*://*.googletagmanager.com/*'],
+      },
       (details, callback) => {
         callback({ cancel: true });
       }
@@ -277,13 +279,6 @@ class ElectronApp {
       }
     });
 
-    app.on('before-quit', () => {
-      if (this.allureWindow && !this.allureWindow.isDestroyed()) {
-        this.allureWindow.destroy();
-        this.allureWindow = null;
-      }
-    });
-
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         this.createSplashWindow();
@@ -344,18 +339,59 @@ class ElectronApp {
     });
 
     app.on('before-quit', () => {
+      // P3-3: 单一 before-quit — 原 L282 (allureWindow destroy) 与 L348 (服务清理)
+      // 两个监听器合并为一处, 避免重复注册/执行顺序依赖
       // 持有子进程/会话的 service 必须在退出前同步释放, 避免孤儿进程
       // 对称: schedulerService.destroy() + allureService.cleanupSync() (will-quit)
       // catch 块加 console.error 可观测性: 静默吞异常致资源泄漏不可排查
-      try { this.services.schedulerService && this.services.schedulerService.destroy(); } catch (e) { console.error('[before-quit] schedulerService.destroy failed:', e); }
-      try { this.services.scrcpyService && this.services.scrcpyService.stopScrcpy(); } catch (e) { console.error('[before-quit] scrcpyService.stopScrcpy failed:', e); }
-      try { this.services.pythonTestService && this.services.pythonTestService.stop(); } catch (e) { console.error('[before-quit] pythonTestService.stop failed:', e); }
-      try { this.services.inspectorService && this.services.inspectorService.dispose(); } catch (e) { console.error('[before-quit] inspectorService.dispose failed:', e); }
+      try {
+        if (this.allureWindow && !this.allureWindow.isDestroyed()) {
+          this.allureWindow.destroy();
+          this.allureWindow = null;
+        }
+      } catch (e) {
+        console.error('[before-quit] allureWindow.destroy failed:', e);
+      }
+      try {
+        this.services.schedulerService && this.services.schedulerService.destroy();
+      } catch (e) {
+        console.error('[before-quit] schedulerService.destroy failed:', e);
+      }
+      try {
+        this.services.scrcpyService && this.services.scrcpyService.stopScrcpy();
+      } catch (e) {
+        console.error('[before-quit] scrcpyService.stopScrcpy failed:', e);
+      }
+      try {
+        this.services.pythonTestService && this.services.pythonTestService.stop();
+      } catch (e) {
+        console.error('[before-quit] pythonTestService.stop failed:', e);
+      }
+      try {
+        this.services.inspectorService && this.services.inspectorService.dispose();
+      } catch (e) {
+        console.error('[before-quit] inspectorService.dispose failed:', e);
+      }
+      // P3-3: 退出链补 stopPreventSleep — 释放 powerSaveBlocker (restorePreventSleepSetting
+      // 启动时可能已 start, 若不停止, 防睡眠锁残留到下次会话)
+      try {
+        const { stopPreventSleep } = require('./handlers/powerHandlers');
+        stopPreventSleep();
+      } catch (e) {
+        console.error('[before-quit] stopPreventSleep failed:', e);
+      }
     });
 
     app.on('will-quit', () => {
       if (this.services.allureService) {
         this.services.allureService.cleanupSync();
+      }
+      // R24 P3-2: 退出前关闭持久日志流 (Logger.close), 防止尾日志丢失
+      try {
+        this.services.allureService?.logger?.close?.();
+        this.services.pythonTestService?.logger?.close?.();
+      } catch (e) {
+        console.error('[will-quit] logger.close failed:', e);
       }
     });
   }

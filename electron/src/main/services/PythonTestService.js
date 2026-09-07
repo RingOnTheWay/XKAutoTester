@@ -6,6 +6,12 @@ const Logger = require('../utils/logger');
 const FileBasedDialogMonitor = require('./FileBasedDialogMonitor');
 const { IPC_CHANNELS } = require('../../shared/constants');
 
+// ── module-level 常量 (对称 TestPlanService DEFAULT_TEST_TYPE 等) ──
+
+/** P1-5: 输出缓冲上限 5MB, 超限保留尾部并标记截断 (防死循环输出 OOM) */
+const MAX_OUTPUT_BUFFER = 5 * 1024 * 1024;
+const OUTPUT_TRUNCATED_MARKER = '\n...[输出过长已截断]...\n';
+
 // ── module-level 纯函数 (对称 H1 TestPlanService parsePytestIni/extractMarkersFromContent/inferTestType) ──
 
 /**
@@ -75,7 +81,9 @@ function findTestPlanRunMarker(output) {
  */
 function buildPythonPathEnv(pythonCmd, srcPath) {
   if (pythonCmd.isSystem && pythonCmd.sitePackagesPath) {
-    return { PYTHONPATH: [pythonCmd.sitePackagesPath, srcPath].join(path.delimiter) };
+    return {
+      PYTHONPATH: [pythonCmd.sitePackagesPath, srcPath].join(path.delimiter),
+    };
   }
   return { PYTHONPATH: srcPath };
 }
@@ -97,7 +105,7 @@ const defaultProgressSenderFactory = (mainWindow) => ({
     if (mainWindow) {
       mainWindow.webContents.send(channel, data);
     }
-  }
+  },
 });
 
 // ── PythonTestService 类 ──
@@ -129,17 +137,21 @@ class PythonTestService {
 
     /** @type {import('child_process').ChildProcess|null} */
     this.currentPythonProcess = null;
+    // R26 P3-4: py_compile 子进程集合 — stop() 时终止, 防跑完 30s 超时
+    this._compileChildren = new Set();
     // 显式状态机 idle/running/stopping, stop() 后 close 回调走 run-stopped 分支
     /** @type {'idle'|'running'|'stopping'|'error'} */
     this._state = 'idle';
 
     // ── 已有注入 (保留, deps.dialogMonitor 直传) ──
     this._spawn = deps.spawn || defaultSpawn;
-    this._dialogMonitor = deps.dialogMonitor || new FileBasedDialogMonitor({
-      mainWindow: this.mainWindow,
-      i18nService: this.i18nService,
-      userDataPath: this.userDataPath
-    });
+    this._dialogMonitor =
+      deps.dialogMonitor ||
+      new FileBasedDialogMonitor({
+        mainWindow: this.mainWindow,
+        i18nService: this.i18nService,
+        userDataPath: this.userDataPath,
+      });
 
     // ── 3 新 factory-or-default (对称 H1/H2) ──
     this._fileSystemFactory = deps.fileSystemFactory || defaultFileSystemFactory;
@@ -171,10 +183,15 @@ class PythonTestService {
         useVenv: true,
         isEmbedded: pythonConfig.isEmbedded,
         isSystem: pythonConfig.isSystem,
-        sitePackagesPath: pythonConfig.sitePackagesPath
+        sitePackagesPath: pythonConfig.sitePackagesPath,
       };
     }
-    return { command: null, args: [], useVenv: false, error: this.i18nService.t('splash.checks.venvNotFound') };
+    return {
+      command: null,
+      args: [],
+      useVenv: false,
+      error: this.i18nService.t('splash.checks.venvNotFound'),
+    };
   }
 
   /**
@@ -188,57 +205,97 @@ class PythonTestService {
    */
   run(testConfig) {
     return new Promise((resolve, reject) => {
-      const { testPlanName } = testConfig;
+      // 主体包进 async IIFE: 使 Step 2.5 的 await 语法校验可用, 同时保留 Promise 契约
+      (async () => {
+        const { testPlanName } = testConfig;
 
-      // run 时刷新 _progressSender: 构造时 mainWindow 可能为 null (applicationService L121),
-      // ElectronApp.initialize L124-125 后续才赋值 this.mainWindow。
-      // 闭包捕获的 null 会导致 webContents.send 静默失败, 渲染进程收不到 TEST_OUTPUT/TEST_ERROR。
-      this._progressSender = this._progressSenderFactory(this.mainWindow);
-
-      // Step 1: 解析 python 命令, 失败早退
-      const pythonCmd = this.getPythonCommand();
-      if (!pythonCmd.command) {
-        resolve(this._buildFailureResult(testPlanName, pythonCmd.error));
-        return;
-      }
-
-      // Step 2: 启动 dialog monitor
-      this._dialogMonitor.start();
-
-      // 进入 running 状态
-      this._state = 'running';
-
-      // Step 3: 组装 args + env + spawn
-      const args = this._buildPythonArgs(testConfig);
-      const env = this._buildSpawnEnv(pythonCmd);
-      const pythonProcess = this._spawnPythonProcess(pythonCmd.command, args, env);
-      this.currentPythonProcess = pythonProcess;
-
-      // Step 4: 接管 stdout/stderr 流 (累积 + 日志 + 转发渲染进程)
-      const buffers = { output: '', errorOutput: '' };
-      this._wireOutputStreams(pythonProcess, buffers);
-
-      // Step 5: close → 清理 + 构建结果
-      pythonProcess.on('close', async (code) => {
-        // 捕获 stopping 状态, stop() 触发的 close 走"已停止"分支
-        const wasStopping = this._state === 'stopping';
-        this._cleanupAfterRun();
-        try {
-          if (wasStopping) {
-            // stop() 主动终止: 返回"已停止"结果, 不走 stats/allure pipeline
-            resolve(this._buildStoppedResult(testPlanName));
-          } else {
-            const result = await this._buildRunResult(code, buffers, testPlanName);
-            resolve(result);
-          }
-        } catch (err) {
-          this._state = 'error';
-          reject(err);
+        // P1-5: 并发守卫 — run 进行中/停止中/出错时拒绝重复启动。
+        // 此前无状态检查, 连续调用会覆盖 currentPythonProcess 引用 → 孤儿进程 + 双路输出。
+        if (this._state !== 'idle') {
+          resolve(this._buildFailureResult(testPlanName, '已有测试在执行中, 请先停止或等待完成'));
+          return;
         }
-      });
 
-      pythonProcess.on('error', (err) => {
-        this._state = 'error';
+        // run 时刷新 _progressSender: 构造时 mainWindow 可能为 null (applicationService L121),
+        // ElectronApp.initialize L124-125 后续才赋值 this.mainWindow。
+        // 闭包捕获的 null 会导致 webContents.send 静默失败, 渲染进程收不到 TEST_OUTPUT/TEST_ERROR。
+        this._progressSender = this._progressSenderFactory(this.mainWindow);
+
+        // Step 1: 解析 python 命令, 失败早退
+        const pythonCmd = this.getPythonCommand();
+        if (!pythonCmd.command) {
+          resolve(this._buildFailureResult(testPlanName, pythonCmd.error));
+          return;
+        }
+
+        // Step 2: 启动 dialog monitor
+        this._dialogMonitor.start();
+
+        // 进入 running 状态
+        this._state = 'running';
+
+        // Step 2.5: P0-1 纵深防御 — 执行前对测试文件做 py_compile 语法校验。
+        // 即使代码生成端转义有遗漏, 语法非法的注入文件也会在此被拒绝, 不会被执行。
+        // 注意: 异步校验期间保持 _state = 'running' 防止重复触发 (stop() 仍可终止)。
+        const compileError = await this._verifyTestFilesCompile(pythonCmd, testConfig.testPaths);
+        // P3-6: compile 校验期间用户 stop() → _state 已被置 'stopping' (进程未 spawn,
+        // stop() 无进程可 kill, 原实现返回失败且 compile 完成后照常启动测试 —
+        // 用户以为已停实际继续执行)。此处短路放弃 spawn。
+        if (this._state !== 'running') {
+          this._dialogMonitor.stop();
+          resolve(this._buildStoppedResult(testPlanName));
+          return;
+        }
+        if (compileError) {
+          this._state = 'idle';
+          this._dialogMonitor.stop();
+          resolve(this._buildFailureResult(testPlanName, compileError.message));
+          return;
+        }
+
+        // Step 3: 组装 args + env + spawn
+        const args = this._buildPythonArgs(testConfig);
+        const env = this._buildSpawnEnv(pythonCmd);
+        const pythonProcess = this._spawnPythonProcess(pythonCmd.command, args, env);
+        this.currentPythonProcess = pythonProcess;
+
+        // Step 4: 接管 stdout/stderr 流 (累积 + 日志 + 转发渲染进程)
+        const buffers = { output: '', errorOutput: '' };
+        this._wireOutputStreams(pythonProcess, buffers);
+
+        // Step 5: close → 清理 + 构建结果
+        pythonProcess.on('close', async (code) => {
+          // 捕获 stopping 状态, stop() 触发的 close 走"已停止"分支
+          const wasStopping = this._state === 'stopping';
+          this._cleanupAfterRun();
+          try {
+            if (wasStopping) {
+              // stop() 主动终止: 返回"已停止"结果, 不走 stats/allure pipeline
+              resolve(this._buildStoppedResult(testPlanName));
+            } else {
+              const result = await this._buildRunResult(code, buffers, testPlanName);
+              resolve(result);
+            }
+          } catch (err) {
+            // R25 P1-2: 结果构建失败 (stats/allure) 复位 idle — _cleanupAfterRun 已
+            // 清理资源, 仅状态需复位, 否则 run() 守卫锁死后续执行
+            this._state = 'idle';
+            reject(err);
+          }
+        });
+
+        pythonProcess.on('error', (err) => {
+          // R25 P1-2: spawn 失败 (python 缺失/损坏/权限错误) 后必须清理复位 —
+          // 原实现只置 _state='error' 不清理, _cleanupAfterRun 也不复位 error 态,
+          // _state 永停 'error' → 后续 run() 入口守卫 (L212) 全拒 → 测试功能锁死,
+          // 只能重启应用恢复。错误语义经 reject 传递给调用方, 状态复位回 idle 允许重试。
+          this._cleanupAfterRun();
+          reject(err);
+        });
+      })().catch((err) => {
+        // R25 P1-2: async IIFE 内异常 (spawn 同步抛错 / compile 校验抛错等) 同样走
+        // 完整清理复位 — 原实现只置 error 态, 状态机锁死导致后续 run() 全被拒
+        this._cleanupAfterRun();
         reject(err);
       });
     });
@@ -259,14 +316,43 @@ class PythonTestService {
 
         this._dialogMonitor.stop();
 
-        return { success: true, message: this.i18nService.t('testExecution.testManuallyStopped') };
-      } else {
-        return { success: false, message: this.i18nService.t('testExecution.noSelectedTestPlan') };
+        return {
+          success: true,
+          message: this.i18nService.t('testExecution.testManuallyStopped'),
+        };
       }
+      // P3-6: py_compile 校验阶段 (state=running 但进程未 spawn) — stop() 无进程可
+      // kill, 原实现落入 else 分支返失败, compile 完成后测试照常启动。
+      // 此处置 'stopping' 并停 dialog monitor, run() 的 compile 后短路检查据此放弃 spawn。
+      if (this._state === 'running') {
+        this._state = 'stopping';
+        this._dialogMonitor.stop();
+        // R26 P3-4: 立即终止所有 py_compile 子进程, 防其跑完 30s 超时
+        for (const child of this._compileChildren) {
+          try {
+            child.kill();
+          } catch (e) {
+            /* 已退出 */
+          }
+        }
+        this._compileChildren.clear();
+        return {
+          success: true,
+          message: this.i18nService.t('testExecution.testManuallyStopped'),
+        };
+      }
+      return {
+        success: false,
+        message: this.i18nService.t('testExecution.noSelectedTestPlan'),
+      };
     } catch (error) {
-      this._state = 'error';
+      // R25 P1-2: stop 失败后复位 idle (原 error 态不清理 → run() 守卫锁死)
+      this._state = 'idle';
       console.error('Stop test failed:', error);
-      return { success: false, message: this.i18nService.t('testExecution.stopTestFailed') + ': ' + error.message };
+      return {
+        success: false,
+        message: this.i18nService.t('testExecution.stopTestFailed') + ': ' + error.message,
+      };
     }
   }
 
@@ -282,7 +368,7 @@ class PythonTestService {
       testPlanName,
       testStats: { passed: 0, failed: 0, skipped: 0, broken: 0, total: 0 },
       allureReportPath: null,
-      sideEffectFailures: []
+      sideEffectFailures: [],
     };
   }
 
@@ -299,6 +385,66 @@ class PythonTestService {
     return args;
   }
 
+  /**
+   * P0-1 纵深防御: 执行前对存在的 .py 测试文件做 python -m py_compile 语法校验。
+   * 语法非法的文件 (被注入的坏代码) 在此被拒绝, 不会进入 pytest 执行。
+   * @param {{command: string}} pythonCmd
+   * @param {string[]|undefined} testPaths
+   * @returns {Promise<Error|null>} null=全部通过; Error=存在语法错误/校验超时
+   */
+  async _verifyTestFilesCompile(pythonCmd, testPaths) {
+    if (!pythonCmd || !pythonCmd.command) return null;
+    if (!Array.isArray(testPaths) || testPaths.length === 0) return null;
+    const files = testPaths.filter((p) => typeof p === 'string' && p.endsWith('.py') && this._fs.existsSync(p));
+    if (files.length === 0) return null;
+
+    const results = await Promise.all(
+      files.map(
+        (file) =>
+          new Promise((resolve) => {
+            const child = this._spawn(pythonCmd.command, ['-m', 'py_compile', file], {
+              stdio: ['ignore', 'pipe', 'pipe'],
+            });
+            // R26 P3-4: compile 子进程登记 — stop() 可立即终止, 防其跑完 30s 超时
+            this._compileChildren.add(child);
+            let errOut = '';
+            if (child.stderr) {
+              child.stderr.on('data', (d) => {
+                errOut += d;
+              });
+            }
+            const timer = setTimeout(() => {
+              child.kill();
+              resolve({ file, ok: false, error: '语法校验超时' });
+            }, 30000);
+            const done = (result) => {
+              this._compileChildren.delete(child);
+              resolve(result);
+            };
+            child.on('close', (code) => {
+              clearTimeout(timer);
+              done({
+                file,
+                ok: code === 0,
+                error: code === 0 ? '' : errOut.trim() || '语法错误',
+              });
+            });
+            child.on('error', (e) => {
+              clearTimeout(timer);
+              done({ file, ok: false, error: e.message });
+            });
+          })
+      )
+    );
+
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length > 0) {
+      const detail = failed.map((f) => `${f.file}: ${f.error}`).join(' | ');
+      return new Error(`测试文件语法校验失败: ${detail}`);
+    }
+    return null;
+  }
+
   /** 构建 spawn env (L118-126 提取) */
   _buildSpawnEnv(pythonCmd) {
     return {
@@ -311,7 +457,7 @@ class PythonTestService {
       // inspector_service._wake_device 等依赖此 env 找到 adb.exe)
       XKAUTOTESTER_ADB_PATH: pathHelper.getAdbPath(this.projectRoot),
       ...(pythonCmd.isEmbedded ? {} : this.buildPythonPathEnv(pythonCmd)),
-      XKAUTOTESTER_USER_DATA: this.userDataPath
+      XKAUTOTESTER_USER_DATA: this.userDataPath,
     };
   }
 
@@ -321,7 +467,7 @@ class PythonTestService {
       cwd: this.projectRoot,
       stdio: ['pipe', 'pipe', 'pipe'],
       env,
-      windowsHide: true
+      windowsHide: true,
     });
   }
 
@@ -333,24 +479,46 @@ class PythonTestService {
   _wireOutputStreams(pythonProcess, buffers) {
     pythonProcess.stdout.on('data', (data) => {
       const decoded = data.toString('utf8');
+      // P1-5: 缓冲设上限 (防死循环打印 OOM), 始终保留最新 MAX 字节 (stats 从末尾解析),
+      // 截断标记置于头部且不重复。
+      // R27 P2-5: slice 前先剥离已有 marker — 原实现 slice 可能把 marker 切半,
+      // startsWith 失败 → 重复拼接半截 marker + 最终 buffer 从半截 marker 开始致 stats 解析错位。
       buffers.output += decoded;
+      if (buffers.output.length > MAX_OUTPUT_BUFFER) {
+        let body = buffers.output;
+        if (body.startsWith(OUTPUT_TRUNCATED_MARKER)) body = body.slice(OUTPUT_TRUNCATED_MARKER.length);
+        buffers.output = body.slice(-MAX_OUTPUT_BUFFER);
+        if (!buffers.output.startsWith(OUTPUT_TRUNCATED_MARKER)) {
+          buffers.output = OUTPUT_TRUNCATED_MARKER + buffers.output;
+        }
+      }
       this.logger.stdout(decoded.trimEnd());
       this._progressSender.send(IPC_CHANNELS.TEST_OUTPUT, decoded);
     });
     pythonProcess.stderr.on('data', (data) => {
       const decoded = data.toString('utf8');
       buffers.errorOutput += decoded;
+      if (buffers.errorOutput.length > MAX_OUTPUT_BUFFER) {
+        // R27 P2-5: 同 stdout 剥离 marker 再截断
+        let body = buffers.errorOutput;
+        if (body.startsWith(OUTPUT_TRUNCATED_MARKER)) body = body.slice(OUTPUT_TRUNCATED_MARKER.length);
+        buffers.errorOutput = body.slice(-MAX_OUTPUT_BUFFER);
+        if (!buffers.errorOutput.startsWith(OUTPUT_TRUNCATED_MARKER)) {
+          buffers.errorOutput = OUTPUT_TRUNCATED_MARKER + buffers.errorOutput;
+        }
+      }
       this.logger.stderr(decoded.trimEnd());
       this._progressSender.send(IPC_CHANNELS.TEST_ERROR, decoded);
     });
   }
 
-  /** close 后清理 (L154-155 提取) */
+  /** close/error 后清理 (L154-155 提取) */
   _cleanupAfterRun() {
     this._dialogMonitor.stop();
     this.currentPythonProcess = null;
-    // 清理后回到 idle (stopping/error 已被 close 回调消费, 这里兜底)
-    if (this._state === 'running' || this._state === 'stopping') {
+    // 清理后回到 idle (stopping/error 已被 close/error 回调消费, 这里兜底)
+    // R25 P1-2: error 态一并复位 — spawn error 后不清理会导致状态机锁死
+    if (this._state === 'running' || this._state === 'stopping' || this._state === 'error') {
       this._state = 'idle';
     }
   }
@@ -370,7 +538,7 @@ class PythonTestService {
       testStats: { passed: 0, failed: 0, skipped: 0, broken: 0, total: 0 },
       allureReportPath: null,
       sideEffectFailures: [],
-      stopped: true  // 标识位, 渲染进程可据此区分"完成"与"已停止"
+      stopped: true, // 标识位, 渲染进程可据此区分"完成"与"已停止"
     };
   }
 
@@ -385,8 +553,7 @@ class PythonTestService {
     const testStats = this._parseTestStats(buffers.output + '\n' + buffers.errorOutput);
     // 单源化: 先记录运行 (追加 run, report_path=null), 再走 Allure pipeline (生成报告后补写 report_path)
     await this._recordTestPlanRun(buffers.output, testPlanName);
-    const { allureReportPath, sideEffectFailures } =
-      await this._runAllurePipeline(buffers.output, testPlanName);
+    const { allureReportPath, sideEffectFailures } = await this._runAllurePipeline(buffers.output, testPlanName);
     // error 字段只用简短消息, 不含整段 errorOutput:
     // errorOutput 已由 _wireOutputStreams 实时转发到 TEST_ERROR (红字) 显示,
     // 若再作为 error 字段返回, invokeWithCheck 抛错时 error.message = 整段日志,
@@ -403,7 +570,7 @@ class PythonTestService {
       testPlanName,
       testStats,
       allureReportPath,
-      sideEffectFailures
+      sideEffectFailures,
     };
   }
 
@@ -415,7 +582,7 @@ class PythonTestService {
    */
   async _recordTestPlanRun(output, testPlanName) {
     if (!this.testPlanService || !testPlanName) return;
-    if (!findTestPlanRunMarker(output)) return;  // 仅校验 marker 存在 + payload 合法 (payload 作 stdout 运行上下文, recordRun 不消费)
+    if (!findTestPlanRunMarker(output)) return; // 仅校验 marker 存在 + payload 合法 (payload 作 stdout 运行上下文, recordRun 不消费)
     try {
       await this.testPlanService.recordRun(testPlanName);
     } catch (e) {
@@ -473,7 +640,7 @@ class PythonTestService {
     const defaultResultsDir = path.join(this._getLogsPath('Allure'), 'allure-results');
     if (this._fs.existsSync(defaultResultsDir)) {
       const files = this._fs.readdirSync(defaultResultsDir);
-      if (files.some(f => f.endsWith('-result.json') || f.endsWith('.json'))) {
+      if (files.some((f) => f.endsWith('-result.json') || f.endsWith('.json'))) {
         return defaultResultsDir;
       }
     }
@@ -487,5 +654,5 @@ module.exports = Object.assign(PythonTestService, {
   parseTestStats,
   findAllureResultsDirMarker,
   findTestPlanRunMarker,
-  buildPythonPathEnv
+  buildPythonPathEnv,
 });

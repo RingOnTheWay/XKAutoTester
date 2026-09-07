@@ -1,0 +1,90 @@
+# XKAutoTester CI — 测试 + lint 强制 (R22 建立, R24 P2-6 强制化)
+# 说明:
+#   - lint 步骤已移除 continue-on-error — 违规即失败 (R22-5 已清零, package.json --max-warnings 0)
+#   - Electron 版本货币检查: 43 支持线至 2027-01-05, 用 npm outdated 输出提醒 (不阻断)
+#   - R24: npm install → npm ci (lock 已同步); 加 timeout-minutes / uv cache / artifact 上传
+name: CI
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+
+jobs:
+  test-electron:
+    name: Electron tests
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: electron
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron/package-lock.json
+
+      # R24: lock 已本地同步 (R23 用户执行过 npm install), 切回可复现的 npm ci
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run JS tests
+        run: npm test
+
+      - name: Lint (JS) — 强制, 违规即失败
+        run: npm run lint
+
+      # R25: 依赖漏洞扫描 — 先扫描不阻断 (当前残留为 axios 链, 待 R25 遗留项 fetch 替代后收紧为强制)
+      - name: npm audit (依赖漏洞扫描) — 先扫描不阻断
+        continue-on-error: true
+        run: npm audit --omit=dev
+
+      - name: Electron 版本货币提醒 (不阻断)
+        continue-on-error: true
+        run: |
+          npx --yes npm-check-updates electron 2>/dev/null || npm outdated electron 2>/dev/null || echo "skip"
+
+  test-python:
+    name: Python tests + Ruff
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Sync dependencies
+        run: uv sync --frozen --group dev --group test
+
+      - name: Run Python tests (config/pytest.ini)
+        run: uv run pytest -c config/pytest.ini --maxfail=5
+
+      - name: Ruff check — 强制, 违规即失败
+        run: uv run ruff check src tests
+
+      # R25: Python 依赖漏洞扫描 (uv audit, 0.11+ 支持) — 先扫描不阻断, 清零后收紧为强制
+      - name: uv audit (依赖漏洞扫描) — 先扫描不阻断
+        continue-on-error: true
+        run: uv audit
+
+      - name: Upload Allure results (失败时可下载排查)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results
+          if-no-files-found: ignore

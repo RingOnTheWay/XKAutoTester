@@ -1,7 +1,6 @@
-import { Action } from '../../core/Action.js';
-import { ApiBridge } from '../../core/ApiBridge.js';
-import { AppState } from '../../core/AppState.js';
 import { Toast } from '../../components/toast.js';
+// R24 P1-6: 统一 core Promise 版 confirm (原 view 回调版已删)
+import { showConfirmModal } from '../../core/utils/confirmModal.js';
 
 /**
  * PagePackageController - 页面封装 Tab 控制器
@@ -36,9 +35,9 @@ export class PagePackageController {
 
   destroy() {
     this.#destroyed = true;
-    this.#unbinds.forEach(fn => fn());
+    this.#unbinds.forEach((fn) => fn());
     this.#unbinds = [];
-    this.#unbindModel.forEach(fn => fn());
+    this.#unbindModel.forEach((fn) => fn());
     this.#unbindModel = [];
     this.#model.destroy();
   }
@@ -123,7 +122,13 @@ export class PagePackageController {
     });
 
     this.#onModel(model, 'save-success', ({ type }) => {
-      Toast.success(window.i18n.t('pagePackage.saveSuccess'));
+      // Inspector 打开时 (从设备识别添加元素), toast 挂在 inspector 弹窗容器内,
+      // 否则挂主窗口 (#app, 会被 inspector 遮罩 z-index 2000 盖住, 显示在主程序窗口)
+      const inspectorContainer = this.#getActiveInspectorContainer();
+      Toast.success(
+        window.i18n.t('pagePackage.saveSuccess'),
+        inspectorContainer ? { container: inspectorContainer } : {}
+      );
       view.closeModal(type);
     });
 
@@ -152,7 +157,7 @@ export class PagePackageController {
 
   #bindCascadeSelects() {
     const types = ['app', 'page', 'element'];
-    types.forEach(type => {
+    types.forEach((type) => {
       const wrapper = this.#view.getCascadeSelectWrapper(type);
       if (!wrapper) return;
 
@@ -249,7 +254,7 @@ export class PagePackageController {
     const optionsContainer = wrapper.querySelector('.cascade-select__options');
     if (!optionsContainer) return;
 
-    optionsContainer.querySelectorAll('.cascade-select__option:not(.empty)').forEach(option => {
+    optionsContainer.querySelectorAll('.cascade-select__option:not(.empty)').forEach((option) => {
       const handler = () => {
         const id = option.dataset.id;
         this.handleSelect(type, id);
@@ -262,7 +267,7 @@ export class PagePackageController {
   // ─── Sub Tab Events ────────────────────────────────────────────
 
   #bindSubTabs() {
-    this.#view.els.ppTabs.forEach(tab => {
+    this.#view.els.ppTabs.forEach((tab) => {
       const handler = () => {
         const targetTab = tab.dataset.tab;
         const targetContent = this.#view.getTabContent(targetTab);
@@ -393,7 +398,10 @@ export class PagePackageController {
       e.preventDefault();
       e.stopPropagation();
       const files = e.dataTransfer.files;
-      if (files.length === 0) { this.#view.resetApkDropZone(); return; }
+      if (files.length === 0) {
+        this.#view.resetApkDropZone();
+        return;
+      }
       const filePath = await this.#model.getFilePath(files[0]);
       await handleApkFile(filePath);
     };
@@ -504,30 +512,35 @@ export class PagePackageController {
     await this.#model.saveElement(elementData);
   }
 
-  handleConfirmDelete(type) {
+  async handleConfirmDelete(type) {
     let itemName, message;
     switch (type) {
       case 'app':
         if (!this.#model.selectedApp) return;
         itemName = this.#model.selectedApp.name;
-        message = window.i18n.t('pagePackage.deleteAppConfirm', { name: itemName });
+        message = window.i18n.t('pagePackage.deleteAppConfirm', {
+          name: itemName,
+        });
         break;
       case 'page':
         if (!this.#model.selectedPage) return;
         itemName = this.#model.selectedPage.name;
-        message = window.i18n.t('pagePackage.deletePageConfirm', { name: itemName });
+        message = window.i18n.t('pagePackage.deletePageConfirm', {
+          name: itemName,
+        });
         break;
       case 'element':
         if (!this.#model.selectedElement) return;
         itemName = this.#model.selectedElement.name;
-        message = window.i18n.t('pagePackage.deleteElementConfirm', { name: itemName });
+        message = window.i18n.t('pagePackage.deleteElementConfirm', {
+          name: itemName,
+        });
         break;
     }
-    this.#view.showConfirmModal(
-      window.i18n.t('pagePackage.deleteConfirm'),
-      message,
-      async () => await this.#model.deleteItem(type)
-    );
+    const ok = await showConfirmModal(window.i18n.t('pagePackage.deleteConfirm'), message);
+    if (ok) {
+      await this.#model.deleteItem(type);
+    }
   }
 
   async handleOpenInspector() {
@@ -535,7 +548,7 @@ export class PagePackageController {
       Toast.error(window.i18n.t('inspector.noAppSelected'));
       return;
     }
-    const app = this.#model.apps.find(a => a.id === this.#model.selectedApp.id);
+    const app = this.#model.apps.find((a) => a.id === this.#model.selectedApp.id);
     if (!app || !app.packageName || !app.activityName) {
       Toast.error(window.i18n.t('inspector.noAppInfo'));
       return;
@@ -549,7 +562,13 @@ export class PagePackageController {
       return;
     }
 
-    const noReset = await this.#view.showResetConfirmModal();
+    // R24: showResetConfirmModal 迁移 core Promise 版 — 语义映射一致:
+    // 确认(清除数据启动) → ok=true → noReset=false; 取消/Esc/遮罩 → ok=false → noReset=true
+    const ok = await showConfirmModal(
+      window.i18n.t('inspector.resetConfirmTitle'),
+      window.i18n.t('inspector.resetConfirmQuestion')
+    );
+    const noReset = !ok;
     const inspectorModal = window.__XKAT_INSPECTOR_MODAL__;
     if (inspectorModal) {
       await inspectorModal.open(deviceName, app.packageName, app.activityName, noReset);
@@ -562,6 +581,16 @@ export class PagePackageController {
    */
   async #requestDeviceForInspector() {
     return await this.#view.showDeviceSelection({ mode: 'inspector' });
+  }
+
+  /**
+   * Inspector 弹窗打开时返回其容器 (toast 挂载点), 否则返回 null
+   * @returns {HTMLElement|null}
+   */
+  #getActiveInspectorContainer() {
+    const overlay = document.getElementById('inspector-modal-overlay');
+    if (!overlay || overlay.classList.contains('hidden')) return null;
+    return overlay.querySelector('.modal-container') || overlay;
   }
 
   // ─── Tab Lifecycle Hooks ───────────────────────────────────────

@@ -2,6 +2,7 @@
 // 用 Module._load hook 拦截 require('electron')
 
 const Module = require('module');
+const os = require('os');
 const path = require('path');
 
 // ── helpers 全局导出 (供测试文件直接 require) ──────────────
@@ -26,7 +27,10 @@ const electronMock = {
   },
   // 扩展: app mock
   app: {
-    getPath: (name) => `/tmp/xkat-test-${name}`,
+    // R27 修复: 原 getPath 返 `/tmp/xkat-test-${name}` — Windows 上 `/tmp` 解析到当前盘根
+    // (如 D:\tmp), UserDataService 构造即 _ensureUserDataDir 创建真实目录且永不清理,
+    // 测试跑一次就在用户盘根拉一坨 Xkautotester/config/test_cases。改用 os.tmpdir() 隔离。
+    getPath: (name) => path.join(os.tmpdir(), 'xkat-test', name),
     setPath: () => {},
   },
   // 扩展: powerSaveBlocker mock

@@ -1,5 +1,6 @@
 import { Action } from '../../core/Action.js';
 import { Toast } from '../../components/toast.js';
+import { showConfirmModal } from '../../core/utils/confirmModal.js';
 
 /**
  * TestCaseController - 测试用例 Tab 控制器
@@ -21,6 +22,8 @@ export class TestCaseController {
   #searchLoadingTimer = null;
   #isSearchLoading = false;
   #destroyed = false;
+  #fileListBound = false; // P2-8: 文件列表容器级一次绑定标志 (bindFileListClick 已有 __tcClickBound, 此处防 controller 层重复 push unbind)
+  #isSaving = false; // P3-12: 保存中防重入标志
 
   /**
    * @param {import('./model.js').TestCaseModel} model
@@ -48,29 +51,65 @@ export class TestCaseController {
   destroy() {
     this.#destroyed = true;
     clearTimeout(this.#searchDebounceTimer);
-    this.#unbinds.forEach(fn => fn());
+    this.#unbinds.forEach((fn) => fn());
     this.#unbinds = [];
-    this.#stepCardUnbinds.forEach(fn => fn());
+    this.#stepCardUnbinds.forEach((fn) => fn());
     this.#stepCardUnbinds = [];
-    this.#unbindModel.forEach(fn => fn());
+    this.#unbindModel.forEach((fn) => fn());
     this.#unbindModel = [];
     this.#model.destroy();
   }
 
   // ─── 访问器（暴露私有字段给内联方法） ────────────────────
 
-  get model() { return this.#model; }
-  get view() { return this.#view; }
-  get unbinds() { return this.#unbinds; }
-  get stepCardUnbinds() { return this.#stepCardUnbinds; }
-  set stepCardUnbinds(v) { this.#stepCardUnbinds = v; }
-  get unbindModel() { return this.#unbindModel; }
-  get isSearchLoading() { return this.#isSearchLoading; }
-  set isSearchLoading(v) { this.#isSearchLoading = v; }
-  get searchDebounceTimer() { return this.#searchDebounceTimer; }
-  set searchDebounceTimer(v) { this.#searchDebounceTimer = v; }
-  get searchLoadingTimer() { return this.#searchLoadingTimer; }
-  set searchLoadingTimer(v) { this.#searchLoadingTimer = v; }
+  get model() {
+    return this.#model;
+  }
+  get view() {
+    return this.#view;
+  }
+  get unbinds() {
+    return this.#unbinds;
+  }
+  get stepCardUnbinds() {
+    return this.#stepCardUnbinds;
+  }
+  set stepCardUnbinds(v) {
+    this.#stepCardUnbinds = v;
+  }
+  get unbindModel() {
+    return this.#unbindModel;
+  }
+  get isSearchLoading() {
+    return this.#isSearchLoading;
+  }
+  set isSearchLoading(v) {
+    this.#isSearchLoading = v;
+  }
+  get searchDebounceTimer() {
+    return this.#searchDebounceTimer;
+  }
+  set searchDebounceTimer(v) {
+    this.#searchDebounceTimer = v;
+  }
+  get searchLoadingTimer() {
+    return this.#searchLoadingTimer;
+  }
+  set searchLoadingTimer(v) {
+    this.#searchLoadingTimer = v;
+  }
+  get fileListBound() {
+    return this.#fileListBound;
+  }
+  set fileListBound(v) {
+    this.#fileListBound = v;
+  }
+  get isSaving() {
+    return this.#isSaving;
+  }
+  set isSaving(v) {
+    this.#isSaving = v;
+  }
 
   // ─── Model 事件 → View 渲染 ──────────────────────────────
 
@@ -89,11 +128,7 @@ export class TestCaseController {
         this.view.updateSearchState(hasDirectory);
         return;
       }
-      this.view.renderTestFiles(
-        model.get('testFiles'),
-        model.get('jsonExistsMap'),
-        model.get('searchQuery')
-      );
+      this.view.renderTestFiles(model.get('testFiles'), model.get('jsonExistsMap'), model.get('searchQuery'));
       // 选择目录后启用添加按钮和搜索框
       const hasDirectory = !!model.get('selectedDirectory');
       this.view.updateAddButtonState(hasDirectory);
@@ -181,6 +216,16 @@ export class TestCaseController {
     this.on(model, 'apps-changed', (apps) => {
       this.view.renderAppOptions(apps, this.model.get('selectedApp'));
       this.bindAppOptionClicks();
+      // 同步选中的应用引用并重渲染步骤卡片: page-package 中新增/删除元素后,
+      // 应用列表刷新但 selectedApp 仍是旧引用, 步骤卡片的页面/元素下拉不会更新,
+      // 导致新元素要重启程序才可见; selectApp 触发 app-changed → renderSteps 重渲染
+      const selectedApp = this.model.get('selectedApp');
+      if (selectedApp) {
+        const freshApp = (apps || []).find((a) => a.id === selectedApp.id);
+        if (freshApp && freshApp !== selectedApp) {
+          this.model.optionPanel.selectApp(freshApp);
+        }
+      }
     });
 
     this.on(model, 'ble-devices-changed', (devices) => {
@@ -203,17 +248,32 @@ export class TestCaseController {
     this.on(model, 'step-updated', ({ stepId, selectId, value, index }) => {
       // 需要级联渲染的 selectId：页面/元素/操作/输入类型/比较目标值类型/页面操作类型/搜索类型/BLE方法
       const cascadeSelects = [
-        'tc-page-select', 'tc-element-select', 'tc-operation-select',
-        'tc-input-type-select', 'tc-target-value-type', 'tc-page-operation-type',
-        'tc-search-type', 'tc-ble-method-select', 'tc-ble-device-select',
-        'tc-compare-element-page', 'tc-compare-element-select',
-        'tc-search-element-page', 'tc-search-element-select',
-        'tc-multi-element-select', 'tc-multi-operation-select',
-        'tc-multi-input-type-select', 'tc-multi-faker-locale',
-        'tc-faker-locale', 'tc-faker-provider', 'tc-faker-category', 'tc-faker-method',
-        'tc-random-precision', 'tc-nav-key-select', 'tc-ble-step-select',
+        'tc-page-select',
+        'tc-element-select',
+        'tc-operation-select',
+        'tc-input-type-select',
+        'tc-target-value-type',
+        'tc-page-operation-type',
+        'tc-search-type',
+        'tc-ble-method-select',
+        'tc-ble-device-select',
+        'tc-compare-element-page',
+        'tc-compare-element-select',
+        'tc-search-element-page',
+        'tc-search-element-select',
+        'tc-multi-element-select',
+        'tc-multi-operation-select',
+        'tc-multi-input-type-select',
+        'tc-multi-faker-locale',
+        'tc-faker-locale',
+        'tc-faker-provider',
+        'tc-faker-category',
+        'tc-faker-method',
+        'tc-random-precision',
+        'tc-nav-key-select',
+        'tc-ble-step-select',
       ];
-      const needsRerender = cascadeSelects.some(cs => selectId.startsWith(cs));
+      const needsRerender = cascadeSelects.some((cs) => selectId.startsWith(cs));
       if (needsRerender) {
         // 先同步 DOM 数据到 model，避免重新渲染时丢失用户编辑的值
         this.model.syncStepsFromDOM(this.view.collectStepCardsData(this.model.get('steps')));
@@ -262,24 +322,25 @@ export class TestCaseController {
     this.unbinds.push(unbind);
 
     // 搜索输入（防抖）
-    this.unbinds.push(
-      this.view.bindSearchInput((query) => this.handleSearchInput(query))
-    );
+    this.unbinds.push(this.view.bindSearchInput((query) => this.handleSearchInput(query)));
   }
 
   // ─── 步骤卡片事件绑定 ────────────────────────────────────
 
   unbindStepCardEvents() {
-    this.stepCardUnbinds.forEach(fn => fn());
+    this.stepCardUnbinds.forEach((fn) => fn());
     this.stepCardUnbinds = [];
   }
 
   // ─── 文件列表事件绑定 ────────────────────────────────────
 
   bindFileListEvents() {
-    this.unbinds.push(
-      this.view.bindFileListClick((file, fileItem) => this.handleFileSelect(file, fileItem))
-    );
+    // P2-8: bindFileListClick 内部已有 __tcClickBound 防重复 addEventListener (后续调用返回 no-op),
+    // 但 controller 层每次调用 (搜索 loading 重渲染后 L708) 都 push 新闭包到 this.unbinds → 无界增长。
+    // 文件列表容器是常驻 DOM, 事件委托一次绑定即可, 首次绑定后不再 push。
+    if (this.fileListBound) return;
+    this.fileListBound = true;
+    this.unbinds.push(this.view.bindFileListClick((file, fileItem) => this.handleFileSelect(file, fileItem)));
   }
 
   bindStepCardEvents() {
@@ -291,8 +352,10 @@ export class TestCaseController {
       this.bindSingleStepCardEvents(card, stepId);
     });
 
-    // 拖拽排序
-    this.unbinds.push(
+    // 拖拽排序 (P2-8: 从 this.unbinds 移到 this.stepCardUnbinds — unbindStepCardEvents
+    // 在每次 renderSteps 重渲染前清理上一轮的拖拽监听; 否则 unbinds 无界增长,
+    // 且返回的 unbind 闭包持有旧 container + 旧 cards (已 innerHTML='' 移除) 阻止 GC)
+    this.stepCardUnbinds.push(
       this.view.bindStepDragDrop(() => {
         this.syncStepOrdersFromDOM();
         this.view.updateMoveButtonsState();
@@ -344,26 +407,26 @@ export class TestCaseController {
       if (!options) return;
 
       const optionItems = options.querySelectorAll('.custom-select__option');
-        optionItems.forEach((option) => {
-          const optionHandler = (e) => {
-            e.stopPropagation();
-            const value = option.dataset.value;
-            const selectId = select.dataset.selectId;
-            const index = wrapper.dataset.index !== undefined ? parseInt(wrapper.dataset.index) : -1;
+      optionItems.forEach((option) => {
+        const optionHandler = (e) => {
+          e.stopPropagation();
+          const value = option.dataset.value;
+          const selectId = select.dataset.selectId;
+          const index = wrapper.dataset.index !== undefined ? parseInt(wrapper.dataset.index) : -1;
 
-            // MVC: 选中态 classList + 文本通过 view 方法
-            this.view.markOptionSelected(options, option);
-            this.view.setSelectSelectedText(select, option.querySelector('span')?.textContent || value);
+          // MVC: 选中态 classList + 文本通过 view 方法
+          this.view.markOptionSelected(options, option);
+          this.view.setSelectSelectedText(select, option.querySelector('span')?.textContent || value);
 
-            // 隐藏下拉框
-            this.view.closeDropdown(options);
+          // 隐藏下拉框
+          this.view.closeDropdown(options);
 
-            // 通知 model
-            this.handleSelectChange(selectId, value, stepId, index);
-          };
-          option.addEventListener('click', optionHandler);
-          this.stepCardUnbinds.push(() => option.removeEventListener('click', optionHandler));
-        });
+          // 通知 model
+          this.handleSelectChange(selectId, value, stepId, index);
+        };
+        option.addEventListener('click', optionHandler);
+        this.stepCardUnbinds.push(() => option.removeEventListener('click', optionHandler));
+      });
     });
   }
 
@@ -417,7 +480,10 @@ export class TestCaseController {
     const clickCountInput = card.querySelector('.tc-nav-click-count');
     if (clickCountInput) {
       const clickCountHandler = (e) => {
-        this.handleSelectChange('tc-system-operation-type', stepId, e.target.value, -1);
+        // P1-1: 修复字段错位 — 点击次数写独立字段 tc-nav-click-count →
+        // systemConfig.clickCount (原误传 tc-system-operation-type, 导致
+        // operationType 被污染为点击次数, clickCount 永不生效)
+        this.handleSelectChange('tc-nav-click-count', e.target.value, stepId, -1);
       };
       clickCountInput.addEventListener('change', clickCountHandler);
       this.stepCardUnbinds.push(() => clickCountInput.removeEventListener('change', clickCountHandler));
@@ -484,16 +550,16 @@ export class TestCaseController {
     if (!bleDevices || bleDevices.length === 0) return;
 
     const steps = this.model.get('steps');
-    const step = steps.find(s => s.id === stepId);
+    const step = steps.find((s) => s.id === stepId);
     const currentDeviceId = step?.config?.deviceConfig?.deviceId || null;
 
     this.view.showDeviceCascadeSelect(stepId, bleDevices, currentDeviceId, (device) => {
-      const targetStep = steps.find(s => s.id === stepId);
+      const targetStep = steps.find((s) => s.id === stepId);
       if (targetStep) {
         targetStep.config = targetStep.config || {};
         targetStep.config.deviceConfig = {
           deviceId: device.deviceId,
-          deviceName: device.name
+          deviceName: device.name,
         };
         this.model.updateStepSelect('tc-ble-device-select', device.deviceId, stepId, -1);
       }
@@ -539,17 +605,15 @@ export class TestCaseController {
    */
   rerenderStepCard(stepId) {
     const steps = this.model.get('steps');
-    const step = steps.find(s => s.id === stepId);
+    const step = steps.find((s) => s.id === stepId);
     if (!step) return;
 
-    // 注入关联数据
-    step._app = this.view._currentApp || null;
-    step._bleDevices = this.view._bleDevices || [];
-    step._allSteps = [...steps].sort((a, b) => a.order - b.order);
+    // P2-4: 注入收敛到 view.injectStepContext (不再直读 view 私有 _currentApp/_bleDevices)
+    this.view.injectStepContext(step, steps);
 
     // 计算步骤序号
     const sortedSteps = [...steps].sort((a, b) => a.order - b.order);
-    const orderIndex = sortedSteps.findIndex(s => s.id === stepId);
+    const orderIndex = sortedSteps.findIndex((s) => s.id === stepId);
 
     // 生成新卡片
     const newCard = this.view.generateStepCard(step, orderIndex + 1);
@@ -680,12 +744,12 @@ export class TestCaseController {
     this.model.showEditor(null);
   }
 
-  handleFileSelect(file, element) {
+  async handleFileSelect(file, element) {
     const isDirty = this.model.get('hasUnsavedChanges');
 
     if (element && element.classList.contains('selected')) {
       if (isDirty) {
-        if (!this.confirmUnsavedChanges()) return;
+        if (!(await this.confirmUnsavedChanges())) return;
       }
       this.model.deselectFile();
       return;
@@ -697,10 +761,9 @@ export class TestCaseController {
     };
 
     if (isDirty) {
-      this.confirmUnsavedChangesWithCallbacks(
-        () => { this.handleSave().then(doSelect); },
-        doSelect,
-      );
+      this.confirmUnsavedChangesWithCallbacks(() => {
+        this.handleSave().then(doSelect);
+      }, doSelect);
       return;
     }
 
@@ -711,8 +774,10 @@ export class TestCaseController {
     const isDirty = this.model.get('hasUnsavedChanges');
     if (isDirty) {
       this.confirmUnsavedChangesWithCallbacks(
-        () => { this.handleSave().then(() => this.model.cancelEdit()); },
-        () => this.model.cancelEdit(),
+        () => {
+          this.handleSave().then(() => this.model.cancelEdit());
+        },
+        () => this.model.cancelEdit()
       );
       return;
     }
@@ -720,11 +785,18 @@ export class TestCaseController {
   }
 
   async handleSave() {
-    const caseData = this.model.collectFormData({
-      inputs: this.view.collectFormInputs(),
-      steps: this.view.collectStepCardsData(this.model.get('steps')),
-    });
-    await this.model.saveCase(caseData);
+    // P3-12: 保存中防重入 — 双击保存按钮可并发触发两次 saveCase → 两次写文件
+    if (this.isSaving) return;
+    this.isSaving = true;
+    try {
+      const caseData = this.model.collectFormData({
+        inputs: this.view.collectFormInputs(),
+        steps: this.view.collectStepCardsData(this.model.get('steps')),
+      });
+      await this.model.saveCase(caseData);
+    } finally {
+      this.isSaving = false;
+    }
   }
 
   handleDelete() {
@@ -735,11 +807,18 @@ export class TestCaseController {
     }
 
     const title = window.i18n.t('testCase.deleteConfirmTitle');
-    const message = window.i18n.t('testCase.deleteConfirmMessage', { name: selectedFile.name });
+    const message = window.i18n.t('testCase.deleteConfirmMessage', {
+      name: selectedFile.name,
+    });
 
-    this.view.showConfirmModal(title, message, () => {
-      const file = this.model.get('selectedFile');
-      this.model.deleteCase(file?.name, file?.pyFilePath);
+    showConfirmModal(title, message).then((ok) => {
+      if (ok) {
+        const file = this.model.get('selectedFile');
+        // R27 修复: scan 条目 name 带 .py 后缀且无 pyFilePath 字段 — 传基名 (去 .py)
+        // + py 全路径 (file.path), 否则服务端 _sanitize 拒绝含点名称 → 删除失败
+        const baseName = typeof file?.name === 'string' ? file.name.replace(/\.py$/i, '') : file?.name;
+        this.model.deleteCase(baseName, file?.path || file?.pyFilePath);
+      }
     });
   }
 
@@ -773,7 +852,7 @@ export class TestCaseController {
     this.model.syncStepsFromDOM(this.view.collectStepCardsData(this.model.get('steps')));
 
     const steps = this.model.get('steps');
-    const step = steps.find(s => s.id === stepId);
+    const step = steps.find((s) => s.id === stepId);
     if (!step) return;
 
     step.config = step.config || {};
@@ -798,7 +877,7 @@ export class TestCaseController {
     this.model.syncStepsFromDOM(this.view.collectStepCardsData(this.model.get('steps')));
 
     const steps = this.model.get('steps');
-    const step = steps.find(s => s.id === stepId);
+    const step = steps.find((s) => s.id === stepId);
     if (!step) return;
 
     step.config = step.config || {};
@@ -812,7 +891,7 @@ export class TestCaseController {
     this.model.syncStepsFromDOM(this.view.collectStepCardsData(this.model.get('steps')));
 
     const steps = this.model.get('steps');
-    const step = steps.find(s => s.id === stepId);
+    const step = steps.find((s) => s.id === stepId);
     if (!step) return;
 
     step.config = step.config || {};
@@ -830,7 +909,7 @@ export class TestCaseController {
 
   handleAppSelect(appId) {
     const apps = this.model.get('apps');
-    const app = apps?.find(a => a.id === appId);
+    const app = apps?.find((a) => a.id === appId);
     if (app) this.model.selectApp(app);
   }
 
@@ -875,7 +954,7 @@ export class TestCaseController {
 
       // 通知 model
       const apps = this.model.get('apps');
-      const app = apps?.find(a => a.id === appId);
+      const app = apps?.find((a) => a.id === appId);
       if (app) this.handleAppSelect(appId);
     });
   }
@@ -948,7 +1027,7 @@ export class TestCaseController {
     const selectedContainer = this.view.els.markersSelected;
     if (!selectedContainer) return;
 
-    selectedContainer.querySelectorAll('.marker-badge-remove').forEach(btn => {
+    selectedContainer.querySelectorAll('.marker-badge-remove').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const marker = btn.dataset.marker;
@@ -961,9 +1040,11 @@ export class TestCaseController {
 
   // ─── 未保存更改确认 ──────────────────────────────────────
 
-  confirmUnsavedChanges() {
+  async confirmUnsavedChanges() {
+    // P2-3: 收敛到全局 confirm modal (原 window.confirm, 与 save-confirm 交互不一致)
+    const title = window.i18n.t('testCase.unsavedChangesTitle');
     const message = window.i18n.t('testCase.unsavedChangesMessage');
-    return window.confirm(message);
+    return showConfirmModal(title, message);
   }
 
   confirmUnsavedChangesWithCallbacks(onSave, onDiscard) {

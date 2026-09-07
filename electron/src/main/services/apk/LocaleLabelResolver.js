@@ -66,7 +66,8 @@ class LocaleLabelResolver {
       const buf = Buffer.from(str, 'latin1');
       const decoded = buf.toString('utf8');
 
-      const garbledPattern = /[\u00c0-\u00df][\u0080-\u00bf]|[\u00e0-\u00ef][\u0080-\u00bf]{2}|[\u00f0-\u00f7][\u0080-\u00bf]{3}/;
+      const garbledPattern =
+        /[\u00c0-\u00df][\u0080-\u00bf]|[\u00e0-\u00ef][\u0080-\u00bf]{2}|[\u00f0-\u00f7][\u0080-\u00bf]{3}/;
       if (garbledPattern.test(decoded) && /[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(decoded)) {
         return decoded;
       }

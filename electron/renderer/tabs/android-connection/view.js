@@ -11,6 +11,7 @@
  *      (call sites 用 this.formatFileSize/this.checkAndApplyEllipsis)。
  */
 import { Icons } from '../../icons.js';
+import { escapeHtml as escapeHtmlUtil } from '../../core/utils/html.js';
 
 export class AndroidConnectionView {
   constructor() {
@@ -131,9 +132,8 @@ export class AndroidConnectionView {
    * @returns {string}
    */
   escapeHtml(str) {
-    if (str === undefined || str === null) return '';
-    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-    return String(str).replace(/[&<>"']/g, m => map[m]);
+    // P2-5: 统一实现 (renderer/core/utils/html.js)
+    return escapeHtmlUtil(str);
   }
 
   /**
@@ -173,8 +173,15 @@ export class AndroidConnectionView {
   }
 
   showDeviceScanningState() {
-    const { deviceScanning, deviceList, noDevices, addDeviceInputContainer,
-            modalDeviceStatusCard, deviceModalConfirmBtn, openPortBtn } = this.els;
+    const {
+      deviceScanning,
+      deviceList,
+      noDevices,
+      addDeviceInputContainer,
+      modalDeviceStatusCard,
+      deviceModalConfirmBtn,
+      openPortBtn,
+    } = this.els;
     deviceScanning && deviceScanning.classList.remove('hidden');
     deviceList && deviceList.classList.add('hidden');
     noDevices && noDevices.classList.add('hidden');
@@ -185,8 +192,15 @@ export class AndroidConnectionView {
   }
 
   displayDevices(devices, modalSelectedDeviceId, onDeviceClick, onAddDeviceClick) {
-    const { deviceScanning, deviceList, noDevices, addDeviceInputContainer,
-            modalDeviceStatusCard, deviceModalConfirmBtn, openPortBtn } = this.els;
+    const {
+      deviceScanning,
+      deviceList,
+      noDevices,
+      addDeviceInputContainer,
+      modalDeviceStatusCard,
+      deviceModalConfirmBtn,
+      openPortBtn,
+    } = this.els;
 
     deviceScanning && deviceScanning.classList.add('hidden');
     addDeviceInputContainer && addDeviceInputContainer.classList.add('hidden');
@@ -199,7 +213,7 @@ export class AndroidConnectionView {
     deviceList.innerHTML = '';
 
     // 渲染设备项
-    devices.forEach(device => {
+    devices.forEach((device) => {
       const el = this.createDeviceItemElement(device, modalSelectedDeviceId, onDeviceClick);
       deviceList.appendChild(el);
     });
@@ -208,7 +222,8 @@ export class AndroidConnectionView {
     const addBtn = document.createElement('div');
     addBtn.id = 'add-device-btn';
     addBtn.className = 'device-item add-device-btn';
-    addBtn.style.cssText = 'padding:8px 12px;border-radius:4px;cursor:pointer;transition:background-color 0.2s;display:flex;align-items:center;justify-content:space-between;';
+    addBtn.style.cssText =
+      'padding:8px 12px;border-radius:4px;cursor:pointer;transition:background-color 0.2s;display:flex;align-items:center;justify-content:space-between;';
     addBtn.innerHTML = `
       <div style="display:flex;align-items:center;">
         ${this.getIconHtml('add', 'vertical-align:middle;margin-right:8px;')}
@@ -216,14 +231,19 @@ export class AndroidConnectionView {
       </div>
       ${this.getIconHtml('keyboard_arrow_right', 'vertical-align:middle;')}
     `;
-    addBtn.addEventListener('mouseenter', () => { addBtn.style.backgroundColor = 'rgba(0,0,0,0.05)'; });
-    addBtn.addEventListener('mouseleave', () => { addBtn.style.backgroundColor = ''; });
+    addBtn.addEventListener('mouseenter', () => {
+      addBtn.style.backgroundColor = 'rgba(0,0,0,0.05)';
+    });
+    addBtn.addEventListener('mouseleave', () => {
+      addBtn.style.backgroundColor = '';
+    });
     addBtn.addEventListener('click', () => onAddDeviceClick?.());
     deviceList.appendChild(addBtn);
 
     // 恢复选中状态
     if (modalSelectedDeviceId) {
-      const selectedEl = deviceList.querySelector(`.device-item[data-device-id="${modalSelectedDeviceId}"]`);
+      // P3-8: CSS.escape 防设备 ID 含引号时 querySelector 抛异常
+      const selectedEl = deviceList.querySelector(`.device-item[data-device-id="${CSS.escape(modalSelectedDeviceId)}"]`);
       if (selectedEl) {
         selectedEl.classList.add('selected');
         const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
@@ -246,7 +266,8 @@ export class AndroidConnectionView {
     const el = document.createElement('div');
     el.className = 'device-item';
     el.setAttribute('data-device-id', deviceId);
-    el.style.cssText = 'padding:8px 12px;border-radius:4px;cursor:pointer;transition:background-color 0.2s;display:flex;align-items:flex-start;';
+    el.style.cssText =
+      'padding:8px 12px;border-radius:4px;cursor:pointer;transition:background-color 0.2s;display:flex;align-items:flex-start;';
 
     const icon = deviceId.includes(':') ? 'wifi' : 'usb';
     el.innerHTML = `
@@ -275,7 +296,7 @@ export class AndroidConnectionView {
   showAddDeviceInput() {
     const { deviceList, addDeviceInputContainer } = this.els;
     // 取消所有已选中设备
-    document.querySelectorAll('.device-item.selected').forEach(item => {
+    document.querySelectorAll('.device-item.selected').forEach((item) => {
       item.classList.remove('selected');
       item.style.backgroundColor = '';
     });
@@ -305,16 +326,12 @@ export class AndroidConnectionView {
 
   resetDeviceStatusCard(isModal = false) {
     const prefix = isModal ? 'modal-' : '';
-    const ids = [
-      `${prefix}device-manufacturer`,
-      `${prefix}device-model`,
-      `${prefix}device-android-version`,
-    ];
+    const ids = [`${prefix}device-manufacturer`, `${prefix}device-model`, `${prefix}device-android-version`];
     // 外部卡片额外重置
     if (!isModal) {
       ids.push('device-wifi', 'device-battery', 'device-storage', 'device-memory');
     }
-    ids.forEach(id => {
+    ids.forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.textContent = '-';
     });
@@ -370,10 +387,14 @@ export class AndroidConnectionView {
     if (fileManagerActions) {
       if (enabled) {
         fileManagerActions.classList.remove('disabled');
-        fileManagerActions.querySelectorAll('button').forEach(btn => { btn.disabled = false; });
+        fileManagerActions.querySelectorAll('button').forEach((btn) => {
+          btn.disabled = false;
+        });
       } else {
         fileManagerActions.classList.add('disabled');
-        fileManagerActions.querySelectorAll('button').forEach(btn => { btn.disabled = true; });
+        fileManagerActions.querySelectorAll('button').forEach((btn) => {
+          btn.disabled = true;
+        });
       }
     }
 
@@ -386,9 +407,10 @@ export class AndroidConnectionView {
     }
 
     if (!enabled && fileList) {
-      fileList.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;"><div style="display:flex;align-items:center;justify-content:center;gap:8px;">'
-        + this.getIconHtml('info', 'vertical-align:middle;')
-        + `<span style="vertical-align:middle;">${window.i18n.t('fileManager.selectDeviceFirst')}</span></div></td></tr>`;
+      fileList.innerHTML =
+        '<tr><td colspan="6" style="text-align:center;padding:20px;"><div style="display:flex;align-items:center;justify-content:center;gap:8px;">' +
+        this.getIconHtml('info', 'vertical-align:middle;') +
+        `<span style="vertical-align:middle;">${window.i18n.t('fileManager.selectDeviceFirst')}</span></div></td></tr>`;
     }
   }
 
@@ -403,8 +425,8 @@ export class AndroidConnectionView {
   }
 
   openEditDeviceIdModal(data) {
-    const { editDeviceIdInput, editAndroidVersionInput, editBlePortInput,
-            bleMockPortGroup, editPortManageBtn } = this.els;
+    const { editDeviceIdInput, editAndroidVersionInput, editBlePortInput, bleMockPortGroup, editPortManageBtn } =
+      this.els;
 
     if (editDeviceIdInput) editDeviceIdInput.value = data.deviceName || '';
     if (editAndroidVersionInput) editAndroidVersionInput.value = data.platformVersion || '';
@@ -465,7 +487,7 @@ export class AndroidConnectionView {
     portModalConfirmBtn && (portModalConfirmBtn.disabled = true);
 
     if (ports && ports.length > 0) {
-      ports.forEach(port => {
+      ports.forEach((port) => {
         const item = document.createElement('div');
         item.className = 'device-item';
         item.setAttribute('data-port-id', port.deviceId);
@@ -479,7 +501,7 @@ export class AndroidConnectionView {
           </div>
         `;
         item.addEventListener('click', () => {
-          portList.querySelectorAll('.device-item').forEach(i => i.classList.remove('selected'));
+          portList.querySelectorAll('.device-item').forEach((i) => i.classList.remove('selected'));
           item.classList.add('selected');
           portModalConfirmBtn && (portModalConfirmBtn.disabled = false);
           onPortClick?.(port);
@@ -496,14 +518,14 @@ export class AndroidConnectionView {
   showPortScanning() {
     const { portScanning, portList, portModalConfirmBtn } = this.els;
     portScanning && (portScanning.style.display = 'flex');
-    portList && (portList.classList.add('hidden'));
+    portList && portList.classList.add('hidden');
     portModalConfirmBtn && (portModalConfirmBtn.disabled = true);
   }
 
   hidePortScanning() {
     const { portScanning, portList } = this.els;
     portScanning && (portScanning.style.display = 'none');
-    portList && (portList.classList.remove('hidden'));
+    portList && portList.classList.remove('hidden');
   }
 
   // ─── 文件管理器显示 (原 fileManagerMixin) ─────────────────────
@@ -513,18 +535,21 @@ export class AndroidConnectionView {
   showFileListLoading() {
     const { fileList } = this.els;
     if (fileList) {
-      fileList.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;"><div style="display:flex;align-items:center;justify-content:center;gap:8px;">'
-        + this.getIconHtml('sync', 'vertical-align:middle;')
-        + `<span style="vertical-align:middle;">${window.i18n.t('fileManager.loadingFiles')}</span></div></td></tr>`;
+      fileList.innerHTML =
+        '<tr><td colspan="6" style="text-align:center;padding:20px;"><div style="display:flex;align-items:center;justify-content:center;gap:8px;">' +
+        this.getIconHtml('sync', 'vertical-align:middle;') +
+        `<span style="vertical-align:middle;">${window.i18n.t('fileManager.loadingFiles')}</span></div></td></tr>`;
     }
   }
 
   displayFileError(message) {
     const { fileList } = this.els;
     if (fileList) {
-      fileList.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;"><div style="display:flex;align-items:center;justify-content:center;gap:8px;">'
-        + this.getIconHtml('error', 'vertical-align:middle;color:var(--error);')
-        + `<span style="vertical-align:middle;color:var(--error);">${message}</span></div></td></tr>`;
+      // P2-1 XSS 修复: message 为 adb 错误输出 (可含文件名等用户可控内容), 必须转义
+      fileList.innerHTML =
+        '<tr><td colspan="6" style="text-align:center;padding:20px;"><div style="display:flex;align-items:center;justify-content:center;gap:8px;">' +
+        this.getIconHtml('error', 'vertical-align:middle;color:var(--error);') +
+        `<span style="vertical-align:middle;color:var(--error);">${this.escapeHtml(message)}</span></div></td></tr>`;
     }
   }
 
@@ -536,16 +561,17 @@ export class AndroidConnectionView {
 
     // 空目录
     if (!files || files.length === 0) {
-      fileList.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;"><div style="display:flex;align-items:center;justify-content:center;gap:8px;">'
-        + this.getIconHtml('folder_open', 'vertical-align:middle;')
-        + `<span style="vertical-align:middle;">${window.i18n.t('fileManager.emptyDirectory')}</span></div></td></tr>`;
+      fileList.innerHTML =
+        '<tr><td colspan="6" style="text-align:center;padding:20px;"><div style="display:flex;align-items:center;justify-content:center;gap:8px;">' +
+        this.getIconHtml('folder_open', 'vertical-align:middle;') +
+        `<span style="vertical-align:middle;">${window.i18n.t('fileManager.emptyDirectory')}</span></div></td></tr>`;
       return;
     }
 
-    files.forEach(file => {
+    files.forEach((file) => {
       if (file.name === '.' || file.name === '..') return;
 
-      const isSelected = selectedFiles?.some(f => f.path === file.path);
+      const isSelected = selectedFiles?.some((f) => f.path === file.path);
       const sizeDisplay = file.isDirectory ? '' : this.formatFileSize(file.size);
 
       const row = document.createElement('tr');
@@ -562,8 +588,8 @@ export class AndroidConnectionView {
           </div>
         </td>
         <td class="file-size">${sizeDisplay}</td>
-        <td class="file-date">${file.modifiedTime || ''}</td>
-        <td class="file-date">${file.createdAt || ''}</td>
+        <td class="file-date">${this.escapeHtml(file.modifiedTime || '')}</td>
+        <td class="file-date">${this.escapeHtml(file.createdAt || '')}</td>
         <td class="file-actions">
           <button class="file-actions-btn" data-path="${this.escapeHtml(file.path)}">
             ${this.getIconHtml('more_vert')}
@@ -640,7 +666,8 @@ export class AndroidConnectionView {
     el.className = 'path-ellipsis';
     el.textContent = '...';
     el.title = window.i18n.t('fileManager.clickToViewMorePath');
-    el.style.cssText = 'cursor:pointer;font-size:16px;margin:0 4px;color:var(--primary);display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;';
+    el.style.cssText =
+      'cursor:pointer;font-size:16px;margin:0 4px;color:var(--primary);display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;';
 
     container.appendChild(el);
 
@@ -648,7 +675,7 @@ export class AndroidConnectionView {
     const dropdown = this.els.ellipsisDropdown;
     if (dropdown) {
       dropdown.innerHTML = '';
-      hiddenSegments.forEach(seg => {
+      hiddenSegments.forEach((seg) => {
         const item = document.createElement('div');
         item.className = 'ellipsis-item';
         item.innerHTML = `${this.getIconHtml('folder')}<span>${this.escapeHtml(seg.displayName)}</span>`;
@@ -765,7 +792,8 @@ export class AndroidConnectionView {
   }
 
   toggleFileSelection(file, isSelected) {
-    const row = document.querySelector(`.file-item[data-path="${file.path}"]`);
+    // P3-8: CSS.escape 防路径含引号时 querySelector 抛异常
+    const row = document.querySelector(`.file-item[data-path="${CSS.escape(file.path)}"]`);
     if (row) {
       row.classList.toggle('selected', isSelected);
     }
@@ -875,7 +903,7 @@ export class AndroidConnectionView {
     if (!optionsEl) return;
 
     const selected = wrapper.querySelector('.custom-select__text');
-    optionsEl.querySelectorAll('.custom-select__option').forEach(option => {
+    optionsEl.querySelectorAll('.custom-select__option').forEach((option) => {
       if (option.dataset.value === value) {
         option.classList.add('selected');
         if (selected) selected.textContent = option.querySelector('span')?.textContent || option.textContent;
@@ -903,7 +931,8 @@ export class AndroidConnectionView {
     tooltip.className = 'floating-tooltip';
     tooltip.textContent = message;
 
-    tooltip.style.cssText = 'position:absolute;z-index:1000;padding:8px 12px;border-radius:4px;font-size:12px;white-space:nowrap;opacity:0;transform:translateY(10px);transition:opacity 0.3s ease,transform 0.3s ease;';
+    tooltip.style.cssText =
+      'position:absolute;z-index:1000;padding:8px 12px;border-radius:4px;font-size:12px;white-space:nowrap;opacity:0;transform:translateY(10px);transition:opacity 0.3s ease,transform 0.3s ease;';
 
     // 根据类型设置颜色
     switch (type) {
@@ -1012,7 +1041,12 @@ export class AndroidConnectionView {
       if (onOutsideContextMenu && contextMenu && !contextMenu.contains(e.target)) {
         onOutsideContextMenu();
       }
-      if (onOutsideEllipsis && ellipsisDropdown && !ellipsisDropdown.contains(e.target) && e.target.id !== 'unique-ellipsis') {
+      if (
+        onOutsideEllipsis &&
+        ellipsisDropdown &&
+        !ellipsisDropdown.contains(e.target) &&
+        e.target.id !== 'unique-ellipsis'
+      ) {
         onOutsideEllipsis();
       }
     };
@@ -1070,12 +1104,12 @@ export class AndroidConnectionView {
   bindNavTabsClick(handler) {
     const tabs = document.querySelectorAll('.nav-tab');
     const unbinds = [];
-    tabs.forEach(tab => {
+    tabs.forEach((tab) => {
       const listener = () => handler(tab.dataset.tab);
       tab.addEventListener('click', listener);
       unbinds.push(() => tab.removeEventListener('click', listener));
     });
-    return () => unbinds.forEach(fn => fn());
+    return () => unbinds.forEach((fn) => fn());
   }
 
   /**
@@ -1144,7 +1178,7 @@ export class AndroidConnectionView {
    * @param {boolean} checked
    */
   setAllFileCheckboxes(checked) {
-    document.querySelectorAll('.file-checkbox').forEach(cb => {
+    document.querySelectorAll('.file-checkbox').forEach((cb) => {
       cb.checked = checked;
     });
   }
@@ -1156,62 +1190,5 @@ export class AndroidConnectionView {
   getRenameInputValue() {
     const { renameInput } = this.els;
     return renameInput?.value?.trim() || '';
-  }
-
-  /**
-   * 显示通用确认弹窗，返回 Promise<boolean>
-   * @param {string} title - 标题
-   * @param {string} message - 消息
-   * @returns {Promise<boolean>} 用户是否确认
-   */
-  showConfirmDialog(title, message) {
-    return new Promise((resolve) => {
-      const titleElement = document.getElementById('confirm-modal-title');
-      const messageElement = document.getElementById('confirm-modal-message');
-
-      if (titleElement) titleElement.textContent = title;
-      if (messageElement) messageElement.textContent = message;
-
-      // 重置确认按钮状态
-      const confirmBtn = document.getElementById('confirm-modal-confirm-btn');
-      if (confirmBtn) {
-        confirmBtn.disabled = false;
-        confirmBtn.classList.remove('loading');
-        // 清除旧的 originalText，使用当前语言重新翻译
-        delete confirmBtn.dataset.originalText;
-        const i18nKey = confirmBtn.getAttribute('data-i18n');
-        confirmBtn.innerHTML = i18nKey ? window.i18n.t(i18nKey) || confirmBtn.textContent : confirmBtn.textContent;
-      }
-
-      window.__XKAT_CONFIRM_CALLBACK__ = () => {
-        window.__XKAT_CONFIRM_CALLBACK__ = null;
-        resolve(true);
-      };
-
-      // 绑定一次性确认按钮点击（确保 callback 在 close 前被调用）
-      const handleConfirmClick = () => {
-        resolve(true);
-      };
-      if (confirmBtn) confirmBtn.addEventListener('click', handleConfirmClick, { once: true });
-
-      // 取消按钮 → reject
-      const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
-      const handleCancelClick = (e) => {
-        e.stopPropagation();
-        if (confirmBtn) confirmBtn.removeEventListener('click', handleConfirmClick);
-        window.__XKAT_CONFIRM_CALLBACK__ = null;
-        resolve(false);
-      };
-      if (cancelBtn) cancelBtn.addEventListener('click', handleCancelClick, { once: true });
-
-      const confirmModal = window.__XKAT_MODALS__?.confirm;
-      if (confirmModal) {
-        confirmModal.open();
-      } else {
-        // 降级处理
-        const ok = window.confirm(message);
-        resolve(ok);
-      }
-    });
   }
 }

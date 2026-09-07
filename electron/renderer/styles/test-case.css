@@ -3027,6 +3027,14 @@ body.dark-theme .theme-color-option.selected {
   position: relative;
 }
 
+/* R27: div 自绘下拉禁用态 (JSON 缺失用例: 平台/应用选择不可交互) */
+.custom-select-wrapper.disabled,
+.custom-select-wrapper.disabled .custom-select {
+  opacity: 0.45;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
 .custom-select {
   position: relative;
   min-width: 150px;
@@ -3345,6 +3353,10 @@ body.dark-theme .custom-select__selected:hover {
   margin: 0;
   width: 16px;
   height: 16px;
+  /* 勾选颜色跟随主题色，避免使用浏览器默认蓝色 */
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .modal-test-file-item label,

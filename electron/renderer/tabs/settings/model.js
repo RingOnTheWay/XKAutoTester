@@ -25,18 +25,24 @@ export class SettingsModel extends EventEmitter {
     checkForUpdate: 'checkForUpdate',
     checkForUpdateRaw: 'checkForUpdateRaw',
     downloadUpdate: 'downloadUpdate',
+    cancelUpdateDownload: 'cancelUpdateDownload', // R27: UI 取消进行中下载
     installUpdate: 'installUpdate',
     clearAllureReports: 'clearAllureReports',
     clearAllLogs: 'clearAllLogs',
     setPreventSleep: 'setPreventSleep',
   });
 
+  #cancelWindowUntil = 0; // R27: 取消窗口截止时间 — cancelDownload 后 1s 内下载错误静默
+
   #state = {
     config: null,
     darkMode: false,
     themeColor: '#4CAF50',
     language: 'zh-CN',
-    notification: { platform: 'none', dingtalk: { access_token: '', secret: '' } },
+    notification: {
+      platform: 'none',
+      dingtalk: { access_token: '', secret: '' },
+    },
     versionInfo: null,
     dataPath: null,
     updateData: null,
@@ -49,20 +55,46 @@ export class SettingsModel extends EventEmitter {
 
   // ── State Getters ──────────────────────────────────────────────
 
-  get config() { return this.#state.config; }
-  get darkMode() { return this.#state.darkMode; }
-  get themeColor() { return this.#state.themeColor; }
-  get language() { return this.#state.language; }
-  get notification() { return this.#state.notification; }
-  get versionInfo() { return this.#state.versionInfo; }
-  get dataPath() { return this.#state.dataPath; }
-  get updateData() { return this.#state.updateData; }
-  get updatePendingFilePath() { return this.#state.updatePendingFilePath; }
-  get autoCheckUpdate() { return this.#state.autoCheckUpdate; }
-  get preventSleep() { return this.#state.preventSleep; }
-  get allowInsecureSSL() { return this.#state.allowInsecureSSL; }
+  get config() {
+    return this.#state.config;
+  }
+  get darkMode() {
+    return this.#state.darkMode;
+  }
+  get themeColor() {
+    return this.#state.themeColor;
+  }
+  get language() {
+    return this.#state.language;
+  }
+  get notification() {
+    return this.#state.notification;
+  }
+  get versionInfo() {
+    return this.#state.versionInfo;
+  }
+  get dataPath() {
+    return this.#state.dataPath;
+  }
+  get updateData() {
+    return this.#state.updateData;
+  }
+  get updatePendingFilePath() {
+    return this.#state.updatePendingFilePath;
+  }
+  get autoCheckUpdate() {
+    return this.#state.autoCheckUpdate;
+  }
+  get preventSleep() {
+    return this.#state.preventSleep;
+  }
+  get allowInsecureSSL() {
+    return this.#state.allowInsecureSSL;
+  }
 
-  get(key) { return this.#state[key]; }
+  get(key) {
+    return this.#state[key];
+  }
 
   // ── Private State Helper ───────────────────────────────────────
 
@@ -76,11 +108,7 @@ export class SettingsModel extends EventEmitter {
   // ── Initialization ─────────────────────────────────────────────
 
   async load() {
-    await Promise.all([
-      this.loadConfig(),
-      this.loadVersionInfo(),
-      this.loadDataPath(),
-    ]);
+    await Promise.all([this.loadConfig(), this.loadVersionInfo(), this.loadDataPath()]);
   }
 
   async loadConfig() {
@@ -91,7 +119,13 @@ export class SettingsModel extends EventEmitter {
       this.#set('darkMode', !!settings.dark_mode, 'dark-mode-changed');
       this.#set('themeColor', settings.theme_color || '#4CAF50', 'theme-color-changed');
       this.#set('language', settings.language || 'zh-CN', 'language-changed');
-      this.#set('notification', settings.notification || { platform: 'none', dingtalk: { access_token: '', secret: '' } });
+      this.#set(
+        'notification',
+        settings.notification || {
+          platform: 'none',
+          dingtalk: { access_token: '', secret: '' },
+        }
+      );
       this.#set('autoCheckUpdate', settings.autoCheckUpdate !== false);
       this.#set('preventSleep', !!settings.preventSleep);
       this.#set('allowInsecureSSL', !!settings.allowInsecureSSL);
@@ -114,7 +148,7 @@ export class SettingsModel extends EventEmitter {
     try {
       const result = await this.#api.getDataPath();
       // API 返回 { currentPath, defaultPath }，提取 currentPath 作为显示路径
-      const path = typeof result === 'string' ? result : (result?.currentPath || '');
+      const path = typeof result === 'string' ? result : result?.currentPath || '';
       this.#set('dataPath', path, 'data-path-changed');
       this.#set('dataPathInfo', result, 'data-path-info-changed');
     } catch (error) {
@@ -192,7 +226,10 @@ export class SettingsModel extends EventEmitter {
 
   async selectExportPath(type = 'config') {
     try {
-      return await this.#api.selectExportPath({ type, title: window.i18n.t('settings.selectExportPath') });
+      return await this.#api.selectExportPath({
+        type,
+        title: window.i18n.t('settings.selectExportPath'),
+      });
     } catch (error) {
       this.emit('error', { source: 'selectExportPath', error });
       return null;
@@ -253,17 +290,23 @@ export class SettingsModel extends EventEmitter {
       }
       const data = result?.data || {};
       if (data.hasUpdate) {
-        this.#set('updateData', {
-          version: data.latestVersion,
-          releaseNotes: data.releaseNotes,
-          releaseName: data.releaseName,
-          downloadUrl: data.downloadUrl,
-          fileName: data.fileName,
-          fileSize: data.fileSize,
-          htmlUrl: data.htmlUrl,
-          sha256: data.sha256,        // R10: 透出 hash 供 UI 显示
-          secure: data.secure !== false && !!data.sha256,  // R10: 无 hash 标记不可安装
-        }, 'update-available');
+        this.#set(
+          'updateData',
+          {
+            // R27: 显示保留 'v' 前缀 (latestVersionDisplay 带 v, 与 tag 一致);
+            // latestVersion 仍可访问用于 semver 比较 (无 v)
+            version: data.latestVersionDisplay || data.latestVersion,
+            releaseNotes: data.releaseNotes,
+            releaseName: data.releaseName,
+            downloadUrl: data.downloadUrl,
+            fileName: data.fileName,
+            fileSize: data.fileSize,
+            htmlUrl: data.htmlUrl,
+            sha256: data.sha256, // R10: 透出 hash 供 UI 显示
+            secure: data.secure !== false && !!data.sha256, // R10: 无 hash 标记不可安装
+          },
+          'update-available'
+        );
       } else {
         this.emit('update-not-available', data);
       }
@@ -282,7 +325,8 @@ export class SettingsModel extends EventEmitter {
   async downloadUpdate() {
     try {
       // 注册下载进度监听
-      if (this.#state.removeUpdateProgressListener) {
+      // R27 P3-7: 仅当为函数才调用 — 旧 preload 兼容可能存非函数真值 → 原调抛 TypeError
+      if (typeof this.#state.removeUpdateProgressListener === 'function') {
         this.#state.removeUpdateProgressListener();
       }
       const removeListener = ApiBridge.api.onUpdateDownloadProgress((progress) => {
@@ -292,7 +336,10 @@ export class SettingsModel extends EventEmitter {
 
       const updateData = this.#state.updateData;
       if (!updateData) {
-        this.emit('error', { source: 'downloadUpdate', message: 'noUpdateData' });
+        this.emit('error', {
+          source: 'downloadUpdate',
+          message: 'noUpdateData',
+        });
         return;
       }
 
@@ -306,13 +353,40 @@ export class SettingsModel extends EventEmitter {
       if (result && result.filePath) {
         this.#set('updatePendingFilePath', result.filePath, 'update-downloaded');
       }
+      // R27: 取消下载 (cancelled) → 状态复位, UI 已由取消按钮关闭
+      else if (result && result.cancelled) {
+        this.emit('update-download-cancelled');
+      }
       return result;
     } catch (error) {
-      if (this.#state.removeUpdateProgressListener) {
-        this.#state.removeUpdateProgressListener();
-        this.#state.removeUpdateProgressListener = null;
+      // R27: 用户取消 (AbortError 或取消窗口内任何流错误) → 静默, 不 emit error
+      // (否则 controller 弹红色 'Download cancelled' 错误 toast 与成功 toast 双弹)
+      const inCancelWindow = Date.now() < this.#cancelWindowUntil;
+      const isAbort =
+        (error && (error.name === 'AbortError' || /abort|cancel/i.test(String(error.message || '')))) || inCancelWindow;
+      if (!isAbort) {
+        if (this.#state.removeUpdateProgressListener) {
+          this.#state.removeUpdateProgressListener();
+          this.#state.removeUpdateProgressListener = null;
+        }
+        this.emit('error', { source: 'downloadUpdate', error });
       }
-      this.emit('error', { source: 'downloadUpdate', error });
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * R27: 取消进行中的更新下载 (abort 主进程下载 + 清临时文件)
+   * 取消窗口: cancelDownload 后 1s 内 downloadUpdate 的任何错误都视为取消副产物, 静默
+   * (主进程 abort 后 writer error / stream destroy 等非 AbortError 错误的双 toast 兜底)
+   */
+  async cancelDownload() {
+    this.#cancelWindowUntil = Date.now() + 1000;
+    try {
+      return await this.#api.cancelUpdateDownload();
+    } catch (error) {
+      // R27: 取消失败静默 (取消为尽力而为, IPC 异常不打扰用户) — 不再 emit error
+      // (原路径会触发 controller 错误 toast, 与成功 toast 叠加成双 toast)
       return { success: false, error: error.message };
     }
   }
@@ -321,7 +395,10 @@ export class SettingsModel extends EventEmitter {
     try {
       const path = filePath || this.#state.updatePendingFilePath;
       if (!path) {
-        this.emit('error', { source: 'installUpdate', message: 'noUpdateFile' });
+        this.emit('error', {
+          source: 'installUpdate',
+          message: 'noUpdateFile',
+        });
         return;
       }
       const result = await this.#api.installUpdate(path);
@@ -403,11 +480,13 @@ export class SettingsModel extends EventEmitter {
 
   static hexToRgb(hex) {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16),
-    } : null;
+    return result
+      ? {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16),
+        }
+      : null;
   }
 
   static darkenColor(hex, amount = 0.2) {
@@ -429,7 +508,7 @@ export class SettingsModel extends EventEmitter {
   }
 
   static rgbToHex(r, g, b) {
-    return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    return '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
   }
 
   static renderMarkdown(text) {

@@ -318,7 +318,7 @@ describe('TestCaseEditor saveCase', () => {
     let errEvt = null;
     ed.on('error', (e) => { errEvt = e; });
 
-    await ed.saveCase({ fileName: 'valid_name' });
+    await ed.saveCase({ fileName: 'test_valid_name' });
     assert.strictEqual(errEvt.message, 'selectCaseFirst');
   });
 
@@ -330,7 +330,7 @@ describe('TestCaseEditor saveCase', () => {
     let errEvt = null;
     ed.on('error', (e) => { errEvt = e; });
 
-    await ed.saveCase({ fileName: 'valid_name' });
+    await ed.saveCase({ fileName: 'test_valid_name' });
     assert.strictEqual(errEvt.message, 'selectAppFirst');
   });
 
@@ -343,7 +343,7 @@ describe('TestCaseEditor saveCase', () => {
     let savedPayload = null;
     ed.on('case-saved', (r) => { savedPayload = r; });
 
-    await ed.saveCase({ fileName: 'valid_name', steps: [] });
+    await ed.saveCase({ fileName: 'test_valid_name', steps: [] });
     assert.strictEqual(ed.hasUnsavedChanges, false);
     assert.ok(savedPayload);
     assert.ok(deps.events.fb.some(([t]) => t === 'scanTestFiles'));
@@ -357,7 +357,7 @@ describe('TestCaseEditor saveCase', () => {
     let errEvt = null;
     ed.on('error', (e) => { errEvt = e; });
 
-    await ed.saveCase({ fileName: 'valid_name' });
+    await ed.saveCase({ fileName: 'test_valid_name' });
     assert.ok(errEvt);
     assert.strictEqual(errEvt.message, 'saveFailed');
   });

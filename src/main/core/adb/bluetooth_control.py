@@ -10,6 +10,7 @@
 - 全部 i18n 键保留 python.adbManager.*
 - 注入 executor,测试可注 FakeAdbAdapter
 """
+
 from __future__ import annotations
 
 import logging

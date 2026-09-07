@@ -26,15 +26,22 @@ class SerialPortEnumerator {
   async getSerialPorts() {
     const pythonConfig = pathHelper.getPythonConfig();
     if (!pythonConfig) {
-      return { success: false, error: this.i18nService.t('splash.checks.venvNotFound') };
+      return {
+        success: false,
+        error: this.i18nService.t('splash.checks.venvNotFound'),
+      };
     }
 
-    const listScript = 'import serial.tools.list_ports; import json; ports = serial.tools.list_ports.comports(); print(json.dumps([{"deviceId": p.device, "name": p.description, "manufacturer": p.manufacturer or "", "serial_number": p.serial_number or "", "hwid": p.hwid or "", "vid": p.vid, "pid": p.pid} for p in ports]))';
+    const listScript =
+      'import serial.tools.list_ports; import json; ports = serial.tools.list_ports.comports(); print(json.dumps([{"deviceId": p.device, "name": p.description, "manufacturer": p.manufacturer or "", "serial_number": p.serial_number or "", "hwid": p.hwid or "", "vid": p.vid, "pid": p.pid} for p in ports]))';
 
     try {
       const result = await this.executeCommand(pythonConfig.pythonPath, ['-c', listScript]);
       if (result.code !== 0) {
-        return { success: false, error: result.stderr || 'Failed to list serial ports' };
+        return {
+          success: false,
+          error: result.stderr || 'Failed to list serial ports',
+        };
       }
       const ports = JSON.parse(result.stdout || '[]');
       return { success: true, data: ports };

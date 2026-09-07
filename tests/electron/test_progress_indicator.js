@@ -116,3 +116,22 @@ describe('ProgressIndicator 定时器回收', () => {
     assert.strictEqual(pi.downloadProgressTimer, null);
   });
 });
+// ── R27 P1-2: escapeHtml 方法存在 (R25 XSS 修复回归) ─────────
+
+describe('P1-2 ProgressIndicator escapeHtml', () => {
+  before(async () => {
+    setupJsdm();
+    await loadIndicator();
+  });
+  after(teardownJsdm);
+
+  test('escapeHtml 转义 < > & " \'', () => {
+    const pi = new IndicatorClass();
+    assert.strictEqual(pi.escapeHtml('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;');
+    assert.strictEqual(pi.escapeHtml('a&b'), 'a&amp;b');
+    assert.strictEqual(pi.escapeHtml('say "hi"'), 'say &quot;hi&quot;');
+    assert.strictEqual(pi.escapeHtml("it's"), 'it&#39;s');
+    assert.strictEqual(pi.escapeHtml(null), '', 'null → 空串');
+    assert.strictEqual(pi.escapeHtml(undefined), '', 'undefined → 空串');
+  });
+});

@@ -5,13 +5,14 @@
 - AdbResult 不可变 (frozen dataclass)
 - AdbResult 字段访问
 """
+
 from __future__ import annotations
 
 import dataclasses
 
 import pytest
 
-from main.core.adb.adb_port import AdbCommandPort, AdbResult
+from main.core.adb.adb_port import AdbResult
 
 
 class TestAdbResult:

@@ -11,6 +11,7 @@
 - 注入 executor,测试可注 FakeAdbAdapter
 - _show_unauthorized_dialog 写文件副作用留本服务内 (抽了反增复杂度)
 """
+
 from __future__ import annotations
 
 import json
@@ -25,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 # 设备行匹配: "设备ID    device" (仅 device 状态,跳过 unauthorized/offline)
 _DEVICE_LINE_RE = re.compile(r"^([^\s]+)\s+device$")
+
+# R24 P3-7: USB 授权等待参数 (原内联魔法数字 60/2, 与其他模块 sleep 命名常量对齐)
+USB_AUTH_MAX_WAIT_SECONDS = 60
+USB_AUTH_CHECK_INTERVAL_SECONDS = 2
 
 # 默认 TCP 连接端口 (device_name 不含 ':' 时使用)
 _DEFAULT_TCP_PORT = 5555
@@ -146,12 +151,23 @@ class DeviceConnectionService:
 
             for line in result.stdout.split("\n"):
                 line = line.strip()
-                if line.startswith(device_identifier):
-                    if "unauthorized" in line:
+                # P2-13: 精确比较首列 (adb devices 格式: <serial>\t<status>),
+                # 对齐 list_devices 的 _DEVICE_LINE_RE。原 startswith 前缀比较会命中
+                # 同前缀更长串 (USB 序列号 '12345' 匹配 '123456 device'),
+                # 导致连接/授权状态误判 → 初始化时序错乱。
+                if not line:
+                    continue
+                serial = line.split()[0]
+                if serial == device_identifier:
+                    # R27 P3-13: 状态列精确匹配 (adb devices 第 2 列) — 原整行 substring,
+                    # "no permissions" 等未知状态落入 not_found 信息失真
+                    parts = line.split()
+                    status = parts[1] if len(parts) > 1 else ""
+                    if status == "unauthorized":
                         return False, "unauthorized"
-                    if "device" in line:
+                    if status == "device":
                         return True, "device"
-                    if "offline" in line:
+                    if status == "offline":
                         return False, "offline"
             return False, "not_found"
         except Exception as e:
@@ -183,13 +199,9 @@ class DeviceConnectionService:
 
     def _connect_tcp_device(self) -> tuple[bool, str]:
         """TCP/IP 设备连接: adb connect + 重新认证流程。"""
-        device_address = (
-            self._device_name if ":" in self._device_name else f"{self._device_name}:{_DEFAULT_TCP_PORT}"
-        )
+        device_address = self._device_name if ":" in self._device_name else f"{self._device_name}:{_DEFAULT_TCP_PORT}"
 
-        connect_result = self._executor.execute(
-            ["connect", device_address]
-        )
+        connect_result = self._executor.execute(["connect", device_address])
         stdout = connect_result.stdout
         stderr = connect_result.stderr
         logger.info(t("python.adbManager.adbConnectStdout", output=stdout))
@@ -208,26 +220,27 @@ class DeviceConnectionService:
             self._executor.execute(["devices"], timeout=5)
 
             logger.info(t("python.adbManager.disconnectForReauth"))
-            disconnect_result = self._executor.execute(
-                ["disconnect", device_address], timeout=5
-            )
+            disconnect_result = self._executor.execute(["disconnect", device_address], timeout=5)
             logger.info(t("python.adbManager.disconnectResult", output=disconnect_result.stdout))
 
             time.sleep(1)
 
             logger.info(t("python.adbManager.reconnectForAuth"))
-            reconnect_result = self._executor.execute(
-                ["connect", device_address]
-            )
+            reconnect_result = self._executor.execute(["connect", device_address])
             logger.info(t("python.adbManager.reconnectResult", output=reconnect_result.stdout))
 
             # 第二次查列表
             devices_result = self._executor.execute(["devices"], timeout=5)
-            logger.info(
-                t("python.adbManager.reconnectDeviceListStdout", output=devices_result.stdout)
-            )
+            logger.info(t("python.adbManager.reconnectDeviceListStdout", output=devices_result.stdout))
 
-            if device_address in devices_result.stdout:
+            # P2-13: 精确匹配首列 (原 `device_address in stdout` 子串匹配会命中
+            # IP:55555 等含目标前缀的行, 误判连接/授权状态)
+            device_found = any(
+                ln.strip().split()[0] == device_address
+                for ln in devices_result.stdout.split("\n")
+                if ln.strip()
+            )
+            if device_found:
                 if "unauthorized" in devices_result.stdout or auth_failed:
                     logger.warning(t("python.adbManager.deviceUnauthorized", device=self._device_name))
                     return self._wait_for_usb_authorization()
@@ -236,11 +249,7 @@ class DeviceConnectionService:
             logger.warning(t("python.adbManager.deviceNotInList", device=self._device_name))
             return False, t("python.adbManager.deviceNotInListShort")
 
-        if (
-            _CANNOT_CONNECT_PREFIX in stdout
-            or _CONN_REFUSED_LOCALIZED in stdout
-            or _ECONNREFUSED_WIN_CODE in stdout
-        ):
+        if _CANNOT_CONNECT_PREFIX in stdout or _CONN_REFUSED_LOCALIZED in stdout or _ECONNREFUSED_WIN_CODE in stdout:
             logger.warning(t("python.adbManager.deviceConnectionRefused", device=self._device_name))
             return False, t("python.adbManager.deviceConnectionRefusedShort")
         logger.warning(t("python.adbManager.deviceConnectionFailed", device=self._device_name))
@@ -253,8 +262,8 @@ class DeviceConnectionService:
         logger.info(t("python.adbManager.pleaseAuthorizeDevice"))
         self._show_unauthorized_dialog()
 
-        max_wait_time = 60
-        check_interval = 2
+        max_wait_time = USB_AUTH_MAX_WAIT_SECONDS
+        check_interval = USB_AUTH_CHECK_INTERVAL_SECONDS
         waited_time = 0
 
         while waited_time < max_wait_time:
@@ -296,9 +305,7 @@ class DeviceConnectionService:
             with open(dialog_trigger_file, "w", encoding="utf-8") as f:
                 json.dump(dialog_data, f, ensure_ascii=False, indent=2)
 
-            logger.info(
-                t("python.adbManager.unauthorizedDialogFileCreated", path=dialog_trigger_file)
-            )
+            logger.info(t("python.adbManager.unauthorizedDialogFileCreated", path=dialog_trigger_file))
         except Exception as e:
             logger.warning(t("python.adbManager.showUnauthorizedDialogFailed", error=e))
             # 弹窗失败不影响主流程,继续等待授权

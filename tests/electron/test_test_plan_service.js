@@ -134,3 +134,120 @@ test('P0 并发回归: 并发 saveTestPlan 同名覆盖不产生重复 (withLock
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+
+// ── P0-2 安全回归: 字段白名单 + 报告路径校验 ─────────────────────────
+
+test('P0-2 saveTestPlan 白名单: 剥离 runs/report_path 等运行期字段', async () => {
+  const tmpDir = makeTmpDir();
+  try {
+    const svc = new TestPlanService(tmpDir, tmpDir, {
+      idGenerator: () => 'plan-id-1',
+    });
+
+    // 渲染进程可注入任意字段 (含 report_path) — 白名单后必须被剥离
+    const result = await svc.saveTestPlan({
+      name: 'VictimPlan',
+      description: 'desc',
+      loopCount: 3,
+      continueOnFailure: false,
+      testFiles: ['a.py'],
+      testTypes: ['unit'],
+      runs: [{ report_path: 'C:\\Windows\\System32', timestamp: '2026-01-01 00:00:00' }],
+      last_run: 'fake',
+      evilField: { any: 'thing' },
+    });
+    assert.strictEqual(result.success, true, result.error);
+
+    const plans = await svc.getTestPlans();
+    const plan = plans.find(p => p.name === 'VictimPlan');
+    assert.ok(plan, 'plan 应存在');
+    assert.strictEqual(plan.description, 'desc');
+    assert.strictEqual(plan.loopCount, 3);
+    assert.strictEqual(plan.continueOnFailure, false);
+    assert.deepStrictEqual(plan.testFiles, ['a.py']);
+    // 运行期/未知字段必须不存在
+    assert.strictEqual(plan.runs, undefined, 'runs 不得由渲染进程注入');
+    assert.strictEqual(plan.last_run, undefined);
+    assert.strictEqual(plan.evilField, undefined);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('P0-2 updateTestPlan 保留服务端运行期字段 (runs/last_run 不丢失)', async () => {
+  const tmpDir = makeTmpDir();
+  try {
+    const svc = new TestPlanService(tmpDir, tmpDir, { idGenerator: () => 'plan-id-1' });
+    await svc.saveTestPlan({ name: 'P', testFiles: [] });
+    // 服务端 recordRun 写入 runs/last_run
+    await svc.recordRun('P');
+
+    // 用户编辑计划 (渲染进程不传 runs) — 历史记录必须保留
+    await svc.updateTestPlan({ id: 'plan-id-1', name: 'P2', testFiles: ['b.py'] });
+    const plans = await svc.getTestPlans();
+    const plan = plans.find(p => p.name === 'P2');
+    assert.ok(plan.runs && plan.runs.length === 1, 'runs 应保留');
+    assert.ok(plan.last_run, 'last_run 应保留');
+    assert.deepStrictEqual(plan.testFiles, ['b.py']);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('P0-2 deleteReportRun 拒绝报告目录外的 report_path', async () => {
+  const tmpDir = makeTmpDir();
+  try {
+    const svc = new TestPlanService(tmpDir, tmpDir, { idGenerator: () => 'plan-id-1' });
+    // 手工构造一个带恶意 report_path 的 plan (模拟白名单上线前的存量脏数据)
+    const evilPath = path.join(os.tmpdir(), 'p0-evil-target-dir');
+    fs.mkdirSync(evilPath, { recursive: true });
+    fs.writeFileSync(path.join(evilPath, 'victim.txt'), 'do-not-delete');
+    try {
+      const fsFactory = () => ({
+        exists: (p) => fs.existsSync(p),
+        stat: (p) => fs.statSync(p),
+        readdir: (d) => fs.readdirSync(d),
+        readFile: (p) => fs.readFileSync(p, 'utf8'),
+        rm: (p, opts) => fs.rmSync(p, opts),
+      });
+      const svc2 = new TestPlanService(tmpDir, tmpDir, {
+        idGenerator: () => 'plan-id-1',
+        fileSystemFactory: fsFactory,
+      });
+      await svc2.saveTestPlan({ name: 'P', testFiles: [] });
+      // 直接往文件注入恶意 run 记录 (模拟被攻破/存量数据)
+      const filePath = path.join(tmpDir, 'test_plans.json');
+      const plans = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      plans[0].runs = [{ report_path: evilPath, timestamp: '2026-01-01 00:00:00' }];
+      fs.writeFileSync(filePath, JSON.stringify(plans, null, 2));
+
+      const result = await svc2.deleteReportRun('P', evilPath);
+      assert.strictEqual(result.success, false, '应拒绝删除目录外路径');
+      assert.ok(result.error.includes('非法'), '错误信息应说明非法路径');
+      // 目标目录必须未被删除
+      assert.ok(fs.existsSync(path.join(evilPath, 'victim.txt')), '受害文件不得被删除');
+    } finally {
+      fs.rmSync(evilPath, { recursive: true, force: true });
+    }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('P0-2 isPathInside 纯函数: 边界与穿越用例', () => {
+  const { isPathInside, sanitizePlanData, PLAN_EDITABLE_FIELDS } = require(path.join(
+    __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'TestPlanService.js'
+  ));
+  const base = 'C:/reports';
+  assert.strictEqual(isPathInside(base, 'C:/reports/plan1'), true);
+  assert.strictEqual(isPathInside(base, 'C:/reports/plan1/index.html'), true);
+  assert.strictEqual(isPathInside(base, 'C:/reports-evil/plan1'), false, '前缀目录不得误判为内部');
+  assert.strictEqual(isPathInside(base, 'C:/reports2'), false);
+  assert.strictEqual(isPathInside(base, 'C:/outside/plan1'), false);
+  assert.strictEqual(isPathInside(base, 'C:/reports'), false, 'baseDir 自身不算内部');
+  assert.strictEqual(isPathInside(base, '/absolute/path'), false);
+  assert.ok(PLAN_EDITABLE_FIELDS.includes('name'));
+  assert.ok(!PLAN_EDITABLE_FIELDS.includes('runs'));
+  assert.ok(!PLAN_EDITABLE_FIELDS.includes('last_run'));
+});

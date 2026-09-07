@@ -44,10 +44,7 @@ class RemoteStatService {
    * @returns {Promise<number>} 字节数,失败返回 0
    */
   async getFileSize(remotePath, deviceId) {
-    const args = this._buildArgs(
-      { prefix: 'stat -c %s', rawPath: remotePath },
-      deviceId
-    );
+    const args = this._buildArgs({ prefix: 'stat -c %s', rawPath: remotePath }, deviceId);
     const result = await this._executor.execute(args, { timeoutMs: 30000 });
 
     if (!result.success) {
@@ -83,10 +80,7 @@ class RemoteStatService {
     }
 
     // 最终 fallback: ls -laR 解析每行第 5 字段求和
-    const lsArgs = this._buildArgs(
-      { prefix: 'ls -laR', rawPath: remotePath },
-      deviceId
-    );
+    const lsArgs = this._buildArgs({ prefix: 'ls -laR', rawPath: remotePath }, deviceId);
     const lsResult = await this._executor.execute(lsArgs, { timeoutMs: 30000 });
 
     if (lsResult.success && lsResult.output) {
@@ -117,7 +111,10 @@ class RemoteStatService {
    * @returns {number} 字节数,无效返回 0
    */
   _parseDuOutput(output) {
-    const lines = output.trim().split('\n').filter(l => l.length > 0);
+    const lines = output
+      .trim()
+      .split('\n')
+      .filter((l) => l.length > 0);
     if (lines.length === 0) return 0;
     const lastLine = lines[lines.length - 1];
     const m = lastLine.match(/(\d+)/);

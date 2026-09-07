@@ -5,6 +5,7 @@
 - enable: svc bluetooth enable + sleep(3)
 - ensure_enabled: check + enable + re-check 编排
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch

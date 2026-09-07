@@ -116,8 +116,9 @@ export class BaseSelect {
   _getVisibleOptions() {
     const container = this._getOptionsContainer();
     if (!container) return [];
-    return Array.from(container.querySelectorAll(this._getOptionSelector()))
-      .filter(opt => opt.style.display !== 'none');
+    return Array.from(container.querySelectorAll(this._getOptionSelector())).filter(
+      (opt) => opt.style.display !== 'none'
+    );
   }
 
   _setActive(index) {
@@ -129,7 +130,7 @@ export class BaseSelect {
     if (index < 0) index = opts.length - 1;
     if (index >= opts.length) index = 0;
 
-    opts.forEach(opt => opt.classList.remove('active'));
+    opts.forEach((opt) => opt.classList.remove('active'));
     opts[index].classList.add('active');
     this._activeIndex = index;
     opts[index].scrollIntoView({ block: 'nearest' });
@@ -141,13 +142,13 @@ export class BaseSelect {
 
   _clearActive() {
     const opts = this._getVisibleOptions();
-    opts.forEach(opt => opt.classList.remove('active'));
+    opts.forEach((opt) => opt.classList.remove('active'));
     this._activeIndex = -1;
   }
 
   _highlightSelectedOrDefault() {
     const opts = this._getVisibleOptions();
-    const selectedIndex = opts.findIndex(opt => opt.classList.contains('selected'));
+    const selectedIndex = opts.findIndex((opt) => opt.classList.contains('selected'));
     this._setActive(selectedIndex >= 0 ? selectedIndex : 0);
   }
 
@@ -262,7 +263,9 @@ export class BaseSelect {
     const mainContent = document.querySelector('.main-content');
     if (mainContent) {
       mainContent.classList.add('dropdown-open');
-      mainContent.addEventListener('wheel', BaseSelect.preventScroll, { passive: false });
+      mainContent.addEventListener('wheel', BaseSelect.preventScroll, {
+        passive: false,
+      });
     }
   }
 
@@ -270,7 +273,9 @@ export class BaseSelect {
     const mainContent = document.querySelector('.main-content');
     if (mainContent && !BaseSelect.activeDropdown) {
       mainContent.classList.remove('dropdown-open');
-      mainContent.removeEventListener('wheel', BaseSelect.preventScroll, { passive: false });
+      mainContent.removeEventListener('wheel', BaseSelect.preventScroll, {
+        passive: false,
+      });
     }
   }
 
@@ -283,6 +288,6 @@ export class BaseSelect {
   static closeAll() {
     // 复制后遍历，避免迭代中 close() 修改 _openInstances
     const instances = Array.from(BaseSelect._openInstances);
-    instances.forEach(inst => inst.close());
+    instances.forEach((inst) => inst.close());
   }
 }

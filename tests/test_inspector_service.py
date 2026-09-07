@@ -11,6 +11,7 @@
 
 注入 FakeDriver/FakeAppiumServer/FakeAdbAdapter,无真 Appium/webdriver/adb。
 """
+
 from __future__ import annotations
 
 from main.core.inspector_service import InspectorService
@@ -18,8 +19,10 @@ from tests.unit.helpers.fake_adb_adapter import FakeAdbAdapter
 
 # ============ Fakes ============
 
+
 class _FakeCommandExecutor:
     """Fake webdriver command_executor — set_timeout 静默吞。"""
+
     def set_timeout(self, seconds: int) -> None:
         self.timeout = seconds
 
@@ -29,6 +32,7 @@ class FakeDriver:
 
     提供: session_id, get_screenshot_as_base64, page_source, quit, command_executor
     """
+
     def __init__(self, url: str, options) -> None:
         self._url = url
         self._options = options
@@ -37,10 +41,10 @@ class FakeDriver:
         self.quit_called = False
         self._screenshot_b64 = "ZmFrZSBzY3JlZW5zaG90"  # "fake screenshot"
         self._page_source = (
-            '<hierarchy>'
+            "<hierarchy>"
             '<node bounds="[0,0][100,100]" resource-id="com.x:id/btn" '
             'class="android.widget.Button" text="OK" content-desc="submit"/>'
-            '</hierarchy>'
+            "</hierarchy>"
         )
 
     def get_screenshot_as_base64(self) -> str:
@@ -59,6 +63,7 @@ class FakeAppiumServer:
 
     apply_default_capabilities 仍走 AppiumServer 类方法 (facade 直调,不经实例)。
     """
+
     def __init__(self, host: str, port: int) -> None:
         self.host = host
         self.port = port
@@ -105,6 +110,7 @@ def _make_service(
 
 
 # ============ Tests ============
+
 
 class TestStartSession:
     """start_session: 成功 + 重复 + AppiumStartFailed。"""
@@ -297,7 +303,12 @@ class TestWakeDeviceUsesAdapter:
         # adapter 被调用
         assert adb.call_count == 1
         assert adb.calls[0] == [
-            "-s", "dev:5555", "shell", "input", "keyevent", "224",
+            "-s",
+            "dev:5555",
+            "shell",
+            "input",
+            "keyevent",
+            "224",
         ]
 
     def test_wake_device_without_device_name_is_noop(self):
@@ -319,3 +330,59 @@ class TestWakeDeviceUsesAdapter:
 
         # 模块不应有 subprocess 属性 (import 已删)
         assert not hasattr(mod, "subprocess")
+
+
+class TestStartSessionPortRecovery:
+    """端口被残留 Appium 占用时自动清理 (修复: 关闭 inspector 后再进入报端口占用)。"""
+
+    def test_start_session_port_in_use_auto_cleanup(self, monkeypatch):
+        """端口 4725 被残留进程占用 → 自动 taskkill 清理后正常启动。"""
+        # 预检占用 → 清理 → 等待释放: 第一次检查仍占用, 第二次释放
+        in_use = [True, True, False]
+        monkeypatch.setattr(
+            "main.core.inspector_service._check_port_in_use",
+            lambda port: in_use.pop(0) if in_use else False,
+        )
+        killed = []
+        monkeypatch.setattr(
+            "main.core.inspector_service._kill_port_process",
+            lambda port: killed.append(port),
+        )
+        # 加速: 避免等待循环真实 sleep
+        monkeypatch.setattr("main.core.inspector_service.time.sleep", lambda s: None)
+
+        service, adb, server = _make_service()
+        result = service.start_session("dev:5555", "com.x.app", ".Main")
+
+        assert result["success"] is True
+        assert killed == [4725], "应清理占用 inspector 端口的残留进程"
+        assert server.start_called is True
+
+    def test_start_session_port_in_use_cleanup_failed_returns_error(self, monkeypatch):
+        """清理后端口仍被占用 → 返回 errorPortInUse (不盲目启动)。"""
+        monkeypatch.setattr("main.core.inspector_service._check_port_in_use", lambda port: True)
+        monkeypatch.setattr("main.core.inspector_service._kill_port_process", lambda port: None)
+        monkeypatch.setattr("main.core.inspector_service.time.sleep", lambda s: None)
+
+        service, _, _ = _make_service()
+        result = service.start_session("dev:5555", "com.x.app", ".Main")
+
+        assert result["success"] is False
+        assert "4725" in result["error"] or "占用" in result["error"]
+
+
+class TestNewCommandTimeoutKeepAlive:
+    """R27: newCommandTimeout 保活 — Appium 默认 60s 空闲回收 session → 长空闲后刷新慢几十秒"""
+
+    def test_start_session_sets_long_new_command_timeout(self):
+        """start_session 设置 newCommandTimeout=1800 (30min), 非默认 60s"""
+        service, _, _ = _make_service()
+
+        service.start_session("dev:5555", "com.x.app", ".MainActivity")
+
+        assert service.driver is not None
+        caps = service.driver._options
+        # UiAutomator2Options 通过 get_capability 读回
+        assert caps.get_capability("newCommandTimeout") == 1800, (
+            "inspector 会话应设长空闲超时, 防 >1min 未操作会话被回收"
+        )

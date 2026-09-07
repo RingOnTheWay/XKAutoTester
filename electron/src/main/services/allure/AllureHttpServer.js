@@ -41,14 +41,8 @@ class AllureHttpServer {
    * Allure 3.x awesome 运行时读 prefers-color-scheme，需在 JS 加载前覆盖 matchMedia
    */
   _patchIndexHtml(content, theme, language) {
-    let patched = content.replace(
-      /"theme"\s*:\s*"[^"]*"/,
-      `"theme":"${theme}"`
-    );
-    patched = patched.replace(
-      /"reportLanguage"\s*:\s*"[^"]*"/,
-      `"reportLanguage":"${language}"`
-    );
+    let patched = content.replace(/"theme"\s*:\s*"[^"]*"/, `"theme":"${theme}"`);
+    patched = patched.replace(/"reportLanguage"\s*:\s*"[^"]*"/, `"reportLanguage":"${language}"`);
 
     // 注入 matchMedia polyfill 强制 prefers-color-scheme 对齐程序设置
     // Allure 3.x 默认 auto 跟随系统，程序非暗色但系统暗色时报告会被染暗，需覆盖
@@ -78,7 +72,7 @@ class AllureHttpServer {
     if (patched.includes('<head>')) {
       patched = patched.replace('<head>', '<head>' + polyfill);
     } else if (patched.includes('<head ')) {
-      patched = patched.replace(/<head[^>]*>/, m => m + polyfill);
+      patched = patched.replace(/<head[^>]*>/, (m) => m + polyfill);
     } else {
       // 无 head 标签，插到文档最前
       patched = polyfill + patched;
@@ -124,8 +118,10 @@ class AllureHttpServer {
         let filePath = path.join(resolvedReportDir, urlPath === '/' ? 'index.html' : urlPath);
         const resolvedPath = path.resolve(filePath);
 
-        // 路径穿越防护
-        if (!resolvedPath.startsWith(resolvedReportDir)) {
+        // 路径穿越防护 (P1-12): 用 path.relative 规范化判定,
+        // 修复此前 startsWith 缺 path.sep 边界 — 前缀目录(如 report1evil)可被误放行。
+        const rel = path.relative(resolvedReportDir, resolvedPath);
+        if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
           res.writeHead(403);
           res.end('Forbidden');
           return;
@@ -136,9 +132,10 @@ class AllureHttpServer {
 
         // 对 index.html 返回注入后的内容
         if (resolvedPath === path.join(resolvedReportDir, 'index.html')) {
+          // R27 P2-3: 移除 Access-Control-Allow-Origin: * — Allure 报告纯静态无跨源需求,
+          // `*` 允许任意网页跨域读取本地报告 (信息泄露面)
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
-            'Access-Control-Allow-Origin': '*'
           });
           res.end(indexHtmlContent);
           return;
@@ -148,7 +145,6 @@ class AllureHttpServer {
         readStream.on('open', () => {
           res.writeHead(200, {
             'Content-Type': contentType,
-            'Access-Control-Allow-Origin': '*'
           });
           readStream.pipe(res);
         });
@@ -166,7 +162,7 @@ class AllureHttpServer {
         resolve({
           success: true,
           url: `http://127.0.0.1:${port}`,
-          port: port
+          port: port,
         });
       });
 
@@ -226,7 +222,7 @@ class AllureHttpServer {
     const isRunning = this.server !== null;
     return {
       running: isRunning,
-      port: this.port
+      port: this.port,
     };
   }
 }

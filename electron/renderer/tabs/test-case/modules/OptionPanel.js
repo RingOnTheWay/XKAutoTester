@@ -45,24 +45,38 @@ export class OptionPanel extends EventEmitter {
   // ── State Getters ──────────────────────────────────────────────
 
   /** @returns {Array} 应用列表 */
-  get apps() { return this.#state.apps; }
+  get apps() {
+    return this.#state.apps;
+  }
   /** @returns {Object|null} 选中的应用 */
-  get selectedApp() { return this.#state.selectedApp; }
+  get selectedApp() {
+    return this.#state.selectedApp;
+  }
   /** @returns {string} 选中的平台标识 */
-  get selectedPlatform() { return this.#state.selectedPlatform; }
+  get selectedPlatform() {
+    return this.#state.selectedPlatform;
+  }
   /** @returns {Array} 蓝牙设备列表 */
-  get bleDevices() { return this.#state.bleDevices; }
+  get bleDevices() {
+    return this.#state.bleDevices;
+  }
   /** @returns {Array} 可用 markers 列表 */
-  get markers() { return this.#state.markers; }
+  get markers() {
+    return this.#state.markers;
+  }
   /** @returns {string[]} 选中的 markers 名称数组 */
-  get selectedMarkers() { return this.#state.selectedMarkers; }
+  get selectedMarkers() {
+    return this.#state.selectedMarkers;
+  }
 
   /**
    * 通用状态获取（供 Model.get 委托）
    * @param {string} key - 状态键名
    * @returns {*} 状态值，键不存在返回 undefined
    */
-  get(key) { return this.#state[key]; }
+  get(key) {
+    return this.#state[key];
+  }
 
   /**
    * 更新状态并触发对应事件 (内部方法)
@@ -83,11 +97,7 @@ export class OptionPanel extends EventEmitter {
    * 并行加载所有引用数据 (apps + bleDevices + markers)
    */
   async load() {
-    await Promise.all([
-      this.loadApps(),
-      this.loadBleDevices(),
-      this.loadMarkers(),
-    ]);
+    await Promise.all([this.loadApps(), this.loadBleDevices(), this.loadMarkers()]);
   }
 
   /**

@@ -15,9 +15,21 @@ import pytest
 
 # P2: spec 用的真实类 (conftest 已将 src/ 加入 sys.path, 可直接 import)
 from main.core.adb_manager import ADBManager
-from main.core.appium_server import AppiumServer
-from main.core.crash_monitor import CrashMonitor
 from main.utils.config import ConfigManager
+
+# P3-14: 显式 __all__ — conftest 用 `from ... import *`, 无 __all__ 时会把
+# subprocess/sys/Path/MagicMock/pytest/ADBManager 等模块级名字注入每个测试模块
+# 的命名空间 (污染 + 遮蔽真实 import)。仅导出共享 fixture。
+__all__ = [
+    "tmp_config_dir",
+    "tmp_user_data",
+    "tmp_project_root",
+    "mock_adb",
+    "mock_subprocess",
+    "ensure_src_on_path",
+    "mock_config_manager",
+    "capture_logs",
+]
 
 # ── 路径 fixture ───────────────────────────────────────────────
 

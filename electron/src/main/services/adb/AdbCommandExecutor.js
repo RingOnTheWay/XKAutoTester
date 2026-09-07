@@ -48,11 +48,19 @@ class AdbCommandExecutor {
 
       // spawn 同步抛错 / error 事件 (ENOENT 等)
       if (r.errorObject) {
-        return { success: false, output: r.stdout, error: r.errorObject.message };
+        return {
+          success: false,
+          output: r.stdout,
+          error: r.errorObject.message,
+        };
       }
       // 超时
       if (r.timedOut) {
-        return { success: false, output: r.stdout, error: this.i18nService.t('main.commandTimeout') };
+        return {
+          success: false,
+          output: r.stdout,
+          error: this.i18nService.t('main.commandTimeout'),
+        };
       }
       // 正常退出
       if (r.code !== 0) {

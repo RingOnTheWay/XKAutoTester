@@ -25,7 +25,10 @@ class AllureCliInvoker {
       timeout: 3000,
     });
     if (result.code !== 0 || !result.stdout) return null;
-    const paths = result.stdout.split('\n').map(p => p.trim()).filter(p => p && p.endsWith('.exe'));
+    const paths = result.stdout
+      .split('\n')
+      .map((p) => p.trim())
+      .filter((p) => p && p.endsWith('.exe'));
     return paths[0] || null;
   }
 
@@ -45,7 +48,7 @@ class AllureCliInvoker {
         // 开发: electron/node_modules
         path.join(this.projectRoot, 'electron', 'node_modules', 'allure'),
         // 打包: app.asar 内部 (须用 Electron node)
-        path.join(__dirname, '..', '..', '..', '..', 'node_modules', 'allure')
+        path.join(__dirname, '..', '..', '..', '..', 'node_modules', 'allure'),
       ];
 
       for (const allureDir of searchPaths) {
@@ -93,7 +96,9 @@ class AllureCliInvoker {
       // 回退: 尝试系统 npx
       command = 'npx';
       args = ['allure', 'generate', resultsDir, '-o', outputDir];
-      await this.logger.warning('Allure npm package not found, falling back to npx');
+      // R27 修复: logger 方法名是 warn (原 warning 不存在 → 任何回退路径即 TypeError
+      // "warning is not a function" → generate 崩 → 报告目录建好但空)
+      await this.logger.warn('Allure npm package not found, falling back to npx');
     }
 
     const result = await this._runner.execute({

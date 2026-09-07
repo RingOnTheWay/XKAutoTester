@@ -66,6 +66,13 @@ class SmartScheduler {
 
     // 刷新串行化链: 文件变更回调与 add/remove/update 并发触发重建队列时, 排队串行执行避免竞态
     this._refreshChain = Promise.resolve();
+    // P1-4: 计划执行串行链 — 并发到期的多个计划排队执行而非静默丢弃
+    this._executionChain = Promise.resolve();
+    // P1-4: generation 令牌 — 每轮调度递增, 旧 setImmediate/setTimeout 回调校验令牌失效即放弃,
+    // 解决倒计时尾段 setImmediate 链在删除计划后仍继续执行的问题
+    this._generation = 0;
+    // P2-11: 执行看门狗超时 (可注入, 默认 30min)
+    this._executionTimeoutMs = opts.executionTimeoutMs || EXECUTION_TIMEOUT_MS;
   }
 
   setMainWindow(window) {
@@ -111,12 +118,25 @@ class SmartScheduler {
 
     const now = this._now();
     const planTime = new Date(nextPlan.scheduledTime).getTime();
+    // P1-5: 无效 scheduledTime 兜底 — NaN delay 会让 setTimeout(NaN)≈0ms 自旋烧 CPU。
+    // 运行期 addPlan 传入脏数据时 (入库校验被绕过/文件被手动编辑), 标记过期并调度下一个。
+    if (Number.isNaN(planTime)) {
+      this.planQueue.dequeue();
+      try {
+        await this._markAsExpired(nextPlan);
+      } catch (error) {
+        this._logger.error('P1-5 标记脏计划过期失败:', error);
+      }
+      await this._startSmartScheduling();
+      return;
+    }
     const timeUntilPlan = planTime - now;
 
     if (timeUntilPlan <= 0) {
-      await this._markAsExpired(nextPlan);
-      this.planQueue.dequeue();
-      await this._startSmartScheduling();
+      // P1-4: 队列中的计划入队时均为未来时间 (加载时已过滤),
+      // 此处到期说明是运行中自然到点 → 排队执行而非标记 expired。
+      // (应用重启后加载的过期计划已在 _loadPlansToQueue 标记 expired)
+      this._executePlan(nextPlan);
       return;
     }
 
@@ -137,7 +157,10 @@ class SmartScheduler {
       if (this.planQueue.size() > 0) {
         this._timer.clearInterval(this.checkInterval);
         this.checkInterval = null;
-        this._startSmartScheduling();
+        // P1-4: catch 防 unhandled rejection (原 fire-and-forget 泄漏)
+        this._startSmartScheduling().catch((e) => {
+          this._logger.error('idle 轮询启动调度失败:', e);
+        });
       }
     }, IDLE_CHECK_INTERVAL);
   }
@@ -193,50 +216,79 @@ class SmartScheduler {
   }
 
   _finalCountdown(plan) {
+    // P1-4: generation 令牌 — 调度被刷新/删除后 (generation 递增), 旧回调直接放弃,
+    // 修复 setImmediate 链不可取消导致删除计划后 _executePlan 仍触发、dequeue 弹出错误队首的问题。
+    const gen = this._generation;
     const now = this._now();
     const planTime = new Date(plan.scheduledTime).getTime();
+    // P1-5: 无效时间放弃倒计时 (不创建 0ms 定时器)
+    if (Number.isNaN(planTime)) return;
     const remaining = planTime - now;
 
     if (remaining <= 0) {
-      this._executePlan(plan);
+      if (gen === this._generation) {
+        this._executePlan(plan);
+      }
     } else if (remaining <= SAFETY_THRESHOLD) {
+      if (gen !== this._generation) return;
       this._timer.setImmediate(() => this._finalCountdown(plan));
     } else {
       this.currentTimer = this._timer.setTimeout(() => {
-        this._finalCountdown(plan);
+        if (gen === this._generation) {
+          this._finalCountdown(plan);
+        }
       }, remaining);
     }
   }
 
-  async _executePlan(plan) {
-    if (this.isExecuting) return;
+  /**
+   * P1-4: 计划执行入口 — 串行链排队, 并发到期的多个计划依次执行而非静默丢弃。
+   * 原实现 `if (this.isExecuting) return` 会丢弃第二个计划, 且 finally 刷新时
+   * 将已到期未执行的计划误标 expired。
+   * @param {Object} plan
+   * @returns {Promise<void>}
+   */
+  _executePlan(plan) {
+    this._executionChain = this._executionChain
+      .then(() => this._runPlan(plan))
+      .catch((error) => {
+        this._logger.error('执行定时计划失败:', error);
+      });
+    return this._executionChain;
+  }
 
+  /** 单个计划的实际执行体 (原 _executePlan 逻辑, 由串行链调用) */
+  async _runPlan(plan) {
     this.isExecuting = true;
 
     try {
-      this.planQueue.dequeue();
+      // P2-9: 以 dequeue 的实际 plan 为准 — 排队期间 _handlePlansFileChange (L365-371)
+      // 会重建 planQueue (整体替换为新队列), 闭包捕获的 plan 引用过期: dequeue 弹出的是
+      // 新队首, 若按旧 plan 更新状态/发 SCHEDULED_TEST_START 会"通知了 A 实际跑的是 B"。
+      // 因此所有身份信息 (id/name/testPlans/scheduledTime) 一律取自 dequeued。
+      const dequeued = this.planQueue.dequeue();
+      const activePlan = dequeued || plan;
       this.state.activePlanCount = this.planQueue.size();
 
       await this.scheduledPlanService.updateScheduledPlan({
-        id: plan.id,
+        id: activePlan.id,
         status: 'running',
         lastRun: new Date(this._now()).toISOString(),
       });
 
       this._notifier.send(IPC_CHANNELS.SCHEDULED_TEST_START, {
-        planId: plan.id,
-        planName: plan.name,
-        testPlans: plan.testPlans,
-        scheduledTime: plan.scheduledTime,
+        planId: activePlan.id,
+        planName: activePlan.name,
+        testPlans: activePlan.testPlans,
+        scheduledTime: activePlan.scheduledTime,
         executionTime: new Date(this._now()).toLocaleString(),
       });
 
-      // 启动执行超时看门狗。若渲染进程未就绪/被关闭, N 分钟内不会收到
-      // SCHEDULED_TEST_COMPLETE 回调, 看门狗自动将 plan 标记 failed, 避免永停 'running'。
-      this._startExecutionWatchdog(plan.id);
+      // 启动执行超时看门狗 (按实际执行的 plan)
+      this._startExecutionWatchdog(activePlan.id);
     } catch (error) {
       this._logger.error('执行定时计划失败:', error);
-      // catch 写 'failed' (原 'completed' 误标完成)
+      // catch 写 'failed' (原 'completed' 误标完成); dequeue 抛错等异常场景用闭包 plan 兜底
       await this.scheduledPlanService.updateScheduledPlan({
         id: plan.id,
         status: 'failed',
@@ -257,7 +309,7 @@ class SmartScheduler {
     this._clearExecutionWatchdog(planId);
     const timer = this._timer.setTimeout(() => {
       this._handleExecutionTimeout(planId);
-    }, EXECUTION_TIMEOUT_MS);
+    }, this._executionTimeoutMs);
     this._runningPlanTimeouts.set(planId, timer);
   }
 
@@ -275,7 +327,22 @@ class SmartScheduler {
       const plans = await this.scheduledPlanService.getScheduledPlans();
       const plan = plans.find((p) => p.id === planId);
       if (plan && plan.status === 'running') {
-        this._logger.warn(`定时计划 ${planId} 执行超时 (${EXECUTION_TIMEOUT_MS / 60000} 分钟), 自动标记为 failed`);
+        // P2-11: 看门狗触发时先判断渲染进程是否存活 —
+        // 存活: 可能是合法长用例 (>30min), 仅告警不误杀;
+        // 已销毁/不可用: 确认为渲染进程挂死, 才标记 failed。
+        const wc = this.mainWindow && this.mainWindow.webContents;
+        if (wc && !wc.isDestroyed()) {
+          this._logger.warn(
+            `定时计划 ${planId} 执行超过 ${this._executionTimeoutMs / 60000} 分钟, 渲染进程仍存活, 不自动标记 (可能为长用例)`
+          );
+          // R24 P2-2: 重新武装看门狗 — 原实现仅告警 return, 该 plan 从此脱离监控
+          // (此后渲染进程挂死也无人标记 failed)。周期化后每 EXECUTION_TIMEOUT_MS 检查一次。
+          this._startExecutionWatchdog(planId);
+          return;
+        }
+        this._logger.warn(
+          `定时计划 ${planId} 执行超时 (${this._executionTimeoutMs / 60000} 分钟), 渲染进程不可用, 自动标记为 failed`
+        );
         await this.scheduledPlanService.updateScheduledPlan({
           id: planId,
           status: 'failed',
@@ -308,6 +375,9 @@ class SmartScheduler {
   }
 
   async _refreshSchedule() {
+    // 简单刷新实现 — 串行化由调用方负责:
+    // _handlePlansFileChange/updatePlan 包 _enqueueRefresh, addPlan/removePlan 走 _enqueueRefresh 分支。
+    // 注意: 此处不能再包 _enqueueRefresh, 否则链上自我等待 (R1.then(outer) 内 await R1.then(inner) → 死锁)。
     this._clearAllTimers();
     await this._startSmartScheduling();
   }
@@ -320,11 +390,9 @@ class SmartScheduler {
    * @returns {Promise<void>}
    */
   _enqueueRefresh(refreshFn) {
-    this._refreshChain = this._refreshChain
-      .then(refreshFn)
-      .catch((error) => {
-        this._logger.error('刷新调度计划失败:', error);
-      });
+    this._refreshChain = this._refreshChain.then(refreshFn).catch((error) => {
+      this._logger.error('刷新调度计划失败:', error);
+    });
     return this._refreshChain;
   }
 
@@ -334,8 +402,12 @@ class SmartScheduler {
 
     const nextPlan = this.planQueue.peek();
     if (nextPlan && nextPlan.id === plan.id) {
-      // addPlan 是同步原子操作 (同一事件循环 tick), 直接同步刷新; 文件监听回调的并发走 _enqueueRefresh 串行化
-      this._refreshSchedule();
+      // P1-4 (C3): 刷新走串行链 — 连续 addPlan 时 _clearAllTimers 不再互相覆盖
+      // (原 fire-and-forget _refreshSchedule 的 async await 挂起点破坏"同步原子"前提)
+      this._enqueueRefresh(async () => {
+        this._clearAllTimers();
+        await this._startSmartScheduling();
+      });
     }
   }
 
@@ -345,39 +417,46 @@ class SmartScheduler {
     this.state.activePlanCount = this.planQueue.size();
 
     if (nextPlan && nextPlan.id === planId) {
-      // 同上: 同步刷新保持 planQueue/state 一致性, 文件监听回调的并发走 _enqueueRefresh 串行化
-      this._refreshSchedule();
+      // P1-4 (C3): 同上, 串行链刷新
+      this._enqueueRefresh(async () => {
+        this._clearAllTimers();
+        await this._startSmartScheduling();
+      });
     }
   }
 
   async updatePlan(planId, updates) {
-    this.removePlan(planId);
+    // P1-4: 包进串行刷新链 — 原实现 removePlan(同步) 与 await getScheduledPlans()(异步)
+    // 之间无锁, 与 SCHEDULED_TEST_COMPLETE 回调/用户编辑并发时存在 TOCTOU。
+    await this._enqueueRefresh(async () => {
+      this.removePlan(planId);
 
-    // 计划完成/失败时清除执行看门狗
-    if (updates.status === 'completed' || updates.status === 'failed') {
-      this._clearExecutionWatchdog(planId);
-    }
-
-    // 重新入队条件放宽: status==='pending' 或 scheduledTime 变化且新时间在未来,
-    // 且状态非终态 (completed/failed) 时均重新入队
-    const shouldReenqueue = updates.status === 'pending' || updates.scheduledTime;
-    if (shouldReenqueue) {
-      try {
-        const plans = await this.scheduledPlanService.getScheduledPlans();
-        const originalPlan = plans.find((p) => p.id === planId);
-        if (originalPlan) {
-          const updatedPlan = { ...originalPlan, ...updates };
-          const isTerminal = updatedPlan.status === 'completed' || updatedPlan.status === 'failed';
-          const planTime = new Date(updatedPlan.scheduledTime).getTime();
-          const now = this._now();
-          if (!isTerminal && planTime > now) {
-            this.addPlan(updatedPlan);
-          }
-        }
-      } catch (error) {
-        this._logger.error('更新调度计划失败:', error);
+      // 计划完成/失败时清除执行看门狗
+      if (updates.status === 'completed' || updates.status === 'failed') {
+        this._clearExecutionWatchdog(planId);
       }
-    }
+
+      // 重新入队条件放宽: status==='pending' 或 scheduledTime 变化且新时间在未来,
+      // 且状态非终态 (completed/failed) 时均重新入队
+      const shouldReenqueue = updates.status === 'pending' || updates.scheduledTime;
+      if (shouldReenqueue) {
+        try {
+          const plans = await this.scheduledPlanService.getScheduledPlans();
+          const originalPlan = plans.find((p) => p.id === planId);
+          if (originalPlan) {
+            const updatedPlan = { ...originalPlan, ...updates };
+            const isTerminal = updatedPlan.status === 'completed' || updatedPlan.status === 'failed';
+            const planTime = new Date(updatedPlan.scheduledTime).getTime();
+            const now = this._now();
+            if (!isTerminal && planTime > now) {
+              this.addPlan(updatedPlan);
+            }
+          }
+        } catch (error) {
+          this._logger.error('更新调度计划失败:', error);
+        }
+      }
+    });
   }
 
   async _markAsExpired(plan) {
@@ -393,6 +472,8 @@ class SmartScheduler {
   }
 
   _clearAllTimers() {
+    // P1-4: 递增 generation 令牌, 使旧倒计时回调 (setImmediate/setTimeout 链) 失效
+    this._generation++;
     if (this.currentTimer) {
       this._timer.clearTimeout(this.currentTimer);
       this.currentTimer = null;

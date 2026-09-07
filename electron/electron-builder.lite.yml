@@ -2,6 +2,9 @@ appId: com.ring.xkautotester
 productName: XKAutoTester
 artifactName: ${productName} Lite Setup v${version}.${ext}
 
+# 与 package.json build.electronDist 对齐: 用本地 electron dist, 跳过官方 zip 下载(网络超时)
+electronDist: node_modules/electron/dist
+
 directories:
   output: dist
 
@@ -38,7 +41,7 @@ extraResources:
 
 win:
   target: nsis
-  icon: assets/icon.png
+  icon: assets/icon.ico
 
 nsis:
   oneClick: false

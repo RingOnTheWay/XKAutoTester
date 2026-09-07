@@ -11,6 +11,7 @@
 
 纯函数, 无 mock, 无 logger 副作用, 使用 tmp_path 隔离 fs。
 """
+
 from __future__ import annotations
 
 from pathlib import Path

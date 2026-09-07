@@ -6,24 +6,28 @@ const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
   const {
-    electronApp, i18nService, versionService, userDataService, updateService,
+    electronApp,
+    i18nService,
+    versionService,
+    userDataService,
+    updateService,
     // changeDataPath 后需通知各 service 更新内部 filePath
-    scheduledPlanService, testPlanService, pagePackageService, testCaseService,
+    scheduledPlanService,
+    testPlanService,
+    pagePackageService,
+    testCaseService,
   } = services;
 
   // i18n 文案封装: i18nService 不可用时回退默认文案
-  const t = (key, fallback) => (i18nService && typeof i18nService.t === 'function'
-    ? i18nService.t(key, { defaultValue: fallback })
-    : fallback);
+  const t = (key, fallback) =>
+    i18nService && typeof i18nService.t === 'function' ? i18nService.t(key, { defaultValue: fallback }) : fallback;
 
   /**
    * changeDataPath/resetDataPath 后通知各 service 更新内部 filePath
    * 避免 service 持有旧路径导致数据写错位置 (原仅靠 relaunchApp 兜底)
    */
   function _notifyServicesPathChange(newConfigPath) {
-    const servicesToUpdate = [
-      scheduledPlanService, testPlanService, pagePackageService, testCaseService,
-    ];
+    const servicesToUpdate = [scheduledPlanService, testPlanService, pagePackageService, testCaseService];
     for (const svc of servicesToUpdate) {
       if (svc && typeof svc.updateConfigPath === 'function') {
         try {
@@ -40,12 +44,24 @@ function register(ipcMain, services) {
     if (await asyncFs.exists(configPath)) {
       return await asyncFs.readJson(configPath);
     }
+    // P3-7: 缺失时合并分发模板默认值 (config/config.json), 避免渲染层拿到空对象缺字段
+    try {
+      const templatePath = path.join(electronApp.projectRoot, 'config', 'config.json');
+      if (await asyncFs.exists(templatePath)) {
+        return await asyncFs.readJson(templatePath);
+      }
+    } catch (e) {
+      console.error('[configHandlers] 读取模板配置失败:', e);
+    }
     return {};
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.SAVE_CONFIG, async (newConfig) => {
     if (!newConfig || typeof newConfig !== 'object' || Array.isArray(newConfig)) {
-      return { success: false, error: t('errors.invalidConfig', '无效的配置数据') };
+      return {
+        success: false,
+        error: t('errors.invalidConfig', '无效的配置数据'),
+      };
     }
     const configPath = path.join(electronApp.userConfigPath, 'config.json');
 
@@ -93,7 +109,8 @@ function register(ipcMain, services) {
 
   registerHandler(ipcMain, IPC_CHANNELS.SHOW_DIALOG, async (options) => {
     const { dialog } = require('electron');
-    const { type, title, message, buttons } = (options && typeof options === 'object' && !Array.isArray(options)) ? options : {};
+    const { type, title, message, buttons } =
+      options && typeof options === 'object' && !Array.isArray(options) ? options : {};
     const browserWindow = electronApp.mainWindow || null;
     return await dialog.showMessageBox(browserWindow, {
       type: type || 'info',
@@ -101,7 +118,7 @@ function register(ipcMain, services) {
       message: message,
       buttons: buttons || ['确定'],
       defaultId: 0,
-      cancelId: 0
+      cancelId: 0,
     });
   });
 
@@ -109,12 +126,16 @@ function register(ipcMain, services) {
     if (!userDataService) return { currentPath: '', defaultPath: '' };
     return {
       currentPath: userDataService.getUserDataPath(),
-      defaultPath: userDataService.getDefaultUserDataPath()
+      defaultPath: userDataService.getDefaultUserDataPath(),
     };
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.CHANGE_DATA_PATH, async (newPath) => {
-    if (!userDataService) return { success: false, error: t('errors.serviceNotInit', '服务未初始化') };
+    if (!userDataService)
+      return {
+        success: false,
+        error: t('errors.serviceNotInit', '服务未初始化'),
+      };
     const result = await userDataService.changeDataPath(newPath);
     if (result.success) {
       electronApp.userConfigPath = userDataService.getUserConfigPath();
@@ -126,7 +147,11 @@ function register(ipcMain, services) {
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.RESET_DATA_PATH, async () => {
-    if (!userDataService) return { success: false, error: t('errors.serviceNotInit', '服务未初始化') };
+    if (!userDataService)
+      return {
+        success: false,
+        error: t('errors.serviceNotInit', '服务未初始化'),
+      };
     const result = await userDataService.resetToDefaultPath();
     if (result.success) {
       electronApp.userConfigPath = userDataService.getUserConfigPath();

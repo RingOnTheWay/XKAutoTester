@@ -3,13 +3,9 @@
 // 重构: 继承 BaseSelect, 复用 toggle/_showDropdown/_setAriaExpanded/_registerActiveDropdown/_lockMainContentScroll/
 // 文档点击外部关闭/static closeAll 等; 多级 _handleKeydown/_setActive/open/close 因签名差异自行覆盖。
 import { BaseSelect } from './base-select.js';
+import { escapeHtml } from '../core/utils/html.js';
 
 // R15: 转义 BLE 设备数据（manufacturer/category/type/model 来自设备扫描与用户配置），防止 XSS
-function escapeHtml(str) {
-  if (str === null || str === undefined) return '';
-  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-  return String(str).replace(/[&<>"']/g, (ch) => map[ch]);
-}
 
 export class DeviceCascadeSelect extends BaseSelect {
   static instances = {};
@@ -18,7 +14,8 @@ export class DeviceCascadeSelect extends BaseSelect {
     super();
     this.containerId = containerId;
     this.placeholder = options.placeholder || window.i18n.t('deviceCascadeSelect.placeholder');
-    this.manufacturerPlaceholder = options.manufacturerPlaceholder || window.i18n.t('deviceCascadeSelect.manufacturerPlaceholder');
+    this.manufacturerPlaceholder =
+      options.manufacturerPlaceholder || window.i18n.t('deviceCascadeSelect.manufacturerPlaceholder');
     this.typePlaceholder = options.typePlaceholder || window.i18n.t('deviceCascadeSelect.typePlaceholder');
     this.modelPlaceholder = options.modelPlaceholder || window.i18n.t('deviceCascadeSelect.modelPlaceholder');
     this.onSelect = options.onSelect || (() => {});
@@ -232,9 +229,12 @@ export class DeviceCascadeSelect extends BaseSelect {
   }
 
   _getLevelOptions(level) {
-    const el = level === 'manufacturer' ? this.manufacturerOptionsEl
-      : level === 'type' ? this.typeOptionsEl
-      : this.modelOptionsEl;
+    const el =
+      level === 'manufacturer'
+        ? this.manufacturerOptionsEl
+        : level === 'type'
+          ? this.typeOptionsEl
+          : this.modelOptionsEl;
     return el ? Array.from(el.querySelectorAll('.device-cascade-select__option')) : [];
   }
 
@@ -245,7 +245,7 @@ export class DeviceCascadeSelect extends BaseSelect {
     if (index < 0) index = opts.length - 1;
     if (index >= opts.length) index = 0;
 
-    opts.forEach(opt => opt.classList.remove('active'));
+    opts.forEach((opt) => opt.classList.remove('active'));
     opts[index].classList.add('active');
     this._activeIndices[level] = index;
     this._activeLevel = level;
@@ -314,7 +314,7 @@ export class DeviceCascadeSelect extends BaseSelect {
       }
     } else if (level === 'model') {
       const id = opt.dataset.id;
-      const device = this.devices.find(d => d[this.valueKey] === id);
+      const device = this.devices.find((d) => d[this.valueKey] === id);
       if (device) {
         this.select(device);
       }
@@ -332,7 +332,7 @@ export class DeviceCascadeSelect extends BaseSelect {
     this._setAriaExpanded(true);
     this._registerActiveDropdown();
 
-    // 默认高亮: 有 selectedDevice 则定位 model 级, 有 selectedManufacturer 则 type 级, 否则 manufacturer 级首项
+    // 定位当前级: 有 selectedDevice 则 model 级, 有 selectedManufacturer 则 type 级, 否则 manufacturer 级
     if (this.selectedDevice) {
       this._activeLevel = 'model';
     } else if (this.selectedManufacturer) {
@@ -340,9 +340,22 @@ export class DeviceCascadeSelect extends BaseSelect {
     } else {
       this._activeLevel = 'manufacturer';
     }
+
+    // 修复: 无已选项时不默认高亮第一项 (此前 _setActive(0) 让首项带上 .active
+    // 主题色背景, 用户误以为"已选中"; 键盘首键 (方向键) 会从 -1 落到第 0 项)
     const opts = this._getLevelOptions(this._activeLevel);
-    const selectedIndex = opts.findIndex(opt => opt.classList.contains('selected'));
-    this._setActive(this._activeLevel, selectedIndex >= 0 ? selectedIndex : 0);
+    const selectedIndex = opts.findIndex((opt) => opt.classList.contains('selected'));
+    if (selectedIndex >= 0) {
+      // 有已选项: 高亮定位到已选项
+      this._setActive(this._activeLevel, selectedIndex);
+    } else {
+      // 无已选项: 清除所有级 active, 保持 _activeIndices = -1
+      ['manufacturer', 'type', 'model'].forEach((level) => {
+        const levelOpts = this._getLevelOptions(level);
+        levelOpts.forEach((opt) => opt.classList.remove('active'));
+        this._activeIndices[level] = -1;
+      });
+    }
 
     this._lockMainContentScroll();
   }
@@ -360,9 +373,9 @@ export class DeviceCascadeSelect extends BaseSelect {
     this._unregisterActiveDropdown();
 
     // 清除高亮
-    ['manufacturer', 'type', 'model'].forEach(level => {
+    ['manufacturer', 'type', 'model'].forEach((level) => {
       const opts = this._getLevelOptions(level);
-      opts.forEach(opt => opt.classList.remove('active'));
+      opts.forEach((opt) => opt.classList.remove('active'));
       this._activeIndices[level] = -1;
     });
 
@@ -432,7 +445,7 @@ export class DeviceCascadeSelect extends BaseSelect {
     this.devices = devices || [];
     this.groupedDevices = {};
 
-    this.devices.forEach(device => {
+    this.devices.forEach((device) => {
       const manufacturerId = device.manufacturerId || 'other';
       const manufacturer = device.manufacturer || manufacturerId;
       const type = device.deviceType || 'other';
@@ -442,14 +455,14 @@ export class DeviceCascadeSelect extends BaseSelect {
         this.groupedDevices[manufacturerId] = {
           manufacturerId: manufacturerId,
           manufacturer: manufacturer,
-          types: {}
+          types: {},
         };
       }
       if (!this.groupedDevices[manufacturerId].types[type]) {
         this.groupedDevices[manufacturerId].types[type] = {
           type: type,
           category: category,
-          devices: []
+          devices: [],
         };
       }
       this.groupedDevices[manufacturerId].types[type].devices.push(device);
@@ -468,21 +481,24 @@ export class DeviceCascadeSelect extends BaseSelect {
       return;
     }
 
-    this.manufacturerOptionsEl.innerHTML = manufacturers.map(group => {
-      const totalDevices = Object.values(group.types).reduce((sum, t) => sum + t.devices.length, 0);
-      const displayManufacturer = group.manufacturerId !== 'other'
-        ? `${group.manufacturer}(${group.manufacturerId.charAt(0).toUpperCase() + group.manufacturerId.slice(1)})`
-        : group.manufacturer;
-      const isSelected = this.selectedManufacturer === group.manufacturerId;
-      return `
+    this.manufacturerOptionsEl.innerHTML = manufacturers
+      .map((group) => {
+        const totalDevices = Object.values(group.types).reduce((sum, t) => sum + t.devices.length, 0);
+        const displayManufacturer =
+          group.manufacturerId !== 'other'
+            ? `${group.manufacturer}(${group.manufacturerId.charAt(0).toUpperCase() + group.manufacturerId.slice(1)})`
+            : group.manufacturer;
+        const isSelected = this.selectedManufacturer === group.manufacturerId;
+        return `
         <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-manufacturer="${escapeHtml(group.manufacturerId)}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
           <span class="device-cascade-select__option-text">${escapeHtml(displayManufacturer)}</span>
           <span class="device-cascade-select__option-count">${totalDevices}</span>
         </div>
       `;
-    }).join('');
+      })
+      .join('');
 
-    this.manufacturerOptionsEl.querySelectorAll('.device-cascade-select__option').forEach(opt => {
+    this.manufacturerOptionsEl.querySelectorAll('.device-cascade-select__option').forEach((opt) => {
       opt.addEventListener('click', () => {
         const manufacturerId = opt.dataset.manufacturer;
         if (this.selectedManufacturer === manufacturerId) {
@@ -514,17 +530,19 @@ export class DeviceCascadeSelect extends BaseSelect {
       return;
     }
 
-    this.typeOptionsEl.innerHTML = types.map(group => {
-      const isSelected = this.selectedType === group.type;
-      return `
+    this.typeOptionsEl.innerHTML = types
+      .map((group) => {
+        const isSelected = this.selectedType === group.type;
+        return `
       <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-type="${escapeHtml(group.type)}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
         <span class="device-cascade-select__option-text">${escapeHtml(group.category)}</span>
         <span class="device-cascade-select__option-count">${group.devices.length}</span>
       </div>
     `;
-    }).join('');
+      })
+      .join('');
 
-    this.typeOptionsEl.querySelectorAll('.device-cascade-select__option').forEach(opt => {
+    this.typeOptionsEl.querySelectorAll('.device-cascade-select__option').forEach((opt) => {
       opt.addEventListener('click', () => {
         const type = opt.dataset.type;
         if (this.selectedType === type) {
@@ -553,16 +571,18 @@ export class DeviceCascadeSelect extends BaseSelect {
       return;
     }
 
-    this.modelOptionsEl.innerHTML = typeGroup.devices.map(device => {
-      const isSelected = this.selectedDevice && device[this.valueKey] === this.selectedDevice[this.valueKey];
-      return `
+    this.modelOptionsEl.innerHTML = typeGroup.devices
+      .map((device) => {
+        const isSelected = this.selectedDevice && device[this.valueKey] === this.selectedDevice[this.valueKey];
+        return `
       <div class="device-cascade-select__option${isSelected ? ' selected' : ''}" data-id="${escapeHtml(device[this.valueKey])}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="-1">
         <span class="device-cascade-select__option-text">${escapeHtml(device[this.labelKey])}</span>
       </div>
     `;
-    }).join('');
+      })
+      .join('');
 
-    this.modelOptionsEl.querySelectorAll('.device-cascade-select__option').forEach(opt => {
+    this.modelOptionsEl.querySelectorAll('.device-cascade-select__option').forEach((opt) => {
       opt.addEventListener('click', () => {
         const id = opt.dataset.id;
         if (this.selectedDevice && this.selectedDevice[this.valueKey] === id) {
@@ -574,7 +594,7 @@ export class DeviceCascadeSelect extends BaseSelect {
           this._renderModelOptions();
           this.onSelect(null);
         } else {
-          const device = this.devices.find(d => d[this.valueKey] === id);
+          const device = this.devices.find((d) => d[this.valueKey] === id);
           if (device) {
             this.select(device);
           }
@@ -614,9 +634,11 @@ export class DeviceCascadeSelect extends BaseSelect {
       const parts = [];
       if (device.manufacturer) {
         const mfgId = device.manufacturerId || 'other';
-        parts.push(mfgId !== 'other'
-          ? `${device.manufacturer}(${mfgId.charAt(0).toUpperCase() + mfgId.slice(1)})`
-          : device.manufacturer);
+        parts.push(
+          mfgId !== 'other'
+            ? `${device.manufacturer}(${mfgId.charAt(0).toUpperCase() + mfgId.slice(1)})`
+            : device.manufacturer
+        );
       }
       if (device.category) parts.push(device.category);
       parts.push(device[this.labelKey]);
@@ -694,7 +716,7 @@ export class DeviceCascadeSelect extends BaseSelect {
   }
 
   static destroyAll() {
-    Object.values(DeviceCascadeSelect.instances).forEach(instance => {
+    Object.values(DeviceCascadeSelect.instances).forEach((instance) => {
       instance.destroy();
     });
     DeviceCascadeSelect.instances = {};

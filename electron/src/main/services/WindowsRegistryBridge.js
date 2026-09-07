@@ -11,36 +11,34 @@
 const { spawnSync } = require('child_process');
 
 class WindowsRegistryBridge {
-    constructor(registryKey = 'HKCU\\Software\\XKAutoTester') {
-        this.registryKey = registryKey;
-    }
+  constructor(registryKey = 'HKCU\\Software\\XKAutoTester') {
+    this.registryKey = registryKey;
+  }
 
-    /**
-     * 写入字符串值到注册表
-     * @param {string} valueName - 注册表值名 (如 'UserDataPath')
-     * @param {string} dataPath - 字符串数据
-     */
-    writePath(valueName, dataPath) {
-        if (process.platform !== 'win32') return;
-        try {
-            // spawnSync 数组参数不经 shell 解析: 根除命令注入
-            const result = spawnSync('reg', [
-                'add', this.registryKey,
-                '/v', valueName,
-                '/t', 'REG_SZ',
-                '/d', dataPath,
-                '/f'
-            ], {
-                windowsHide: true,
-                encoding: 'utf8'
-            });
-            if (result.status !== 0) {
-                console.error('[WindowsRegistryBridge] reg add 失败:', result.stderr || result.stdout);
-            }
-        } catch (error) {
-            console.error('[WindowsRegistryBridge] 写入注册表失败:', error);
+  /**
+   * 写入字符串值到注册表
+   * @param {string} valueName - 注册表值名 (如 'UserDataPath')
+   * @param {string} dataPath - 字符串数据
+   */
+  writePath(valueName, dataPath) {
+    if (process.platform !== 'win32') return;
+    try {
+      // spawnSync 数组参数不经 shell 解析: 根除命令注入
+      const result = spawnSync(
+        'reg',
+        ['add', this.registryKey, '/v', valueName, '/t', 'REG_SZ', '/d', dataPath, '/f'],
+        {
+          windowsHide: true,
+          encoding: 'utf8',
         }
+      );
+      if (result.status !== 0) {
+        console.error('[WindowsRegistryBridge] reg add 失败:', result.stderr || result.stdout);
+      }
+    } catch (error) {
+      console.error('[WindowsRegistryBridge] 写入注册表失败:', error);
     }
+  }
 }
 
 module.exports = WindowsRegistryBridge;

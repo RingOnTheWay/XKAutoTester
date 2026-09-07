@@ -10,6 +10,7 @@
 - 锁由调用方持有 (避免双锁,LogcatMonitor 持 _lock)
 - 无 IO/线程/i18n,完全可测
 """
+
 from __future__ import annotations
 
 from collections import deque

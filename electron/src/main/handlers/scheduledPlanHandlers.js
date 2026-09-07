@@ -15,11 +15,15 @@ const { IPC_CHANNELS } = require('../../shared/constants');
 async function getScheduledPlanRuns(scheduledPlanService, testPlanService, planId, tr) {
   try {
     const plans = await scheduledPlanService.getScheduledPlans();
-    const plan = plans.find(p => p.id === planId);
+    const plan = plans.find((p) => p.id === planId);
     if (!plan) {
-      return { success: false, error: tr('errors.scheduledPlanNotFound', '未找到指定的定时计划'), groups: [] };
+      return {
+        success: false,
+        error: tr('errors.scheduledPlanNotFound', '未找到指定的定时计划'),
+        groups: [],
+      };
     }
-    const testPlanIds = (plan.testPlans || []).map(p => typeof p === 'string' ? p : p.id);
+    const testPlanIds = (plan.testPlans || []).map((p) => (typeof p === 'string' ? p : p.id));
 
     // 取所有 testPlans 用于 id -> name 映射
     const allTestPlansResult = await testPlanService.getTestPlans();
@@ -27,13 +31,15 @@ async function getScheduledPlanRuns(scheduledPlanService, testPlanService, planI
 
     const groups = [];
     for (const tpId of testPlanIds) {
-      const tp = allTestPlans.find(p => p.id === tpId);
+      const tp = allTestPlans.find((p) => p.id === tpId);
       if (!tp) continue;
       const runsResult = await testPlanService.getTestPlanRuns(tp.name);
       const runs = runsResult?.runs || [];
       if (runs.length === 0) continue;
       // 附加 sourcePlanName 便于删除时定位原计划
-      runs.forEach(r => { r.sourcePlanName = tp.name; });
+      runs.forEach((r) => {
+        r.sourcePlanName = tp.name;
+      });
       // 分组内最新 run 时间
       const latestTs = runs[0]?.timestamp || '';
       groups.push({ sourcePlanName: tp.name, latestTimestamp: latestTs, runs });
@@ -55,9 +61,8 @@ function register(ipcMain, services) {
   const { scheduledPlanService, schedulerService, testPlanService, i18nService } = services;
 
   // i18n 文案封装: i18nService 不可用时回退默认文案
-  const tr = (key, fallback) => (i18nService && typeof i18nService.t === 'function'
-    ? i18nService.t(key, { defaultValue: fallback })
-    : fallback);
+  const tr = (key, fallback) =>
+    i18nService && typeof i18nService.t === 'function' ? i18nService.t(key, { defaultValue: fallback }) : fallback;
 
   registerHandler(ipcMain, IPC_CHANNELS.GET_SCHEDULED_PLANS, () => scheduledPlanService.getScheduledPlans());
 
@@ -98,7 +103,7 @@ function register(ipcMain, services) {
     const result = await scheduledPlanService.updateScheduledPlan({
       id: planId,
       status: 'completed',
-      lastRun: new Date().toISOString()
+      lastRun: new Date().toISOString(),
     });
     // 通知调度器该计划已完成
     schedulerService.updatePlan(planId, { status: 'completed' });

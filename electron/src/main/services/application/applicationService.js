@@ -58,14 +58,16 @@ class ApplicationService {
     this._notificationServiceFactory = opts.notificationServiceFactory || defaultNotificationServiceFactory;
     this._scrcpyServiceFactory = opts.scrcpyServiceFactory || defaultScrcpyServiceFactory;
     this._pagePackageServiceFactory = opts.pagePackageServiceFactory || defaultPagePackageServiceFactory;
-    this._bleDeviceDiscoveryServiceFactory = opts.bleDeviceDiscoveryServiceFactory || defaultBleDeviceDiscoveryServiceFactory;
+    this._bleDeviceDiscoveryServiceFactory =
+      opts.bleDeviceDiscoveryServiceFactory || defaultBleDeviceDiscoveryServiceFactory;
     this._testCaseServiceFactory = opts.testCaseServiceFactory || defaultTestCaseServiceFactory;
     this._apkParserServiceFactory = opts.apkParserServiceFactory || defaultApkParserServiceFactory;
     this._updateServiceFactory = opts.updateServiceFactory || defaultUpdateServiceFactory;
     this._inspectorServiceFactory = opts.inspectorServiceFactory || defaultInspectorServiceFactory;
     this._dataTransferServiceFactory = opts.dataTransferServiceFactory || defaultDataTransferServiceFactory;
     this._schedulerServiceFactory = opts.schedulerServiceFactory || defaultSchedulerServiceFactory;
-    this._environmentStartupServiceFactory = opts.environmentStartupServiceFactory || defaultEnvironmentStartupServiceFactory;
+    this._environmentStartupServiceFactory =
+      opts.environmentStartupServiceFactory || defaultEnvironmentStartupServiceFactory;
 
     // 4 await injector + registerHandlers + errorHandler
     this._i18nInitializer = opts.i18nInitializer || defaultI18nInitializer;

@@ -8,6 +8,10 @@
 
 const crypto = require('crypto');
 
+// P2-6: 钉钉请求默认超时 (ms)。axios 默认无超时, 钉钉 API 不响应时 Promise 永久 pending,
+// 会阻塞定时计划完成回调链。超时后 axios 抛 ECONNABORTED, 被 sendDingTalkNotification 的 catch 归一。
+const DINGTALK_REQUEST_TIMEOUT = 10000;
+
 /** @typedef {Object} HttpClient
  * @property {(url: string, body: object, opts: object) => Promise<{data: any}>} post
  */
@@ -39,9 +43,10 @@ function buildSignString(timestamp, secret) {
  */
 function buildRequestBody(message) {
   return {
-    at: { isAtAll: 'false', atUserIds: [], atMobiles: [] },
+    // P3-4: isAtAll 应为 boolean (钉钉 API 期望布尔, 字符串 'false' 语义异常)
+    at: { isAtAll: false, atUserIds: [], atMobiles: [] },
     text: { content: message },
-    msgtype: 'text'
+    msgtype: 'text',
   };
 }
 
@@ -57,9 +62,31 @@ function buildSignedUrl(accessToken, timestamp, sign) {
 }
 
 const defaultHttpClientFactory = () => {
-  const axios = require('axios');
+  // R25: axios → Node 22 全局 fetch (消除 axios 漏洞链: formDataToJSON 递归 DoS/原型污染等 10 条 advisory)
   return {
-    post: (url, body, opts) => axios.post(url, body, opts)
+    post: async (url, body, opts) => {
+      // 超时经 AbortController 实现 (对齐原 axios timeout 语义)
+      const timeout = (opts && opts.timeout) || DINGTALK_REQUEST_TIMEOUT;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: opts && opts.headers ? opts.headers : { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        // R27 P1-1: fetch 不自动抛 HTTP 错误 (axios 行为差异) — 4xx/5xx 需显式转抛,
+        // 否则 res.json() 解析错误体且 sendDingTalkNotification 误判 success
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        // 兼容原 axios 返回 { data } 契约
+        return { data: await res.json(), status: res.status };
+      } finally {
+        clearTimeout(timer);
+      }
+    },
   };
 };
 
@@ -86,7 +113,7 @@ class NotificationService {
         return {
           success: false,
           // 复用既有 i18n key (未配置通知平台); 无法新增 key (locales 只读), 采用现有文案
-          error: this.i18nService.t('notificationNotConfigured')
+          error: this.i18nService.t('notificationNotConfigured'),
         };
       }
 
@@ -96,13 +123,26 @@ class NotificationService {
       const body = buildRequestBody(message);
 
       const response = await this._httpClient.post(url, body, {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        timeout: DINGTALK_REQUEST_TIMEOUT,
       });
-      return { success: true, data: response.data };
+      // R27 P1-1: 钉钉业务层校验 — errcode!=0 (token 失效/被拒/限流) 视为失败,
+      // 原实现 HTTP 200 即 success:true, 通知实际未送达仍报成功
+      const data = response && response.data ? response.data : {};
+      if (data.errcode !== undefined && data.errcode !== 0) {
+        return { success: false, error: `DingTalk errcode ${data.errcode}: ${data.errmsg || ''}` };
+      }
+      return { success: true, data };
     } catch (error) {
       return { success: false, error: error.message };
     }
   }
 }
 
-module.exports = { NotificationService, buildSignString, buildRequestBody, buildSignedUrl };
+module.exports = {
+  NotificationService,
+  buildSignString,
+  buildRequestBody,
+  buildSignedUrl,
+  DINGTALK_REQUEST_TIMEOUT,
+};

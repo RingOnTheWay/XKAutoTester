@@ -414,3 +414,60 @@ class TestBLEDeviceClose:
         dev.close()
         # closed 不应变 (因 is_open=False 跳过)
         assert fake.closed is False
+
+
+@pytest.mark.unit
+class TestBLEDeviceAtInjection:
+    """P2-8: AT 命令注入防护"""
+
+    def test_set_ble_name_strips_crlf_injection(self):
+        """ble_name 含换行时只写一条命令 (注入面消除)"""
+        fake = FakeSerial(responses=["OK"])
+        dev = BLEDevice("COM_FAKE", serial_factory=lambda: fake)
+        dev.ser = fake
+        result = dev.set_ble_name("MyDev\r\nAT+RESET\r\n")
+        assert result is True
+        written = b"".join(fake.written)
+        # 注入的 \r\n 被剥离, 只写单行命令 (值中 AT+RESET 仅为文本, 无换行触发执行)
+        assert b"AT+NAME=MyDevAT+RESET" in written
+        assert written.count(b"\r\n") == 1, "仅命令结尾一个换行"
+        assert b"\r\nAT+" not in written, "不得出现换行开头的新命令"
+
+    def test_set_uuid_strips_equals_injection(self):
+        """uuid_value 含 = 时不改写命令分隔语义"""
+        fake = FakeSerial(responses=["OK"])
+        dev = BLEDevice("COM_FAKE", serial_factory=lambda: fake)
+        dev.ser = fake
+        result = dev.set_uuid("UUIDS", "ABCD=1234\r\nAT+ERASE")
+        assert result is True
+        written = b"".join(fake.written)
+        assert b"AT+UUIDS=ABCD1234AT+ERASE" in written
+        assert written.count(b"\r\n") == 1, "仅命令结尾一个换行"
+        assert b"\r\nAT+" not in written, "不得出现换行开头的新命令"
+
+    def test_sanitize_at_value_pure_function(self):
+        """_sanitize_at_value 过滤控制字符/分隔符"""
+        assert BLEDevice._sanitize_at_value("a\r\nb=c;d") == "abcd"
+        assert BLEDevice._sanitize_at_value(None) == ""
+        assert BLEDevice._sanitize_at_value("normal-name") == "normal-name"
+        assert BLEDevice._sanitize_at_value(12345) == "12345"
+
+    def test_read_n_lines_tolerates_binary_bytes(self):
+        """非 UTF-8 响应字节不抛异常 (errors=replace)"""
+
+        class BinSerial:
+            def __init__(self):
+                self.written = []
+
+            def write(self, data):
+                self.written.append(data)
+                return len(data)
+
+            def readline(self):
+                return b"\xff\xfe\x80 invalid\r\n"
+
+        dev = BLEDevice("COM_BIN", response_timeout=0.1, serial_factory=lambda: BinSerial())
+        dev.ser = BinSerial()
+        lines = dev._read_n_lines(1)
+        assert lines is not None
+        assert "invalid" in lines[0]

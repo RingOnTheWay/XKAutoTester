@@ -104,7 +104,11 @@ class JsonStdioTransport {
     this._disposed = true;
 
     if (this._process) {
-      try { this._process.kill(); } catch (e) { /* ignore */ }
+      try {
+        this._process.kill();
+      } catch (e) {
+        /* ignore */
+      }
     }
 
     this._rejectAllPending('Transport disposed');
@@ -150,7 +154,11 @@ class JsonStdioTransport {
             this._readyReject(new Error(`Handshake timeout after ${this._handshakeTimeoutMs}ms`));
             // 超时后清理进程, 避免泄漏 (与 dispose 一致, 但不设 _disposed 标志, 允许后续重试)
             if (this._process) {
-              try { this._process.kill(); } catch (e) { /* ignore */ }
+              try {
+                this._process.kill();
+              } catch (e) {
+                /* ignore */
+              }
               this._process = null;
             }
             this._buffer = '';
@@ -173,7 +181,12 @@ class JsonStdioTransport {
       }
 
       const requestId = ++this._requestCounter;
-      const payload = JSON.stringify({ kind: 'request', id: requestId, command, params });
+      const payload = JSON.stringify({
+        kind: 'request',
+        id: requestId,
+        command,
+        params,
+      });
       const timeoutMs = opts.timeoutMs || this._defaultTimeoutMs;
 
       const timeout = setTimeout(() => {
@@ -234,9 +247,17 @@ class JsonStdioTransport {
       return;
     }
     // 其他 notification (progress 等) 转发给订阅者
-    const notification = { type: frame.type, payload: frame, stage: frame.stage };
-    this._notificationHandlers.forEach(h => {
-      try { h(notification); } catch (e) { /* ignore */ }
+    const notification = {
+      type: frame.type,
+      payload: frame,
+      stage: frame.stage,
+    };
+    this._notificationHandlers.forEach((h) => {
+      try {
+        h(notification);
+      } catch (e) {
+        /* ignore */
+      }
     });
   }
 
@@ -256,13 +277,17 @@ class JsonStdioTransport {
     }
     this._process = null;
     this._buffer = '';
-    this._exitHandlers.forEach(h => {
-      try { h(code, signal); } catch (e) { /* ignore */ }
+    this._exitHandlers.forEach((h) => {
+      try {
+        h(code, signal);
+      } catch (e) {
+        /* ignore */
+      }
     });
   }
 
   _rejectAllPending(reason) {
-    for (const [id, pending] of this._pendingRequests) {
+    for (const [, pending] of this._pendingRequests) {
       clearTimeout(pending.timeout);
       pending.reject(new Error(reason));
     }

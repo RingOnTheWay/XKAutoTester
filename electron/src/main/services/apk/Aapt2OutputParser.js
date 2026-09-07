@@ -69,7 +69,9 @@ class Aapt2OutputParser {
         }
       }
 
-      const localeLabelMatch = trimmedLine.match(/^application-label-([a-zA-Z]{2,3}(?:-[a-zA-Z]{2,3}(?:-[a-zA-Z]{2})?)?):\s*'(.*)'/);
+      const localeLabelMatch = trimmedLine.match(
+        /^application-label-([a-zA-Z]{2,3}(?:-[a-zA-Z]{2,3}(?:-[a-zA-Z]{2})?)?):\s*'(.*)'/
+      );
       if (localeLabelMatch) {
         const locale = localeLabelMatch[1];
         const label = localeLabelMatch[2];

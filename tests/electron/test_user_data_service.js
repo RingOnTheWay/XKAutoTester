@@ -375,3 +375,32 @@ test('4 个 getter 返回正确路径', () => {
     mocks.restore();
   }
 });
+
+// ── R27 P2-1: changeDataPath 绝对路径校验 ───────────────────
+
+test('P2-1 changeDataPath 相对路径 → 拒绝', async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xkat-uds-p21-'));
+  try {
+    const svc = createService(tempDir, {});
+
+    const result = await svc.changeDataPath('relative/path');
+
+    assert.strictEqual(result.success, false, '相对路径拒绝');
+    assert.match(result.error, /绝对路径/, '错误说明需绝对路径');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('P2-1 changeDataPath 非字符串 → 拒绝', async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xkat-uds-p21-'));
+  try {
+    const svc = createService(tempDir, {});
+
+    const result = await svc.changeDataPath(12345);
+
+    assert.strictEqual(result.success, false, '非字符串拒绝');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

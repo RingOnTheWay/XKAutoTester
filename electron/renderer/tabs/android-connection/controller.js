@@ -1,6 +1,6 @@
 import { Action } from '../../core/Action.js';
-import { ApiBridge } from '../../core/ApiBridge.js';
 import { Toast } from '../../components/toast.js';
+import { showConfirmModal } from '../../core/utils/confirmModal.js';
 
 /**
  * AndroidConnectionController - 安卓连接 Tab 控制器
@@ -32,7 +32,7 @@ export class AndroidConnectionController {
   }
 
   destroy() {
-    this.#cleanups.forEach(fn => fn());
+    this.#cleanups.forEach((fn) => fn());
     this.#cleanups = [];
     this.#model.stopDeviceRefresh();
     this.#model.destroy();
@@ -62,7 +62,7 @@ export class AndroidConnectionController {
         model.selectedFiles,
         (file) => this.#handleFileClick(file),
         (file, checked) => this.#handleFileCheckboxChange(file, checked),
-        (file, btn) => this.#handleFileActionsBtnClick(file, btn),
+        (file, btn) => this.#handleFileActionsBtnClick(file, btn)
       );
       view.updateSelectAllCheckbox(files.length, model.selectedFiles.length);
       view.updateActionButtonsState(model.selectedFiles.length > 0);
@@ -71,7 +71,7 @@ export class AndroidConnectionController {
       view.updatePathDisplay(
         segments,
         (segPath) => model.navigateToPath(segPath),
-        (segPath) => model.navigateToPath(segPath),
+        (segPath) => model.navigateToPath(segPath)
       );
       view.updateBackButtonState(model.currentPath === '/storage/emulated/0');
     });
@@ -87,7 +87,7 @@ export class AndroidConnectionController {
       view.updatePathDisplay(
         segments,
         (segPath) => model.navigateToPath(segPath),
-        (segPath) => model.navigateToPath(segPath),
+        (segPath) => model.navigateToPath(segPath)
       );
       view.updateBackButtonState(path === '/storage/emulated/0');
     });
@@ -160,12 +160,9 @@ export class AndroidConnectionController {
     this.#addAction('#open-port-btn', () => this.handleOpenPort5555());
 
     // ── 编辑设备 ID 弹窗 ─────────────────────────────────────
-    // 注意：edit-device-id-manage-btn 由 test-execution controller 通过 addEventListener 绑定
-    // （遵循 memory 规则：编辑设备弹窗按钮统一由 test-execution controller 处理）
-    // 此处不再重复绑定，避免双 handler 触发导致 DeviceSelectionModal 实例冲突
-    this.#addAction('#edit-device-id-modal-close-btn', () => view.closeEditDeviceIdModal());
-    this.#addAction('#edit-device-id-cancel-btn', () => view.closeEditDeviceIdModal());
-    this.#addAction('#edit-device-id-confirm-btn', () => this.handleConfirmEditDeviceId());
+    // 注意：编辑设备弹窗按钮（close/cancel/confirm）统一由 test-execution controller 通过
+    // addEventListener 绑定（R26 P1-2：此处曾重复 #addAction 绑定同三按钮 → 双 handler 触发，
+    // 已删除，与 L163-165 注释一致，避免 DeviceSelectionModal 实例冲突）
     this.#addAction('#edit-port-manage-btn', () => this.handleShowPortModal());
 
     // BLE 端口输入校验
@@ -194,9 +191,7 @@ export class AndroidConnectionController {
     this.#addAction('#install-apk-btn', () => model.installApk());
 
     // 全选复选框
-    this.#cleanups.push(
-      this.#view.bindSelectAllChange((checked) => this.handleToggleSelectAll(checked))
-    );
+    this.#cleanups.push(this.#view.bindSelectAllChange((checked) => this.handleToggleSelectAll(checked)));
 
     // ── 右键菜单 ─────────────────────────────────────────────
     this.#cleanups.push(
@@ -218,9 +213,7 @@ export class AndroidConnectionController {
     this.#addAction('#rename-modal-cancel-btn', () => view.closeRenameModal());
     this.#addAction('#rename-modal-close-btn', () => view.closeRenameModal());
 
-    this.#cleanups.push(
-      this.#view.bindRenameFormSubmit(() => this.handleRenameSave())
-    );
+    this.#cleanups.push(this.#view.bindRenameFormSubmit(() => this.handleRenameSave()));
 
     // ── 导航 Tab 切换 ────────────────────────────────────────
     this.#cleanups.push(
@@ -317,7 +310,9 @@ export class AndroidConnectionController {
         const versionResult = await this.#model.executeAdbCommand('getprop ro.build.version.release', deviceId);
         platformVersion = versionResult.output.trim();
         this.#view.setEditAndroidVersionInput(platformVersion);
-      } catch (e) { /* 获取版本失败容错,留空 */ }
+      } catch (e) {
+        /* 获取版本失败容错,留空 */
+      }
 
       // 重新打开编辑弹窗
       this.#view.openEditDeviceIdModal({
@@ -358,11 +353,20 @@ export class AndroidConnectionController {
       const caseResult = await this.#model.getTestCase(fileName);
       if (caseResult?.success && caseResult?.data) {
         const caseData = caseResult.data;
-        caseData.deviceName = deviceName;
-        caseData.platformVersion = platformVersion;
-        if (blePort) {
-          caseData.blePort = blePort;
-        }
+        // P1-2: 修复数据模型分叉 — 写入 deviceConfig 嵌套结构,
+        // 与 test-execution/model.js (deviceConfig?.deviceName) 和
+        // test-case/TestCaseEditor.js (deviceConfig) 读取侧对齐。
+        // 此前写入顶层 deviceName/platformVersion/blePort, 其他 tab 读不到。
+        caseData.deviceConfig = {
+          ...(caseData.deviceConfig || {}),
+          deviceName,
+          platformVersion,
+          ...(blePort ? { blePort } : {}),
+        };
+        // 兼容旧数据结构: 清理顶层残留, 避免后续读取分叉
+        delete caseData.deviceName;
+        delete caseData.platformVersion;
+        delete caseData.blePort;
 
         const dataPathResult = await this.#model.getDataPath();
         const outputDir = dataPathResult?.currentPath || '';
@@ -462,7 +466,9 @@ export class AndroidConnectionController {
     const result = await this.#model.openPort5555();
     const modalContainer = this.#view.getDeviceModalContainer();
     if (result?.success) {
-      Toast.success(window.i18n.t('deviceModal.portOpenSuccess'), { container: modalContainer });
+      Toast.success(window.i18n.t('deviceModal.portOpenSuccess'), {
+        container: modalContainer,
+      });
     } else {
       Toast.error(result?.error || window.i18n.t('deviceModal.portOpenFailed'), { container: modalContainer });
     }
@@ -499,7 +505,9 @@ export class AndroidConnectionController {
     // 确认弹窗
     const confirmed = await this.#showConfirmDialog(
       window.i18n.t('fileManager.deleteConfirm') || '确认删除',
-      window.i18n.t('fileManager.deleteConfirmMessage', { count: files.length }) || `确定要删除 ${files.length} 个文件吗？`,
+      window.i18n.t('fileManager.deleteConfirmMessage', {
+        count: files.length,
+      }) || `确定要删除 ${files.length} 个文件吗？`
     );
     if (!confirmed) return;
 
@@ -510,7 +518,9 @@ export class AndroidConnectionController {
   async #handleDeleteSingleFile(file) {
     const confirmed = await this.#showConfirmDialog(
       window.i18n.t('fileManager.deleteConfirm') || '确认删除',
-      window.i18n.t('fileManager.deleteSingleConfirmMessage', { name: file.name }) || `确定要删除 "${file.name}" 吗？`,
+      window.i18n.t('fileManager.deleteSingleConfirmMessage', {
+        name: file.name,
+      }) || `确定要删除 "${file.name}" 吗？`
     );
     if (!confirmed) return;
 
@@ -535,11 +545,11 @@ export class AndroidConnectionController {
       results.push({ fileName, result });
     }
 
-    const failed = results.filter(r => !r.result?.success);
+    const failed = results.filter((r) => !r.result?.success);
     if (failed.length === 0) {
       Toast.success(window.i18n.t('fileManager.uploadSuccess') || '上传成功');
     } else {
-      const failedNames = failed.map(r => r.fileName).join(', ');
+      const failedNames = failed.map((r) => r.fileName).join(', ');
       Toast.error(`${window.i18n.t('fileManager.uploadFailed') || '上传失败'}: ${failedNames}`);
     }
     await this.#model.loadFileList();
@@ -550,10 +560,21 @@ export class AndroidConnectionController {
     if (!result) return;
 
     const { downloadDir, files } = result;
+    const results = [];
     for (const file of files) {
-      await this.#model.downloadFile(file, downloadDir);
+      const r = await this.#model.downloadFile(file, downloadDir);
+      results.push({ fileName: file.name, result: r });
     }
-    Toast.success(window.i18n.t('fileManager.downloadSuccess'));
+
+    // R27 P1-4: 检查各下载返回 — 原不检查 (失败仅返 {success:false} 不抛), 任一个失败仍弹"下载成功"误导
+    const failed = results.filter((r) => !r.result?.success);
+    if (failed.length === 0) {
+      Toast.success(window.i18n.t('fileManager.downloadSuccess'));
+    } else {
+      const failedNames = failed.map((r) => r.fileName).join(', ');
+      Toast.error(`${window.i18n.t('fileManager.downloadFailed') || '下载失败'}: ${failedNames}`);
+    }
+    await this.#model.loadFileList();
   }
 
   async #handleDownloadSingleFile(file) {
@@ -624,7 +645,10 @@ export class AndroidConnectionController {
     }
   }
 
+  // R25 P1-4: confirm 收敛 — 原委托 view.showConfirmDialog (第三套实现: 写全局
+  // __XKAT_CONFIRM_CALLBACK__ 且确认路径不 close 弹窗, 需二次点击才关)。
+  // 统一走 core/utils/confirmModal.js Promise 版 (全仓唯一实现)。
   #showConfirmDialog(title, message) {
-    return this.#view.showConfirmDialog(title, message);
+    return showConfirmModal(title, message);
   }
 }

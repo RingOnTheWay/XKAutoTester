@@ -9,6 +9,7 @@
 
 注入 FakeAdbAdapter,无真 subprocess。
 """
+
 from __future__ import annotations
 
 from main.core.adb.adb_port import AdbResult
@@ -58,7 +59,11 @@ class TestStartStreamAndReadline:
         proc.start_stream()
 
         assert fake.popen_calls[0] == [
-            "-s", "dev:5555", "logcat", "-v", "threadtime",
+            "-s",
+            "dev:5555",
+            "logcat",
+            "-v",
+            "threadtime",
         ]
 
     def test_readline_returns_bytes_line_and_none_on_eof(self):

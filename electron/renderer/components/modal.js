@@ -69,7 +69,7 @@ export class Modal {
   }
 
   static closeAll() {
-    document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(m => {
+    document.querySelectorAll('.modal-overlay:not(.hidden)').forEach((m) => {
       m.classList.add('hidden');
     });
   }

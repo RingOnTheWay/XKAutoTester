@@ -87,7 +87,9 @@ class CaptchaRecognizer:
 
         try:
             # 获取验证码图片元素
-            captcha_img = page.locator(selector).nth(1)  # 第二个img元素
+            # P3-2: 取第二个 img 元素 (首个为占位/装饰图, 第二个为实际验证码图);
+            # 若页面结构变化导致索引失效, 应改为按 src 的 data: 前缀筛选
+            captcha_img = page.locator(selector).nth(1)
 
             # 获取base64数据
             base64_data = captcha_img.get_attribute("src")

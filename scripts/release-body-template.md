@@ -22,6 +22,11 @@
 
 ## 🔐 完整性校验（在线更新依赖，安装前请核对）
 
+<!-- ⚠️ SHA256 行直接写 64 位 hex，勿加反引号/代码块包裹：
+     UpdateService.parseSha256FromBody 正则期望 `SHA256: <hex>`，
+     带反引号会匹配失败 → UI 报"未提供 SHA256 校验值, 已禁用下载"。
+     patch-body.ps1 会按此格式自动写入, 手工改时保持一致。 -->
+
 **XKAutoTester.Setup.v{{VERSION}}.exe**
 SHA256: （64 位十六进制，留空待填）
 

@@ -6,6 +6,7 @@
 
 纯函数,无 mock,无 IO。
 """
+
 from __future__ import annotations
 
 from main.core.inspector_service import _find_element_by_path, _generate_locators
@@ -53,10 +54,7 @@ class TestGenerateLocators:
         """class + resource-id 非空 → xpath by resource-id。"""
         attrs = {"class": "android.widget.Button", "resource-id": "com.x:id/btn"}
         locators = _generate_locators(attrs)
-        xpath_id = [
-            loc for loc in locators
-            if loc["type"] == "xpath" and "resource-id" in loc["value"]
-        ]
+        xpath_id = [loc for loc in locators if loc["type"] == "xpath" and "resource-id" in loc["value"]]
         assert len(xpath_id) == 1
         assert '//android.widget.Button[@resource-id="com.x:id/btn"]' == xpath_id[0]["value"]
 
@@ -64,10 +62,7 @@ class TestGenerateLocators:
         """class + text 非空 → xpath by text。"""
         attrs = {"class": "android.widget.Button", "text": "OK"}
         locators = _generate_locators(attrs)
-        xpath_text = [
-            loc for loc in locators
-            if loc["type"] == "xpath" and "@text" in loc["value"]
-        ]
+        xpath_text = [loc for loc in locators if loc["type"] == "xpath" and "@text" in loc["value"]]
         assert len(xpath_text) == 1
         assert '//android.widget.Button[@text="OK"]' == xpath_text[0]["value"]
 
@@ -75,10 +70,7 @@ class TestGenerateLocators:
         """class + content-desc 非空 → xpath by content-desc。"""
         attrs = {"class": "android.widget.Button", "content-desc": "submit"}
         locators = _generate_locators(attrs)
-        xpath_desc = [
-            loc for loc in locators
-            if loc["type"] == "xpath" and "@content-desc" in loc["value"]
-        ]
+        xpath_desc = [loc for loc in locators if loc["type"] == "xpath" and "@content-desc" in loc["value"]]
         assert len(xpath_desc) == 1
         assert '//android.widget.Button[@content-desc="submit"]' == xpath_desc[0]["value"]
 

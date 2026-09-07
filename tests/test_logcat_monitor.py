@@ -10,6 +10,7 @@
 
 注入 FakeAdbAdapter,无真 subprocess,无真 adb。
 """
+
 from __future__ import annotations
 
 import threading
@@ -48,7 +49,11 @@ class TestStart:
             assert fake.calls[0] == ["-s", "dev:5555", "logcat", "-c"]
             # start_stream 调用
             assert fake.popen_calls[0] == [
-                "-s", "dev:5555", "logcat", "-v", "threadtime",
+                "-s",
+                "dev:5555",
+                "logcat",
+                "-v",
+                "threadtime",
             ]
         finally:
             monitor.stop()

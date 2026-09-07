@@ -64,20 +64,30 @@ export class TestCaseEditor extends EventEmitter {
   // ── State Getters ──────────────────────────────────────────────
 
   /** @returns {boolean} 是否处于编辑模式 */
-  get isEditing() { return this.#state.isEditing; }
+  get isEditing() {
+    return this.#state.isEditing;
+  }
   /** @returns {boolean} 是否有未保存更改 */
-  get hasUnsavedChanges() { return this.#state.hasUnsavedChanges; }
+  get hasUnsavedChanges() {
+    return this.#state.hasUnsavedChanges;
+  }
   /** @returns {Object|null} 已加载的设备配置 */
-  get loadedDeviceConfig() { return this.#state.loadedDeviceConfig; }
+  get loadedDeviceConfig() {
+    return this.#state.loadedDeviceConfig;
+  }
   /** @returns {Object|null} 已加载的蓝牙设备 */
-  get loadedBleDevice() { return this.#state.loadedBleDevice; }
+  get loadedBleDevice() {
+    return this.#state.loadedBleDevice;
+  }
 
   /**
    * 通用状态获取（供 Model.get 委托）
    * @param {string} key - 状态键名
    * @returns {*} 状态值，键不存在返回 undefined
    */
-  get(key) { return this.#state[key]; }
+  get(key) {
+    return this.#state[key];
+  }
 
   /**
    * 更新状态并触发对应事件 (内部方法)
@@ -150,19 +160,27 @@ export class TestCaseEditor extends EventEmitter {
    */
   async showEditor(file = null) {
     if (file) {
-      const fileName = typeof file.name === 'string'
-        ? file.name.replace(/\.[^/.]+$/, '')
-        : file.name;
+      const fileName = typeof file.name === 'string' ? file.name.replace(/\.[^/.]+$/, '') : file.name;
       try {
         const jsonCheck = await this.#api.checkJsonExists(fileName);
         if (!jsonCheck.exists) {
           this.#set('isEditing', false, 'editing-changed');
           this.resetEditor();
-          this.emit('show-editor', { file, isNew: false, jsonMissing: true, fileName });
+          this.emit('show-editor', {
+            file,
+            isNew: false,
+            jsonMissing: true,
+            fileName,
+          });
           return;
         }
         this.#set('isEditing', true, 'editing-changed');
-        this.emit('show-editor', { file, isNew: false, jsonMissing: false, fileName });
+        this.emit('show-editor', {
+          file,
+          isNew: false,
+          jsonMissing: false,
+          fileName,
+        });
         await this.loadCaseData(fileName);
       } catch (error) {
         this.emit('error', { source: 'showEditor', error });
@@ -171,7 +189,12 @@ export class TestCaseEditor extends EventEmitter {
       // 新建模式
       this.#set('isEditing', false, 'editing-changed');
       this.resetEditor();
-      this.emit('show-editor', { file: null, isNew: true, jsonMissing: false, fileName: '' });
+      this.emit('show-editor', {
+        file: null,
+        isNew: true,
+        jsonMissing: false,
+        fileName: '',
+      });
     }
   }
 
@@ -200,11 +223,17 @@ export class TestCaseEditor extends EventEmitter {
       return;
     }
     if (!/^[a-zA-Z0-9_]+$/.test(caseData.fileName)) {
-      this.emit('error', { source: 'saveCase', message: 'fileNameInvalidChars' });
+      this.emit('error', {
+        source: 'saveCase',
+        message: 'fileNameInvalidChars',
+      });
       return;
     }
     if (!/^test_/.test(caseData.fileName)) {
-      this.emit('error', { source: 'saveCase', message: 'fileNameMustStartTestPrefix' });
+      this.emit('error', {
+        source: 'saveCase',
+        message: 'fileNameMustStartTestPrefix',
+      });
       return;
     }
     if (!this.#fileBrowser.selectedDirectory) {
@@ -217,10 +246,7 @@ export class TestCaseEditor extends EventEmitter {
     }
 
     try {
-      const result = await this.#api.saveAndGenerate(
-        caseData,
-        this.#fileBrowser.selectedDirectory,
-      );
+      const result = await this.#api.saveAndGenerate(caseData, this.#fileBrowser.selectedDirectory);
       // invokeWithCheck 已保证失败时抛错，走到这里即成功
       this.clearDirty();
       this.emit('case-saved', result);
@@ -243,7 +269,11 @@ export class TestCaseEditor extends EventEmitter {
       this.emit('case-deleted', { fileName, pyFilePath });
       await this.#fileBrowser.scanTestFiles(this.#fileBrowser.selectedDirectory);
     } catch (error) {
-      this.emit('error', { source: 'deleteCase', message: 'deleteFailed', error });
+      this.emit('error', {
+        source: 'deleteCase',
+        message: 'deleteFailed',
+        error,
+      });
     }
   }
 
@@ -315,7 +345,7 @@ export class TestCaseEditor extends EventEmitter {
         const config = step.config || {};
         const deviceConfig = config.deviceConfig || {};
         if (deviceConfig.deviceId) {
-          const device = this.#optionPanel.bleDevices.find(d => d.deviceId === deviceConfig.deviceId);
+          const device = this.#optionPanel.bleDevices.find((d) => d.deviceId === deviceConfig.deviceId);
           if (device) {
             const bleConfig = device.bleConfig || {};
             bleDevice = {

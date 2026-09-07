@@ -11,17 +11,20 @@ const ALLURE_SERVICE_PATH = path.join(
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 const USER_DATA_PATH = path.join(__dirname, '..', '..', 'trae-backup');
+// R25 P2-3: openReportByPath 报告根 = <userDataPath>/logs/Allure/allure-reports (getLogsPath)
+const REPORTS_ROOT = path.join(USER_DATA_PATH, 'logs', 'Allure', 'allure-reports');
 
 // ── mock 工厂 ──────────────────────────────────────────────
 
 function makeLoggerMock() {
-  const calls = { error: [], warning: [], info: [], ensureLogDir: 0, resetLogPath: 0 };
+  const calls = { error: [], warning: [], warn: [], info: [], ensureLogDir: 0, resetLogPath: 0 };
   return {
     calls,
     async ensureLogDir() { calls.ensureLogDir++; },
     resetLogPath() { calls.resetLogPath++; },
     async error(msg) { calls.error.push(msg); },
     async warning(msg) { calls.warning.push(msg); },
+    async warn(msg) { calls.warn.push(msg); }, // R27: 对齐真实 Logger
     async info(msg) { calls.info.push(msg); },
   };
 }
@@ -220,7 +223,8 @@ test('openReportByPath 路径不存在 返 {success:false}', async () => {
     asyncFsMock: makeAsyncFsMock({ existsResult: false }),
   });
 
-  const r = await svc.openReportByPath('/nonexistent/report');
+  // R25 P2-3: reportPath 须位于报告根内 — 用根内合法路径测"不存在"分支
+  const r = await svc.openReportByPath(path.join(REPORTS_ROOT, 'plan1', '20260101_000000'));
 
   assert.strictEqual(r.success, false);
   assert.strictEqual(r.error, '报告路径不存在');
@@ -235,7 +239,8 @@ test('openReportByPath 路径存在 委托 httpServer.start + 返 url/port/messa
   const i18nMock = { t: (key) => `[i18n]${key}` };
   svc.i18nService = i18nMock;
 
-  const r = await svc.openReportByPath('/path/to/report');
+  const reportPath = path.join(REPORTS_ROOT, 'plan1', '20260101_000000');
+  const r = await svc.openReportByPath(reportPath);
 
   assert.strictEqual(r.success, true);
   assert.strictEqual(r.url, 'http://localhost:9999');
@@ -243,7 +248,7 @@ test('openReportByPath 路径存在 委托 httpServer.start + 返 url/port/messa
   assert.strictEqual(r.message, '[i18n]allure.openingReport');
   assert.strictEqual(httpServer.calls.stop, 1, '先调 stop 再 start');
   assert.strictEqual(httpServer.calls.start.length, 1);
-  assert.strictEqual(httpServer.calls.start[0].reportDir, '/path/to/report');
+  assert.strictEqual(httpServer.calls.start[0].reportDir, reportPath);
 });
 
 test('openReportByPath 无 i18nService 返默认中文 message', async () => {
@@ -252,7 +257,7 @@ test('openReportByPath 无 i18nService 返默认中文 message', async () => {
     httpServerMock: makeHttpServerMock({ startResult }),
   });
 
-  const r = await svc.openReportByPath('/path/to/report');
+  const r = await svc.openReportByPath(path.join(REPORTS_ROOT, 'plan1', '20260101_000000'));
 
   assert.strictEqual(r.message, '正在打开Allure报告...');
 });
@@ -263,10 +268,26 @@ test('openReportByPath httpServer.start 返 {success:false} 透传', async () =>
     httpServerMock: makeHttpServerMock({ startResult }),
   });
 
-  const r = await svc.openReportByPath('/path/to/report');
+  const r = await svc.openReportByPath(path.join(REPORTS_ROOT, 'plan1', '20260101_000000'));
 
   assert.strictEqual(r.success, false);
   assert.strictEqual(r.error, 'port in use');
+});
+
+test('R25 P2-3: openReportByPath 越界路径拒绝 (防 HTTP 托管任意目录)', async () => {
+  const { svc, httpServer } = buildService();
+  const outsidePaths = [
+    path.join(USER_DATA_PATH, 'config.json'),   // 报告根之外 (userDataPath 下)
+    path.join(REPORTS_ROOT, '..', '..'),          // 相对回溯
+    path.join(__dirname, 'test_allure_service.js'), // 任意文件
+  ];
+  for (const p of outsidePaths) {
+    const r = await svc.openReportByPath(p);
+    assert.strictEqual(r.success, false, `应拒绝越界路径: ${p}`);
+    assert.strictEqual(r.error, 'invalid_report_path');
+  }
+  assert.strictEqual(httpServer.calls.start.length, 0, '越界路径不得启动 HTTP 服务器');
+  assert.strictEqual(httpServer.calls.stop, 0, '越界路径不得触发 stop');
 });
 
 // ── generateAllureReport 测试 ────────────────────────────
@@ -338,7 +359,7 @@ test('generateAllureReport cliInvoker 返 code!=0 返 {success:false, error}', a
 
 // ── clearAllureReports 测试 ──────────────────────────────
 
-test('clearAllureReports 目录不存在 返 {success:true}', async () => {
+test('clearAllureReports 目录均不存在 返 {success:true} 0 项', async () => {
   const { svc, asyncFs } = buildService({
     asyncFsMock: makeAsyncFsMock({ existsResult: false }),
   });
@@ -346,15 +367,16 @@ test('clearAllureReports 目录不存在 返 {success:true}', async () => {
   const r = await svc.clearAllureReports();
 
   assert.strictEqual(r.success, true);
-  assert.ok(r.message.includes('不存在'));
-  assert.strictEqual(asyncFs.calls.exists.length, 1);
+  assert.ok(r.message.includes('0'));
+  assert.strictEqual(asyncFs.calls.exists.length, 2, 'reports + results 两个目录都探测');
 });
 
-test('clearAllureReports 目录存在 + 删除文件 返 deletedCount', async () => {
+test('clearAllureReports 同时清空 allure-reports 与 allure-results', async () => {
   const { svc, asyncFs } = buildService({
     asyncFsMock: makeAsyncFsMock({
       existsResult: true,
-      readdirResult: ['report1', 'report2'],
+      // mock readdir 每次返回同数组: reports + results 两目录各扫 5 项
+      readdirResult: ['item1', 'item2', 'item3', 'item4', 'item5'],
       statResult: { isDirectory: () => false, mtimeMs: 0 },
     }),
   });
@@ -362,8 +384,9 @@ test('clearAllureReports 目录存在 + 删除文件 返 deletedCount', async ()
   const r = await svc.clearAllureReports();
 
   assert.strictEqual(r.success, true);
-  assert.ok(r.message.includes('2'));
-  assert.strictEqual(asyncFs.calls.unlink.length, 2);
+  assert.ok(r.message.includes('报告'), 'message 含报告/结果分项');
+  assert.strictEqual(asyncFs.calls.unlink.length, 10, 'reports 5 + results 5 全部 unlink');
+  assert.strictEqual(asyncFs.calls.readdir.length, 2, 'reports + results 两个目录都扫描');
 });
 
 // ── clearAllLogs 测试 ────────────────────────────────────

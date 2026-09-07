@@ -19,10 +19,7 @@ const ALLOWED_PROTOCOLS = new Set(['https:']);
  * 当前应用唯一合法外链场景: GitHub 仓库/Release/Issue (settings 页 "项目主页" 按钮)。
  * 新增 host 需在此处登记, 避免任意域外跳。
  */
-const ALLOWED_HOSTS = new Set([
-  'github.com',
-  'www.github.com',
-]);
+const ALLOWED_HOSTS = new Set(['github.com', 'www.github.com']);
 
 /**
  * 校验 URL 是否允许 shell.openExternal 打开。
@@ -41,7 +38,10 @@ function isAllowedExternalUrl(url) {
     return { allowed: false, reason: 'URL 格式无效' };
   }
   if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
-    return { allowed: false, reason: `不允许的协议: ${parsed.protocol} (仅允许 https:)` };
+    return {
+      allowed: false,
+      reason: `不允许的协议: ${parsed.protocol} (仅允许 https:)`,
+    };
   }
   const host = parsed.hostname.toLowerCase();
   if (!ALLOWED_HOSTS.has(host)) {

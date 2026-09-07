@@ -70,7 +70,7 @@ export class ApiBridge {
         }
       }
     }
-    return () => unsubscribers.forEach(fn => fn());
+    return () => unsubscribers.forEach((fn) => fn());
   }
 
   /**

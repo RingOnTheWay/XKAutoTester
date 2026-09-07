@@ -42,22 +42,34 @@ export class FileBrowser extends EventEmitter {
   // ── State Getters ──────────────────────────────────────────────
 
   /** @returns {string|null} 当前选中目录 */
-  get selectedDirectory() { return this.#state.selectedDirectory; }
+  get selectedDirectory() {
+    return this.#state.selectedDirectory;
+  }
   /** @returns {Object|null} 当前选中文件对象 */
-  get selectedFile() { return this.#state.selectedFile; }
+  get selectedFile() {
+    return this.#state.selectedFile;
+  }
   /** @returns {Array} 测试文件列表 */
-  get testFiles() { return this.#state.testFiles; }
+  get testFiles() {
+    return this.#state.testFiles;
+  }
   /** @returns {Object} JSON 存在性映射 { fileName: boolean } */
-  get jsonExistsMap() { return this.#state.jsonExistsMap; }
+  get jsonExistsMap() {
+    return this.#state.jsonExistsMap;
+  }
   /** @returns {string} 当前搜索关键词 */
-  get searchQuery() { return this.#state.searchQuery; }
+  get searchQuery() {
+    return this.#state.searchQuery;
+  }
 
   /**
    * 通用状态获取（供 Model.get 委托）
    * @param {string} key - 状态键名
    * @returns {*} 状态值，键不存在返回 undefined
    */
-  get(key) { return this.#state[key]; }
+  get(key) {
+    return this.#state[key];
+  }
 
   /**
    * 更新状态并触发对应事件 (内部方法)
@@ -98,11 +110,11 @@ export class FileBrowser extends EventEmitter {
     if (!directory) return;
     try {
       const files = await this.#api.scanTestFiles(directory);
-      this.#set('testFiles', files || [], 'files-changed');
+      const safeFiles = files || [];
+      this.#set('testFiles', safeFiles, 'files-changed');
       this.#set('searchQuery', '');
-      await this.batchCheckJsonExists(
-        (files || []).map(f => f.name.replace(/\.[^/.]+$/, ''))
-      );
+      // R26 P2-6: filter(Boolean) 防列表含 null 条目时 f.name 抛 TypeError
+      await this.batchCheckJsonExists(safeFiles.filter(Boolean).map((f) => f.name.replace(/\.[^/.]+$/, '')));
     } catch (error) {
       this.emit('error', { source: 'scanTestFiles', error });
     }

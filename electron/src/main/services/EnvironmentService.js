@@ -36,6 +36,9 @@ const { compareVersions } = require('../utils/versionCompare');
 // ── module-level 常量 (对称 UpdateService GITHUB_OWNER/REPO) ──────────
 
 const REQUIRED_PYTHON_VERSION = '3.12.4';
+// P2-5: 探测命令默认超时 (ms)。损坏/挂起的 python.exe 会使 splash 环境检查永久阻塞,
+// 统一注入 15s 兜底, 超时后 spawnHelper 返回 { code: -1, timedOut: true }。
+const DEFAULT_CMD_TIMEOUT = 15000;
 const PYTHON_EMBEDDABLE_ZIP = 'python312.zip';
 const PTH_CONFIG_MARKER = '# XKAutoTester configured';
 const WINDOWSAPPS_MARKER = 'windowsapps';
@@ -58,8 +61,8 @@ function parsePyprojectDependencies(content) {
   if (!match) return [];
   return match[1]
     .split('\n')
-    .map(line => line.trim().replace(/['"]/g, '').replace(/,\s*$/, ''))
-    .filter(line => line && !line.startsWith('#'));
+    .map((line) => line.trim().replace(/['"]/g, '').replace(/,\s*$/, ''))
+    .filter((line) => line && !line.startsWith('#'));
 }
 
 /**
@@ -68,7 +71,10 @@ function parsePyprojectDependencies(content) {
  * @returns {string}
  */
 function extractPackageName(spec) {
-  return spec.split(/[<>=~!]/)[0].toLowerCase().trim();
+  return spec
+    .split(/[<>=~!]/)[0]
+    .toLowerCase()
+    .trim();
 }
 
 /**
@@ -81,9 +87,7 @@ function checkMissingPackages(installed, requirements) {
   const missing = [];
   for (const req of requirements) {
     const pkgName = extractPackageName(req);
-    const found = [...installed].some(p =>
-      p.startsWith(`${pkgName}==`) || p.startsWith(`${pkgName}>=`)
-    );
+    const found = [...installed].some((p) => p.startsWith(`${pkgName}==`) || p.startsWith(`${pkgName}>=`));
     if (!found) missing.push(req);
   }
   return missing;
@@ -146,7 +150,7 @@ class EnvironmentService {
     this.i18nService = i18nService;
     this.projectRoot = projectRoot;
     this.pythonConfigured = false;
-    this._initialized = false;  // 懒初始化 flag (对称 UpdateService._initialized)
+    this._initialized = false; // 懒初始化 flag (对称 UpdateService._initialized)
 
     this._fileSystemFactory = opts.fileSystemFactory || defaultFileSystemFactory;
     this._commandRunnerFactory = opts.commandRunnerFactory || defaultCommandRunnerFactory;
@@ -160,9 +164,14 @@ class EnvironmentService {
   _ensureInitialized() {
     if (this._initialized) return;
 
-    const spawnHelper = { executeCommand: this._commandRunnerFactory() };
+    // R26 P3-5: commandRunner 一次创建复用 (原 _commandRunnerFactory 调两次 → 两个实例,
+    // 测试注入 spy 被调用两次且 spawnHelper/_cmd 非同一 runner)
+    const commandRunner = this._commandRunnerFactory();
+    const spawnHelper = { executeCommand: commandRunner };
     this._fs = this._fileSystemFactory();
-    this._cmd = this._commandRunnerFactory();
+    // P2-5: 所有 this._cmd 探测 (python --version / where / -c 脚本) 统一注入默认 15s 超时,
+    // 调用处可传 opts.timeout 覆盖 (0 = 禁超时)。防损坏 python.exe 挂起 splash 环境检查。
+    this._cmd = (cmd, args, opts = {}) => commandRunner(cmd, args, { timeout: DEFAULT_CMD_TIMEOUT, ...opts });
     this._pathHelper = this._pathHelperFactory();
     this._isPackaged = this._isPackagedGetterFactory();
     this._driverChecker = this._driverCheckerFactory(this.i18nService, this.projectRoot, spawnHelper);
@@ -180,12 +189,14 @@ class EnvironmentService {
     const embeddedPython = this._pathHelper.getEmbeddedPythonPath(this.projectRoot);
     if (embeddedPython) {
       this.configureEmbeddedPythonPth(embeddedPython);
-      this._pathHelper.setPythonConfig(buildPythonConfig(
-        embeddedPython,
-        { isEmbedded: true, isSystem: false },
-        this._pathHelper.getVenvSitePackagesPath(this.projectRoot),
-        `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
-      ));
+      this._pathHelper.setPythonConfig(
+        buildPythonConfig(
+          embeddedPython,
+          { isEmbedded: true, isSystem: false },
+          this._pathHelper.getVenvSitePackagesPath(this.projectRoot),
+          `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
+        )
+      );
       this.pythonConfigured = true;
       return;
     }
@@ -194,12 +205,14 @@ class EnvironmentService {
     if (venvPython) {
       const testResult = await this._cmd(venvPython, ['--version']);
       if (testResult.code === 0) {
-        this._pathHelper.setPythonConfig(buildPythonConfig(
-          venvPython,
-          { isEmbedded: false, isSystem: false },
-          null,
-          `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
-        ));
+        this._pathHelper.setPythonConfig(
+          buildPythonConfig(
+            venvPython,
+            { isEmbedded: false, isSystem: false },
+            null,
+            `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
+          )
+        );
         this.pythonConfigured = true;
         return;
       }
@@ -209,12 +222,14 @@ class EnvironmentService {
         this._pathHelper.fixPyvenvCfg(this.projectRoot, pythonHome);
         const retryResult = await this._cmd(venvPython, ['--version']);
         if (retryResult.code === 0) {
-          this._pathHelper.setPythonConfig(buildPythonConfig(
-            venvPython,
-            { isEmbedded: false, isSystem: false },
-            null,
-            `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
-          ));
+          this._pathHelper.setPythonConfig(
+            buildPythonConfig(
+              venvPython,
+              { isEmbedded: false, isSystem: false },
+              null,
+              `(${this.i18nService.t('splash.checks.sourceBuiltIn')})`
+            )
+          );
           this.pythonConfigured = true;
           return;
         }
@@ -223,12 +238,14 @@ class EnvironmentService {
 
     const systemPython = await this.findSystemPython();
     if (systemPython) {
-      this._pathHelper.setPythonConfig(buildPythonConfig(
-        systemPython,
-        { isEmbedded: false, isSystem: true },
-        this._pathHelper.getVenvSitePackagesPath(this.projectRoot),
-        `(${this.i18nService.t('splash.checks.sourceSystem')})`
-      ));
+      this._pathHelper.setPythonConfig(
+        buildPythonConfig(
+          systemPython,
+          { isEmbedded: false, isSystem: true },
+          this._pathHelper.getVenvSitePackagesPath(this.projectRoot),
+          `(${this.i18nService.t('splash.checks.sourceSystem')})`
+        )
+      );
       this.pythonConfigured = true;
       return;
     }
@@ -240,7 +257,7 @@ class EnvironmentService {
   configureEmbeddedPythonPth(embeddedPythonPath) {
     this._ensureInitialized();
     const pythonDir = path.dirname(embeddedPythonPath);
-    const pthFiles = this._fs.readdirSync(pythonDir).filter(f => f.endsWith('._pth'));
+    const pthFiles = this._fs.readdirSync(pythonDir).filter((f) => f.endsWith('._pth'));
 
     if (pthFiles.length === 0) return;
 
@@ -263,7 +280,7 @@ class EnvironmentService {
         '# Uncomment to run site.main() (automatically done by site.py)',
         'import site',
         '',
-        PTH_CONFIG_MARKER
+        PTH_CONFIG_MARKER,
       ].join('\n');
 
       this._fs.writeFileSync(pthFilePath, newContent, 'utf8');
@@ -278,7 +295,10 @@ class EnvironmentService {
       const result = await this._cmd('where', ['python']);
       if (result.code !== 0) return null;
 
-      const paths = result.stdout.split('\n').map(p => p.trim()).filter(p => p && p.endsWith('.exe'));
+      const paths = result.stdout
+        .split('\n')
+        .map((p) => p.trim())
+        .filter((p) => p && p.endsWith('.exe'));
       for (const p of paths) {
         if (p.toLowerCase().includes(WINDOWSAPPS_MARKER)) continue;
         const testResult = await this._cmd(p, ['--version']);
@@ -303,7 +323,7 @@ class EnvironmentService {
         const result = await this._cmd(systemPython, ['-c', 'import sys; print(sys.base_prefix)']);
         if (result.code === 0) return result.stdout.trim();
       }
-    } catch { }
+    } catch {}
 
     return null;
   }
@@ -313,10 +333,13 @@ class EnvironmentService {
     try {
       const result = await this._cmd('where', ['uv']);
       if (result.code === 0) {
-        const paths = result.stdout.split('\n').map(p => p.trim()).filter(p => p);
+        const paths = result.stdout
+          .split('\n')
+          .map((p) => p.trim())
+          .filter((p) => p);
         return paths[0] || null;
       }
-    } catch { }
+    } catch {}
     return null;
   }
 
@@ -405,7 +428,7 @@ class EnvironmentService {
       if (adbAvailable && aapt2Available) {
         return {
           status: 'success',
-          message: this.i18nService.t('splash.checks.androidSdkComplete') + sourceLabel
+          message: this.i18nService.t('splash.checks.androidSdkComplete') + sourceLabel,
         };
       }
 
@@ -415,12 +438,16 @@ class EnvironmentService {
 
       return {
         status: 'error',
-        message: this.i18nService.t('splash.checks.missingAndroidSdkComponents', { components: missingComponents.join(', ') })
+        message: this.i18nService.t('splash.checks.missingAndroidSdkComponents', {
+          components: missingComponents.join(', '),
+        }),
       };
     } catch (error) {
       return {
         status: 'error',
-        message: this.i18nService.t('splash.checks.checkAndroidSdkFailed', { error: error.message })
+        message: this.i18nService.t('splash.checks.checkAndroidSdkFailed', {
+          error: error.message,
+        }),
       };
     }
   }
@@ -434,7 +461,7 @@ class EnvironmentService {
       if (!pythonConfig) {
         return {
           status: 'error',
-          message: this.i18nService.t('splash.checks.venvNotFound')
+          message: this.i18nService.t('splash.checks.venvNotFound'),
         };
       }
 
@@ -444,7 +471,7 @@ class EnvironmentService {
       if (result.code !== 0) {
         return {
           status: 'error',
-          message: this.i18nService.t('splash.checks.pythonNotFound')
+          message: this.i18nService.t('splash.checks.pythonNotFound'),
         };
       }
 
@@ -452,7 +479,7 @@ class EnvironmentService {
       if (!versionMatch) {
         return {
           status: 'error',
-          message: this.i18nService.t('splash.checks.cannotGetPythonVersion')
+          message: this.i18nService.t('splash.checks.cannotGetPythonVersion'),
         };
       }
 
@@ -461,40 +488,70 @@ class EnvironmentService {
       let versionMessage;
 
       if (compareVersions(version, REQUIRED_PYTHON_VERSION) >= 0) {
-        versionMessage = this.i18nService.t('splash.checks.pythonVersion', {
-          version: version,
-          recommended: REQUIRED_PYTHON_VERSION
-        }) + ' ' + sourceLabel;
+        versionMessage =
+          this.i18nService.t('splash.checks.pythonVersion', {
+            version: version,
+            recommended: REQUIRED_PYTHON_VERSION,
+          }) +
+          ' ' +
+          sourceLabel;
       } else {
         return {
           status: 'error',
-          message: this.i18nService.t('splash.checks.pythonVersionMismatch', { version: version, required: REQUIRED_PYTHON_VERSION })
+          message: this.i18nService.t('splash.checks.pythonVersionMismatch', {
+            version: version,
+            required: REQUIRED_PYTHON_VERSION,
+          }),
         };
       }
 
       const requirementsPath = path.join(projectRoot, PYPROJECT_FILE);
       if (this._fs.existsSync(requirementsPath)) {
-        const listScript = "import importlib.metadata; dists = importlib.metadata.distributions(); [print(d.metadata['Name'] + '==' + d.version) for d in dists]";
-        const pipResult = await this._cmd(pythonConfig.pythonPath, ['-c', listScript]);
+        const listScript =
+          "import importlib.metadata; dists = importlib.metadata.distributions(); [print(d.metadata['Name'] + '==' + d.version) for d in dists]";
+        let pipResult = await this._cmd(pythonConfig.pythonPath, ['-c', listScript]);
 
         if (pipResult.code !== 0) {
-          return {
-            status: 'warning',
-            message: versionMessage + ' - ' + this.i18nService.t('splash.checks.cannotCheckPackages')
-          };
+          // R27: importlib.metadata 探测失败 (个别环境 distributions() 抛错/metadata 异常) 时
+          // 回退 pip list --format=freeze (输出 pkg==ver 与 checkMissingPackages 匹配兼容),
+          // 两个通道都失败才笼统报"无法检查"; 失败细节 console 留痕 (splash 期诊断用)
+          pipResult = await this._cmd(pythonConfig.pythonPath, ['-m', 'pip', 'list', '--format=freeze']);
+          if (pipResult.code !== 0) {
+            console.error(
+              '[EnvironmentService] 依赖探测失败: pythonPath=',
+              pythonConfig.pythonPath,
+              'stdout=',
+              (pipResult.stdout || '').slice(0, 500),
+              'stderr=',
+              (pipResult.stderr || '').slice(0, 500)
+            );
+            return {
+              status: 'warning',
+              message: versionMessage + ' - ' + this.i18nService.t('splash.checks.cannotCheckPackages'),
+            };
+          }
         }
 
-        const installedPackages = new Set(pipResult.stdout.split('\n').map(pkg => pkg.toLowerCase().trim()).filter(pkg => pkg));
+        const installedPackages = new Set(
+          pipResult.stdout
+            .split('\n')
+            .map((pkg) => pkg.toLowerCase().trim())
+            .filter((pkg) => pkg)
+        );
         const requirementsContent = this._fs.readFileSync(requirementsPath, 'utf8');
-        const requirements = parsePyprojectDependencies(requirementsContent)
-          .filter(spec => !IGNORED_MISSING_PACKAGES.includes(extractPackageName(spec)));
+        const requirements = parsePyprojectDependencies(requirementsContent).filter(
+          (spec) => !IGNORED_MISSING_PACKAGES.includes(extractPackageName(spec))
+        );
 
         if (requirements.length > 0) {
           const missingPackages = checkMissingPackages(installedPackages, requirements);
           if (missingPackages.length > 0) {
             return {
               status: 'warning',
-              message: this.i18nService.t('splash.checks.missingPackages', { versionMessage: versionMessage, packages: missingPackages.join(', ') })
+              message: this.i18nService.t('splash.checks.missingPackages', {
+                versionMessage: versionMessage,
+                packages: missingPackages.join(', '),
+              }),
             };
           }
         }
@@ -502,12 +559,12 @@ class EnvironmentService {
 
       return {
         status: versionStatus,
-        message: versionMessage
+        message: versionMessage,
       };
     } catch (error) {
       return {
         status: 'error',
-        message: this.i18nService.t('splash.checks.checkPythonEnvironmentFailed', { error: error.message })
+        message: this.i18nService.t('splash.checks.checkPythonEnvironmentFailed', { error: error.message }),
       };
     }
   }
@@ -520,7 +577,7 @@ class EnvironmentService {
       if (this._isPackaged()) {
         return {
           status: 'success',
-          message: this.i18nService.t('splash.checks.nodeModulesComplete')
+          message: this.i18nService.t('splash.checks.nodeModulesComplete'),
         };
       }
 
@@ -530,25 +587,28 @@ class EnvironmentService {
       if (!this._fs.existsSync(nodeModulesPath)) {
         return {
           status: 'error',
-          message: this.i18nService.t('splash.checks.nodeModulesNotFound')
+          message: this.i18nService.t('splash.checks.nodeModulesNotFound'),
         };
       }
 
       if (!this._fs.existsSync(packageJsonPath)) {
         return {
           status: 'warning',
-          message: this.i18nService.t('splash.checks.packageJsonNotFound')
+          message: this.i18nService.t('splash.checks.packageJsonNotFound'),
         };
       }
 
       const packageJson = JSON.parse(this._fs.readFileSync(packageJsonPath, 'utf8'));
-      const dependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
+      const dependencies = {
+        ...packageJson.dependencies,
+        ...packageJson.devDependencies,
+      };
       const depNames = Object.keys(dependencies);
 
       if (depNames.length === 0) {
         return {
           status: 'success',
-          message: this.i18nService.t('splash.checks.nodeModulesComplete')
+          message: this.i18nService.t('splash.checks.nodeModulesComplete'),
         };
       }
 
@@ -564,24 +624,28 @@ class EnvironmentService {
         if (missingDeps.length <= 5) {
           return {
             status: 'error',
-            message: this.i18nService.t('splash.checks.nodeModulesMissing', { deps: missingDeps.join(', ') })
+            message: this.i18nService.t('splash.checks.nodeModulesMissing', {
+              deps: missingDeps.join(', '),
+            }),
           };
         } else {
           return {
             status: 'error',
-            message: this.i18nService.t('splash.checks.nodeModulesMissingMany', { count: missingDeps.length })
+            message: this.i18nService.t('splash.checks.nodeModulesMissingMany', { count: missingDeps.length }),
           };
         }
       }
 
       return {
         status: 'success',
-        message: this.i18nService.t('splash.checks.nodeModulesComplete')
+        message: this.i18nService.t('splash.checks.nodeModulesComplete'),
       };
     } catch (error) {
       return {
         status: 'error',
-        message: this.i18nService.t('splash.checks.checkNodeModulesFailed', { error: error.message })
+        message: this.i18nService.t('splash.checks.checkNodeModulesFailed', {
+          error: error.message,
+        }),
       };
     }
   }
@@ -594,28 +658,28 @@ class EnvironmentService {
       {
         name: this.i18nService.t('splash.checks.cp210DriverCheck'),
         check: () => this.checkCP210xDriver(),
-        isRequired: false
+        isRequired: false,
       },
       {
         name: 'Android SDK',
         check: () => this.checkAndroidSDK(),
-        isRequired: true
+        isRequired: true,
       },
       {
         name: this.i18nService.t('splash.checks.pythonEnvironment'),
         check: () => this.checkPythonEnvironment(projectRoot),
-        isRequired: true
+        isRequired: true,
       },
       {
         name: this.i18nService.t('splash.checks.nodeModulesCheck'),
         check: () => this.checkNodeModules(),
-        isRequired: true
-      }
+        isRequired: true,
+      },
     ];
 
     const results = {
       required: [],
-      warnings: []
+      warnings: [],
     };
 
     for (let i = 0; i < checks.length; i++) {
@@ -625,7 +689,9 @@ class EnvironmentService {
       if (splashWindow) {
         splashWindow.webContents.send(IPC_CHANNELS.CHECK_PROGRESS, {
           percentage: progress,
-          message: this.i18nService.t('splash.checks.checking', { name: check.name })
+          message: this.i18nService.t('splash.checks.checking', {
+            name: check.name,
+          }),
         });
       }
 
@@ -639,7 +705,7 @@ class EnvironmentService {
             message: result.message,
             isRequired: check.isRequired,
             canInstall: result.canInstall || false,
-            installerPath: result.installerPath || null
+            installerPath: result.installerPath || null,
           });
         }
 
@@ -657,8 +723,10 @@ class EnvironmentService {
           splashWindow.webContents.send(IPC_CHANNELS.CHECK_RESULT, {
             name: check.name,
             status: 'error',
-            message: this.i18nService.t('splash.checks.checkFailed', { error: error.message }),
-            isRequired: check.isRequired
+            message: this.i18nService.t('splash.checks.checkFailed', {
+              error: error.message,
+            }),
+            isRequired: check.isRequired,
           });
         }
 
@@ -669,7 +737,7 @@ class EnvironmentService {
         }
       }
 
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
 
     return results;
@@ -685,4 +753,5 @@ module.exports = {
   buildPythonConfig,
   IGNORED_MISSING_PACKAGES,
   REQUIRED_PYTHON_VERSION,
+  DEFAULT_CMD_TIMEOUT,
 };

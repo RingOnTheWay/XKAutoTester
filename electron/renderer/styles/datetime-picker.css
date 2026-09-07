@@ -177,7 +177,11 @@
 }
 
 .datetime-picker-day:hover:not(.disabled):not(.empty) {
-  background: linear-gradient(135deg, rgba(var(--primary-rgb, 33, 150, 243), 0.1) 0%, rgba(var(--primary-rgb, 33, 150, 243), 0.05) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(var(--primary-rgb, 33, 150, 243), 0.1) 0%,
+    rgba(var(--primary-rgb, 33, 150, 243), 0.05) 100%
+  );
   border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.3);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.15);
@@ -203,7 +207,11 @@
 }
 
 .datetime-picker-day.today {
-  background: linear-gradient(135deg, rgba(var(--primary-rgb, 33, 150, 243), 0.15) 0%, rgba(var(--primary-rgb, 33, 150, 243), 0.08) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(var(--primary-rgb, 33, 150, 243), 0.15) 0%,
+    rgba(var(--primary-rgb, 33, 150, 243), 0.08) 100%
+  );
   border: 1px solid rgba(var(--primary-rgb, 33, 150, 243), 0.4);
   color: var(--primary);
   font-weight: 600;
@@ -269,7 +277,7 @@
   margin: 0;
 }
 
-.time-input[type=number] {
+.time-input[type='number'] {
   -moz-appearance: textfield;
 }
 
@@ -381,7 +389,11 @@ body.dark-theme .datetime-picker-day {
 }
 
 body.dark-theme .datetime-picker-day:hover:not(.disabled):not(.empty) {
-  background: linear-gradient(135deg, rgba(var(--primary-rgb, 33, 150, 243), 0.2) 0%, rgba(var(--primary-rgb, 33, 150, 243), 0.1) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(var(--primary-rgb, 33, 150, 243), 0.2) 0%,
+    rgba(var(--primary-rgb, 33, 150, 243), 0.1) 100%
+  );
   border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.4);
   box-shadow: 0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.2);
 }
@@ -403,7 +415,11 @@ body.dark-theme .datetime-picker-day.selected:hover:not(.disabled):not(.empty) {
 }
 
 body.dark-theme .datetime-picker-day.today {
-  background: linear-gradient(135deg, rgba(var(--primary-rgb, 33, 150, 243), 0.2) 0%, rgba(var(--primary-rgb, 33, 150, 243), 0.1) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(var(--primary-rgb, 33, 150, 243), 0.2) 0%,
+    rgba(var(--primary-rgb, 33, 150, 243), 0.1) 100%
+  );
   border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.5);
 }
 
@@ -467,7 +483,7 @@ body.dark-theme .datetime-picker-btn.confirm-btn:hover {
   padding: 2px 8px;
   border-radius: 4px;
   background: rgba(156, 39, 176, 0.2);
-  color: #9C27B0;
+  color: #9c27b0;
   margin-left: 8px;
 }
 
@@ -486,7 +502,7 @@ body.dark-theme #test-execution .scheduled-plan-item:hover {
   background: rgba(255, 255, 255, 0.06);
 }
 
-body.dark-theme input[type="datetime-local"] {
+body.dark-theme input[type='datetime-local'] {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.1);
 }
@@ -511,3 +527,24 @@ body.dark-theme input[type="datetime-local"] {
   height: 200px;
 }
 
+/* R27: 选中日期为"今天"时保持选中实色背景 — .today 定义在 .selected 之后(同特异性
+后赢) 把选中背景覆盖成浅色, 鼠标移开即"消失"(仅 hover 显深色)。复合选择器置于末尾 */
+.datetime-picker-day.selected.today {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: #fff;
+  border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.5);
+  box-shadow:
+    0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+body.dark-theme .datetime-picker-day.selected.today {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: #fff;
+  border-color: rgba(var(--primary-rgb, 33, 150, 243), 0.6);
+  box-shadow:
+    0 4px 12px rgba(var(--primary-rgb, 33, 150, 243), 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}

@@ -85,8 +85,9 @@ class DriverChecker {
       // 2. 注册表查询 silabser 服务
       const regResult = await this.executeCommand('reg.exe', ['query', REG_KEY]);
       if (regResult.code === 0 && regResult.stdout.includes('silabser')) {
-        const hasDeleteFlag = regResult.stdout.match(/DriverDelete\s+REG_DWORD\s+0x1/i) ||
-                              regResult.stdout.match(/DeleteFlag\s+REG_DWORD\s+0x1/i);
+        const hasDeleteFlag =
+          regResult.stdout.match(/DriverDelete\s+REG_DWORD\s+0x1/i) ||
+          regResult.stdout.match(/DeleteFlag\s+REG_DWORD\s+0x1/i);
         const startMatch = regResult.stdout.match(/Start\s+REG_DWORD\s+0x(\d+)/i);
         const isDisabled = startMatch && startMatch[1] === '4';
 
@@ -100,7 +101,9 @@ class DriverChecker {
 
       // 3. oem*.inf 文件中含 silabser → 驱动已安装
       const driverStoreResult = await this.executeCommand('findstr.exe', [
-        '/i', '/m', 'silabser',
+        '/i',
+        '/m',
+        'silabser',
         path.join(systemRoot, 'INF', INF_PATTERN),
       ]);
       if (driverStoreResult.code === 0 && driverStoreResult.stdout.includes('.inf')) {
@@ -122,7 +125,9 @@ class DriverChecker {
       const installerPath = this.getDriverInstallerPath();
       return {
         status: 'warning',
-        message: this.i18nService.t('splash.checks.cp210xCheckFailed', { error: error.message }),
+        message: this.i18nService.t('splash.checks.cp210xCheckFailed', {
+          error: error.message,
+        }),
         canInstall: !!installerPath,
         installerPath: installerPath,
       };
@@ -137,15 +142,11 @@ class DriverChecker {
     if (!this.isWindows) return false;
 
     try {
-      const result = await this.executeCommand('tasklist', [
-        '/FI', `IMAGENAME eq ${DRIVER_INSTALLER_X64}`, '/NH',
-      ]);
+      const result = await this.executeCommand('tasklist', ['/FI', `IMAGENAME eq ${DRIVER_INSTALLER_X64}`, '/NH']);
       if (result.stdout.includes(INSTALLER_PROCESS_NAME)) {
         return true;
       }
-      const result86 = await this.executeCommand('tasklist', [
-        '/FI', `IMAGENAME eq ${DRIVER_INSTALLER_X86}`, '/NH',
-      ]);
+      const result86 = await this.executeCommand('tasklist', ['/FI', `IMAGENAME eq ${DRIVER_INSTALLER_X86}`, '/NH']);
       return result86.stdout.includes(INSTALLER_PROCESS_NAME);
     } catch {
       return false;

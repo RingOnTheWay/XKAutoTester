@@ -9,6 +9,9 @@ from typing import TYPE_CHECKING
 
 from main.utils.i18n import t
 
+# P3-10: 崩溃堆栈续行等待 (命名常量, 原魔法数字 3)
+_CRASH_STACK_TAIL_WAIT_S = 3
+
 if TYPE_CHECKING:
     from main.core.adb_manager import ADBManager
     from main.utils.test_reporter import TestReporter
@@ -87,7 +90,7 @@ class CrashMonitor:
 
             # 崩溃检测后等待堆栈续行
             if crash_detected:
-                time.sleep(3)
+                time.sleep(_CRASH_STACK_TAIL_WAIT_S)
 
             full_log = self._adb.get_logcat_full_log()
 

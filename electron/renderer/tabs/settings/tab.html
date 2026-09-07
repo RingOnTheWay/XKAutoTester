@@ -310,12 +310,14 @@
                                 <div class="version-item">
                                     <span class="svg-icon" data-icon="code"></span>
                                     <span class="version-label" data-i18n="labels.version">版本号</span>
-                                    <span id="app-version-info" class="version-value">v0.1.3-dev.1</span>
+                                    <!-- 中性占位: 首帧不闪旧版本 (v0.1.3-dev.1 陈旧默认值), renderVersionInfo 加载后立即覆盖 -->
+                                    <span id="app-version-info" class="version-value">-</span>
                                 </div>
                                 <div class="version-item">
                                     <span class="svg-icon" data-icon="build"></span>
                                     <span class="version-label" data-i18n="labels.buildDate">构建日期</span>
-                                    <span class="version-value">2026-04-15</span>
+                                    <!-- R27 修复: 原硬编码 2026-04-15 永不更新 — 绑定 version.json buildDate (脚本更新版本时自动设当日) -->
+                                    <span id="app-build-date" class="version-value">-</span>
                                 </div>
                                 <div class="version-item">
                                     <span class="svg-icon" data-icon="external_link"></span>

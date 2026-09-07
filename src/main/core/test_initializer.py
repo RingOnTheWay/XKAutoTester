@@ -223,9 +223,7 @@ class TestInitializer:
         self.logger.info(t("python.testInitializer.usingDevice", device=self.config.adb.device_name))
 
         try:
-            self.adb_manager = self._adb_manager_factory(
-                self.config.adb.device_name, self.config.adb.app_package
-            )
+            self.adb_manager = self._adb_manager_factory(self.config.adb.device_name, self.config.adb.app_package)
 
             if not self.adb_manager.connection.check_adb_service():
                 self.logger.warning(t("python.testInitializer.adbServiceError"))
@@ -306,9 +304,7 @@ class TestInitializer:
             bool: 初始化是否成功
         """
         self.options = _build_appium_options(self.config.appium)
-        self.appium_server = self._appium_server_factory(
-            AppiumServer.DEFAULT_HOST, AppiumServer.DEFAULT_PORT
-        )
+        self.appium_server = self._appium_server_factory(AppiumServer.DEFAULT_HOST, AppiumServer.DEFAULT_PORT)
 
         if not self.appium_server.start():
             self.logger.error(t("python.testInitializer.appiumServerStartFailed"))
@@ -330,26 +326,34 @@ class TestInitializer:
         """
         self.logger.info(t("python.testInitializer.creatingAppiumSession"))
         start_time = self._time.time()
+        # P2-10: socket.setdefaulttimeout 是进程级全局副作用。
+        # 会话创建期间临时设置 60s 超时保护, finally 恢复原值,
+        # 避免整个进程后续所有 socket 操作继承 60s 超时。
+        # (Appium Client 底层走 requests, 有独立超时控制, 不受其影响)
+        _original_timeout = socket.getdefaulttimeout()
         _set_appium_session_timeout(AppiumServer.DEFAULT_SESSION_TIMEOUT)
-        self.adb_manager.app.force_stop(silent=True)
-        self._time.sleep(_SLEEP_AFTER_FORCE_STOP)
+        try:
+            self.adb_manager.app.force_stop(silent=True)
+            self._time.sleep(_SLEEP_AFTER_FORCE_STOP)
 
-        self.driver = self._driver_factory(self.appium_server.server_url, options=self.options)
+            self.driver = self._driver_factory(self.appium_server.server_url, options=self.options)
 
-        elapsed_time = self._time.time() - start_time
-        self.logger.info(t("python.testInitializer.appiumSessionCreated", time=f"{elapsed_time:.2f}"))
-        self.logger.info(t("python.testInitializer.deviceInfo", info=self.options.capabilities))
-        self.logger.info(t("python.testInitializer.sessionId", id=self.driver.session_id))
+            elapsed_time = self._time.time() - start_time
+            self.logger.info(t("python.testInitializer.appiumSessionCreated", time=f"{elapsed_time:.2f}"))
+            self.logger.info(t("python.testInitializer.deviceInfo", info=self.options.capabilities))
+            self.logger.info(t("python.testInitializer.sessionId", id=self.driver.session_id))
 
-        self.reporter.attach(
-            t(
-                "python.testInitializer.appiumSessionAttachInfo",
-                info=self.options.capabilities,
-                session_id=self.driver.session_id,
-                time=f"{elapsed_time:.2f}",
-            ),
-            name=t("python.testInitializer.deviceConfigAttachName"),
-        )
+            self.reporter.attach(
+                t(
+                    "python.testInitializer.appiumSessionAttachInfo",
+                    info=self.options.capabilities,
+                    session_id=self.driver.session_id,
+                    time=f"{elapsed_time:.2f}",
+                ),
+                name=t("python.testInitializer.deviceConfigAttachName"),
+            )
+        finally:
+            socket.setdefaulttimeout(_original_timeout)
 
     def _track_app_pid(self) -> None:
         """私有: PID 首次获取 + logcat pid 更新。
@@ -357,7 +361,10 @@ class TestInitializer:
         从原 appium_init L235-246 提取。
         """
         self.logger.info(t("python.testInitializer.gettingAppPid"))
-        self.app_pid = self.adb_manager.app.get_pid()
+        # P3-16: get_pid 返回 int, 下游 (crash_monitor/logcat_parser/check_crash_logs)
+        # 均按 str 比较 (logcat pid 是字符串), 显式 str() 保持 app_pid: str | None 标注一致
+        pid = self.adb_manager.app.get_pid()
+        self.app_pid = str(pid) if pid is not None else None
         if self.app_pid:
             self.logger.info(t("python.testInitializer.gotAppPid", pid=self.app_pid))
             self.reporter.attach(
@@ -379,11 +386,14 @@ class TestInitializer:
 
         # 等待后重新获取 PID（app 可能在加载期间崩溃重启，PID 已变化）
         new_pid = self.adb_manager.app.get_pid()
-        if new_pid and new_pid != self.app_pid:
+        # R26 P1-3: get_pid 返回 int, app_pid 为 str (R25 P3-16 契约) — 直接 `int != str` 恒 True:
+        # PID 未变也误报 appPidChanged, 且赋值回 int 破坏 str|None 契约。
+        # 统一 str() 比较与赋值; logcat parser 按字符串比较 pid, update_logcat_pid 亦传 str。
+        if new_pid and str(new_pid) != self.app_pid:
             self.logger.info(t("python.testInitializer.appPidChanged", old_pid=self.app_pid, new_pid=new_pid))
-            self.app_pid = new_pid
+            self.app_pid = str(new_pid)
             # 更新 logcat monitor 的 PID
-            self.adb_manager.update_logcat_pid(new_pid)
+            self.adb_manager.update_logcat_pid(str(new_pid))
 
         current_activity = self.driver.current_activity
         self.logger.info(t("python.testInitializer.currentActivity", activity=current_activity))
