@@ -38,17 +38,19 @@ export class ToastManager {
     toast.className = `toast ${config.type}`;
     toast.textContent = message;
 
-    // ── 临时诊断 (R27 双 toast 定位): 右上角小字显示调用源 file:line ──
-    // 定位后移除。例: 取消下载双 toast 中第二条来源未知, 靠此标记识别
+    // ── 临时诊断 (R27 双 toast 定位): 右上角小字显示调用栈前 3 帧 (去 toast.js) ──
     try {
-      const stackMatch = (new Error().stack || '').match(/[\\/]([^\\/\\s]+\.js:\d+)/g);
-      const caller = stackMatch ? stackMatch[stackMatch.length - 1].replace(/^[\\/]/, '') : '';
-      if (caller && !caller.startsWith('toast.js')) {
+      const matches = (new Error().stack || '').match(/[\\/]([^\\/\\s]+\.js:\d+)/g) || [];
+      const frames = matches
+        .map((m) => m.replace(/^[\\/]/, ''))
+        .filter((f) => !f.startsWith('toast.js'))
+        .slice(0, 3);
+      if (frames.length > 0) {
         const tag = document.createElement('span');
         tag.className = 'toast-debug-src';
-        tag.textContent = caller;
+        tag.textContent = frames.join(' \u2192 ');
         tag.style.cssText =
-          'position:absolute;top:1px;right:4px;font-size:9px;opacity:.45;font-family:monospace;pointer-events:none;';
+          'position:absolute;top:1px;right:4px;font-size:9px;opacity:.45;font-family:monospace;pointer-events:none;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         toast.style.position = 'relative';
         toast.appendChild(tag);
       }

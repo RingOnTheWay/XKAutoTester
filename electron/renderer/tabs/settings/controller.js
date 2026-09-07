@@ -388,8 +388,9 @@ export class SettingsController {
       }
     });
 
-    // 更新弹窗 - 下载/安装按钮
+    // 更新弹窗 - 下载/安装按钮 (R27: 复用 cancelHandling 锁, 防止与取消按钮同瞬态窗口并发)
     this.#bindClick('update-download-btn', async () => {
+      if (cancelHandling) return; // 取消流程中, 避免下载/安装按钮 click 重复触发
       const pendingFile = this.#model.updatePendingFilePath;
       if (pendingFile) {
         await this.#model.installUpdate(pendingFile);
