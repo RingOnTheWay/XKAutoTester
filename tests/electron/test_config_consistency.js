@@ -23,6 +23,30 @@ const USER_DATA_MIGRATOR_PATH = path.join(
 // Python 消费方: config.py
 const CONFIG_PY_PATH = path.join(PROJECT_ROOT, 'src', 'main', 'utils', 'config.py');
 
+// R27 fixture: CI clone 后 config/config.json 缺失 (用户运行时数据, .gitignore 忽略)。
+// 测试需自给自足: 若文件不存在, 写入最小可用 fixture; 测试结束若原不存在则恢复删除。
+// (避免强依赖仓库提交 config.json)
+let _existed = false;
+test.before(() => {
+  _existed = fs.existsSync(TEMPLATE_PATH);
+  if (!_existed) {
+    fs.mkdirSync(path.dirname(TEMPLATE_PATH), { recursive: true });
+    fs.writeFileSync(
+      TEMPLATE_PATH,
+      JSON.stringify(
+        { APP_SETTINGS: { autoCheckUpdate: true }, LOG_CONFIG: { level: 'INFO' } },
+        null,
+        2
+      ),
+      'utf8'
+    );
+  }
+});
+test.after(() => {
+  if (!_existed && fs.existsSync(TEMPLATE_PATH)) {
+    fs.unlinkSync(TEMPLATE_PATH);
+  }
+});
 
 test('config/config.json 模板文件存在', () => {
   assert.ok(fs.existsSync(TEMPLATE_PATH), 'config/config.json 必须存在 (权威源)');

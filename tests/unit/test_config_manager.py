@@ -164,20 +164,36 @@ class TestConfigManagerReload:
 class TestGetConfigManagerSingleton:
     """get_config_manager() 懒加载单例测试"""
 
-    def test_returns_singleton_instance(self):
+    def test_returns_singleton_instance(self, tmp_path, monkeypatch):
         """两次调用返回同一实例"""
+        # 提供临时 config.json, 通过 XKAUTOTESTER_USER_DATA 让 ConfigManager 找到
+        # paths.get_config_file() = user_data_root / config / config.json
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "config.json").write_text(
+            json.dumps({"APP_SETTINGS": {"autoCheckUpdate": True, "language": "zh-CN"}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("XKAUTOTESTER_USER_DATA", str(tmp_path))
         # 重置模块级单例
         config_module._config_manager_instance = None
         try:
-            # 构造需要配置文件存在,用当前项目 config.json
             a = config_module.get_config_manager()
             b = config_module.get_config_manager()
             assert a is b
         finally:
             config_module._config_manager_instance = None
 
-    def test_singleton_constructed_lazily(self):
+    def test_singleton_constructed_lazily(self, tmp_path, monkeypatch):
         """模块 import 时不构造,首次调用才构造"""
+        # paths.get_config_file() = user_data_root / config / config.json
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "config.json").write_text(
+            json.dumps({"APP_SETTINGS": {"autoCheckUpdate": True, "language": "zh-CN"}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("XKAUTOTESTER_USER_DATA", str(tmp_path))
         config_module._config_manager_instance = None
         try:
             assert config_module._config_manager_instance is None
@@ -204,9 +220,18 @@ class TestSetConfigManager:
         finally:
             config_module._config_manager_instance = old
 
-    def test_inject_none_restores_lazy_construction(self):
+    def test_inject_none_restores_lazy_construction(self, tmp_path, monkeypatch):
         """重置为 None 后恢复懒加载构造"""
         from unittest.mock import MagicMock
+
+        # paths.get_config_file() = user_data_root / config / config.json
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "config.json").write_text(
+            json.dumps({"APP_SETTINGS": {"autoCheckUpdate": True, "language": "zh-CN"}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("XKAUTOTESTER_USER_DATA", str(tmp_path))
 
         fake = MagicMock(spec=ConfigManager)
         old = config_module._config_manager_instance
@@ -215,7 +240,7 @@ class TestSetConfigManager:
             assert config_module.get_config_manager() is fake
             # 重置
             config_module._config_manager_instance = None
-            # 再次 get 触发懒加载构造 (需要 config.json 存在)
+            # 再次 get 触发懒加载构造 (从 tmpdir 读临时 config.json)
             config_module.get_config_manager()
             assert config_module.get_config_manager() is not fake
         finally:
