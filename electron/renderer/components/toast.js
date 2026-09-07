@@ -38,6 +38,24 @@ export class ToastManager {
     toast.className = `toast ${config.type}`;
     toast.textContent = message;
 
+    // ── 临时诊断 (R27 双 toast 定位): 右上角小字显示调用源 file:line ──
+    // 定位后移除。例: 取消下载双 toast 中第二条来源未知, 靠此标记识别
+    try {
+      const stackMatch = (new Error().stack || '').match(/[\\/]([^\\/\\s]+\.js:\d+)/g);
+      const caller = stackMatch ? stackMatch[stackMatch.length - 1].replace(/^[\\/]/, '') : '';
+      if (caller && !caller.startsWith('toast.js')) {
+        const tag = document.createElement('span');
+        tag.className = 'toast-debug-src';
+        tag.textContent = caller;
+        tag.style.cssText =
+          'position:absolute;top:1px;right:4px;font-size:9px;opacity:.45;font-family:monospace;pointer-events:none;';
+        toast.style.position = 'relative';
+        toast.appendChild(tag);
+      }
+    } catch (e) {
+      /* 诊断失败不影响 toast */
+    }
+
     container.appendChild(toast);
     this.activeToasts.add(toast);
 
