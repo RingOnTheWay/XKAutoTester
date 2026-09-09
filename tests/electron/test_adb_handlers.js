@@ -1,6 +1,6 @@
 // adbHandlers.js 单元测试 — R25 补 R24 遗留测试缺口
 // 覆盖 INSTALL_APK: 注册 / adbService 未初始化 / apkPath 校验 / deviceId 校验 /
-// 正常安装转发 (apkInstaller.install 三参含 event.sender)
+// 正常安装转发 (installApk 门面方法, 三参含 event.sender)
 // 注: harness 的 createServiceContainer 不支持 null/嵌套对象, 此处手动 register + IpcFake。
 
 const { test, describe } = require('node:test');
@@ -20,7 +20,7 @@ function makeIpc(services) {
 describe('adbHandlers INSTALL_APK', () => {
   test('register 注册 install-apk channel', () => {
     const ipc = makeIpc({
-      adbService: { apkInstaller: { install: async () => ({ success: true }) } },
+      adbService: { installApk: async () => ({ success: true }) },
       i18nService: {},
     });
 
@@ -40,11 +40,9 @@ describe('adbHandlers INSTALL_APK', () => {
     const installCalls = [];
     const ipc = makeIpc({
       adbService: {
-        apkInstaller: {
-          install: async (apkPath, deviceId, sender) => {
-            installCalls.push([apkPath, deviceId, sender]);
-            return { success: true };
-          },
+        installApk: async (apkPath, deviceId, sender) => {
+          installCalls.push([apkPath, deviceId, sender]);
+          return { success: true };
         },
       },
       i18nService: {},
@@ -65,11 +63,9 @@ describe('adbHandlers INSTALL_APK', () => {
     const installCalls = [];
     const ipc = makeIpc({
       adbService: {
-        apkInstaller: {
-          install: async (...args) => {
-            installCalls.push(args);
-            return { success: true };
-          },
+        installApk: async (...args) => {
+          installCalls.push(args);
+          return { success: true };
         },
       },
       i18nService: {},
@@ -81,15 +77,13 @@ describe('adbHandlers INSTALL_APK', () => {
     assert.strictEqual(installCalls.length, 0, '非法 deviceId 不调 install');
   });
 
-  test('正常安装: 转发 install(apkPath, deviceId, event.sender)', async () => {
+  test('正常安装: 转发 installApk(apkPath, deviceId, event.sender)', async () => {
     const installCalls = [];
     const ipc = makeIpc({
       adbService: {
-        apkInstaller: {
-          install: async (apkPath, deviceId, sender) => {
-            installCalls.push([apkPath, deviceId, sender]);
-            return { success: true };
-          },
+        installApk: async (apkPath, deviceId, sender) => {
+          installCalls.push([apkPath, deviceId, sender]);
+          return { success: true };
         },
       },
       i18nService: {},

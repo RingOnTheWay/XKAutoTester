@@ -1705,15 +1705,56 @@ test("R27 cancelDownload 代理到 downloadStrategy", async () => {
 test("R27 downloadUpdate 收到 cancelled 结果 → 短路返回, 不报 SHA 校验失败", async () => {
   const { svc } = makeFakeApp({
     expectedSha256: "a".repeat(64),
-    downloadResult: { success: false, cancelled: true },
+    downloadResult: { success: false, state: "cancelled" },
   });
   const result = await svc.downloadUpdate(
     "https://github.com/RingOnTheWay/XKAutoTester/releases/download/v2.0.0/XKAutoTester Setup v2.0.0.exe",
     "XKAutoTester Setup v2.0.0.exe",
     null,
   );
-  assert.strictEqual(result.cancelled, true, "cancelled 原样返回");
+  assert.strictEqual(result.state, "cancelled", "cancelled 原样返回 (权威词汇 state)");
   assert.ok(!result.filePath, "取消不产生安装文件");
+});
+
+// ── 权威词汇回归: 取消请求过 / abort 期间连接错误 → 归 cancelled, 不 reject (防双 toast) ──
+
+test("权威词汇: 取消请求后初始 fetch AbortError → 归 cancelled 不 reject (防双 toast)", async () => {
+  const svc = new UpdateService(makeFakeVersionService("1.0.0"), makeFakeUserDataService("/fake/config"), {});
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    throw Object.assign(new Error("aborted"), { name: "AbortError" });
+  };
+  try {
+    svc.cancelDownload(); // 请求取消 (置取消旗 + abort)
+    const result = await svc._downloadStrategy.download(
+      "https://github.com/RingOnTheWay/XKAutoTester/releases/download/x/y.exe",
+      "/tmp/y.exe",
+      null,
+    );
+    assert.strictEqual(result.state, "cancelled", "取消期间连接期 AbortError 应归 cancelled 而非 reject");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("权威词汇: 已请求取消 (非 AbortError 错误) → 归 cancelled 不 reject", async () => {
+  const svc = new UpdateService(makeFakeVersionService("1.0.0"), makeFakeUserDataService("/fake/config"), {});
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    const e = Object.assign(new Error("stream destroyed"), { name: "ERR_STREAM_DESTROYED" });
+    svc._downloadStrategy._cancelled = true; // 模拟 cancelDownload 已置旗 (与流进行中取消等价)
+    throw e;
+  };
+  try {
+    const result = await svc._downloadStrategy.download(
+      "https://github.com/RingOnTheWay/XKAutoTester/releases/download/x/y.exe",
+      "/tmp/y.exe",
+      null,
+    );
+    assert.strictEqual(result.state, "cancelled", "请求过取消 + 非 AbortError 错误也应归 cancelled");
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 // ── R27: fetch 化错误分类回归 — 底层错误在 error.cause, 原只看 error.code → 全落 unknown ──
@@ -1770,7 +1811,7 @@ test("R27 checkForUpdate latestVersionDisplay 与 latestVersion 同步时返回�
 
 // ── R27: 取消下载无活跃 → 幂等成功 (no_active), 不报 no_active_download 打扰 UI ──
 
-test("R27 cancelDownload 无活跃下载幂等成功 (action=no_active)", async () => {
+test("R27 cancelDownload 无活跃下载幂等成功 (state=no_active)", async () => {
   // 用默认 downloadStrategyFactory (真实 strategy, 无网络/fs 触发): 初始无活跃下载
   const svc = new UpdateService(
     makeFakeVersionService("1.0.0"),
@@ -1780,9 +1821,9 @@ test("R27 cancelDownload 无活跃下载幂等成功 (action=no_active)", async 
   const result = svc.cancelDownload();
   assert.strictEqual(result.success, true, "无活跃下载取消应幂等成功");
   assert.strictEqual(
-    result.action,
+    result.state,
     "no_active",
-    "无活跃应标 no_active (非错误)",
+    "无活跃应标 no_active (权威词汇 state, 非错误)",
   );
 });
 

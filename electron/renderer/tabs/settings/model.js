@@ -2,6 +2,15 @@ import { EventEmitter } from '../../core/EventEmitter.js';
 import { ApiBridge } from '../../core/ApiBridge.js';
 import { AppState } from '../../core/AppState.js';
 
+/** 更新下载结果状态 (权威词汇 #1: main 产出 state, renderer 只读不猜原取消/正则) */
+const UPDATE_DOWNLOAD_RESULT_STATE = Object.freeze({
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
+  NO_ACTIVE: 'no_active',
+});
+
+export { UPDATE_DOWNLOAD_RESULT_STATE };
+
 /**
  * SettingsModel - 设置 Tab 的 Model 层
  * 管理配置加载/保存、主题、语言、通知、版本、更新等状态
@@ -32,7 +41,10 @@ export class SettingsModel extends EventEmitter {
     setPreventSleep: 'setPreventSleep',
   });
 
-  #cancelWindowUntil = 0; // R27: 取消窗口截止时间 — cancelDownload 后 1s 内下载错误静默
+  // 取消旗 (作用域于当前下载): 取消时同步置位, 供 downloadUpdate catch 判定是否静默。
+  // 取消/下载是两个独立 IPC, 下载错误可能先于取消 IPC 落地 → 仅靠 main 无法保证唯一权威,
+  // 需渲染层同步信号协调 (等价旧 #cancelWindowUntil 防护, 但非时间窗、作用域明确)。
+  #cancelling = false;
 
   #state = {
     config: null,
@@ -324,6 +336,7 @@ export class SettingsModel extends EventEmitter {
 
   async downloadUpdate() {
     try {
+      this.#cancelling = false; // 新下载复位取消旗
       // 注册下载进度监听
       // R27 P3-7: 仅当为函数才调用 — 旧 preload 兼容可能存非函数真值 → 原调抛 TypeError
       if (typeof this.#state.removeUpdateProgressListener === 'function') {
@@ -353,18 +366,15 @@ export class SettingsModel extends EventEmitter {
       if (result && result.filePath) {
         this.#set('updatePendingFilePath', result.filePath, 'update-downloaded');
       }
-      // R27: 取消下载 (cancelled) → 状态复位, UI 已由取消按钮关闭
-      else if (result && result.cancelled) {
+      // 取消下载 (state=cancelled) → 状态复位, UI 已由取消按钮关闭
+      else if (result && result.state === UPDATE_DOWNLOAD_RESULT_STATE.CANCELLED) {
         this.emit('update-download-cancelled');
       }
       return result;
     } catch (error) {
-      // R27: 用户取消 (AbortError 或取消窗口内任何流错误) → 静默, 不 emit error
-      // (否则 controller 弹红色 'Download cancelled' 错误 toast 与成功 toast 双弹)
-      const inCancelWindow = Date.now() < this.#cancelWindowUntil;
-      const isAbort =
-        (error && (error.name === 'AbortError' || /abort|cancel/i.test(String(error.message || '')))) || inCancelWindow;
-      if (!isAbort) {
+      // 权威词汇 + 渲染层取消旗: 用户已取消 (取消旗置位, 下载错误可能已先落地) → 静默不报错;
+      // 否则为真实失败 → 报错弹红 toast
+      if (!this.#cancelling) {
         if (this.#state.removeUpdateProgressListener) {
           this.#state.removeUpdateProgressListener();
           this.#state.removeUpdateProgressListener = null;
@@ -376,17 +386,15 @@ export class SettingsModel extends EventEmitter {
   }
 
   /**
-   * R27: 取消进行中的更新下载 (abort 主进程下载 + 清临时文件)
-   * 取消窗口: cancelDownload 后 1s 内 downloadUpdate 的任何错误都视为取消副产物, 静默
-   * (主进程 abort 后 writer error / stream destroy 等非 AbortError 错误的双 toast 兜底)
+   * 取消进行中的更新下载 (abort 主进程下载 + 清临时文件)
+   * 权威词汇: main 依 abort 产出 state='cancelled'; 渲染层同步置取消旗, 供 downloadUpdate catch 静默
    */
   async cancelDownload() {
-    this.#cancelWindowUntil = Date.now() + 1000;
+    this.#cancelling = true; // 同步置位 (先于 IPC), 保证下载错误落到 catch 时已可识别为取消
     try {
       return await this.#api.cancelUpdateDownload();
     } catch (error) {
-      // R27: 取消失败静默 (取消为尽力而为, IPC 异常不打扰用户) — 不再 emit error
-      // (原路径会触发 controller 错误 toast, 与成功 toast 叠加成双 toast)
+      // 取消失败静默 (取消为尽力而为, IPC 异常不打扰用户)
       return { success: false, error: error.message };
     }
   }

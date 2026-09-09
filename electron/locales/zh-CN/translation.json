@@ -162,6 +162,8 @@
     "clickToUpdate": "点击以更新",
     "cancelUpdate": "取消",
     "downloadFailed": "下载更新失败",
+    "downloadUpdateFailed": "下载更新失败",
+    "installUpdateFailed": "安装更新失败",
     "updateChangelog": "更新日志",
     "insecureReleaseWarning": "⚠ 该版本未提供 SHA256 校验值，无法验证完整性，已禁用下载 (安全闭环)",
     "updateHashVerified": "✓ SHA256 校验值已就绪，可安全下载安装",

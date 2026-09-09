@@ -3,6 +3,7 @@ import { AppState } from '../../core/AppState.js';
 import { Toast } from '../../components/toast.js';
 // R24 P1-6: 统一 core Promise 版 confirm (原 view 回调版已删)
 import { showConfirmModal } from '../../core/utils/confirmModal.js';
+import { UPDATE_DOWNLOAD_RESULT_STATE } from './model.js';
 
 /**
  * SettingsController - 设置 Tab 控制器
@@ -119,8 +120,9 @@ export class SettingsController {
       const translated = source ? window.i18n.t(failedKey) : '';
       let msg;
       if (translated && translated !== failedKey) {
-        // checkUpdate 优先用 updateErrorCodes 映射具体原因
-        if (source === 'checkUpdate' && err.code) {
+        // 更新相关失败用 updateErrorCodes 映射具体原因 (checkUpdate/downloadUpdate/installUpdate)
+        const codeMapSources = ['checkUpdate', 'downloadUpdate', 'installUpdate'];
+        if (codeMapSources.includes(source) && err.code) {
           const codeKey = `settings.updateErrorCodes.${err.code}`;
           const codeMsg = window.i18n.t(codeKey);
           const codeTranslated = codeMsg && codeMsg !== codeKey;
@@ -397,15 +399,13 @@ export class SettingsController {
       }
     });
 
-    // 更新弹窗 - 关闭按钮 / 取消按钮 (R27: 下载中点取消/叉 → 真正 abort 下载 + toast 提示)
-    // 双 toast 已在源头修复 (主进程 abort 后 writer error 不 reject + 渲染层取消窗口静默),
-    // 无需调用侧去重锁
+    // 更新弹窗 - 关闭按钮 / 取消按钮 (下载中点取消/叉 → 真正 abort 下载 + toast 提示)
+    // 权威词汇: 仅真实中止 (state='cancelled') 弹 toast; 无活跃下载 (state='no_active',
+    // 如下载已完成/就绪态点取消=推迟安装) 静默关窗
     const handleUpdateCancel = async () => {
       try {
         const result = await this.#model.cancelDownload();
-        // R27: 仅真实中止 (action='cancelled') 弹 toast; 无活跃下载 (action='no_active',
-        // 如下载已完成/就绪态点取消=推迟安装) 静默关窗, 不报 no_active_download 打扰
-        if (result && result.success && result.action === 'cancelled') {
+        if (result && result.success && result.state === UPDATE_DOWNLOAD_RESULT_STATE.CANCELLED) {
           Toast.success(window.i18n.t('settings.downloadCancelled'));
         }
       } catch (e) {

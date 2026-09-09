@@ -162,6 +162,8 @@
     "clickToUpdate": "Click to Update",
     "cancelUpdate": "Cancel",
     "downloadFailed": "Failed to download update",
+    "downloadUpdateFailed": "Failed to download update",
+    "installUpdateFailed": "Failed to install update",
     "updateChangelog": "Release Notes",
     "insecureReleaseWarning": "⚠ This release has no SHA256 hash; integrity cannot be verified. Download disabled (security closure).",
     "updateHashVerified": "✓ SHA256 hash present; safe to download and install.",

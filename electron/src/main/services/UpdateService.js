@@ -21,8 +21,8 @@ const crypto = require('crypto');
 const { app } = require('electron');
 const { spawn } = require('child_process');
 const { ensureDirectoryExists } = require('../utils/pathHelper');
-const { IPC_CHANNELS } = require('../../shared/constants');
-const { compareVersions } = require('../utils/versionCompare');
+const { IPC_CHANNELS, UPDATE_DOWNLOAD_STATE } = require('../../shared/constants');
+const { compareVersions, normalizeVersionTag } = require('../utils/versionCompare');
 
 const GITHUB_OWNER = 'RingOnTheWay';
 const GITHUB_REPO = 'XKAutoTester';
@@ -312,6 +312,9 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
     const controller = new AbortController();
     // R27: 保存活跃下载控制器 — UI 取消 (cancelDownload) 可 abort; 完成/失败/超时后清引用
     this._activeDownloadController = controller;
+    // 权威词汇: 取消请求过即任何错误归 cancelled — 防 abort 竞态 (初始 fetch/流错误在
+    // abort 信号生效前 reject) 导致渲染层 catch 弹红 toast + 取消成功 toast 双弹 (ADR-0001)。
+    this._cancelled = false;
     const timer = setTimeout(() => controller.abort(), 300000);
     let response;
     try {
@@ -322,6 +325,9 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
       });
     } catch (err) {
       clearTimeout(timer);
+      if (this._cancelled || (err && err.name === 'AbortError')) {
+        return { success: false, state: UPDATE_DOWNLOAD_STATE.CANCELLED, message: 'Download cancelled' };
+      }
       throw err;
     }
     if (!response.ok || !response.body) {
@@ -404,9 +410,9 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
           try {
             fs.unlinkSync(filePath);
           } catch (e) {}
-          // R27: UI 取消 (abort) → 归为"已取消"结果而非下载失败, 渲染层不弹失败提示
-          if (err && err.name === 'AbortError') {
-            resolve({ success: false, cancelled: true, message: 'Download cancelled' });
+          // 权威词汇: 用户/超时取消 (abort) 或已请求过取消 → 归为"已取消"结果而非下载失败, 渲染层不弹失败提示
+          if (err && (err.name === 'AbortError' || this._cancelled)) {
+            resolve({ success: false, state: UPDATE_DOWNLOAD_STATE.CANCELLED, message: 'Download cancelled' });
             return;
           }
           reject(err);
@@ -418,11 +424,9 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
         try {
           fs.unlinkSync(filePath);
         } catch (e) {}
-        // R27: 用户/超时取消 (abort) 已由主 catch 走 resolve cancelled — writer error 是
-        // abort 的副产物 (ERR_STREAM_* 而非 AbortError)。若再 reject → IPC reject →
-        // 渲染层 downloadUpdate catch 误判下载失败弹红色错误 toast (与取消成功 toast 双弹)。
-        // 已 abort 时忽略 writer error (promise 已结算, 无需二次 reject)。
-        if (controller.signal.aborted) {
+        // 权威词汇: 已 abort 或已请求取消 → 忽略 writer error (promise 已结算, 无需二次 reject),
+        // 防 abort 副产物 (ERR_STREAM_*) 在 abort 信号生效前的窗口内 reject → 渲染层双 toast。
+        if (controller.signal.aborted || this._cancelled) {
           return;
         }
         reject(err);
@@ -431,20 +435,22 @@ const defaultDownloadStrategyFactory = (httpsAgent) => ({
   },
 
   /**
-   * R27: 取消进行中的更新下载 (UI 取消/叉掉) — abort 流 + 临时文件由 download catch 清理
+   * 取消进行中的更新下载 (UI 取消/叉掉) — abort 流 + 临时文件由 download catch 清理
    * 无活跃下载视为"已无下载"幂等成功 (下载已完成/失败后取消不报错打扰 UI):
-   * action = 'cancelled' (真实中止) | 'no_active' (无活跃下载)
+   * state = 'cancelled' (真实中止) | 'no_active' (无活跃下载)
    */
   cancelDownload() {
+    // 权威词汇: 先置取消旗再 abort — 保证 abort 竞态期间任何流/连接错误都归 cancelled 而非 reject
+    this._cancelled = true;
     if (this._activeDownloadController) {
       try {
         this._activeDownloadController.abort();
       } catch (e) {
         /* ignore */
       }
-      return { success: true, action: 'cancelled', message: 'Download cancellation requested' };
+      return { success: true, state: UPDATE_DOWNLOAD_STATE.CANCELLED, message: 'Download cancellation requested' };
     }
-    return { success: true, action: 'no_active', message: 'No active download' };
+    return { success: true, state: UPDATE_DOWNLOAD_STATE.NO_ACTIVE, message: 'No active download' };
   },
 });
 
@@ -602,7 +608,7 @@ class UpdateService {
       };
     }
 
-    const latestVersion = latestRelease.tag_name.replace(/^v/, '');
+    const latestVersion = normalizeVersionTag(latestRelease.tag_name);
     // 用 fullVersion (含 prerelease, 如 0.1.5-dev.2) 与 tag 去 v 后的 latestVersion 比较。
     // 若用 version (0.1.5), 会把 prerelease 段解析成数字段导致同版本误判为有更新。
     const currentVersion = this.versionService.getFullVersion();
@@ -723,8 +729,8 @@ class UpdateService {
 
       const result = await this._downloadStrategy.download(downloadUrl, filePath, eventSender);
 
-      // R27: UI 取消 (abort) — 临时文件已清, 直接返回, 跳过 SHA 校验防误报下载失败
-      if (result && result.cancelled) {
+      // UI 取消 (abort) — 临时文件已清, 直接返回, 跳过 SHA 校验防误报下载失败
+      if (result && result.state === UPDATE_DOWNLOAD_STATE.CANCELLED) {
         return result;
       }
 

@@ -1,6 +1,6 @@
 // deviceHandlers.js 单元测试 — R26 P1-1: 上传/下载 localPath 路径约束
-// 覆盖 UPLOAD_FILE / DOWNLOAD_FILE: 非法 localPath (相对/非字符串/空) 拒绝且不调 fileTransfer;
-// 合法绝对路径正常转发 (三参含 event.sender)。
+// 覆盖 UPLOAD_FILE / DOWNLOAD_FILE: 非法 localPath (相对/非字符串/空) 拒绝且不调门面;
+// 合法绝对路径经门面 uploadFile/downloadFile 转发 (三参含 event.sender)。
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
@@ -33,11 +33,20 @@ function makeFileTransferMock() {
   };
 }
 
+// ADR-0002: 门面方法 uploadFile/downloadFile 委托注入的 fileTransfer
+function makeAdbService(ft) {
+  return {
+    uploadFile: (localPath, remotePath, deviceId, sender) => ft.upload(localPath, remotePath, deviceId, sender),
+    downloadFile: (remotePath, localPath, deviceId, sender) =>
+      ft.download(remotePath, localPath, deviceId, sender),
+  };
+}
+
 describe('deviceHandlers UPLOAD_FILE/DOWNLOAD_FILE 路径约束', () => {
-  test('UPLOAD_FILE 非法 localPath → 拒绝且不调 fileTransfer.upload', async () => {
+  test('UPLOAD_FILE 非法 localPath → 拒绝且不调 uploadFile', async () => {
     const ft = makeFileTransferMock();
     const ipc = makeIpc({
-      adbService: { fileTransfer: ft },
+      adbService: makeAdbService(ft),
       scrcpyService: {},
     });
 
@@ -50,10 +59,10 @@ describe('deviceHandlers UPLOAD_FILE/DOWNLOAD_FILE 路径约束', () => {
     assert.strictEqual(ft.uploadCalls.length, 0, '非法 localPath 不得触发上传');
   });
 
-  test('UPLOAD_FILE 合法绝对路径 → 转发 upload(localPath, remotePath, deviceId, event.sender)', async () => {
+  test('UPLOAD_FILE 合法绝对路径 → 经 uploadFile 转发 upload(localPath, remotePath, deviceId, event.sender)', async () => {
     const ft = makeFileTransferMock();
     const ipc = makeIpc({
-      adbService: { fileTransfer: ft },
+      adbService: makeAdbService(ft),
       scrcpyService: {},
     });
 
@@ -67,10 +76,10 @@ describe('deviceHandlers UPLOAD_FILE/DOWNLOAD_FILE 路径约束', () => {
     assert.ok(ft.uploadCalls[0][3] && typeof ft.uploadCalls[0][3].send === 'function', '第四参为 event.sender');
   });
 
-  test('DOWNLOAD_FILE 非法 localPath → 拒绝且不调 fileTransfer.download', async () => {
+  test('DOWNLOAD_FILE 非法 localPath → 拒绝且不调 downloadFile', async () => {
     const ft = makeFileTransferMock();
     const ipc = makeIpc({
-      adbService: { fileTransfer: ft },
+      adbService: makeAdbService(ft),
       scrcpyService: {},
     });
 
@@ -81,10 +90,10 @@ describe('deviceHandlers UPLOAD_FILE/DOWNLOAD_FILE 路径约束', () => {
     assert.strictEqual(ft.downloadCalls.length, 0, '非法 localPath 不得触发下载');
   });
 
-  test('DOWNLOAD_FILE 合法绝对路径 → 转发 download(remotePath, localPath, deviceId, event.sender)', async () => {
+  test('DOWNLOAD_FILE 合法绝对路径 → 经 downloadFile 转发 download(remotePath, localPath, deviceId, event.sender)', async () => {
     const ft = makeFileTransferMock();
     const ipc = makeIpc({
-      adbService: { fileTransfer: ft },
+      adbService: makeAdbService(ft),
       scrcpyService: {},
     });
 

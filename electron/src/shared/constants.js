@@ -177,4 +177,15 @@ const IPC_CHANNELS = {
   TEST_CASE_SAVE_AND_GENERATE: 'test-case:save-and-generate',
 };
 
-module.exports = { IPC_CHANNELS };
+/**
+ * 更新下载结果状态 — 单一权威词汇 (架构 #1 收敛)。
+ * main 产出替代旧 `cancelled:true` / `action:'cancelled'|'no_active'` 多套鸭型信号;
+ * renderer 只读该字段判断, 不再用时间窗/正则嗅探。
+ */
+const UPDATE_DOWNLOAD_STATE = Object.freeze({
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
+  NO_ACTIVE: 'no_active',
+});
+
+module.exports = { IPC_CHANNELS, UPDATE_DOWNLOAD_STATE };

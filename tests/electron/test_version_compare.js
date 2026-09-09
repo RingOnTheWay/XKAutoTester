@@ -3,7 +3,24 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
 
-const { compareVersions } = require('../../electron/src/main/utils/versionCompare');
+const { compareVersions, normalizeVersionTag } = require('../../electron/src/main/utils/versionCompare');
+
+describe('normalizeVersionTag 归一化 (剥 v 前缀, 单一权威)', () => {
+  test('剥小写 v', () => {
+    assert.strictEqual(normalizeVersionTag('v2.0.0'), '2.0.0');
+    assert.strictEqual(normalizeVersionTag('v0.1.6-dev.2'), '0.1.6-dev.2');
+  });
+  test('剥大写 V (与 compareVersions /^v/i 口径一致)', () => {
+    assert.strictEqual(normalizeVersionTag('V2.0.0'), '2.0.0');
+  });
+  test('无 v 前缀原样返回', () => {
+    assert.strictEqual(normalizeVersionTag('2.0.0'), '2.0.0');
+  });
+  test('compareVersions 与 normalizeVersionTag 口径一致', () => {
+    // 大写 V tag 与无前缀号比较, 大小写不敏感剥 v 应判等
+    assert.strictEqual(compareVersions('V2.0.0', '2.0.0'), 0);
+  });
+});
 
 describe('compareVersions 数字段比较', () => {
   test('基本大小比较', () => {

@@ -711,7 +711,9 @@ npm run version:sync      # 强制同步
 - `trae-backup/` — 文件修改备份（gitignore 忽略）
 - `logs/` — 运行日志
 
-### 2. 永远把涉及打包和 npm install 的指令留给用户自行执行
+### 2. 涉及打包和 npm install 的指令可由 agent 自行执行
+
+> 2026-09-08 规则变更: 原「永远留给用户自行执行」已取消, agent 可自主执行 `npm install` 及测试/打包相关命令。若遇到依赖安装缓慢或失败, 仍需向用户说明并征询。
 
 ### 3. Python 代码修改后注意
 

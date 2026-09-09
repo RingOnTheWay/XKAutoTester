@@ -28,7 +28,7 @@ function register(ipcMain, services) {
       if (typeof localPath !== 'string' || !path.isAbsolute(localPath)) {
         return { success: false, error: 'invalid local path' };
       }
-      return adbService.fileTransfer.upload(localPath, remotePath, deviceId, event.sender);
+      return adbService.uploadFile(localPath, remotePath, deviceId, event.sender);
     },
     { withEvent: true }
   );
@@ -46,7 +46,7 @@ function register(ipcMain, services) {
       if (typeof localPath !== 'string' || !path.isAbsolute(localPath)) {
         return { success: false, error: 'invalid local path' };
       }
-      return adbService.fileTransfer.download(remotePath, localPath, deviceId, event.sender);
+      return adbService.downloadFile(remotePath, localPath, deviceId, event.sender);
     },
     { withEvent: true }
   );

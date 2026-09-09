@@ -35,8 +35,8 @@ function register(ipcMain, services) {
           error: t('errors.invalidDeviceId', '无效的设备 ID'),
         };
       }
-      // 调用方直接持 .apkInstaller
-      return adbService.apkInstaller.install(apkPath, deviceId, event.sender);
+      // 门面方法 (收敛 .apkInstaller 直持)
+      return adbService.installApk(apkPath, deviceId, event.sender);
     },
     { withEvent: true }
   );

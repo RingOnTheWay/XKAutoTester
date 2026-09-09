@@ -149,24 +149,36 @@ class ADBService {
       });
   }
 
-  /** collaborator 属性暴露: 调用方直接持属性 */
-  get fileTransfer() {
-    return this._fileTransfer;
+  /**
+   * 上传文件到设备 (门面方法, 收敛 .fileTransfer 直持)
+   * @param {string} localPath
+   * @param {string} remotePath
+   * @param {string} deviceId
+   * @param {object} eventSender - IPC sender (进度事件)
+   */
+  uploadFile(localPath, remotePath, deviceId, eventSender) {
+    return this._fileTransfer.upload(localPath, remotePath, deviceId, eventSender);
   }
 
-  /** collaborator 属性暴露 */
-  get apkInstaller() {
-    return this._apkInstaller;
+  /**
+   * 从设备下载文件 (门面方法, 收敛 .fileTransfer 直持)
+   * @param {string} remotePath
+   * @param {string} localPath
+   * @param {string} deviceId
+   * @param {object} eventSender - IPC sender (进度事件)
+   */
+  downloadFile(remotePath, localPath, deviceId, eventSender) {
+    return this._fileTransfer.download(remotePath, localPath, deviceId, eventSender);
   }
 
-  /** collaborator 属性暴露 */
-  get remoteStat() {
-    return this._remoteStat;
-  }
-
-  /** collaborator 属性暴露 (供测试访问) */
-  get tarExtractor() {
-    return this._tarExtractor;
+  /**
+   * 安装 APK 到设备 (门面方法, 收敛 .apkInstaller 直持)
+   * @param {string} apkPath
+   * @param {string} deviceId
+   * @param {object} eventSender - IPC sender (进度事件)
+   */
+  installApk(apkPath, deviceId, eventSender) {
+    return this._apkInstaller.install(apkPath, deviceId, eventSender);
   }
 
   /**

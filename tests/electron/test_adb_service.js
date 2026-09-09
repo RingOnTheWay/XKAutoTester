@@ -489,11 +489,10 @@ test('M4: fileTransfer 属性暴露 collaborator + 直调 upload', async () => {
     const ADBService = loadAdbService();
     const svc = new ADBService(PROJECT_ROOT, i18nMock, { fileTransferService: fileTransferMock });
 
-    // M4: 调用方直接持 .fileTransfer (无 uploadFile wrapper)
-    assert.strictEqual(typeof svc.uploadFile, 'undefined', 'M4: uploadFile wrapper 应已删除');
-    assert.strictEqual(svc.fileTransfer, fileTransferMock, 'M4: fileTransfer 属性应暴露注入的 collaborator');
+    // M4 (已深化): uploadFile 门面方法委托注入的 fileTransfer; 泄漏 getter 已删
+    assert.strictEqual(typeof svc.fileTransfer, 'undefined', 'M4: fileTransfer 应已私有, 不再暴露 getter');
 
-    const result = await svc.fileTransfer.upload('/local/f', '/sdcard/f', 'dev1', { send: () => {} });
+    const result = await svc.uploadFile('/local/f', '/sdcard/f', 'dev1', { send: () => {} });
 
     assert.strictEqual(result.success, true);
     assert.strictEqual(calledArgs.length, 4);
@@ -506,7 +505,7 @@ test('M4: fileTransfer 属性暴露 collaborator + 直调 upload', async () => {
   }
 });
 
-test('M4: fileTransfer 属性直调 download', async () => {
+test('M4: downloadFile 门面方法委托 download', async () => {
   let calledArgs = null;
   const fileTransferMock = {
     download: async (...args) => {
@@ -519,10 +518,10 @@ test('M4: fileTransfer 属性直调 download', async () => {
     const ADBService = loadAdbService();
     const svc = new ADBService(PROJECT_ROOT, i18nMock, { fileTransferService: fileTransferMock });
 
-    // M4: 调用方直接持 .fileTransfer (无 downloadFile wrapper)
-    assert.strictEqual(typeof svc.downloadFile, 'undefined', 'M4: downloadFile wrapper 应已删除');
+    // M4 (已深化): downloadFile 门面方法委托注入的 fileTransfer
+    assert.strictEqual(typeof svc.downloadFile, 'function', 'M4: downloadFile 门面应存在');
 
-    const result = await svc.fileTransfer.download('/sdcard/f', '/local/f', null, null);
+    const result = await svc.downloadFile('/sdcard/f', '/local/f', null, null);
 
     assert.strictEqual(result.success, true);
     assert.deepStrictEqual(calledArgs, ['/sdcard/f', '/local/f', null, null]);
@@ -531,7 +530,7 @@ test('M4: fileTransfer 属性直调 download', async () => {
   }
 });
 
-test('M4: apkInstaller 属性暴露 collaborator + 直调 install', async () => {
+test('M4: installApk 门面方法委托 collaborator + 泄漏 getter 已删', async () => {
   let calledArgs = null;
   const apkInstallerMock = {
     install: async (...args) => {
@@ -544,11 +543,11 @@ test('M4: apkInstaller 属性暴露 collaborator + 直调 install', async () => 
     const ADBService = loadAdbService();
     const svc = new ADBService(PROJECT_ROOT, i18nMock, { apkInstaller: apkInstallerMock });
 
-    // M4: 调用方直接持 .apkInstaller (无 installApk wrapper)
-    assert.strictEqual(typeof svc.installApk, 'undefined', 'M4: installApk wrapper 应已删除');
-    assert.strictEqual(svc.apkInstaller, apkInstallerMock, 'M4: apkInstaller 属性应暴露注入的 collaborator');
+    // M4 (已深化): installApk 门面方法委托注入的 apkInstaller; 泄漏 getter 已删
+    assert.strictEqual(typeof svc.apkInstaller, 'undefined', 'M4: apkInstaller 应已私有, 不再暴露 getter');
+    assert.strictEqual(typeof svc.installApk, 'function', 'M4: installApk 门面应存在');
 
-    const result = await svc.apkInstaller.install('/local/app.apk', 'dev1', null);
+    const result = await svc.installApk('/local/app.apk', 'dev1', null);
 
     assert.strictEqual(result.success, true);
     assert.deepStrictEqual(calledArgs, ['/local/app.apk', 'dev1', null]);
@@ -557,34 +556,31 @@ test('M4: apkInstaller 属性暴露 collaborator + 直调 install', async () => 
   }
 });
 
-test('M4: remoteStat 属性暴露 collaborator', async () => {
+test('M4: remoteStat 内部 collaborator 已私有 (无泄漏 getter)', async () => {
   const remoteStatMock = { stat: async () => ({ success: true }) };
   const restoreElectron = setupElectronMock();
   try {
     const ADBService = loadAdbService();
     const svc = new ADBService(PROJECT_ROOT, i18nMock, { remoteStatService: remoteStatMock });
 
-    // M4: remoteStat 属性应暴露注入的 collaborator
-    assert.strictEqual(svc.remoteStat, remoteStatMock);
+    // M4 (已深化): remoteStat 不再暴露 getter, 保持私有
+    assert.strictEqual(svc.remoteStat, undefined, 'remoteStat 应为私有, 无泄漏 getter');
   } finally {
     restoreElectron();
   }
 });
 
-test('M4: tarExtractor factory-or-default 注入', async () => {
+test('M4: tarExtractor 内部 collaborator 已私有 (无泄漏 getter)', async () => {
   const fakeTarExtractor = { extract: async () => [] };
   const restoreElectron = setupElectronMock();
   try {
     const ADBService = loadAdbService();
 
-    // 默认构造 → 内部 new TarExtractor()
+    // 默认构造 + 注入 fake 均不暴露 getter (保持私有)
     const svc1 = new ADBService(PROJECT_ROOT, i18nMock);
-    assert.ok(svc1.tarExtractor, '默认构造应有 tarExtractor');
-    assert.strictEqual(typeof svc1.tarExtractor.extract, 'function');
-
-    // 注入 fake → 用 fake
     const svc2 = new ADBService(PROJECT_ROOT, i18nMock, { tarExtractor: fakeTarExtractor });
-    assert.strictEqual(svc2.tarExtractor, fakeTarExtractor, '注入的 tarExtractor 应被使用');
+    assert.strictEqual(svc1.tarExtractor, undefined, '默认构造不应泄漏 tarExtractor');
+    assert.strictEqual(svc2.tarExtractor, undefined, '注入也不应泄漏 tarExtractor');
   } finally {
     restoreElectron();
   }
