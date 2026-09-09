@@ -28,7 +28,9 @@ dist-electron/
 
 # Electron-builder
 /electron/dist/
-/electron/build/
+# build/ 仅含打包必要源文件 installer.nsh, 纳入版本控制 (2026-09-09: 曾因整目录忽略丢失无法恢复)
+/electron/build/*
+!/electron/build/installer.nsh
 /electron/out/
 
 # --- Environments ---
