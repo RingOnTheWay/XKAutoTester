@@ -1,4 +1,4 @@
-const { registerHandler, makeI18nFallback } = require('./base/handlerUtils');
+const { registerHandler, makeI18nFallback, fail } = require('./base/handlerUtils');
 const path = require('path');
 const { app } = require('electron');
 const asyncFs = require('../utils/asyncFs');
@@ -57,10 +57,7 @@ function register(ipcMain, services) {
 
   registerHandler(ipcMain, IPC_CHANNELS.SAVE_CONFIG, async (newConfig) => {
     if (!newConfig || typeof newConfig !== 'object' || Array.isArray(newConfig)) {
-      return {
-        success: false,
-        error: t('errors.invalidConfig', '无效的配置数据'),
-      };
+      return fail(t('errors.invalidConfig', '无效的配置数据'));
     }
     const configPath = path.join(electronApp.userConfigPath, 'config.json');
 
@@ -130,11 +127,7 @@ function register(ipcMain, services) {
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.CHANGE_DATA_PATH, async (newPath) => {
-    if (!userDataService)
-      return {
-        success: false,
-        error: t('errors.serviceNotInit', '服务未初始化'),
-      };
+    if (!userDataService) return fail(t('errors.serviceNotInit', '服务未初始化'));
     const result = await userDataService.changeDataPath(newPath);
     if (result.success) {
       electronApp.userConfigPath = userDataService.getUserConfigPath();
@@ -146,11 +139,7 @@ function register(ipcMain, services) {
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.RESET_DATA_PATH, async () => {
-    if (!userDataService)
-      return {
-        success: false,
-        error: t('errors.serviceNotInit', '服务未初始化'),
-      };
+    if (!userDataService) return fail(t('errors.serviceNotInit', '服务未初始化'));
     const result = await userDataService.resetToDefaultPath();
     if (result.success) {
       electronApp.userConfigPath = userDataService.getUserConfigPath();

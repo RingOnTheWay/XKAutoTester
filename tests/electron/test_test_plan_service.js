@@ -235,18 +235,10 @@ test('P0-2 deleteReportRun 拒绝报告目录外的 report_path', async () => {
   }
 });
 
-test('P0-2 isPathInside 纯函数: 边界与穿越用例', () => {
-  const { isPathInside, sanitizePlanData, PLAN_EDITABLE_FIELDS } = require(path.join(
+test('P0-2 PLAN_EDITABLE_FIELDS 白名单: 不含运行期字段', () => {
+  const { sanitizePlanData, PLAN_EDITABLE_FIELDS } = require(path.join(
     __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'TestPlanService.js'
   ));
-  const base = 'C:/reports';
-  assert.strictEqual(isPathInside(base, 'C:/reports/plan1'), true);
-  assert.strictEqual(isPathInside(base, 'C:/reports/plan1/index.html'), true);
-  assert.strictEqual(isPathInside(base, 'C:/reports-evil/plan1'), false, '前缀目录不得误判为内部');
-  assert.strictEqual(isPathInside(base, 'C:/reports2'), false);
-  assert.strictEqual(isPathInside(base, 'C:/outside/plan1'), false);
-  assert.strictEqual(isPathInside(base, 'C:/reports'), false, 'baseDir 自身不算内部');
-  assert.strictEqual(isPathInside(base, '/absolute/path'), false);
   assert.ok(PLAN_EDITABLE_FIELDS.includes('name'));
   assert.ok(!PLAN_EDITABLE_FIELDS.includes('runs'));
   assert.ok(!PLAN_EDITABLE_FIELDS.includes('last_run'));

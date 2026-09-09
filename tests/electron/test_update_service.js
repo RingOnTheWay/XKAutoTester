@@ -1558,6 +1558,20 @@ test("P3-1 deleteUpdateFile 任意路径/非字符串 → 拒绝", async () => {
   assert.strictEqual(fileSystem.calls.unlink.length, 0, "全部拒绝, 不 unlink");
 });
 
+test("P3-1 deleteUpdateFile 相等路径 (==updateDir) 与字面 ..foo 拒绝 (ADR-0010 收紧语义)", async () => {
+  const { svc, fileSystem } = makeFakeApp({});
+  svc._ensureInitialized();
+
+  // 相等: target === updateDir (不允许删 updateDir 自身)
+  const r1 = await svc.deleteUpdateFile("/fake/config/updates");
+  assert.strictEqual(r1.success, false, "相等路径(updateDir 自身)拒绝");
+
+  // 字面 `..foo` 文件名 (非穿越, 但按收紧语义一并拒绝)
+  const r2 = await svc.deleteUpdateFile("/fake/config/updates/..foo");
+  assert.strictEqual(r2.success, false, "字面 ..foo 拒绝");
+  assert.strictEqual(fileSystem.calls.unlink.length, 0, "全部拒绝, 不 unlink");
+});
+
 // ── P3-2: SHA256 按文件名绑定 (Map) ─────────────────────────
 
 test("P3-2 _getExpectedSha256: Map 优先, 全局值回退", async () => {

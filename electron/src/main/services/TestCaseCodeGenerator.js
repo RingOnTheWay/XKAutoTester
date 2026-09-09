@@ -23,6 +23,7 @@
 const fs = require('fs').promises;
 const fsSync = require('fs'); // 同步 API (isSafeOutputDir 目录存在性检查, 单次调用开销可忽略)
 const path = require('path');
+const { isSystemProtectedPath } = require('../utils/pathGuard');
 
 // ─── P0-1 安全转义函数族 (渲染进程输入 → Python 源码) ───
 // 原则: 一切拼入 Python 源码的用户可控字符串, 必须按所在语法位置选择对应转义。
@@ -115,23 +116,13 @@ const defaultFileSystemFactory = () => ({
   writeFile: (p, content, enc) => fs.writeFile(p, content, enc),
 });
 
-// R25 P1-3: Windows + POSIX 系统关键目录黑名单 (防渲染层被攻破时向系统分区写 .py)
-const SYSTEM_PROTECTED_DIRS = new Set([
-  // Windows
-  'windows', 'system32', 'syswow64', 'program files', 'program files (x86)',
-  'programdata', 'recovery', '$recycle.bin', 'system volume information',
-  // POSIX
-  'etc', 'usr', 'bin', 'sbin', 'boot', 'dev', 'proc', 'sys', 'var',
-]);
-
-/**
- * R25 P1-3: outputDir 目录级安全检查。
- * 约束: 目录必须已存在 (防任意目录创建/写入) 且非系统关键目录 (防写系统分区)。
- * 不约束"用户数据目录内" — outputDir 语义是用户选择的测试目录 (test-execution 的
- * selectedDirectory / 文件浏览器的 currentPath), 可能是任意用户目录, 白名单根会破坏功能。
- * @param {string} resolvedDir path.resolve 后的绝对目录
- * @returns {boolean}
- */
+// R25 P1-3: outputDir 目录级安全检查。
+// 约束: 目录必须已存在 (防任意目录创建/写入) 且非系统关键目录 (防写系统分区)。
+// 系统关键目录判定委派 pathGuard.isSystemProtectedPath (ADR-0010: 单源收口)。
+// 不约束"用户数据目录内" — outputDir 语义是用户选择的测试目录 (test-execution 的
+// selectedDirectory / 文件浏览器的 currentPath), 可能是任意用户目录, 白名单根会破坏功能。
+// @param {string} resolvedDir path.resolve 后的绝对目录
+// @returns {boolean}
 function isSafeOutputDir(resolvedDir) {
   let stat;
   try {
@@ -140,11 +131,7 @@ function isSafeOutputDir(resolvedDir) {
     return false; // 目录不存在
   }
   if (!stat.isDirectory()) return false;
-
-  const segments = path.resolve(resolvedDir).replace(/[\\/]+$/, '').split(/[\\/]/).filter(Boolean);
-  if (segments.length <= 1) return false; // 盘根 (C:) / POSIX 根 (/)
-  const rootSeg = segments[1] ? segments[1].toLowerCase() : '';
-  return !(rootSeg && SYSTEM_PROTECTED_DIRS.has(rootSeg));
+  return !isSystemProtectedPath(resolvedDir);
 }
 
 // 默认 templateLoader factory: 返 async () => string, 闭包捕获 templatePath

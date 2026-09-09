@@ -1,4 +1,4 @@
-const { registerHandler } = require('./base/handlerUtils');
+const { registerHandler, fail } = require('./base/handlerUtils');
 const { IPC_CHANNELS } = require('../../shared/constants');
 const path = require('path');
 
@@ -26,7 +26,7 @@ function register(ipcMain, services) {
     (localPath, remotePath, deviceId, event) => {
       // R26 P1-1: localPath 必须为绝对路径 — 渲染层可控, 原无校验可读任意本机文件 push 到设备 (数据外泄)
       if (typeof localPath !== 'string' || !path.isAbsolute(localPath)) {
-        return { success: false, error: 'invalid local path' };
+        return fail('invalid local path');
       }
       return adbService.uploadFile(localPath, remotePath, deviceId, event.sender);
     },
@@ -44,7 +44,7 @@ function register(ipcMain, services) {
     (remotePath, localPath, deviceId, event) => {
       // R26 P1-1: localPath 必须为绝对路径 — 原无校验可写任意目录 (覆盖 AppData\Startup 等)
       if (typeof localPath !== 'string' || !path.isAbsolute(localPath)) {
-        return { success: false, error: 'invalid local path' };
+        return fail('invalid local path');
       }
       return adbService.downloadFile(remotePath, localPath, deviceId, event.sender);
     },

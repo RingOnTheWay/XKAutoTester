@@ -1,4 +1,4 @@
-const { registerHandler, makeI18nFallback } = require('./base/handlerUtils');
+const { registerHandler, makeI18nFallback, fail } = require('./base/handlerUtils');
 const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
@@ -34,10 +34,7 @@ function register(ipcMain, services) {
         typeof fileName !== 'string' ||
         fileName.trim() === ''
       ) {
-        return {
-          success: false,
-          error: t('errors.updateUrlMissing', '未提供下载地址或文件名'),
-        };
+        return fail(t('errors.updateUrlMissing', '未提供下载地址或文件名'));
       }
       // R26 P2-1: 原未传 event.sender → downloadUpdate 的进度事件 (ON_DOWNLOAD_PROGRESS)
       // 永不发出, UI 进度条卡死。补 withEvent 透传。
@@ -51,10 +48,7 @@ function register(ipcMain, services) {
 
   registerHandler(ipcMain, IPC_CHANNELS.INSTALL_UPDATE, (filePath) => {
     if (typeof filePath !== 'string' || filePath.trim() === '') {
-      return {
-        success: false,
-        error: t('errors.invalidUpdatePath', '无效的更新文件路径'),
-      };
+      return fail(t('errors.invalidUpdatePath', '无效的更新文件路径'));
     }
     return updateService.installUpdate(filePath);
   });

@@ -1,4 +1,4 @@
-const { registerHandlers, makeI18nFallback } = require('./base/handlerUtils');
+const { registerHandlers, makeI18nFallback, fail } = require('./base/handlerUtils');
 const { IPC_CHANNELS } = require('../../shared/constants');
 
 function register(ipcMain, services) {
@@ -10,10 +10,7 @@ function register(ipcMain, services) {
   registerHandlers(ipcMain, {
     [IPC_CHANNELS.APK_PARSE]: (apkPath) => {
       if (!apkParserService) {
-        return {
-          success: false,
-          error: t('errors.apkParserNotInit', 'APK 解析服务未初始化'),
-        };
+        return fail(t('errors.apkParserNotInit', 'APK 解析服务未初始化'));
       }
       return apkParserService.parseApk(apkPath);
     },

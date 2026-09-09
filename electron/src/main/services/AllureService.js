@@ -12,8 +12,8 @@ const Logger = require('../utils/logger');
 const { getTimestamp, getLogsPath } = require('../utils/pathHelper');
 const AllureHttpServer = require('./allure/AllureHttpServer');
 const AllureCliInvoker = require('./allure/AllureCliInvoker');
-// R25 P2-3: 报告路径约束复用 TestPlanService 的 isPathInside (无循环依赖: TestPlanService 不 require 本模块)
-const { isPathInside } = require('./TestPlanService');
+// 报告路径约束复用统一路径守卫 (utils/pathGuard, ADR-0010; 无循环依赖)
+const { isPathInside } = require('../utils/pathGuard');
 
 /** @typedef {Object} AllureServiceOptions
  * @property {() => object} [loggerFactory] - 默认 `() => new Logger(this._getLogsPath('XKAT'), 'Electron')`

@@ -61,10 +61,33 @@ function makeI18nFallback(i18nService) {
     i18nService && typeof i18nService.t === 'function' ? i18nService.t(key, { defaultValue: fallback }) : fallback;
 }
 
+/**
+ * 统一 IPC 响应构造 (收敛跨 handler 的 {success:false, error} / {success:true} 散落)。
+ * 纯成功响应: {success:true, ...payload}; 失败响应: {success:false, error, ...extra}。
+ * registerHandler 的 catch 也产出同构 {success:false, error}, 渲染层可统一判定 success。
+ * @param {object} [payload] - 成功响应的附加字段
+ * @returns {{success: boolean} & object}
+ */
+function ok(payload) {
+  return { success: true, ...payload };
+}
+
+/**
+ * 统一失败响应: {success:false, error}。业务规则拒绝用 (非抛异常路径)。
+ * @param {string} message - 错误信息 (i18n 已翻译或原始文案)
+ * @param {object} [extra] - 附加字段 (如 errorCode/statusCode/groups)
+ * @returns {{success: boolean, error: string} & object}
+ */
+function fail(message, extra) {
+  return { success: false, error: message, ...extra };
+}
+
 module.exports = {
   registerHandler,
   registerHandlers,
   isTrustedSender,
   assertTrustedSender,
   makeI18nFallback,
+  ok,
+  fail,
 };

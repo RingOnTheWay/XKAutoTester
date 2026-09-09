@@ -1,5 +1,5 @@
 const { IPC_CHANNELS } = require('../../shared/constants');
-const { registerHandler, makeI18nFallback } = require('./base/handlerUtils');
+const { registerHandler, makeI18nFallback, fail } = require('./base/handlerUtils');
 
 function register(ipcMain, services) {
   const { adbService, i18nService } = services;
@@ -14,25 +14,16 @@ function register(ipcMain, services) {
     IPC_CHANNELS.INSTALL_APK,
     async (data, event) => {
       if (!adbService) {
-        return {
-          success: false,
-          error: t('errors.adbServiceNotInit', 'ADB 服务未初始化'),
-        };
+        return fail(t('errors.adbServiceNotInit', 'ADB 服务未初始化'));
       }
       const apkPath = data && typeof data === 'object' ? data.apkPath : null;
       const deviceId = data && typeof data === 'object' ? data.deviceId : null;
 
       if (typeof apkPath !== 'string' || apkPath.trim() === '') {
-        return {
-          success: false,
-          error: t('errors.invalidApkPath', '无效的 APK 路径'),
-        };
+        return fail(t('errors.invalidApkPath', '无效的 APK 路径'));
       }
       if (typeof deviceId !== 'string' || deviceId.trim() === '') {
-        return {
-          success: false,
-          error: t('errors.invalidDeviceId', '无效的设备 ID'),
-        };
+        return fail(t('errors.invalidDeviceId', '无效的设备 ID'));
       }
       // 门面方法 (收敛 .apkInstaller 直持)
       return adbService.installApk(apkPath, deviceId, event.sender);

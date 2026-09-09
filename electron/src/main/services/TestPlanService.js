@@ -1,5 +1,6 @@
 const path = require('path');
 const asyncFs = require('../utils/asyncFs');
+const { isPathInside } = require('../utils/pathGuard');
 const { JsonFileCrudService } = require('./base/JsonFileCrudService');
 
 // ── module-level 常量 (对称 EnvironmentService REQUIRED_PYTHON_VERSION 等 7 const) ──
@@ -34,17 +35,6 @@ function sanitizePlanData(planData) {
     if (planData[field] !== undefined) clean[field] = planData[field];
   }
   return clean;
-}
-
-/**
- * 校验 targetPath 是否严格位于 baseDir 内 (P0-2: 防目录穿越删除)
- * @param {string} baseDir
- * @param {string} targetPath
- * @returns {boolean}
- */
-function isPathInside(baseDir, targetPath) {
-  const rel = path.relative(baseDir, targetPath);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
 // ── module-level 纯函数 (对称 EnvironmentService parsePyprojectDependencies/extractPackageName/checkMissingPackages/buildPythonConfig) ──
@@ -536,6 +526,5 @@ module.exports = {
   parseMarkersLine,
   MARKER_DESCRIPTIONS,
   sanitizePlanData,
-  isPathInside,
   PLAN_EDITABLE_FIELDS,
 };

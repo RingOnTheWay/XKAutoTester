@@ -19,6 +19,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const { isPathInside } = require('../utils/pathGuard');
 const asyncFs = require('../utils/asyncFs');
 const TestCaseCodeGenerator = require('./TestCaseCodeGenerator');
 
@@ -116,12 +117,6 @@ class TestCaseService {
     const withoutExt = base.replace(/\.json$/i, '').replace(/\.py$/i, '');
     if (!withoutExt || !/^[a-zA-Z0-9_\u4e00-\u9fa5-]+$/.test(withoutExt)) return null;
     return withoutExt;
-  }
-
-  // P1-3: target 必须位于 baseDir 内部 (规范化相对路径判定, 防前缀目录穿越)
-  _isPathInside(baseDir, target) {
-    const rel = path.relative(path.resolve(baseDir), path.resolve(target));
-    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
   }
 
   // ── fs helper (藏 try-catch + fs 模板, 对称 PagePackageService _applyQuery/_applyMutation) ──
@@ -380,7 +375,7 @@ class TestCaseService {
       if (pyFilePath) {
         // P1-3: pyFilePath 必须位于 userConfigPath 内 (test_cases 子目录 + 用户数据根下的
         // .py 输出均为合法), 阻止任意路径文件删除
-        if (this._isPathInside(this.userConfigPath, pyFilePath)) {
+        if (isPathInside(this.userConfigPath, pyFilePath)) {
           await this._deleteFile(pyFilePath); // 吞 ENOENT
         } else {
           // R27b: JSON 缺失用例 (仅 .py, 用户从任意目录浏览/导入) 删除支持 —

@@ -1,4 +1,4 @@
-const { registerHandlers, makeI18nFallback } = require('./base/handlerUtils');
+const { registerHandlers, makeI18nFallback, fail } = require('./base/handlerUtils');
 const path = require('path');
 const asyncFs = require('../utils/asyncFs');
 const { IPC_CHANNELS } = require('../../shared/constants');
@@ -47,10 +47,7 @@ function register(ipcMain, services) {
     [IPC_CHANNELS.CLEAR_ALL_LOGS]: () => allureService.clearAllLogs(),
     [IPC_CHANNELS.SEND_DINGTALK_NOTIFICATION]: async (notificationData) => {
       if (!notificationData || typeof notificationData !== 'object' || Array.isArray(notificationData)) {
-        return {
-          success: false,
-          error: t('errors.invalidNotification', '无效的通知数据'),
-        };
+        return fail(t('errors.invalidNotification', '无效的通知数据'));
       }
       // 从配置中读取 dingtalk access_token 和 secret，注入到 notificationData
       const configPath = path.join(electronApp.userConfigPath, 'config.json');

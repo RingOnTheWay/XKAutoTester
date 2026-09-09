@@ -23,6 +23,7 @@ const { spawn } = require('child_process');
 const { ensureDirectoryExists } = require('../utils/pathHelper');
 const { IPC_CHANNELS, UPDATE_DOWNLOAD_STATE } = require('../../shared/constants');
 const { compareVersions, normalizeVersionTag } = require('../utils/versionCompare');
+const { isPathInside } = require('../utils/pathGuard');
 
 const GITHUB_OWNER = 'RingOnTheWay';
 const GITHUB_REPO = 'XKAutoTester';
@@ -36,18 +37,6 @@ const TRUSTED_DOWNLOAD_HOSTS = ['github.com', 'objects.githubusercontent.com'];
 
 /** 更新包扩展名白名单 (P0-4: 防写入任意文件类型) */
 const UPDATE_FILE_EXTENSIONS = ['.exe', '.zip'];
-
-/**
- * P3-1: 判断 targetPath 是否严格位于 baseDir 内 (防 `..` 回溯 / 绝对路径逃逸)。
- * @param {string} baseDir - 限定根目录
- * @param {string} targetPath - 待校验路径
- * @returns {boolean}
- */
-function isPathInside(baseDir, targetPath) {
-  if (typeof targetPath !== 'string' || !targetPath) return false;
-  const rel = path.relative(baseDir, targetPath);
-  return rel === '' || (rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel));
-}
 
 /**
  * 清洗更新文件名 (P0-4: 防路径穿越)。
@@ -834,5 +823,4 @@ module.exports = {
   computeFileSha256,
   sanitizeUpdateFileName,
   isTrustedDownloadUrl,
-  isPathInside,
 };
