@@ -50,9 +50,21 @@ function registerHandlers(ipcMain, handlers) {
   });
 }
 
+/**
+ * 构造 i18n fallback 翻译闭包 (7 handler 重复, 收敛于此)。
+ * i18nService 不可用时回退 fallback 原文 (服务未就绪/测试注入)。
+ * @param {object} i18nService
+ * @returns {(key: string, fallback: string) => string}
+ */
+function makeI18nFallback(i18nService) {
+  return (key, fallback) =>
+    i18nService && typeof i18nService.t === 'function' ? i18nService.t(key, { defaultValue: fallback }) : fallback;
+}
+
 module.exports = {
   registerHandler,
   registerHandlers,
   isTrustedSender,
   assertTrustedSender,
+  makeI18nFallback,
 };

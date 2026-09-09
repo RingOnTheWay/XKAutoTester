@@ -1,4 +1,4 @@
-const { registerHandler } = require('./base/handlerUtils');
+const { registerHandler, makeI18nFallback } = require('./base/handlerUtils');
 const path = require('path');
 const { app } = require('electron');
 const asyncFs = require('../utils/asyncFs');
@@ -19,8 +19,7 @@ function register(ipcMain, services) {
   } = services;
 
   // i18n 文案封装: i18nService 不可用时回退默认文案
-  const t = (key, fallback) =>
-    i18nService && typeof i18nService.t === 'function' ? i18nService.t(key, { defaultValue: fallback }) : fallback;
+  const t = makeI18nFallback(i18nService);
 
   /**
    * changeDataPath/resetDataPath 后通知各 service 更新内部 filePath

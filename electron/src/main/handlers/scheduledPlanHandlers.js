@@ -1,4 +1,4 @@
-const { registerHandler } = require('./base/handlerUtils');
+const { registerHandler, makeI18nFallback } = require('./base/handlerUtils');
 const { IPC_CHANNELS } = require('../../shared/constants');
 
 /**
@@ -61,8 +61,7 @@ function register(ipcMain, services) {
   const { scheduledPlanService, schedulerService, testPlanService, i18nService } = services;
 
   // i18n 文案封装: i18nService 不可用时回退默认文案
-  const tr = (key, fallback) =>
-    i18nService && typeof i18nService.t === 'function' ? i18nService.t(key, { defaultValue: fallback }) : fallback;
+  const tr = makeI18nFallback(i18nService);
 
   registerHandler(ipcMain, IPC_CHANNELS.GET_SCHEDULED_PLANS, () => scheduledPlanService.getScheduledPlans());
 

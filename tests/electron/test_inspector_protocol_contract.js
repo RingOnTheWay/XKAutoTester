@@ -29,6 +29,36 @@ function extractEnum(branch, propName) {
   return null;
 }
 
+// ── Python 源码解析辅助 (从 inspector_constants.py 提取实际集合, 防硬编码漏检) ──
+
+function parsePythonStringVars(source) {
+  const vars = {};
+  const re = /^([A-Z_]+)\s*=\s*"([^"]+)"/gm;
+  let m;
+  while ((m = re.exec(source))) vars[m[1]] = m[2];
+  return vars;
+}
+
+/** 解析 INSPECTOR_COMMANDS = (NAME, ...) → 解析真实命令字符串 (经具名常量取值) */
+function extractPythonCommands(source) {
+  const vars = parsePythonStringVars(source);
+  const m = source.match(/INSPECTOR_COMMANDS\s*=\s*\(([^)]*)\)/);
+  assert.ok(m, 'Python INSPECTOR_COMMANDS 元组定义应存在');
+  return (m[1].match(/[A-Z_]+/g) || []).map((name) => {
+    assert.ok(vars[name] !== undefined, `Python 命令常量 ${name} 应已定义`);
+    return vars[name];
+  });
+}
+
+/** 解析字面量元组 (NOTIFICATION_TYPES / FRAME_KINDS), 提取其中字符串字面量 */
+function extractPythonStringTuple(source, tupleName) {
+  const re = new RegExp(`${tupleName}\\s*=\\s*\\(([^)]*)\\)`);
+  const m = source.match(re);
+  assert.ok(m, `Python ${tupleName} 元组定义应存在`);
+  const list = m[1].match(/"([^"]+)"/g) || [];
+  return list.map((s) => s.replace(/"/g, ''));
+}
+
 // ── 极简 additionalProperties 校验 (无 ajv 依赖) ────────────────
 
 function validateAdditionalProperties(frame, branch) {
@@ -90,19 +120,20 @@ test('契约: FRAME_KINDS 与 schema 各分支 kind.const 一致', () => {
 // ── 契约: Python 常量 ↔ schema enum 一致 (源码文本解析) ─────────
 
 test('契约: Python INSPECTOR_COMMANDS 与 schema Request.command.enum 一致', () => {
-  // 从 Python 源码提取字面量 (粗暴但够用: 抓双引号字符串)
-  const pythonCommands = [
-    'start-session', 'get-screenshot', 'get-source',
-    'find-locators', 'refresh', 'stop-session'
-  ];
-  // 验证每个命令都在 Python 源码中出现
-  for (const cmd of pythonCommands) {
-    assert.ok(pyConstantsSource.includes(`"${cmd}"`),
-      `Python inspector_constants.py 必须包含 "${cmd}"`);
-  }
+  // 从 Python 源码解析真实命令集合 (经 INSPECTOR_COMMANDS 元组取值), 非硬编码:
+  // 防 Python 新增/删除命令而 schema 未同步不被察觉
+  const pythonCommands = extractPythonCommands(pyConstantsSource);
   const reqBranch = findBranchByTitle('Request');
   const schemaCommands = extractEnum(reqBranch, 'command');
-  assert.deepEqual([...pythonCommands].sort(), [...schemaCommands].sort());
+  assert.deepEqual([...pythonCommands].sort(), [...schemaCommands].sort(),
+    'Python INSPECTOR_COMMANDS 必须与 schema Request.command.enum 完全一致');
+});
+
+test('契约: Python FRAME_KINDS 与 schema 各分支 kind.const 一致', () => {
+  const pyFrameKinds = extractPythonStringTuple(pyConstantsSource, 'FRAME_KINDS');
+  const schemaKinds = schema.oneOf.map(b => b.properties.kind.const);
+  assert.deepEqual([...pyFrameKinds].sort(), [...schemaKinds].sort(),
+    'Python FRAME_KINDS 必须与 schema 各分支 kind.const 完全一致');
 });
 
 test('契约: Python NOTIFICATION_TYPES 与 schema Notification.type.enum 一致', () => {
