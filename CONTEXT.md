@@ -15,6 +15,18 @@
 
 **位置**：`electron/src/shared/constants.js` → `UPDATE_DOWNLOAD_STATE`；渲染层镜像 `UPDATE_DOWNLOAD_RESULT_STATE` (settings/model.js)。
 
+## 通知去重 (Toast Dedup)
+
+**定义**：Toast 通知层职责 —— 同文本同类型通知在展示期内复用单条，调用方无防重义务。
+
+- **文本即 key**：去重键为 `类型:文本`，同 key 再发 → 复用已有通知并重置计时；异文本/异类型独立共存
+- **复用而非丢弃**：连发同文本只显一条，且按最后一次发送重新计时
+- **错误通知单一归口**：model 层错误一律 `emit('error')`，controller 单点渲染 toast；方法返回值只做流程控制，不做通知
+
+**演化**：历史上双 toast 由调用方各自防御（800ms 锁 / 占锁静默 / 查 success 不 emit），已收敛为通知层能力 + 契约 —— 见 [ADR-0011](docs/adr/ADR-0011-toast-dedup-and-error-notification-contract.md)。
+
+**位置**：`electron/renderer/components/toast.js` → `ToastManager`。
+
 ## Quick 参考
 
 - 测试执行 / 定时计划 / 页面封装 / Inspector 等其它词条按需补充。

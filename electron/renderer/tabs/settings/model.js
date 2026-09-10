@@ -260,9 +260,14 @@ export class SettingsModel extends EventEmitter {
   async exportConfig(outputPath) {
     try {
       const result = await this.#api.exportConfig(outputPath);
+      if (result && result.success === false) {
+        // ADR-0011 错误通知单一归口: IPC 失败形态归入 emit 路径, controller 不查 success 弹错
+        this.emit('error', { source: 'exportConfig', error: new Error(result.error || 'Export failed') });
+        return { success: false, error: result.error };
+      }
       return result;
     } catch (error) {
-      // 不 emit('error'): 失败由 controller 检查 result.success 统一显示原因, 避免双 toast
+      this.emit('error', { source: 'exportConfig', error });
       return { success: false, error: error.message };
     }
   }
@@ -270,17 +275,25 @@ export class SettingsModel extends EventEmitter {
   async exportLogs(outputPath) {
     try {
       const result = await this.#api.exportLogs(outputPath);
+      if (result && result.success === false) {
+        this.emit('error', { source: 'exportLogs', error: new Error(result.error || 'Export logs failed') });
+        return { success: false, error: result.error };
+      }
       return result;
     } catch (error) {
-      // 不 emit('error'): 失败由 controller 检查 result.success 统一显示原因, 避免双 toast
+      this.emit('error', { source: 'exportLogs', error });
       return { success: false, error: error.message };
     }
   }
 
   async importConfig(zipPath) {
     try {
-      // wrapper 已处理 IPC 失败,错误由外层 catch 接
       const result = await this.#api.importConfig(zipPath);
+      if (result && result.success === false) {
+        // ADR-0011: IPC 失败形态归入 emit 路径 (原由 controller 查 success 弹错, 双 toast 风险)
+        this.emit('error', { source: 'importConfig', error: new Error(result.error || 'Import failed') });
+        return { success: false, error: result.error };
+      }
       await this.loadConfig();
       return result;
     } catch (error) {

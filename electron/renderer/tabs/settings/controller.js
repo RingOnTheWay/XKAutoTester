@@ -263,14 +263,11 @@ export class SettingsController {
       if (result && !result.canceled && result.filePath) {
         this.#view.setButtonLoading('export-config-btn', true);
         try {
+          // ADR-0011: 失败由 model emit('error') 单点 toast, 此处只弹成功
           const res = await this.#model.exportConfig(result.filePath);
           if (res && res.success) {
             Toast?.success(window.i18n.t('settings.exportConfigSuccess'));
-          } else {
-            Toast?.error(res?.error || window.i18n.t('settings.exportConfigFailed'));
           }
-        } catch (error) {
-          Toast?.error(error?.message || window.i18n.t('settings.exportConfigFailed'));
         } finally {
           this.#view.setButtonLoading('export-config-btn', false);
         }
@@ -283,14 +280,11 @@ export class SettingsController {
       if (result && !result.canceled && result.filePath) {
         this.#view.setButtonLoading('export-logs-btn', true);
         try {
+          // ADR-0011: 失败由 model emit('error') 单点 toast, 此处只弹成功
           const res = await this.#model.exportLogs(result.filePath);
           if (res && res.success) {
             Toast?.success(window.i18n.t('settings.exportLogsSuccess'));
-          } else {
-            Toast?.error(res?.error || window.i18n.t('settings.exportLogsFailed'));
           }
-        } catch (error) {
-          Toast?.error(error?.message || window.i18n.t('settings.exportLogsFailed'));
         } finally {
           this.#view.setButtonLoading('export-logs-btn', false);
         }
@@ -306,10 +300,8 @@ export class SettingsController {
           window.i18n.t('settings.importConfigConfirm')
         );
         if (!ok) return;
-        // wrapper 已处理 IPC 失败,错误由 model 层 catch emit + 外层 try-catch 接
+        // ADR-0011: 失败由 model emit('error') 单点 toast, 此处只弹成功 (原 else 分支查 success 弹错有双 toast 风险)
         const importResult = await this.#model.importConfig(result.filePaths[0]);
-        // R27 P2-6: 检查 success — 失败时 model 已 emit error toast, 原无条件弹成功造成
-        // "失败 + 成功"双 toast 误导
         if (importResult?.success) {
           Toast?.success(window.i18n.t('settings.importConfigSuccess'));
         }

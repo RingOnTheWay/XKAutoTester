@@ -6,6 +6,8 @@ export class ToastManager {
   constructor() {
     this.containers = new Map();
     this.activeToasts = new Set();
+    // ADR-0011 通知去重: 文本即 key, 同文本 toast 展示期内复用 (调用方无防重义务)
+    this.activeToastKeys = new Map();
     this.defaultOptions = {
       type: 'info',
       duration: 3000,
@@ -27,12 +29,27 @@ export class ToastManager {
     const config = { ...this.defaultOptions, ...options, type };
     const container = this.getOrCreateContainer(config.container, config.position);
 
+    // 通知去重: 同文本已有展示中的 toast → 复用 (重置计时), 连发只显一个
+    // (fade-out 退场中的 toast 不复用, 走新建)
+    const dedupKey = `${config.type}:${message}`;
+    const existing = this.activeToastKeys.get(dedupKey);
+    if (existing && existing.parentNode && !existing.classList.contains('fade-out')) {
+      clearTimeout(parseInt(existing.dataset.timeoutId));
+      const timeoutId = setTimeout(() => {
+        this.removeToast(existing, config.container);
+      }, config.duration);
+      existing.dataset.timeoutId = timeoutId;
+      return existing;
+    }
+
     const toast = document.createElement('div');
     toast.className = `toast ${config.type}`;
     toast.textContent = message;
+    toast.dataset.dedupKey = dedupKey;
 
     container.appendChild(toast);
     this.activeToasts.add(toast);
+    this.activeToastKeys.set(dedupKey, toast);
 
     const timeoutId = setTimeout(() => {
       this.removeToast(toast, config.container);
@@ -46,6 +63,7 @@ export class ToastManager {
   removeToast(toast, container) {
     if (!toast.parentNode) {
       this.activeToasts.delete(toast);
+      this.#deleteToastKey(toast);
       return;
     }
 
@@ -55,6 +73,7 @@ export class ToastManager {
         toast.parentNode.removeChild(toast);
       }
       this.activeToasts.delete(toast);
+      this.#deleteToastKey(toast);
 
       const containerKey = this.getContainerKey(container);
       const toastContainer = this.containers.get(containerKey);
@@ -84,8 +103,7 @@ export class ToastManager {
       }
     });
     this.activeToasts.clear();
-
-    // 收集需要删除的key，避免在遍历中修改Map
+    this.activeToastKeys.clear();
     const keysToDelete = [];
     this.containers.forEach((container, key) => {
       if (container.dataset.container !== 'default') {
@@ -133,6 +151,16 @@ export class ToastManager {
     }
 
     return container;
+  }
+
+  /**
+   * 清除 toast 在去重索引中的条目 (toast 移除时调用)
+   */
+  #deleteToastKey(toast) {
+    const key = toast.dataset?.dedupKey;
+    if (key && this.activeToastKeys.get(key) === toast) {
+      this.activeToastKeys.delete(key);
+    }
   }
 
   getContainerKey(container) {
