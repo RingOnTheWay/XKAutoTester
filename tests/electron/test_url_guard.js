@@ -4,9 +4,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const { isAllowedExternalUrl } = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'utils', 'urlGuard.js'
-));
+const { isAllowedExternalUrl } = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'utils', 'urlGuard.js')
+);
 
 // ── 允许的 URL ─────────────────────────────────────────
 

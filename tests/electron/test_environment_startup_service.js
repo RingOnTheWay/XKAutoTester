@@ -6,7 +6,14 @@ const assert = require('node:assert');
 const path = require('path');
 
 const SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'EnvironmentStartupService.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'EnvironmentStartupService.js'
 );
 const EnvironmentStartupService = require(SERVICE_PATH);
 const { buildDriverInstallCommand } = EnvironmentStartupService;
@@ -84,9 +91,7 @@ test('P2-6 handleInstallDriver 委托注入的 driverInstallerFactory', async ()
   });
   await svc._ensureInitialized();
   // R25 P2-4: 白名单内合法路径 (真实驱动安装包)
-  const result = await svc.handleInstallDriver(
-    path.join(DRIVERS_ROOT, 'CP210xVCPInstaller_x64.exe')
-  );
+  const result = await svc.handleInstallDriver(path.join(DRIVERS_ROOT, 'CP210xVCPInstaller_x64.exe'));
   assert.strictEqual(result.success, true);
   assert.deepStrictEqual(calls, [path.join(DRIVERS_ROOT, 'CP210xVCPInstaller_x64.exe')]);
 });
@@ -101,11 +106,11 @@ test('R25 P2-4: 白名单外路径拒绝 (防启动任意 exe)', async () => {
   });
   await svc._ensureInitialized();
   const outsidePaths = [
-    'C:\\Windows\\System32\\cmd.exe',          // 系统目录
+    'C:\\Windows\\System32\\cmd.exe', // 系统目录
     path.join(PROJECT_ROOT, 'env', 'python', 'python.exe'), // 驱动目录外 (env 其他子目录)
-    path.join(DRIVERS_ROOT, '..', '..', '..', 'x'),          // 相对回溯
-    '',                                                  // 空串
-    null,                                                // 非字符串
+    path.join(DRIVERS_ROOT, '..', '..', '..', 'x'), // 相对回溯
+    '', // 空串
+    null, // 非字符串
   ];
   for (const p of outsidePaths) {
     const result = await svc.handleInstallDriver(p);

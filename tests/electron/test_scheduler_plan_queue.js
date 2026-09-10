@@ -4,17 +4,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const { ScheduledPlanQueue, compareByScheduledTime } = require(path.join(
-  __dirname,
-  '..',
-  '..',
-  'electron',
-  'src',
-  'main',
-  'services',
-  'scheduler',
-  'planQueue.js'
-));
+const { ScheduledPlanQueue, compareByScheduledTime } = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'scheduler', 'planQueue.js')
+);
 
 function makePlan(id, scheduledTime) {
   return { id, scheduledTime, name: `plan-${id}` };

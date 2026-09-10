@@ -5,15 +5,18 @@ const assert = require('node:assert');
 const path = require('path');
 
 const NOTIFICATION_SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'NotificationService.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'NotificationService.js'
 );
-const {
-  NotificationService,
-  buildSignString,
-  buildRequestBody,
-  buildSignedUrl,
-  DINGTALK_REQUEST_TIMEOUT,
-} = require(NOTIFICATION_SERVICE_PATH);
+const { NotificationService, buildSignString, buildRequestBody, buildSignedUrl, DINGTALK_REQUEST_TIMEOUT } = require(
+  NOTIFICATION_SERVICE_PATH
+);
 
 // ── Fakes ──────────────────────────────────────────────
 
@@ -68,7 +71,10 @@ test('buildRequestBody 返 { at, text, msgtype:"text" } 结构', () => {
 test('buildSignedUrl 返正确格式 URL', () => {
   const url = buildSignedUrl('TOKEN123', '1700000000000', 'SIGN%2Babc%3D');
 
-  assert.strictEqual(url, 'https://oapi.dingtalk.com/robot/send?access_token=TOKEN123&timestamp=1700000000000&sign=SIGN%2Babc%3D');
+  assert.strictEqual(
+    url,
+    'https://oapi.dingtalk.com/robot/send?access_token=TOKEN123&timestamp=1700000000000&sign=SIGN%2Babc%3D'
+  );
 });
 
 // ── constructor ────────────────────────────────────────
@@ -76,10 +82,13 @@ test('buildSignedUrl 返正确格式 URL', () => {
 test('constructor 收 2 factory + 2 实例建', () => {
   const http = makeFakeHttpClient();
   const logger = makeFakeLogger();
-  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
-    httpClientFactory: () => http,
-    loggerFactory: () => logger,
-  });
+  const svc = new NotificationService(
+    { t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') },
+    {
+      httpClientFactory: () => http,
+      loggerFactory: () => logger,
+    }
+  );
 
   assert.strictEqual(svc._httpClient, http);
   assert.strictEqual(svc._logger, logger);
@@ -88,10 +97,13 @@ test('constructor 收 2 factory + 2 实例建', () => {
 // ── sendDingTalkNotification ───────────────────────────
 
 test('sendDingTalkNotification accessToken/secret 缺失返 {success:false, error}', async () => {
-  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
-    httpClientFactory: () => makeFakeHttpClient(),
-    loggerFactory: () => makeFakeLogger(),
-  });
+  const svc = new NotificationService(
+    { t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') },
+    {
+      httpClientFactory: () => makeFakeHttpClient(),
+      loggerFactory: () => makeFakeLogger(),
+    }
+  );
 
   const result = await svc.sendDingTalkNotification({
     accessToken: '',
@@ -114,10 +126,13 @@ test('sendDingTalkNotification accessToken/secret 缺失返 {success:false, erro
 
 test('sendDingTalkNotification 调 httpClient.post + 返 {success:true, data}', async () => {
   const http = makeFakeHttpClient();
-  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
-    httpClientFactory: () => http,
-    loggerFactory: () => makeFakeLogger(),
-  });
+  const svc = new NotificationService(
+    { t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') },
+    {
+      httpClientFactory: () => http,
+      loggerFactory: () => makeFakeLogger(),
+    }
+  );
 
   const result = await svc.sendDingTalkNotification({
     accessToken: 'TOKEN123',
@@ -145,12 +160,17 @@ test('sendDingTalkNotification 调 httpClient.post + 返 {success:true, data}', 
 
 test('sendDingTalkNotification httpClient.post 抛错 catch 返 {success:false, error}', async () => {
   const http = {
-    post: async () => { throw new Error('network timeout'); },
+    post: async () => {
+      throw new Error('network timeout');
+    },
   };
-  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
-    httpClientFactory: () => http,
-    loggerFactory: () => makeFakeLogger(),
-  });
+  const svc = new NotificationService(
+    { t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') },
+    {
+      httpClientFactory: () => http,
+      loggerFactory: () => makeFakeLogger(),
+    }
+  );
 
   const result = await svc.sendDingTalkNotification({
     accessToken: 'TOKEN',
@@ -164,10 +184,13 @@ test('sendDingTalkNotification httpClient.post 抛错 catch 返 {success:false, 
 
 test('sendDingTalkNotification 集成验证: 调 buildSignString + buildRequestBody + buildSignedUrl', async () => {
   const http = makeFakeHttpClient();
-  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
-    httpClientFactory: () => http,
-    loggerFactory: () => makeFakeLogger(),
-  });
+  const svc = new NotificationService(
+    { t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') },
+    {
+      httpClientFactory: () => http,
+      loggerFactory: () => makeFakeLogger(),
+    }
+  );
 
   await svc.sendDingTalkNotification({
     accessToken: 'TOKEN_X',
@@ -190,10 +213,13 @@ test('sendDingTalkNotification 集成验证: 调 buildSignString + buildRequestB
 
 test('P2-6 post 调用携带默认 10s timeout', async () => {
   const http = makeFakeHttpClient();
-  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
-    httpClientFactory: () => http,
-    loggerFactory: () => makeFakeLogger(),
-  });
+  const svc = new NotificationService(
+    { t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') },
+    {
+      httpClientFactory: () => http,
+      loggerFactory: () => makeFakeLogger(),
+    }
+  );
 
   await svc.sendDingTalkNotification({
     accessToken: 'TOKEN123',
@@ -214,10 +240,13 @@ test('P2-6 超时异常被 catch 归一为 {success:false, error}', async () => 
       throw err;
     },
   };
-  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, {
-    httpClientFactory: () => http,
-    loggerFactory: () => makeFakeLogger(),
-  });
+  const svc = new NotificationService(
+    { t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') },
+    {
+      httpClientFactory: () => http,
+      loggerFactory: () => makeFakeLogger(),
+    }
+  );
 
   const result = await svc.sendDingTalkNotification({
     accessToken: 'TOKEN',
@@ -240,7 +269,10 @@ test('P1-1 钉钉 errcode!=0 (token 失效/被拒) → success:false', async () 
       return { data: { errcode: 310000, errmsg: 'invalid access token' } };
     },
   };
-  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, { httpClientFactory: () => http });
+  const svc = new NotificationService(
+    { t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') },
+    { httpClientFactory: () => http }
+  );
 
   const result = await svc.sendDingTalkNotification({
     accessToken: 'tok',
@@ -255,7 +287,10 @@ test('P1-1 钉钉 errcode!=0 (token 失效/被拒) → success:false', async () 
 
 test('P1-1 钉钉 errcode=0 → success:true', async () => {
   const http = makeFakeHttpClient();
-  const svc = new NotificationService({ t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') }, { httpClientFactory: () => http });
+  const svc = new NotificationService(
+    { t: (key) => (key === 'notificationNotConfigured' ? '钉钉配置不完整' : '') },
+    { httpClientFactory: () => http }
+  );
 
   const result = await svc.sendDingTalkNotification({
     accessToken: 'tok',

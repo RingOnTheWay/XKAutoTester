@@ -20,7 +20,14 @@ const assert = require('node:assert');
 const path = require('path');
 
 const ENV_SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'EnvironmentService.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'EnvironmentService.js'
 );
 const {
   EnvironmentService,
@@ -48,9 +55,9 @@ function makeFakeFileSystem(opts = {}) {
   };
   const normalizePath = (p) => path.normalize(p);
   const files = {};
-  for (const k in (opts.files || {})) files[normalizePath(k)] = opts.files[k];
+  for (const k in opts.files || {}) files[normalizePath(k)] = opts.files[k];
   const dirs = {};
-  for (const k in (opts.dirs || {})) dirs[normalizePath(k)] = opts.dirs[k];
+  for (const k in opts.dirs || {}) dirs[normalizePath(k)] = opts.dirs[k];
   return {
     calls,
     existsSync: (p) => {
@@ -93,9 +100,18 @@ function makeFakeCommandRunner(responses = []) {
 function makeFakeDriverChecker(overrides = {}) {
   const calls = {};
   const stub = {
-    checkCP210xDriver: async (...a) => { calls.checkCP210xDriver = a; return overrides.checkCP210xDriver || { status: 'success', message: 'stub-driver' }; },
-    isInstallerRunning: async (...a) => { calls.isInstallerRunning = a; return overrides.isInstallerRunning !== undefined ? overrides.isInstallerRunning : false; },
-    getDriverInstallerPath: (...a) => { calls.getDriverInstallerPath = a; return overrides.getDriverInstallerPath !== undefined ? overrides.getDriverInstallerPath : null; },
+    checkCP210xDriver: async (...a) => {
+      calls.checkCP210xDriver = a;
+      return overrides.checkCP210xDriver || { status: 'success', message: 'stub-driver' };
+    },
+    isInstallerRunning: async (...a) => {
+      calls.isInstallerRunning = a;
+      return overrides.isInstallerRunning !== undefined ? overrides.isInstallerRunning : false;
+    },
+    getDriverInstallerPath: (...a) => {
+      calls.getDriverInstallerPath = a;
+      return overrides.getDriverInstallerPath !== undefined ? overrides.getDriverInstallerPath : null;
+    },
   };
   stub.__calls = calls;
   return stub;
@@ -104,7 +120,10 @@ function makeFakeDriverChecker(overrides = {}) {
 function makeFakeSerialPortEnumerator(overrides = {}) {
   const calls = {};
   const stub = {
-    getSerialPorts: async (...a) => { calls.getSerialPorts = a; return overrides.getSerialPorts || { success: true, data: [] }; },
+    getSerialPorts: async (...a) => {
+      calls.getSerialPorts = a;
+      return overrides.getSerialPorts || { success: true, data: [] };
+    },
   };
   stub.__calls = calls;
   return stub;
@@ -148,7 +167,6 @@ function makeFakeApp(opts = {}) {
 
   return { svc, fileSystem, commandRunner, driverChecker, serialPortEnumerator, pathHelper, isPackagedGetter };
 }
-
 
 // ─── module-level 纯函数 ─────────────────────────────────────
 
@@ -212,7 +230,6 @@ test('buildPythonConfig sitePackagesPath=null 允许', () => {
   assert.strictEqual(cfg.isSystem, false);
 });
 
-
 // ─── constructor + 懒初始化 ─────────────────────────────────
 
 test('constructor 收 6 factory + _initialized=false + pythonConfigured=false', () => {
@@ -229,14 +246,37 @@ test('constructor 收 6 factory + _initialized=false + pythonConfigured=false', 
 });
 
 test('懒初始化: constructor 不触发 factory 调用, 首次 configurePythonEnvironment 触发 _ensureInitialized', async () => {
-  let fsFactoryCalled = 0, cmdFactoryCalled = 0, dcFactoryCalled = 0, spFactoryCalled = 0, phFactoryCalled = 0, ipFactoryCalled = 0;
+  let fsFactoryCalled = 0,
+    cmdFactoryCalled = 0,
+    dcFactoryCalled = 0,
+    spFactoryCalled = 0,
+    phFactoryCalled = 0,
+    ipFactoryCalled = 0;
   const svc = new EnvironmentService(i18nMock, '/fake/root', {
-    fileSystemFactory: () => { fsFactoryCalled++; return makeFakeFileSystem(); },
-    commandRunnerFactory: () => { cmdFactoryCalled++; return makeFakeCommandRunner(); },
-    driverCheckerFactory: () => { dcFactoryCalled++; return makeFakeDriverChecker(); },
-    serialPortEnumeratorFactory: () => { spFactoryCalled++; return makeFakeSerialPortEnumerator(); },
-    pathHelperFactory: () => { phFactoryCalled++; return makeFakePathHelper(); },
-    isPackagedGetterFactory: () => { ipFactoryCalled++; return () => false; },
+    fileSystemFactory: () => {
+      fsFactoryCalled++;
+      return makeFakeFileSystem();
+    },
+    commandRunnerFactory: () => {
+      cmdFactoryCalled++;
+      return makeFakeCommandRunner();
+    },
+    driverCheckerFactory: () => {
+      dcFactoryCalled++;
+      return makeFakeDriverChecker();
+    },
+    serialPortEnumeratorFactory: () => {
+      spFactoryCalled++;
+      return makeFakeSerialPortEnumerator();
+    },
+    pathHelperFactory: () => {
+      phFactoryCalled++;
+      return makeFakePathHelper();
+    },
+    isPackagedGetterFactory: () => {
+      ipFactoryCalled++;
+      return () => false;
+    },
   });
 
   assert.strictEqual(fsFactoryCalled, 0, 'constructor 不触发 fileSystemFactory');
@@ -256,14 +296,16 @@ test('懒初始化: constructor 不触发 factory 调用, 首次 configurePython
 test('懒初始化幂等: 重复 configurePythonEnvironment 仅初始化一次', async () => {
   let dcCount = 0;
   const svc = new EnvironmentService(i18nMock, '/fake/root', {
-    driverCheckerFactory: () => { dcCount++; return makeFakeDriverChecker(); },
+    driverCheckerFactory: () => {
+      dcCount++;
+      return makeFakeDriverChecker();
+    },
   });
   await svc.configurePythonEnvironment();
   const initCount = dcCount;
   await svc.configurePythonEnvironment();
   assert.strictEqual(dcCount, initCount, '二次调用不重新初始化');
 });
-
 
 // ─── configurePythonEnvironment (三级回退) ───────────────────
 
@@ -323,7 +365,6 @@ test('configurePythonEnvironment 无任何 Python 时 setPythonConfig(null)', as
   assert.deepStrictEqual(setCalls, [null]);
 });
 
-
 // ─── configureEmbeddedPythonPth (fileSystem port) ────────────
 
 test('configureEmbeddedPythonPth 用 fileSystem port 写 ._pth 文件', () => {
@@ -371,14 +412,17 @@ test('configureEmbeddedPythonPth 无 ._pth 文件时不报错', () => {
   assert.strictEqual(fileSystem.calls.writeFileSync.length, 0);
 });
 
-
 // ─── findSystemPython (跳过 windowsapps) ─────────────────────
 
 test('findSystemPython 跳过 windowsapps 路径', async () => {
   const { svc, commandRunner } = makeFakeApp({
     commandResponses: [
       // where python 输出
-      { code: 0, stdout: 'C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe\nC:\\Python\\python.exe', stderr: '' },
+      {
+        code: 0,
+        stdout: 'C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe\nC:\\Python\\python.exe',
+        stderr: '',
+      },
       // python --version 验证非 windowsapps 路径
       { code: 0, stdout: 'Python 3.12.4', stderr: '' },
     ],
@@ -400,7 +444,6 @@ test('findSystemPython where 无结果时返回 null', async () => {
   const result = await svc.findSystemPython();
   assert.strictEqual(result, null);
 });
-
 
 // ─── 委托: DriverChecker / SerialPortEnumerator / pathHelper ─
 
@@ -454,7 +497,6 @@ test('getAapt2Path 委托 pathHelper', () => {
   assert.strictEqual(result, '/fake/aapt2.exe');
 });
 
-
 // ─── checkCommandExists ──────────────────────────────────────
 
 test('checkCommandExists where 返回 0 + 非空 stdout 时返回 true', async () => {
@@ -484,7 +526,6 @@ test('checkCommandExists commandRunner 抛异常时返回 false', async () => {
   const exists = await svc.checkCommandExists('python');
   assert.strictEqual(exists, false);
 });
-
 
 // ─── checkPythonEnvironment (用纯函数) ───────────────────────
 
@@ -560,9 +601,7 @@ test('checkPythonEnvironment system Python 版本不匹配时返回 error', asyn
         isSystem: true,
       }),
     },
-    commandResponses: [
-      { code: 0, stdout: 'Python 3.10.0', stderr: '' },
-    ],
+    commandResponses: [{ code: 0, stdout: 'Python 3.10.0', stderr: '' }],
   });
 
   const result = await svc.checkPythonEnvironment('/fake/root');
@@ -632,7 +671,6 @@ test('IGNORED_MISSING_PACKAGES 常量包含 ddddocr', () => {
   assert.ok(IGNORED_MISSING_PACKAGES.includes('ddddocr'), '包含 ddddocr');
 });
 
-
 // ─── checkNodeModules (用 isPackagedGetter + fileSystem) ─────
 
 test('checkNodeModules isPackaged=true 时返回 success', () => {
@@ -671,7 +709,6 @@ test('checkNodeModules 无 package.json 时返回 warning', () => {
   assert.ok(result.message.includes('packageJsonNotFound'));
 });
 
-
 // ─── runEnvironmentChecks (编排) ─────────────────────────────
 
 test('runEnvironmentChecks 编排 4 checks + 返 {required, warnings}', async () => {
@@ -700,13 +737,13 @@ test('runEnvironmentChecks 必需检查失败时填 required 数组', async () =
   const { svc } = makeFakeApp({
     driverChecker: { checkCP210xDriver: { status: 'warning', message: 'cp210 missing' } },
     pathHelper: {
-      getAdbPath: () => 'adb',  // 本地不存在
+      getAdbPath: () => 'adb', // 本地不存在
       getAapt2Path: () => 'aapt2',
-      getPythonConfig: () => null,  // python 检查失败
+      getPythonConfig: () => null, // python 检查失败
     },
     commandResponses: [
-      { code: 1, stdout: '', stderr: 'not found' },  // where adb
-      { code: 1, stdout: '', stderr: 'not found' },  // where aapt2
+      { code: 1, stdout: '', stderr: 'not found' }, // where adb
+      { code: 1, stdout: '', stderr: 'not found' }, // where aapt2
     ],
   });
 
@@ -714,7 +751,6 @@ test('runEnvironmentChecks 必需检查失败时填 required 数组', async () =
   // Android SDK 必需检查失败 + Python 环境必需检查失败
   assert.ok(results.required.length >= 1, '必需检查失败应填 required');
 });
-
 
 // ─── P2-5: 探测命令统一注入默认 timeout (防挂起 splash) ───────
 
@@ -731,11 +767,7 @@ test('P2-5 configurePythonEnvironment venv 探测携带 timeout', async () => {
   await svc.configurePythonEnvironment();
 
   assert.strictEqual(commandRunner.calls.length, 1);
-  assert.strictEqual(
-    commandRunner.calls[0].opts.timeout,
-    DEFAULT_CMD_TIMEOUT,
-    '--version 探测应携带默认 15s 超时'
-  );
+  assert.strictEqual(commandRunner.calls[0].opts.timeout, DEFAULT_CMD_TIMEOUT, '--version 探测应携带默认 15s 超时');
 });
 
 test('P2-5 findSystemPython where/--version 均携带 timeout', async () => {

@@ -438,9 +438,7 @@ class ADBService {
     }
     // R27: 参数经 AdbPathQuoter 单引号包裹 (adb shell 拼串后在设备 sh 内安全,
     // 允许空格/括号等合法字符; 单引号内 $()/反引号不展开)
-    const rmArgs = isDirectory
-      ? ['rm', '-rf', AdbPathQuoter.quote(safe)]
-      : ['rm', '-f', AdbPathQuoter.quote(safe)];
+    const rmArgs = isDirectory ? ['rm', '-rf', AdbPathQuoter.quote(safe)] : ['rm', '-f', AdbPathQuoter.quote(safe)];
     return this._executeDeviceCommand(rmArgs, deviceId);
   }
 
@@ -464,10 +462,7 @@ class ADBService {
     // R27: mv 两参 (完整源/目标路径) 整体单引号包裹 — 空格/括号等合法字符设备端安全,
     // 无需在 newName 上预先拒括号 (原 _sanitize 字符黑名单误伤合法文件名)
     const targetPath = path.posix.join(path.posix.dirname(safe), safeName);
-    return this._executeDeviceCommand(
-      ['mv', AdbPathQuoter.quote(safe), AdbPathQuoter.quote(targetPath)],
-      deviceId
-    );
+    return this._executeDeviceCommand(['mv', AdbPathQuoter.quote(safe), AdbPathQuoter.quote(targetPath)], deviceId);
   }
 
   /**

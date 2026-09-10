@@ -7,11 +7,16 @@ const path = require('path');
 const Module = require('module');
 
 const APK_PARSER_SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'ApkParserService.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'ApkParserService.js'
 );
-const ASYNC_FS_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'utils', 'asyncFs.js'
-);
+const ASYNC_FS_PATH = path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'utils', 'asyncFs.js');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 
@@ -47,16 +52,18 @@ function makeParserMock({ parseResult = null } = {}) {
     calls,
     parse(output) {
       calls.parse.push({ output });
-      return parseResult || {
-        packageName: 'com.example',
-        activityName: 'com.example.MainActivity',
-        versionName: '1.0',
-        versionCode: '1',
-        applicationLabel: 'ExampleApp',
-        permissions: [],
-        features: [],
-        localeLabels: { default: 'ExampleApp' },
-      };
+      return (
+        parseResult || {
+          packageName: 'com.example',
+          activityName: 'com.example.MainActivity',
+          versionName: '1.0',
+          versionCode: '1',
+          applicationLabel: 'ExampleApp',
+          permissions: [],
+          features: [],
+          localeLabels: { default: 'ExampleApp' },
+        }
+      );
     },
   };
 }
@@ -195,7 +202,9 @@ test('parseApk 文件不存在 返 fileNotFound', async () => {
 
 test('parseApk exists 抛错 返 fileAccessError', async () => {
   const asyncFsMock = {
-    async exists() { throw new Error('EACCES'); },
+    async exists() {
+      throw new Error('EACCES');
+    },
   };
   const ApkParserService = loadServiceWithAsyncFsMock(asyncFsMock);
   const svc = new ApkParserService(PROJECT_ROOT, i18nMock);
@@ -305,7 +314,9 @@ test('parseApk parser.parse 抛错 返 parseError', async () => {
   svc.aapt2Path = '/fake/aapt2.exe';
   svc._invoker = makeInvokerMock();
   svc._parser = {
-    parse() { throw new Error('regex broken'); },
+    parse() {
+      throw new Error('regex broken');
+    },
   };
 
   const r = await svc.parseApk('/path/app.apk');

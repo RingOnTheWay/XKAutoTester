@@ -9,7 +9,7 @@ const projectRoot = path.join(__dirname, '..', '..');
 // stub electron minimal
 const fakeElectron = {
   app: { getPath: () => '/tmp/fake-app-data', isPackaged: false },
-  process: { resourcesPath: '' }
+  process: { resourcesPath: '' },
 };
 const savedElectron = process.versions.electron;
 require.cache.electron = { exports: fakeElectron };
@@ -144,7 +144,9 @@ test('ApkParserService delegates aapt2 resolution to pathHelper', () => {
 });
 
 test('EnvironmentService.getAapt2Path delegates to pathHelper', () => {
-  const { EnvironmentService } = require(path.join(projectRoot, 'electron', 'src', 'main', 'services', 'EnvironmentService'));
+  const { EnvironmentService } = require(
+    path.join(projectRoot, 'electron', 'src', 'main', 'services', 'EnvironmentService')
+  );
   const service = new EnvironmentService({ t: (k) => k }, projectRoot);
   pathHelper.clearAapt2PathCache();
   const result = service.getAapt2Path();
@@ -158,7 +160,9 @@ test('ADBService no longer has getAdbPath wrapper method', () => {
 });
 
 test('EnvironmentService no longer has getAdbPath wrapper method', () => {
-  const { EnvironmentService } = require(path.join(projectRoot, 'electron', 'src', 'main', 'services', 'EnvironmentService'));
+  const { EnvironmentService } = require(
+    path.join(projectRoot, 'electron', 'src', 'main', 'services', 'EnvironmentService')
+  );
   const service = new EnvironmentService({ t: (k) => k }, projectRoot);
   assert.strictEqual(typeof service.getAdbPath, 'undefined', 'EnvironmentService.getAdbPath should be removed');
 });
@@ -173,8 +177,14 @@ test('No duplicate aapt2 possiblePaths in service files', () => {
     'utf8'
   );
   // Services should not contain inline possiblePaths for aapt2
-  assert.ok(!apkParserSource.includes('android-sdk\', \'build-tools\', \'aapt2'), 'ApkParserService should not have inline aapt2 path');
-  assert.ok(!envServiceSource.includes('android-sdk\', \'build-tools\', \'aapt2'), 'EnvironmentService should not have inline aapt2 path');
+  assert.ok(
+    !apkParserSource.includes("android-sdk', 'build-tools', 'aapt2"),
+    'ApkParserService should not have inline aapt2 path'
+  );
+  assert.ok(
+    !envServiceSource.includes("android-sdk', 'build-tools', 'aapt2"),
+    'EnvironmentService should not have inline aapt2 path'
+  );
 });
 
 test('No this.getAdbPath() calls in ADBService and EnvironmentService', () => {
@@ -193,22 +203,13 @@ test('No this.getAdbPath() calls in ADBService and EnvironmentService', () => {
 // ── getLocalesPath (打包模式 i18n 修复) ─────────────────────────
 
 test('getLocalesPath 开发模式 (isPackaged=false) → projectRoot/electron/locales', () => {
-  assert.strictEqual(
-    pathHelper.getLocalesPath('/fake/root', false),
-    path.join('/fake/root', 'electron', 'locales')
-  );
+  assert.strictEqual(pathHelper.getLocalesPath('/fake/root', false), path.join('/fake/root', 'electron', 'locales'));
 });
 
 test('getLocalesPath 打包模式 (isPackaged=true) → projectRoot/locales (resources 提取)', () => {
-  assert.strictEqual(
-    pathHelper.getLocalesPath('/fake/root', true),
-    path.join('/fake/root', 'locales')
-  );
+  assert.strictEqual(pathHelper.getLocalesPath('/fake/root', true), path.join('/fake/root', 'locales'));
 });
 
 test('getLocalesPath 默认 (不传 isPackaged) 保持开发模式路径 (向后兼容)', () => {
-  assert.strictEqual(
-    pathHelper.getLocalesPath('/fake/root'),
-    path.join('/fake/root', 'electron', 'locales')
-  );
+  assert.strictEqual(pathHelper.getLocalesPath('/fake/root'), path.join('/fake/root', 'electron', 'locales'));
 });

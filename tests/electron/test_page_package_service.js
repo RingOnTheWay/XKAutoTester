@@ -8,9 +8,9 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const { PagePackageService } = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'PagePackageService.js'
-));
+const { PagePackageService } = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'PagePackageService.js')
+);
 
 // ── 测试数据 ─────────────────────────────────────────────
 
@@ -18,20 +18,25 @@ function makeTestData() {
   return {
     apps: [
       {
-        id: 'app1', name: 'TestApp', platform: 'android', packageName: 'com.test', activityName: 'Main',
+        id: 'app1',
+        name: 'TestApp',
+        platform: 'android',
+        packageName: 'com.test',
+        activityName: 'Main',
         pages: [
           {
-            id: 'page1', name: 'HomePage',
+            id: 'page1',
+            name: 'HomePage',
             elements: [
               { id: 'elem1', name: 'SubmitBtn', locator: 'id', value: 'submit' },
-              { id: 'elem2', name: 'CancelBtn', locator: 'xpath', value: '//cancel' }
-            ]
+              { id: 'elem2', name: 'CancelBtn', locator: 'xpath', value: '//cancel' },
+            ],
           },
-          { id: 'page2', name: 'SettingPage', elements: [] }
-        ]
+          { id: 'page2', name: 'SettingPage', elements: [] },
+        ],
       },
-      { id: 'app2', name: 'AnotherApp', pages: [] }
-    ]
+      { id: 'app2', name: 'AnotherApp', pages: [] },
+    ],
   };
 }
 
@@ -41,8 +46,13 @@ class InMemoryPagePackageService extends PagePackageService {
     super('/fake/path', opts);
     this._memData = initialData || { apps: [] };
   }
-  async getData() { return this._memData; }
-  async saveData(data) { this._memData = data; return { success: true }; }
+  async getData() {
+    return this._memData;
+  }
+  async saveData(data) {
+    this._memData = data;
+    return { success: true };
+  }
 }
 
 // ── 1. _navigate 纯函数 ──────────────────────────────────
@@ -128,7 +138,7 @@ test('_applyDelete 删路径: getData → navigate → splice → saveData → {
 
   // 删 page
   const result = await svc._applyDelete({ appId: 'app1', pageId: 'page1' }, (ctx) => {
-    return ctx.app.pages.findIndex(p => p.id === 'page1');
+    return ctx.app.pages.findIndex((p) => p.id === 'page1');
   });
 
   assert.deepStrictEqual(result, { success: true });
@@ -140,9 +150,8 @@ test('_applyDelete 删路径: getData → navigate → splice → saveData → {
 
   // 删 element
   const svc2 = new InMemoryPagePackageService(makeTestData());
-  const result2 = await svc2._applyDelete(
-    { appId: 'app1', pageId: 'page1', elementId: 'elem1' },
-    (ctx) => ctx.page.elements.findIndex(e => e.id === 'elem1')
+  const result2 = await svc2._applyDelete({ appId: 'app1', pageId: 'page1', elementId: 'elem1' }, (ctx) =>
+    ctx.page.elements.findIndex((e) => e.id === 'elem1')
   );
   assert.deepStrictEqual(result2, { success: true });
   const saved2 = await svc2.getData();
@@ -154,9 +163,12 @@ test('_applyDelete 删路径: getData → navigate → splice → saveData → {
 
 test('idGenerator 注入: 测试传确定性 ID 生成器', async () => {
   let seq = 0;
-  const svc = new InMemoryPagePackageService({ apps: [] }, {
-    idGenerator: () => `fixed-id-${++seq}`,
-  });
+  const svc = new InMemoryPagePackageService(
+    { apps: [] },
+    {
+      idGenerator: () => `fixed-id-${++seq}`,
+    }
+  );
 
   const r1 = await svc.addApp({ name: 'App1' });
   assert.strictEqual(r1.data.id, 'fixed-id-1');
@@ -173,12 +185,17 @@ test('idGenerator 注入: 测试传确定性 ID 生成器', async () => {
 
 test('errorReporter 注入: 测试传 spy 验证错误日志调用', async () => {
   const errors = [];
-  const svc = new InMemoryPagePackageService({ apps: [] }, {
-    errorReporter: (msg, err) => errors.push({ msg, errMessage: err.message }),
-  });
+  const svc = new InMemoryPagePackageService(
+    { apps: [] },
+    {
+      errorReporter: (msg, err) => errors.push({ msg, errMessage: err.message }),
+    }
+  );
 
   // 触发错误: getData 抛错
-  svc.getData = async () => { throw new Error('disk read failed'); };
+  svc.getData = async () => {
+    throw new Error('disk read failed');
+  };
 
   const result = await svc.getApps();
 
@@ -194,15 +211,24 @@ test('facade forward 契约: 18 方法正确 forward 到 _applyQuery/_applyMutat
   const svc = new InMemoryPagePackageService(makeTestData());
 
   const calls = { query: [], mutation: [], delete: [] };
-  svc._applyQuery = async (nav, fn) => { calls.query.push({ nav, fnName: fn.name || 'anon' }); return { success: true, data: 'query-result' }; };
-  svc._applyMutation = async (nav, fn) => { calls.mutation.push({ nav, fnName: fn.name || 'anon' }); return { success: true, data: 'mutation-result' }; };
-  svc._applyDelete = async (nav, fn) => { calls.delete.push({ nav, fnName: fn.name || 'anon' }); return { success: true }; };
+  svc._applyQuery = async (nav, fn) => {
+    calls.query.push({ nav, fnName: fn.name || 'anon' });
+    return { success: true, data: 'query-result' };
+  };
+  svc._applyMutation = async (nav, fn) => {
+    calls.mutation.push({ nav, fnName: fn.name || 'anon' });
+    return { success: true, data: 'mutation-result' };
+  };
+  svc._applyDelete = async (nav, fn) => {
+    calls.delete.push({ nav, fnName: fn.name || 'anon' });
+    return { success: true };
+  };
 
   // Apps (5)
   await svc.getApps();
   await svc.addApp({ name: 'X' });
   await svc.updateApp('app1', { name: 'Y' });
-  await svc.updateApp('app1', 'string-name');  // 字符串兼容
+  await svc.updateApp('app1', 'string-name'); // 字符串兼容
   await svc.deleteApp('app1');
   await svc.searchApps('keyword');
 
@@ -245,7 +271,12 @@ test('默认 factory 集成: 真实 fs + 临时 page_package.json', async () => 
     assert.deepStrictEqual(r1.data, []);
 
     // addApp
-    const r2 = await svc.addApp({ name: 'RealApp', platform: 'android', packageName: 'com.real', activityName: 'Main' });
+    const r2 = await svc.addApp({
+      name: 'RealApp',
+      platform: 'android',
+      packageName: 'com.real',
+      activityName: 'Main',
+    });
     assert.strictEqual(r2.success, true);
     assert.ok(r2.data.id, '应生成 ID');
     assert.strictEqual(r2.data.name, 'RealApp');
@@ -289,7 +320,10 @@ test('P0 并发回归: 20 个并发 addApp 全部持久化 (withLock 串行化 r
     );
 
     // 全部成功
-    assert.ok(results.every(r => r.success === true), '所有 addApp 应成功');
+    assert.ok(
+      results.every((r) => r.success === true),
+      '所有 addApp 应成功'
+    );
 
     // 持久化数量 = N (无丢更新)
     const fileContent = fs.readFileSync(path.join(tmpDir, 'page_package.json'), 'utf8');
@@ -297,7 +331,7 @@ test('P0 并发回归: 20 个并发 addApp 全部持久化 (withLock 串行化 r
     assert.strictEqual(persisted.apps.length, N, `应持久化 ${N} 个 app (withLock 防丢更新)`);
 
     // 名称集合完整 (无覆盖)
-    const names = new Set(persisted.apps.map(a => a.name));
+    const names = new Set(persisted.apps.map((a) => a.name));
     assert.strictEqual(names.size, N, 'app 名称应无重复');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -313,11 +347,9 @@ test('P0 并发回归: 10 个并发 addPage 到同一 app 全部持久化', asyn
 
     // 10 个并发 addPage 到同一 app
     const N = 10;
-    const results = await Promise.all(
-      Array.from({ length: N }, (_, i) => svc.addPage(appId, `Page${i}`))
-    );
+    const results = await Promise.all(Array.from({ length: N }, (_, i) => svc.addPage(appId, `Page${i}`)));
 
-    assert.ok(results.every(r => r.success === true));
+    assert.ok(results.every((r) => r.success === true));
 
     const fileContent = fs.readFileSync(path.join(tmpDir, 'page_package.json'), 'utf8');
     const persisted = JSON.parse(fileContent);

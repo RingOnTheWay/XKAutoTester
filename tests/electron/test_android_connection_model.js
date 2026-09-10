@@ -62,7 +62,15 @@ test('P3-11 sanitizeRemotePath 拒绝 shell 元字符/控制字符', async () =>
   await loadModel();
   const model = createModel();
 
-  const bad = ['/sdcard;rm -rf /', '/sdcard`id`', '/sdcard$(reboot)', '/sdcard|ls', '/sd\ncard', '/sd\\card', '/sd"quote'];
+  const bad = [
+    '/sdcard;rm -rf /',
+    '/sdcard`id`',
+    '/sdcard$(reboot)',
+    '/sdcard|ls',
+    '/sd\ncard',
+    '/sd\\card',
+    '/sd"quote',
+  ];
   for (const p of bad) {
     assert.strictEqual(model.sanitizeRemotePath(p), null, `应拒绝: ${p}`);
   }

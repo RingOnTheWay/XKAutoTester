@@ -14,7 +14,9 @@ let dom;
 let savedGlobals = {};
 
 function setupJsdom() {
-  dom = new JSDOM('<!DOCTYPE html><html><body><div id="tree-container"></div></body></html>', { pretendToBeVisual: true });
+  dom = new JSDOM('<!DOCTYPE html><html><body><div id="tree-container"></div></body></html>', {
+    pretendToBeVisual: true,
+  });
   const { window } = dom;
   savedGlobals.document = global.document;
   savedGlobals.window = global.window;
@@ -27,7 +29,7 @@ function setupJsdom() {
 }
 
 function teardownJsdom() {
-  Object.keys(savedGlobals).forEach(k => {
+  Object.keys(savedGlobals).forEach((k) => {
     if (savedGlobals[k] === undefined) delete global[k];
     else global[k] = savedGlobals[k];
   });
@@ -114,7 +116,8 @@ describe('deviceModalRenderMixin XSS 转义（deviceId）', () => {
   after(teardownJsdom);
 
   test('恶意 deviceId 不注入原始 HTML', async () => {
-    const { deviceModalRenderMixin } = await import('../../electron/renderer/components/mixins/deviceModalRenderMixin.js');
+    const { deviceModalRenderMixin } =
+      await import('../../electron/renderer/components/mixins/deviceModalRenderMixin.js');
     const host = createDeviceModalHost();
     const el = deviceModalRenderMixin.createDeviceItemElement.call(host, {
       id: '"><img src=x onerror=alert(1)><script>evil()</script>',
@@ -123,13 +126,18 @@ describe('deviceModalRenderMixin XSS 转义（deviceId）', () => {
     assert.strictEqual(el.querySelectorAll('img').length, 0, '不应产生 img 元素');
     assert.strictEqual(el.querySelectorAll('script').length, 0, '不应产生 script 元素');
     // data-device-id 属性完整保留原值（setAttribute 路径不经 HTML 解析）
-    assert.strictEqual(el.getAttribute('data-device-id'), '"><img src=x onerror=alert(1)><script>evil()</script>', 'data-device-id 应完整保留原值');
+    assert.strictEqual(
+      el.getAttribute('data-device-id'),
+      '"><img src=x onerror=alert(1)><script>evil()</script>',
+      'data-device-id 应完整保留原值'
+    );
     // 文本断言
     assert.ok(el.textContent.includes('<script>evil()</script>'), 'deviceId 应作为纯文本保留原文');
   });
 
   test('正常 deviceId 渲染不受影响（usb/wifi 图标判定）', async () => {
-    const { deviceModalRenderMixin } = await import('../../electron/renderer/components/mixins/deviceModalRenderMixin.js');
+    const { deviceModalRenderMixin } =
+      await import('../../electron/renderer/components/mixins/deviceModalRenderMixin.js');
     const host = createDeviceModalHost();
 
     const usbEl = deviceModalRenderMixin.createDeviceItemElement.call(host, 'emulator-5554');
@@ -140,7 +148,8 @@ describe('deviceModalRenderMixin XSS 转义（deviceId）', () => {
   });
 
   test('旧字符串调用形态兼容', async () => {
-    const { deviceModalRenderMixin } = await import('../../electron/renderer/components/mixins/deviceModalRenderMixin.js');
+    const { deviceModalRenderMixin } =
+      await import('../../electron/renderer/components/mixins/deviceModalRenderMixin.js');
     const host = createDeviceModalHost();
     const el = deviceModalRenderMixin.createDeviceItemElement.call(host, 'device-abc');
     assert.strictEqual(el.getAttribute('data-device-id'), 'device-abc', '字符串形态应取原值');
@@ -203,7 +212,11 @@ describe('DeviceCascadeSelect XSS 转义（BLE 设备数据）', () => {
         manufacturerId: 'm1',
         manufacturer: 'M',
         types: {
-          '"><svg onload=e()>': { type: '"><svg onload=e()>', category: '<img src=x onerror=alert(1)>', devices: [{ deviceId: 'd1', name: 'n1' }] },
+          '"><svg onload=e()>': {
+            type: '"><svg onload=e()>',
+            category: '<img src=x onerror=alert(1)>',
+            devices: [{ deviceId: 'd1', name: 'n1' }],
+          },
         },
       },
     };
@@ -223,9 +236,13 @@ describe('DeviceCascadeSelect XSS 转义（BLE 设备数据）', () => {
       m1: {
         manufacturerId: 'm1',
         manufacturer: 'M',
-        types: { t1: { type: 't1', category: '体温计', devices: [
-          { deviceId: '"><img src=x onerror=alert(1)>', name: '<script>evil()</script>' },
-        ] } },
+        types: {
+          t1: {
+            type: 't1',
+            category: '体温计',
+            devices: [{ deviceId: '"><img src=x onerror=alert(1)>', name: '<script>evil()</script>' }],
+          },
+        },
       },
     };
     DeviceCascadeSelectClass.prototype._renderModelOptions.call(host);
@@ -247,7 +264,13 @@ describe('DeviceCascadeSelect XSS 转义（BLE 设备数据）', () => {
       bioland: {
         manufacturerId: 'bioland',
         manufacturer: 'Bioland',
-        types: { thermometer: { type: 'thermometer', category: '体温计', devices: [{ deviceId: 'MB026A-01', name: '体温计 01' }] } },
+        types: {
+          thermometer: {
+            type: 'thermometer',
+            category: '体温计',
+            devices: [{ deviceId: 'MB026A-01', name: '体温计 01' }],
+          },
+        },
       },
     };
     DeviceCascadeSelectClass.prototype._renderManufacturerOptions.call(host);
@@ -269,10 +292,12 @@ describe('TestCaseView showJsonMissingWarning 转义（i18next 插值）', () =>
     editorContent.className = 'tc-editor-content';
     global.document.body.appendChild(editorContent);
     // i18n mock: 模拟 i18next v25 escapeValue=false 行为（插值原样输出不转义）
-    global.window.i18n = { t: (key, opts) => {
-      if (key === 'testCase.jsonMissingWarning' && opts) return `JSON 文件缺失: ${opts.fileName}`;
-      return key;
-    } };
+    global.window.i18n = {
+      t: (key, opts) => {
+        if (key === 'testCase.jsonMissingWarning' && opts) return `JSON 文件缺失: ${opts.fileName}`;
+        return key;
+      },
+    };
     const mod = await import('../../electron/renderer/tabs/test-case/view.js');
     ViewClass = mod.TestCaseView;
   });

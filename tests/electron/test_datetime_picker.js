@@ -30,13 +30,18 @@ function setupJsdom() {
   global.i18n = global.window.i18n;
   if (!window.HTMLElement.prototype.getBoundingClientRect) {
     window.HTMLElement.prototype.getBoundingClientRect = () => ({
-      width: 200, height: 30, top: 100, bottom: 130, left: 10, right: 210,
+      width: 200,
+      height: 30,
+      top: 100,
+      bottom: 130,
+      left: 10,
+      right: 210,
     });
   }
 }
 
 function teardownJsdm() {
-  Object.keys(savedGlobals).forEach(k => {
+  Object.keys(savedGlobals).forEach((k) => {
     if (savedGlobals[k] === undefined) delete global[k];
     else global[k] = savedGlobals[k];
   });

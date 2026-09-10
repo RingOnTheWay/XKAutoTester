@@ -5,7 +5,14 @@ const assert = require('node:assert');
 const path = require('path');
 
 const BLE_SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'BleDeviceDiscoveryService.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'BleDeviceDiscoveryService.js'
 );
 const { BleDeviceDiscoveryService } = require(BLE_SERVICE_PATH);
 
@@ -26,8 +33,9 @@ function makeFakeFileSystem(opts = {}) {
     readdirSync: (dir, readdirOpts) => {
       calls.readdirSync.push({ dir, readdirOpts });
       if (readdirOpts && readdirOpts.withFileTypes) {
-        return dirEntries.map(name => ({
-          name, isDirectory: () => subDirEntries[name] !== undefined
+        return dirEntries.map((name) => ({
+          name,
+          isDirectory: () => subDirEntries[name] !== undefined,
         }));
       }
       // 找对应 subDir 的文件列表
@@ -54,23 +62,27 @@ test('constructor 收 fileSystemFactory + _initialized=false', () => {
   assert.strictEqual(svc._initialized, false);
   assert.strictEqual(svc._deviceCache, null);
   assert.strictEqual(svc._fs, fakeFs);
-  assert.deepStrictEqual(fakeFs.calls.exists, []);  // 构造期不触发
+  assert.deepStrictEqual(fakeFs.calls.exists, []); // 构造期不触发
 });
 
 test('懒初始化: 首次 getDevices 触发 scan', async () => {
   const fakeFs = makeFakeFileSystem({
     dirEntries: ['bioland'],
-    subDirEntries: { 'bioland': ['device.json'] },
+    subDirEntries: { bioland: ['device.json'] },
     fileContents: {},
   });
-  fakeFs.exists = async (p) => {  // 注意: 同步 exists 在 _scanDevices 中是同步的
+  fakeFs.exists = async (p) => {
+    // 注意: 同步 exists 在 _scanDevices 中是同步的
     fakeFs.calls.exists.push(p);
     return true;
   };
   // 重写为同步 exists (scanDevices 用同步 fs)
   const syncFs = {
     calls: fakeFs.calls,
-    exists: (p) => { fakeFs.calls.exists.push(p); return true; },
+    exists: (p) => {
+      fakeFs.calls.exists.push(p);
+      return true;
+    },
     readdirSync: fakeFs.readdirSync,
     readFileSync: fakeFs.readFileSync,
   };
@@ -100,7 +112,7 @@ test('懒初始化幂等: 重复 getDevices 仅 scan 1 次', async () => {
   await svc.getDevices();
   await svc.getDevices();
 
-  assert.strictEqual(scanCount, 1);  // 只 scan 顶层目录 1 次
+  assert.strictEqual(scanCount, 1); // 只 scan 顶层目录 1 次
 });
 
 test('_scanDevices 目录不存在返空数组', async () => {
@@ -139,7 +151,7 @@ test('_scanDevices 解析 metadata + 过滤无 deviceId/bleConfig', async () => 
         return JSON.stringify({ deviceId: 'bioland-002', bleConfig: { port: 'COM4' } });
       }
       if (p.endsWith('invalid.json')) {
-        return JSON.stringify({ foo: 'bar' });  // 无 deviceId + bleConfig
+        return JSON.stringify({ foo: 'bar' }); // 无 deviceId + bleConfig
       }
       return '{}';
     },
@@ -199,6 +211,6 @@ test('refreshCache 强制重扫 + _initialized=true', async () => {
   assert.strictEqual(scanCount, 2);
   assert.strictEqual(svc._initialized, true);
 
-  await svc.getDevices();  // 不再触发 scan
+  await svc.getDevices(); // 不再触发 scan
   assert.strictEqual(scanCount, 2);
 });

@@ -59,7 +59,9 @@ describe('OptionPanel loadApps', () => {
     const { api } = makeFakeApi();
     const op = new OptionPanel(api);
     let emitted = null;
-    op.on('apps-changed', (apps) => { emitted = apps; });
+    op.on('apps-changed', (apps) => {
+      emitted = apps;
+    });
     await op.loadApps();
     assert.strictEqual(op.apps.length, 1);
     assert.strictEqual(op.apps[0].id, 'app1');
@@ -68,10 +70,16 @@ describe('OptionPanel loadApps', () => {
 
   test('API 抛错时触发 error 不修改 apps', async () => {
     const OptionPanel = await loadOptionPanel();
-    const api = { getApps: async () => { throw new Error('boom'); } };
+    const api = {
+      getApps: async () => {
+        throw new Error('boom');
+      },
+    };
     const op = new OptionPanel(api);
     let errEvt = null;
-    op.on('error', (e) => { errEvt = e; });
+    op.on('error', (e) => {
+      errEvt = e;
+    });
     await op.loadApps();
     assert.deepStrictEqual(op.apps, []);
     assert.strictEqual(errEvt.source, 'loadApps');
@@ -84,7 +92,9 @@ describe('OptionPanel loadBleDevices', () => {
     const { api } = makeFakeApi();
     const op = new OptionPanel(api);
     let emitted = null;
-    op.on('ble-devices-changed', (devs) => { emitted = devs; });
+    op.on('ble-devices-changed', (devs) => {
+      emitted = devs;
+    });
     await op.loadBleDevices();
     assert.strictEqual(op.bleDevices.length, 1);
     assert.strictEqual(op.bleDevices[0].deviceId, 'dev1');
@@ -98,7 +108,9 @@ describe('OptionPanel loadMarkers', () => {
     const { api } = makeFakeApi();
     const op = new OptionPanel(api);
     let emitted = null;
-    op.on('markers-list-changed', (m) => { emitted = m; });
+    op.on('markers-list-changed', (m) => {
+      emitted = m;
+    });
     await op.loadMarkers();
     assert.strictEqual(op.markers.length, 1);
     assert.strictEqual(op.markers[0].name, 'smoke');
@@ -107,10 +119,16 @@ describe('OptionPanel loadMarkers', () => {
 
   test('API 抛错时 markers 回退为空 + error 事件', async () => {
     const OptionPanel = await loadOptionPanel();
-    const api = { getPytestMarkers: async () => { throw new Error('boom'); } };
+    const api = {
+      getPytestMarkers: async () => {
+        throw new Error('boom');
+      },
+    };
     const op = new OptionPanel(api);
     let errEvt = null;
-    op.on('error', (e) => { errEvt = e; });
+    op.on('error', (e) => {
+      errEvt = e;
+    });
     await op.loadMarkers();
     assert.deepStrictEqual(op.markers, []);
     assert.strictEqual(errEvt.source, 'loadMarkers');
@@ -124,9 +142,9 @@ describe('OptionPanel load (并行)', () => {
     const op = new OptionPanel(api);
     await op.load();
     assert.strictEqual(calls.length, 3);
-    assert.ok(calls.some(c => c.method === 'getApps'));
-    assert.ok(calls.some(c => c.method === 'getBleDevices'));
-    assert.ok(calls.some(c => c.method === 'getPytestMarkers'));
+    assert.ok(calls.some((c) => c.method === 'getApps'));
+    assert.ok(calls.some((c) => c.method === 'getBleDevices'));
+    assert.ok(calls.some((c) => c.method === 'getPytestMarkers'));
     assert.strictEqual(op.apps.length, 1);
     assert.strictEqual(op.bleDevices.length, 1);
     assert.strictEqual(op.markers.length, 1);
@@ -138,7 +156,9 @@ describe('OptionPanel selectApp / selectPlatform', () => {
     const OptionPanel = await loadOptionPanel();
     const op = new OptionPanel({});
     let emitted = null;
-    op.on('app-changed', (app) => { emitted = app; });
+    op.on('app-changed', (app) => {
+      emitted = app;
+    });
     const app = { id: 'a1', name: 'App1' };
     op.selectApp(app);
     assert.strictEqual(op.selectedApp, app);
@@ -151,7 +171,9 @@ describe('OptionPanel selectApp / selectPlatform', () => {
     const app = { id: 'a1' };
     op.selectApp(app);
     let count = 0;
-    op.on('app-changed', () => { count++; });
+    op.on('app-changed', () => {
+      count++;
+    });
     op.selectApp(app);
     assert.strictEqual(count, 0);
   });
@@ -160,7 +182,9 @@ describe('OptionPanel selectApp / selectPlatform', () => {
     const OptionPanel = await loadOptionPanel();
     const op = new OptionPanel({});
     let emitted = null;
-    op.on('platform-changed', (p) => { emitted = p; });
+    op.on('platform-changed', (p) => {
+      emitted = p;
+    });
     op.selectPlatform('ios');
     assert.strictEqual(op.selectedPlatform, 'ios');
     assert.strictEqual(emitted, 'ios');
@@ -172,7 +196,9 @@ describe('OptionPanel toggleMarker', () => {
     const OptionPanel = await loadOptionPanel();
     const op = new OptionPanel({});
     let emitted = null;
-    op.on('markers-changed', (m) => { emitted = m; });
+    op.on('markers-changed', (m) => {
+      emitted = m;
+    });
     op.toggleMarker('smoke');
     assert.deepStrictEqual(op.selectedMarkers, ['smoke']);
     assert.deepStrictEqual(emitted, ['smoke']);
@@ -195,7 +221,9 @@ describe('OptionPanel replaceSelectedMarkers', () => {
     const op = new OptionPanel({});
     op.toggleMarker('a');
     let emitted = null;
-    op.on('markers-changed', (m) => { emitted = m; });
+    op.on('markers-changed', (m) => {
+      emitted = m;
+    });
     op.replaceSelectedMarkers(['x', 'y']);
     assert.deepStrictEqual(op.selectedMarkers, ['x', 'y']);
     assert.deepStrictEqual(emitted, ['x', 'y']);

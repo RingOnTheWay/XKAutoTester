@@ -93,7 +93,9 @@ describe('StepEditor addStep', () => {
     const StepEditor = await loadStepEditor();
     const se = new StepEditor();
     let emitted = null;
-    se.on('steps-changed', (steps) => { emitted = steps; });
+    se.on('steps-changed', (steps) => {
+      emitted = steps;
+    });
 
     se.addStep();
     assert.ok(emitted);
@@ -147,7 +149,9 @@ describe('StepEditor deleteStep', () => {
     const se = new StepEditor();
     const s = se.addStep();
     let emitted = null;
-    se.on('steps-changed', (steps) => { emitted = steps; });
+    se.on('steps-changed', (steps) => {
+      emitted = steps;
+    });
 
     se.deleteStep(s.id);
     assert.deepStrictEqual(emitted, []);
@@ -159,7 +163,9 @@ describe('StepEditor deleteStep', () => {
     const se = new StepEditor();
     se.addStep();
     let emitCount = 0;
-    se.on('steps-changed', () => { emitCount++; });
+    se.on('steps-changed', () => {
+      emitCount++;
+    });
 
     se.deleteStep('nonexistent');
     assert.strictEqual(se.steps.length, 1);
@@ -291,7 +297,9 @@ describe('StepEditor changeStepType', () => {
     const se = new StepEditor();
     const s = se.addStep();
     let emitted = null;
-    se.on('steps-changed', (steps) => { emitted = steps; });
+    se.on('steps-changed', (steps) => {
+      emitted = steps;
+    });
 
     se.changeStepType(s.id, 'system');
     assert.ok(emitted);
@@ -315,7 +323,9 @@ describe('StepEditor updateStepName', () => {
     const se = new StepEditor();
     const s = se.addStep();
     let emitCount = 0;
-    se.on('steps-changed', () => { emitCount++; });
+    se.on('steps-changed', () => {
+      emitCount++;
+    });
 
     se.updateStepName(s.id, '新名称');
     assert.strictEqual(emitCount, 0);
@@ -657,7 +667,9 @@ describe('StepEditor updateStepSelect - 事件', () => {
     const se = new StepEditor();
     const s = se.addStep();
     let payload = null;
-    se.on('step-updated', (p) => { payload = p; });
+    se.on('step-updated', (p) => {
+      payload = p;
+    });
 
     se.updateStepSelect('tc-operation-select-1', 'click', s.id, 3);
     assert.deepStrictEqual(payload, {
@@ -673,7 +685,9 @@ describe('StepEditor updateStepSelect - 事件', () => {
     const StepEditor = await loadStepEditor();
     const se = new StepEditor();
     let emitCount = 0;
-    se.on('step-updated', () => { emitCount++; });
+    se.on('step-updated', () => {
+      emitCount++;
+    });
 
     se.updateStepSelect('tc-operation-select-1', 'click', 'nonexistent');
     assert.strictEqual(emitCount, 0);
@@ -685,9 +699,14 @@ describe('StepEditor setSteps / reset / syncFromDOM', () => {
     const StepEditor = await loadStepEditor();
     const se = new StepEditor();
     let emitted = null;
-    se.on('steps-changed', (s) => { emitted = s; });
+    se.on('steps-changed', (s) => {
+      emitted = s;
+    });
 
-    se.setSteps([{ id: 'a', order: 1 }, { id: 'b', order: 2 }]);
+    se.setSteps([
+      { id: 'a', order: 1 },
+      { id: 'b', order: 2 },
+    ]);
     assert.strictEqual(se.steps.length, 2);
     assert.strictEqual(emitted.length, 2);
   });
@@ -715,7 +734,9 @@ describe('StepEditor setSteps / reset / syncFromDOM', () => {
     const se = new StepEditor();
     se.addStep();
     let emitCount = 0;
-    se.on('steps-changed', () => { emitCount++; });
+    se.on('steps-changed', () => {
+      emitCount++;
+    });
 
     se.reset();
     assert.deepStrictEqual(se.steps, []);
@@ -726,7 +747,9 @@ describe('StepEditor setSteps / reset / syncFromDOM', () => {
     const StepEditor = await loadStepEditor();
     const se = new StepEditor();
     let emitCount = 0;
-    se.on('steps-changed', () => { emitCount++; });
+    se.on('steps-changed', () => {
+      emitCount++;
+    });
 
     se.syncFromDOM([{ id: 'a', order: 1 }]);
     assert.strictEqual(se.steps.length, 1);
@@ -749,7 +772,9 @@ describe('StepEditor setDraggedStep', () => {
     const StepEditor = await loadStepEditor();
     const se = new StepEditor();
     let emitted = null;
-    se.on('dragged-step-changed', (s) => { emitted = s; });
+    se.on('dragged-step-changed', (s) => {
+      emitted = s;
+    });
 
     const step = { id: 'step_x' };
     se.setDraggedStep(step);
@@ -771,7 +796,9 @@ describe('StepEditor setDraggedStep', () => {
     const step = { id: 'x' };
     se.setDraggedStep(step);
     let emitCount = 0;
-    se.on('dragged-step-changed', () => { emitCount++; });
+    se.on('dragged-step-changed', () => {
+      emitCount++;
+    });
 
     se.setDraggedStep(step);
     assert.strictEqual(emitCount, 0);

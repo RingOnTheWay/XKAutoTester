@@ -19,27 +19,51 @@ function makeFakeDeps(overrides = {}) {
   const fileBrowser = {
     selectedDirectory: '/fake/dir',
     selectedFile: null,
-    selectFile: (f) => { fileBrowser.selectedFile = f; events.fb.push(['selectFile', f]); },
-    deselectFile: () => { fileBrowser.selectedFile = null; events.fb.push(['deselectFile']); },
-    scanTestFiles: async (dir) => { events.fb.push(['scanTestFiles', dir]); },
+    selectFile: (f) => {
+      fileBrowser.selectedFile = f;
+      events.fb.push(['selectFile', f]);
+    },
+    deselectFile: () => {
+      fileBrowser.selectedFile = null;
+      events.fb.push(['deselectFile']);
+    },
+    scanTestFiles: async (dir) => {
+      events.fb.push(['scanTestFiles', dir]);
+    },
   };
   const optionPanel = {
     selectedApp: null,
     selectedPlatform: 'android',
     selectedMarkers: [],
     bleDevices: [],
-    selectApp: (app) => { optionPanel.selectedApp = app; events.op.push(['selectApp', app]); },
-    selectPlatform: (p) => { optionPanel.selectedPlatform = p; events.op.push(['selectPlatform', p]); },
-    replaceSelectedMarkers: (m) => { optionPanel.selectedMarkers = m; events.op.push(['replaceSelectedMarkers', m]); },
+    selectApp: (app) => {
+      optionPanel.selectedApp = app;
+      events.op.push(['selectApp', app]);
+    },
+    selectPlatform: (p) => {
+      optionPanel.selectedPlatform = p;
+      events.op.push(['selectPlatform', p]);
+    },
+    replaceSelectedMarkers: (m) => {
+      optionPanel.selectedMarkers = m;
+      events.op.push(['replaceSelectedMarkers', m]);
+    },
   };
   const stepEditor = {
     steps: [],
-    reset: () => { stepEditor.steps = []; events.se.push(['reset']); },
-    setSteps: (s) => { stepEditor.steps = s; events.se.push(['setSteps', s]); },
+    reset: () => {
+      stepEditor.steps = [];
+      events.se.push(['reset']);
+    },
+    setSteps: (s) => {
+      stepEditor.steps = s;
+      events.se.push(['setSteps', s]);
+    },
   };
   const api = {
     checkJsonExists: async (name) => overrides.checkJsonExists ?? { exists: true },
-    getCase: async (name) => overrides.getCase ?? { data: { fileName: name, steps: [], allureConfig: {}, targetApp: null } },
+    getCase: async (name) =>
+      overrides.getCase ?? { data: { fileName: name, steps: [], allureConfig: {}, targetApp: null } },
     saveAndGenerate: async (data, dir) => overrides.saveAndGenerate ?? { success: true, data: {} },
     deleteCase: async (payload) => overrides.deleteCase ?? { success: true },
   };
@@ -71,7 +95,9 @@ describe('TestCaseEditor markDirty / clearDirty', () => {
     const TestCaseEditor = await loadTestCaseEditor();
     const ed = new TestCaseEditor(makeFakeDeps());
     let emitted = null;
-    ed.on('dirty-changed', (v) => { emitted = v; });
+    ed.on('dirty-changed', (v) => {
+      emitted = v;
+    });
 
     ed.markDirty();
     assert.strictEqual(ed.hasUnsavedChanges, true);
@@ -83,7 +109,9 @@ describe('TestCaseEditor markDirty / clearDirty', () => {
     const ed = new TestCaseEditor(makeFakeDeps());
     ed.markDirty();
     let emitted = null;
-    ed.on('dirty-changed', (v) => { emitted = v; });
+    ed.on('dirty-changed', (v) => {
+      emitted = v;
+    });
 
     ed.clearDirty();
     assert.strictEqual(ed.hasUnsavedChanges, false);
@@ -95,7 +123,9 @@ describe('TestCaseEditor markDirty / clearDirty', () => {
     const ed = new TestCaseEditor(makeFakeDeps());
     ed.markDirty();
     let emitCount = 0;
-    ed.on('dirty-changed', () => { emitCount++; });
+    ed.on('dirty-changed', () => {
+      emitCount++;
+    });
 
     ed.markDirty();
     assert.strictEqual(emitCount, 0);
@@ -152,7 +182,9 @@ describe('TestCaseEditor selectFile', () => {
     const ed = new TestCaseEditor(deps);
     ed.markDirty();
     let showEditorEmitted = null;
-    ed.on('show-editor', (p) => { showEditorEmitted = p; });
+    ed.on('show-editor', (p) => {
+      showEditorEmitted = p;
+    });
     ed.on('editing-changed', () => {}); // 监听避免未捕获
 
     await new Promise((resolve) => {
@@ -212,7 +244,9 @@ describe('TestCaseEditor cancelEdit', () => {
     ed.markDirty();
 
     let cancelEmitted = false;
-    ed.on('cancel-edit', () => { cancelEmitted = true; });
+    ed.on('cancel-edit', () => {
+      cancelEmitted = true;
+    });
 
     ed.cancelEdit();
     assert.strictEqual(ed.isEditing, false);
@@ -230,7 +264,9 @@ describe('TestCaseEditor showEditor', () => {
     const deps = makeFakeDeps();
     const ed = new TestCaseEditor(deps);
     let payload = null;
-    ed.on('show-editor', (p) => { payload = p; });
+    ed.on('show-editor', (p) => {
+      payload = p;
+    });
 
     await ed.showEditor(null);
     assert.strictEqual(ed.isEditing, false);
@@ -243,13 +279,24 @@ describe('TestCaseEditor showEditor', () => {
   test('showEditor(file) JSON 存在: isEditing=true + emit show-editor + loadCaseData', async () => {
     const TestCaseEditor = await loadTestCaseEditor();
     const deps = makeFakeDeps({
-      getCase: { data: { fileName: 'test', steps: [{ id: 's1' }], allureConfig: { markers: ['smoke'] }, targetApp: { id: 'a1' } } },
+      getCase: {
+        data: {
+          fileName: 'test',
+          steps: [{ id: 's1' }],
+          allureConfig: { markers: ['smoke'] },
+          targetApp: { id: 'a1' },
+        },
+      },
     });
     const ed = new TestCaseEditor(deps);
     let showPayload = null;
     let loadedPayload = null;
-    ed.on('show-editor', (p) => { showPayload = p; });
-    ed.on('case-loaded', (p) => { loadedPayload = p; });
+    ed.on('show-editor', (p) => {
+      showPayload = p;
+    });
+    ed.on('case-loaded', (p) => {
+      loadedPayload = p;
+    });
 
     await ed.showEditor({ name: 'test.py' });
     assert.strictEqual(ed.isEditing, true);
@@ -267,7 +314,9 @@ describe('TestCaseEditor showEditor', () => {
     const deps = makeFakeDeps({ checkJsonExists: { exists: false } });
     const ed = new TestCaseEditor(deps);
     let payload = null;
-    ed.on('show-editor', (p) => { payload = p; });
+    ed.on('show-editor', (p) => {
+      payload = p;
+    });
 
     await ed.showEditor({ name: 'test.py' });
     assert.strictEqual(ed.isEditing, false);
@@ -280,7 +329,9 @@ describe('TestCaseEditor showEditor', () => {
     const deps = makeFakeDeps({ checkJsonExists: Promise.reject(new Error('boom')) });
     const ed = new TestCaseEditor(deps);
     let errEvt = null;
-    ed.on('error', (e) => { errEvt = e; });
+    ed.on('error', (e) => {
+      errEvt = e;
+    });
 
     await ed.showEditor({ name: 'test.py' });
     assert.ok(errEvt);
@@ -293,7 +344,9 @@ describe('TestCaseEditor saveCase', () => {
     const TestCaseEditor = await loadTestCaseEditor();
     const ed = new TestCaseEditor(makeFakeDeps());
     let errEvt = null;
-    ed.on('error', (e) => { errEvt = e; });
+    ed.on('error', (e) => {
+      errEvt = e;
+    });
 
     await ed.saveCase({ fileName: '' });
     assert.ok(errEvt);
@@ -304,7 +357,9 @@ describe('TestCaseEditor saveCase', () => {
     const TestCaseEditor = await loadTestCaseEditor();
     const ed = new TestCaseEditor(makeFakeDeps());
     let errEvt = null;
-    ed.on('error', (e) => { errEvt = e; });
+    ed.on('error', (e) => {
+      errEvt = e;
+    });
 
     await ed.saveCase({ fileName: 'bad-name!' });
     assert.strictEqual(errEvt.message, 'fileNameInvalidChars');
@@ -316,7 +371,9 @@ describe('TestCaseEditor saveCase', () => {
     deps.fileBrowser.selectedDirectory = null;
     const ed = new TestCaseEditor(deps);
     let errEvt = null;
-    ed.on('error', (e) => { errEvt = e; });
+    ed.on('error', (e) => {
+      errEvt = e;
+    });
 
     await ed.saveCase({ fileName: 'test_valid_name' });
     assert.strictEqual(errEvt.message, 'selectCaseFirst');
@@ -328,7 +385,9 @@ describe('TestCaseEditor saveCase', () => {
     deps.optionPanel.selectedApp = null;
     const ed = new TestCaseEditor(deps);
     let errEvt = null;
-    ed.on('error', (e) => { errEvt = e; });
+    ed.on('error', (e) => {
+      errEvt = e;
+    });
 
     await ed.saveCase({ fileName: 'test_valid_name' });
     assert.strictEqual(errEvt.message, 'selectAppFirst');
@@ -341,7 +400,9 @@ describe('TestCaseEditor saveCase', () => {
     const ed = new TestCaseEditor(deps);
     ed.markDirty();
     let savedPayload = null;
-    ed.on('case-saved', (r) => { savedPayload = r; });
+    ed.on('case-saved', (r) => {
+      savedPayload = r;
+    });
 
     await ed.saveCase({ fileName: 'test_valid_name', steps: [] });
     assert.strictEqual(ed.hasUnsavedChanges, false);
@@ -355,7 +416,9 @@ describe('TestCaseEditor saveCase', () => {
     deps.optionPanel.selectedApp = { id: 'app1' };
     const ed = new TestCaseEditor(deps);
     let errEvt = null;
-    ed.on('error', (e) => { errEvt = e; });
+    ed.on('error', (e) => {
+      errEvt = e;
+    });
 
     await ed.saveCase({ fileName: 'test_valid_name' });
     assert.ok(errEvt);
@@ -369,7 +432,9 @@ describe('TestCaseEditor deleteCase', () => {
     const deps = makeFakeDeps();
     const ed = new TestCaseEditor(deps);
     let deletedPayload = null;
-    ed.on('case-deleted', (p) => { deletedPayload = p; });
+    ed.on('case-deleted', (p) => {
+      deletedPayload = p;
+    });
 
     await ed.deleteCase('test', '/path/to/test.py');
     assert.ok(deletedPayload);
@@ -382,7 +447,9 @@ describe('TestCaseEditor deleteCase', () => {
     const deps = makeFakeDeps({ deleteCase: Promise.reject(new Error('del fail')) });
     const ed = new TestCaseEditor(deps);
     let errEvt = null;
-    ed.on('error', (e) => { errEvt = e; });
+    ed.on('error', (e) => {
+      errEvt = e;
+    });
 
     await ed.deleteCase('test', '/path/to/test.py');
     assert.ok(errEvt);
@@ -394,18 +461,22 @@ describe('TestCaseEditor loadCaseData', () => {
   test('loadCaseData 编排 OptionPanel + StepEditor + loadedConfigs', async () => {
     const TestCaseEditor = await loadTestCaseEditor();
     const deps = makeFakeDeps({
-      getCase: { data: {
-        fileName: 'test',
-        steps: [{ id: 's1' }, { id: 's2' }],
-        allureConfig: { markers: ['smoke', 'regression'] },
-        targetApp: { id: 'app1' },
-        deviceConfig: { deviceId: 'dev1' },
-        bleDevice: { deviceId: 'ble1' },
-      } },
+      getCase: {
+        data: {
+          fileName: 'test',
+          steps: [{ id: 's1' }, { id: 's2' }],
+          allureConfig: { markers: ['smoke', 'regression'] },
+          targetApp: { id: 'app1' },
+          deviceConfig: { deviceId: 'dev1' },
+          bleDevice: { deviceId: 'ble1' },
+        },
+      },
     });
     const ed = new TestCaseEditor(deps);
     let loadedPayload = null;
-    ed.on('case-loaded', (p) => { loadedPayload = p; });
+    ed.on('case-loaded', (p) => {
+      loadedPayload = p;
+    });
 
     await ed.loadCaseData('test');
     assert.deepStrictEqual(deps.optionPanel.selectedMarkers, ['smoke', 'regression']);
@@ -436,7 +507,9 @@ describe('TestCaseEditor loadCaseData', () => {
     const deps = makeFakeDeps({ getCase: Promise.reject(new Error('load fail')) });
     const ed = new TestCaseEditor(deps);
     let errEvt = null;
-    ed.on('error', (e) => { errEvt = e; });
+    ed.on('error', (e) => {
+      errEvt = e;
+    });
 
     await ed.loadCaseData('test');
     assert.ok(errEvt);
@@ -509,26 +582,30 @@ describe('TestCaseEditor collectFormData', () => {
   test('collectFormData 从 BLE 步骤提取 bleDevice', async () => {
     const TestCaseEditor = await loadTestCaseEditor();
     const deps = makeFakeDeps();
-    deps.optionPanel.bleDevices = [{
-      deviceId: 'ble1',
-      name: 'BLE Dev',
-      bleConfig: { uuids: 's1', uuidn: 'n1', uuidw: 'w1', bleName: 'Name', advData: 'adv' },
-    }];
+    deps.optionPanel.bleDevices = [
+      {
+        deviceId: 'ble1',
+        name: 'BLE Dev',
+        bleConfig: { uuids: 's1', uuidn: 'n1', uuidw: 'w1', bleName: 'Name', advData: 'adv' },
+      },
+    ];
     const ed = new TestCaseEditor(deps);
 
     const data = ed.collectFormData({
       inputs: { fileName: 'x' },
-      steps: [{
-        type: 'ble',
-        config: {
-          deviceConfig: {
-            deviceId: 'ble1',
-            port: 'COM3',
-            methodName: 'method1',
-            params: { foo: 'bar' },
+      steps: [
+        {
+          type: 'ble',
+          config: {
+            deviceConfig: {
+              deviceId: 'ble1',
+              port: 'COM3',
+              methodName: 'method1',
+              params: { foo: 'bar' },
+            },
           },
         },
-      }],
+      ],
     });
 
     assert.ok(data.bleDevice);
@@ -563,21 +640,25 @@ describe('TestCaseEditor collectFormData', () => {
     const deps = makeFakeDeps({
       getCase: { data: { bleDevice: { port: 'COM9' } } },
     });
-    deps.optionPanel.bleDevices = [{
-      deviceId: 'ble1',
-      name: 'BLE',
-      bleConfig: {},
-    }];
+    deps.optionPanel.bleDevices = [
+      {
+        deviceId: 'ble1',
+        name: 'BLE',
+        bleConfig: {},
+      },
+    ];
     const ed = new TestCaseEditor(deps);
     // 通过公共 loadCaseData 设置 loadedBleDevice
     await ed.loadCaseData('x');
 
     const data = ed.collectFormData({
       inputs: { fileName: 'x' },
-      steps: [{
-        type: 'ble',
-        config: { deviceConfig: { deviceId: 'ble1', port: 'COM3' } },
-      }],
+      steps: [
+        {
+          type: 'ble',
+          config: { deviceConfig: { deviceId: 'ble1', port: 'COM3' } },
+        },
+      ],
     });
 
     assert.strictEqual(data.bleDevice.port, 'COM9');
@@ -602,7 +683,9 @@ describe('TestCaseEditor destroy', () => {
     const TestCaseEditor = await loadTestCaseEditor();
     const ed = new TestCaseEditor(makeFakeDeps());
     let called = false;
-    ed.on('test-event', () => { called = true; });
+    ed.on('test-event', () => {
+      called = true;
+    });
 
     ed.destroy();
     ed.emit('test-event');

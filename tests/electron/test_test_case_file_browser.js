@@ -24,10 +24,12 @@ function makeFakeApi(overrides = {}) {
     },
     scanTestFiles: async (dir) => {
       calls.push({ method: 'scanTestFiles', dir });
-      return overrides.scanTestFiles ?? [
-        { name: 'test_a.py', path: '/fake/dir/test_a.py' },
-        { name: 'test_b.py', path: '/fake/dir/test_b.py' },
-      ];
+      return (
+        overrides.scanTestFiles ?? [
+          { name: 'test_a.py', path: '/fake/dir/test_a.py' },
+          { name: 'test_b.py', path: '/fake/dir/test_b.py' },
+        ]
+      );
     },
     batchCheckJsonExists: async (names) => {
       calls.push({ method: 'batchCheckJsonExists', names });
@@ -62,7 +64,9 @@ describe('FileBrowser selectDirectory', () => {
     const { api } = makeFakeApi({ selectDirectory: { canceled: true, filePaths: [] } });
     const fb = new FileBrowser(api);
     let emitted = false;
-    fb.on('directory-changed', () => { emitted = true; });
+    fb.on('directory-changed', () => {
+      emitted = true;
+    });
     await fb.selectDirectory();
     assert.strictEqual(fb.selectedDirectory, null);
     assert.strictEqual(emitted, false);
@@ -80,8 +84,8 @@ describe('FileBrowser selectDirectory', () => {
     await fb.selectDirectory();
 
     assert.strictEqual(fb.selectedDirectory, '/fake/dir');
-    assert.ok(calls.some(c => c.method === 'scanTestFiles' && c.dir === '/fake/dir'));
-    assert.ok(calls.some(c => c.method === 'batchCheckJsonExists'));
+    assert.ok(calls.some((c) => c.method === 'scanTestFiles' && c.dir === '/fake/dir'));
+    assert.ok(calls.some((c) => c.method === 'batchCheckJsonExists'));
     // 事件顺序: directory-changed → files-changed (testFiles set) → json-exists-changed → files-changed (jsonExists updated)
     assert.ok(events.some(([t]) => t === 'directory-changed'));
     assert.ok(events.filter(([t]) => t === 'files-changed').length >= 2);
@@ -92,11 +96,15 @@ describe('FileBrowser selectDirectory', () => {
   test('selectDirectory 抛错时触发 error 事件', async () => {
     const FileBrowser = await loadFileBrowser();
     const api = {
-      selectDirectory: async () => { throw new Error('boom'); },
+      selectDirectory: async () => {
+        throw new Error('boom');
+      },
     };
     const fb = new FileBrowser(api);
     let errEvt = null;
-    fb.on('error', (e) => { errEvt = e; });
+    fb.on('error', (e) => {
+      errEvt = e;
+    });
     await fb.selectDirectory();
     assert.ok(errEvt);
     assert.strictEqual(errEvt.source, 'selectDirectory');
@@ -121,17 +129,21 @@ describe('FileBrowser scanTestFiles', () => {
     await fb.scanTestFiles('/fake/dir');
     assert.strictEqual(fb.testFiles.length, 2);
     assert.strictEqual(fb.searchQuery, '');
-    assert.ok(calls.some(c => c.method === 'batchCheckJsonExists' && c.names.length === 2));
+    assert.ok(calls.some((c) => c.method === 'batchCheckJsonExists' && c.names.length === 2));
   });
 
   test('扫描抛错时触发 error', async () => {
     const FileBrowser = await loadFileBrowser();
     const api = {
-      scanTestFiles: async () => { throw new Error('scan-fail'); },
+      scanTestFiles: async () => {
+        throw new Error('scan-fail');
+      },
     };
     const fb = new FileBrowser(api);
     let errEvt = null;
-    fb.on('error', (e) => { errEvt = e; });
+    fb.on('error', (e) => {
+      errEvt = e;
+    });
     await fb.scanTestFiles('/fake/dir');
     assert.strictEqual(errEvt.source, 'scanTestFiles');
   });
@@ -146,7 +158,9 @@ describe('FileBrowser batchCheckJsonExists', () => {
     await fb.batchCheckJsonExists(['old']);
     assert.deepStrictEqual(fb.jsonExistsMap, { old: true });
     let filesChanged = 0;
-    fb.on('files-changed', () => { filesChanged++; });
+    fb.on('files-changed', () => {
+      filesChanged++;
+    });
     await fb.batchCheckJsonExists([]);
     assert.deepStrictEqual(fb.jsonExistsMap, {});
     assert.ok(filesChanged >= 1);
@@ -155,11 +169,15 @@ describe('FileBrowser batchCheckJsonExists', () => {
   test('API 抛错时回退为空 map 并触发 error', async () => {
     const FileBrowser = await loadFileBrowser();
     const api = {
-      batchCheckJsonExists: async () => { throw new Error('batch-fail'); },
+      batchCheckJsonExists: async () => {
+        throw new Error('batch-fail');
+      },
     };
     const fb = new FileBrowser(api);
     let errEvt = null;
-    fb.on('error', (e) => { errEvt = e; });
+    fb.on('error', (e) => {
+      errEvt = e;
+    });
     await fb.batchCheckJsonExists(['a', 'b']);
     assert.deepStrictEqual(fb.jsonExistsMap, {});
     assert.strictEqual(errEvt.source, 'batchCheckJsonExists');
@@ -172,7 +190,9 @@ describe('FileBrowser setSearchQuery', () => {
     const { api } = makeFakeApi();
     const fb = new FileBrowser(api);
     let emitted = null;
-    fb.on('files-changed', () => { emitted = true; });
+    fb.on('files-changed', () => {
+      emitted = true;
+    });
     fb.setSearchQuery('keyword');
     assert.strictEqual(fb.searchQuery, 'keyword');
     assert.strictEqual(emitted, true);
@@ -184,7 +204,9 @@ describe('FileBrowser setSearchQuery', () => {
     const fb = new FileBrowser(api);
     fb.setSearchQuery('kw');
     let count = 0;
-    fb.on('files-changed', () => { count++; });
+    fb.on('files-changed', () => {
+      count++;
+    });
     fb.setSearchQuery('kw'); // 同值
     assert.strictEqual(count, 0);
   });
@@ -195,7 +217,9 @@ describe('FileBrowser selectFile / deselectFile', () => {
     const FileBrowser = await loadFileBrowser();
     const fb = new FileBrowser({});
     let emitted = null;
-    fb.on('selected-file-changed', (f) => { emitted = f; });
+    fb.on('selected-file-changed', (f) => {
+      emitted = f;
+    });
     const file = { name: 'test_a.py', path: '/x/test_a.py' };
     fb.selectFile(file);
     assert.strictEqual(fb.selectedFile, file);
@@ -207,7 +231,9 @@ describe('FileBrowser selectFile / deselectFile', () => {
     const fb = new FileBrowser({});
     fb.selectFile({ name: 'x.py' });
     let emitted = 'not-null';
-    fb.on('selected-file-changed', (f) => { emitted = f; });
+    fb.on('selected-file-changed', (f) => {
+      emitted = f;
+    });
     fb.deselectFile();
     assert.strictEqual(fb.selectedFile, null);
     assert.strictEqual(emitted, null);
@@ -219,7 +245,9 @@ describe('FileBrowser selectFile / deselectFile', () => {
     const file = { name: 'x.py' };
     fb.selectFile(file);
     let count = 0;
-    fb.on('selected-file-changed', () => { count++; });
+    fb.on('selected-file-changed', () => {
+      count++;
+    });
     fb.selectFile(file); // 同引用
     assert.strictEqual(count, 0);
   });

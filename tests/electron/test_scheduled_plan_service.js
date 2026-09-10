@@ -6,9 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'ScheduledPlanService.js'
-);
+const SERVICE_PATH = path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'ScheduledPlanService.js');
 const { ScheduledPlanService, formatDateToMinute, isSameMinutePlan, isValidScheduledTime } = require(SERVICE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
@@ -19,10 +17,21 @@ function makeFakeAsyncFs(opts = {}) {
   return {
     calls,
     storedData,
-    exists: async (p) => { calls.exists.push(p); return true; },
-    readJson: async (p) => { calls.readJson.push(p); return storedData; },
-    writeJson: async (p, data) => { calls.writeJson.push({ p, data }); storedData = data; },
-    ensureDir: async (dir) => { calls.ensureDir.push(dir); },
+    exists: async (p) => {
+      calls.exists.push(p);
+      return true;
+    },
+    readJson: async (p) => {
+      calls.readJson.push(p);
+      return storedData;
+    },
+    writeJson: async (p, data) => {
+      calls.writeJson.push({ p, data });
+      storedData = data;
+    },
+    ensureDir: async (dir) => {
+      calls.ensureDir.push(dir);
+    },
   };
 }
 
@@ -45,19 +54,19 @@ function makeService(opts = {}) {
 // ── 日期纯函数 ─────────────────────────────────────────
 
 test('formatDateToMinute 返 YYYY-MM-DDTHH:MM 格式', () => {
-  const d = new Date(2026, 6, 28, 14, 5, 30);  // 2026-07-28 14:05:30 (local)
+  const d = new Date(2026, 6, 28, 14, 5, 30); // 2026-07-28 14:05:30 (local)
   assert.strictEqual(formatDateToMinute(d), '2026-07-28T14:05');
 });
 
 test('formatDateToMinute 补 0 (单位数月/日/时/分)', () => {
-  const d = new Date(2026, 0, 1, 0, 0);  // 2026-01-01 00:00
+  const d = new Date(2026, 0, 1, 0, 0); // 2026-01-01 00:00
   assert.strictEqual(formatDateToMinute(d), '2026-01-01T00:00');
 });
 
 test('isSameMinutePlan 同分钟返 true, 不同分钟返 false', () => {
   const t1 = new Date(2026, 6, 28, 14, 5, 30);
-  const t2 = new Date(2026, 6, 28, 14, 5, 59);  // 同分钟, 不同秒
-  const t3 = new Date(2026, 6, 28, 14, 6, 0);   // 不同分钟
+  const t2 = new Date(2026, 6, 28, 14, 5, 59); // 同分钟, 不同秒
+  const t3 = new Date(2026, 6, 28, 14, 6, 0); // 不同分钟
 
   assert.strictEqual(isSameMinutePlan(t1, t2), true);
   assert.strictEqual(isSameMinutePlan(t1, t3), false);
@@ -169,15 +178,17 @@ test('P1-5 isValidScheduledTime 纯函数', () => {
 // ── updateScheduledPlan ────────────────────────────────
 
 test('updateScheduledPlan 找到 + spread 合并 + testPlanNames 兜底', async () => {
-  const initial = [{
-    id: 'p1',
-    name: 'old',
-    created: '2026-01-01T00:00:00Z',
-    testPlanNames: ['old-tp'],
-    scheduledTime: '2026-01-01T00:00',
-    status: 'pending',
-    lastRun: null,
-  }];
+  const initial = [
+    {
+      id: 'p1',
+      name: 'old',
+      created: '2026-01-01T00:00:00Z',
+      testPlanNames: ['old-tp'],
+      scheduledTime: '2026-01-01T00:00',
+      status: 'pending',
+      lastRun: null,
+    },
+  ];
   const { svc, asyncFs } = makeService({ initialData: initial });
 
   const result = await svc.updateScheduledPlan({
@@ -189,8 +200,8 @@ test('updateScheduledPlan 找到 + spread 合并 + testPlanNames 兜底', async 
   assert.strictEqual(result.success, true);
   const saved = asyncFs.calls.writeJson[0].data[0];
   assert.strictEqual(saved.name, 'new name');
-  assert.strictEqual(saved.created, '2026-01-01T00:00:00Z');  // 保留原 created
-  assert.deepStrictEqual(saved.testPlanNames, ['new-tp']);  // 从 testPlans 推导
+  assert.strictEqual(saved.created, '2026-01-01T00:00:00Z'); // 保留原 created
+  assert.deepStrictEqual(saved.testPlanNames, ['new-tp']); // 从 testPlans 推导
 });
 
 test('updateScheduledPlan 未找到返 {success:false, error:"未找到指定的定时计划"}', async () => {
@@ -233,7 +244,7 @@ test('deleteScheduledPlan 未找到返 {success:false, error}', async () => {
 test('checkTimeConflict excludeId 跳过 + cancelled 跳过 + 同分钟返 conflictingPlan', async () => {
   const initial = [
     { id: 'p1', name: 'plan1', scheduledTime: '2026-07-28T14:30', status: 'pending' },
-    { id: 'p2', name: 'plan2', scheduledTime: '2026-07-28T14:30', status: 'cancelled' },  // cancelled 跳过
+    { id: 'p2', name: 'plan2', scheduledTime: '2026-07-28T14:30', status: 'cancelled' }, // cancelled 跳过
     { id: 'p3', name: 'plan3', scheduledTime: '2026-07-28T14:30', status: 'pending' },
   ];
   const { svc } = makeService({ initialData: initial });
@@ -271,19 +282,24 @@ test('P0 并发回归: 20 个并发 saveScheduledPlan 全部持久化 (withLock 
     const N = 20;
     const baseTime = new Date(2026, 6, 28, 14, 30).getTime();
     const results = await Promise.all(
-      Array.from({ length: N }, (_, i) => svc.saveScheduledPlan({
-        name: `Plan${i}`,
-        scheduledTime: new Date(baseTime + i * 60000).toISOString(),  // 每个错开 1 分钟避免冲突
-      }))
+      Array.from({ length: N }, (_, i) =>
+        svc.saveScheduledPlan({
+          name: `Plan${i}`,
+          scheduledTime: new Date(baseTime + i * 60000).toISOString(), // 每个错开 1 分钟避免冲突
+        })
+      )
     );
 
-    assert.ok(results.every(r => r.success === true), '所有 saveScheduledPlan 应成功');
+    assert.ok(
+      results.every((r) => r.success === true),
+      '所有 saveScheduledPlan 应成功'
+    );
 
     const fileContent = fs.readFileSync(path.join(tmpDir, 'scheduled_plans.json'), 'utf8');
     const persisted = JSON.parse(fileContent);
     assert.strictEqual(persisted.length, N, `应持久化 ${N} 个 plan (withLock 防丢更新)`);
 
-    const names = new Set(persisted.map(p => p.name));
+    const names = new Set(persisted.map((p) => p.name));
     assert.strictEqual(names.size, N, 'plan 名称应无重复');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -314,11 +330,9 @@ test('P0 并发回归: 10 个并发 deleteScheduledPlan 互不干扰', async () 
 
     // 并发删除全部 10 个
     const allPlans = await svc.getScheduledPlans();
-    const results = await Promise.all(
-      allPlans.map(p => svc.deleteScheduledPlan(p.id))
-    );
+    const results = await Promise.all(allPlans.map((p) => svc.deleteScheduledPlan(p.id)));
 
-    assert.ok(results.every(r => r.success === true));
+    assert.ok(results.every((r) => r.success === true));
     const remaining = await svc.getScheduledPlans();
     assert.strictEqual(remaining.length, 0, '并发删除后应剩 0 个 plan');
   } finally {

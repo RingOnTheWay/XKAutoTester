@@ -7,13 +7,9 @@ const path = require('path');
 const Module = require('module');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
-const SPAWN_HELPER_PATH = path.join(
-  PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'spawnHelper.js'
-);
+const SPAWN_HELPER_PATH = path.join(PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'spawnHelper.js');
 
-const {
-  setupChildProcessMock,
-} = require(path.join(__dirname, 'helpers', 'serviceMock.js'));
+const { setupChildProcessMock } = require(path.join(__dirname, 'helpers', 'serviceMock.js'));
 
 function loadSpawnHelper() {
   delete require.cache[require.resolve(SPAWN_HELPER_PATH)];
@@ -23,13 +19,7 @@ function loadSpawnHelper() {
 // 构造可观察的 spawn mock: 记录传入参数 + 可控制输出
 function createControllableSpawn(opts = {}) {
   const calls = [];
-  const {
-    stdout = '',
-    stderr = '',
-    code = 0,
-    error = null,
-    delay = 0,
-  } = opts;
+  const { stdout = '', stderr = '', code = 0, error = null, delay = 0 } = opts;
 
   const spawnMock = function (cmd, args, options) {
     calls.push({ cmd, args, options });
@@ -39,8 +29,16 @@ function createControllableSpawn(opts = {}) {
     const errorCbs = [];
 
     const proc = {
-      stdout: { on: (evt, cb) => { if (evt === 'data') stdoutCbs.push(cb); } },
-      stderr: { on: (evt, cb) => { if (evt === 'data') stderrCbs.push(cb); } },
+      stdout: {
+        on: (evt, cb) => {
+          if (evt === 'data') stdoutCbs.push(cb);
+        },
+      },
+      stderr: {
+        on: (evt, cb) => {
+          if (evt === 'data') stderrCbs.push(cb);
+        },
+      },
       on: (evt, cb) => {
         if (evt === 'close') closeCbs.push(cb);
         else if (evt === 'error') errorCbs.push(cb);
@@ -50,12 +48,12 @@ function createControllableSpawn(opts = {}) {
 
     const emit = () => {
       if (error) {
-        errorCbs.forEach(cb => cb(error));
+        errorCbs.forEach((cb) => cb(error));
         return;
       }
-      if (stdout) stdoutCbs.forEach(cb => cb(Buffer.from(stdout)));
-      if (stderr) stderrCbs.forEach(cb => cb(Buffer.from(stderr)));
-      closeCbs.forEach(cb => cb(code));
+      if (stdout) stdoutCbs.forEach((cb) => cb(Buffer.from(stdout)));
+      if (stderr) stderrCbs.forEach((cb) => cb(Buffer.from(stderr)));
+      closeCbs.forEach((cb) => cb(code));
     };
 
     if (delay > 0) {
@@ -70,7 +68,6 @@ function createControllableSpawn(opts = {}) {
   spawnMock.calls = calls;
   return spawnMock;
 }
-
 
 // ─── 基本调用 ─────────────────────────────────────────────────
 
@@ -129,7 +126,6 @@ test('executeCommand stdout/stderr 自动 trim', async () => {
   }
 });
 
-
 // ─── 错误处理 ─────────────────────────────────────────────────
 
 test('executeCommand spawn error 时 reject', async () => {
@@ -138,15 +134,11 @@ test('executeCommand spawn error 时 reject', async () => {
 
   try {
     const { executeCommand } = loadSpawnHelper();
-    await assert.rejects(
-      executeCommand('nonexistent-cmd', []),
-      /ENOENT/
-    );
+    await assert.rejects(executeCommand('nonexistent-cmd', []), /ENOENT/);
   } finally {
     restore();
   }
 });
-
 
 // ─── windowsHide 强制 ────────────────────────────────────────
 
@@ -158,15 +150,11 @@ test('executeCommand 强制 windowsHide: true (即使 options 指定 false)', as
     const { executeCommand } = loadSpawnHelper();
     await executeCommand('cmd', [], { windowsHide: false });
 
-    assert.strictEqual(
-      spawnMock.calls[0].options.windowsHide, true,
-      '应强制 windowsHide: true 避免弹出控制台窗口'
-    );
+    assert.strictEqual(spawnMock.calls[0].options.windowsHide, true, '应强制 windowsHide: true 避免弹出控制台窗口');
   } finally {
     restore();
   }
 });
-
 
 // ─── env 合并 ──────────────────────────────────────────────────
 
@@ -203,16 +191,12 @@ test('executeCommand options.env 覆盖 process.env 同名字段', async () => {
     const { executeCommand } = loadSpawnHelper();
     await executeCommand('cmd', [], { env: { PATH: '/custom/path' } });
 
-    assert.strictEqual(
-      spawnMock.calls[0].options.env.PATH, '/custom/path',
-      'options.env 应覆盖 process.env 同名字段'
-    );
+    assert.strictEqual(spawnMock.calls[0].options.env.PATH, '/custom/path', 'options.env 应覆盖 process.env 同名字段');
   } finally {
     process.env.PATH = originalPath;
     restore();
   }
 });
-
 
 // ─── 多次调用独立 ─────────────────────────────────────────────
 
@@ -223,14 +207,20 @@ test('executeCommand 多次调用互不干扰', async () => {
     const closeCbs = [];
     const stdoutCbs = [];
     const proc = {
-      stdout: { on: (evt, cb) => { if (evt === 'data') stdoutCbs.push(cb); } },
+      stdout: {
+        on: (evt, cb) => {
+          if (evt === 'data') stdoutCbs.push(cb);
+        },
+      },
       stderr: { on: () => {} },
-      on: (evt, cb) => { if (evt === 'close') closeCbs.push(cb); },
+      on: (evt, cb) => {
+        if (evt === 'close') closeCbs.push(cb);
+      },
       kill: () => {},
     };
     setImmediate(() => {
-      stdoutCbs.forEach(cb => cb(Buffer.from(`out-${currentCount}`)));
-      closeCbs.forEach(cb => cb(0));
+      stdoutCbs.forEach((cb) => cb(Buffer.from(`out-${currentCount}`)));
+      closeCbs.forEach((cb) => cb(0));
     });
     return proc;
   };
@@ -238,11 +228,7 @@ test('executeCommand 多次调用互不干扰', async () => {
 
   try {
     const { executeCommand } = loadSpawnHelper();
-    const [r1, r2, r3] = await Promise.all([
-      executeCommand('a'),
-      executeCommand('b'),
-      executeCommand('c'),
-    ]);
+    const [r1, r2, r3] = await Promise.all([executeCommand('a'), executeCommand('b'), executeCommand('c')]);
 
     assert.strictEqual(r1.stdout, 'out-1');
     assert.strictEqual(r2.stdout, 'out-2');

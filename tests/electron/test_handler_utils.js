@@ -1,129 +1,118 @@
 // handlerUtils 单测 — P0-3: IPC sender 来源校验 + ok()/fail() 响应构造
-const { test, describe } = require("node:test");
-const assert = require("node:assert");
+const { test, describe } = require('node:test');
+const assert = require('node:assert');
 const {
   isTrustedSender,
   assertTrustedSender,
   ok,
   fail,
-} = require("../../electron/src/main/handlers/base/handlerUtils");
+} = require('../../electron/src/main/handlers/base/handlerUtils');
 
-describe("handlerUtils P0-3 sender 校验", () => {
-  test("file:// 前缀 sender 通过", () => {
+describe('handlerUtils P0-3 sender 校验', () => {
+  test('file:// 前缀 sender 通过', () => {
     assert.strictEqual(
       isTrustedSender({
-        senderFrame: { url: "file:///D:/app/renderer/index.html" },
+        senderFrame: { url: 'file:///D:/app/renderer/index.html' },
       }),
-      true,
+      true
     );
     assert.strictEqual(
       isTrustedSender({
-        senderFrame: { url: "file:///C:/XKAutoTester/splash.html" },
+        senderFrame: { url: 'file:///C:/XKAutoTester/splash.html' },
       }),
-      true,
+      true
     );
   });
 
-  test("dev server localhost 通过", () => {
+  test('dev server localhost 通过', () => {
     assert.strictEqual(
       isTrustedSender({
-        senderFrame: { url: "http://localhost:5173/index.html" },
+        senderFrame: { url: 'http://localhost:5173/index.html' },
       }),
-      true,
+      true
     );
     assert.strictEqual(
       isTrustedSender({
-        senderFrame: { url: "http://127.0.0.1:5173/index.html" },
+        senderFrame: { url: 'http://127.0.0.1:5173/index.html' },
       }),
-      true,
+      true
     );
   });
 
-  test("外部 http(s) 来源拒绝", () => {
+  test('外部 http(s) 来源拒绝', () => {
+    assert.strictEqual(isTrustedSender({ senderFrame: { url: 'https://evil.com/x.html' } }), false);
+    assert.strictEqual(isTrustedSender({ senderFrame: { url: 'http://192.168.1.1/evil' } }), false);
     assert.strictEqual(
-      isTrustedSender({ senderFrame: { url: "https://evil.com/x.html" } }),
+      isTrustedSender({ senderFrame: { url: 'https://localhost.evil.com/' } }),
       false,
-    );
-    assert.strictEqual(
-      isTrustedSender({ senderFrame: { url: "http://192.168.1.1/evil" } }),
-      false,
-    );
-    assert.strictEqual(
-      isTrustedSender({ senderFrame: { url: "https://localhost.evil.com/" } }),
-      false,
-      "前缀欺诈域名拒绝",
+      '前缀欺诈域名拒绝'
     );
   });
 
-  test("无 senderFrame / 无 url 拒绝", () => {
+  test('无 senderFrame / 无 url 拒绝', () => {
     assert.strictEqual(isTrustedSender({}), false);
     assert.strictEqual(isTrustedSender({ senderFrame: {} }), false);
     assert.strictEqual(isTrustedSender(null), false);
     assert.strictEqual(isTrustedSender(undefined), false);
   });
 
-  test("assertTrustedSender 非法来源抛 ERR_UNTRUSTED_SENDER", () => {
-    assert.throws(
-      () => assertTrustedSender({ senderFrame: { url: "https://evil.com/" } }),
-      /Untrusted IPC sender/,
-    );
+  test('assertTrustedSender 非法来源抛 ERR_UNTRUSTED_SENDER', () => {
+    assert.throws(() => assertTrustedSender({ senderFrame: { url: 'https://evil.com/' } }), /Untrusted IPC sender/);
     assert.doesNotThrow(() =>
       assertTrustedSender({
-        senderFrame: { url: "file:///D:/app/index.html" },
-      }),
+        senderFrame: { url: 'file:///D:/app/index.html' },
+      })
     );
   });
 
-  test("registerHandler 包装: 非法 sender 返回 {success:false} 且不执行 handler", async () => {
-    const {
-      registerHandler,
-    } = require("../../electron/src/main/handlers/base/handlerUtils");
+  test('registerHandler 包装: 非法 sender 返回 {success:false} 且不执行 handler', async () => {
+    const { registerHandler } = require('../../electron/src/main/handlers/base/handlerUtils');
     const ipc = {
       handle: (channel, fn) => {
         ipc._fn = fn;
       },
     };
     let executed = false;
-    registerHandler(ipc, "test-channel", () => {
+    registerHandler(ipc, 'test-channel', () => {
       executed = true;
       return { success: true, ok: true };
     });
 
-    const result = await ipc._fn({ senderFrame: { url: "https://evil.com/" } });
+    const result = await ipc._fn({ senderFrame: { url: 'https://evil.com/' } });
     assert.strictEqual(result.success, false);
-    assert.ok(result.error.includes("Untrusted"));
-    assert.strictEqual(executed, false, "handler 不得被执行");
+    assert.ok(result.error.includes('Untrusted'));
+    assert.strictEqual(executed, false, 'handler 不得被执行');
 
     const okResult = await ipc._fn({
-      senderFrame: { url: "file:///D:/app/index.html" },
+      senderFrame: { url: 'file:///D:/app/index.html' },
     });
     assert.strictEqual(okResult.success, true);
-    assert.strictEqual(executed, true, "可信 sender 应执行 handler");
+    assert.strictEqual(executed, true, '可信 sender 应执行 handler');
   });
 });
 
-describe("handlerUtils ok()/fail() 响应构造 (ADR-0010 响应收口)", () => {
-  test("ok() 纯成功: {success:true}", () => {
+describe('handlerUtils ok()/fail() 响应构造 (ADR-0010 响应收口)', () => {
+  test('ok() 纯成功: {success:true}', () => {
     assert.deepStrictEqual(ok(), { success: true });
   });
 
-  test("ok(payload) 展开附加字段", () => {
-    assert.deepStrictEqual(ok({ data: [1, 2], msg: "hi" }), {
+  test('ok(payload) 展开附加字段', () => {
+    assert.deepStrictEqual(ok({ data: [1, 2], msg: 'hi' }), {
       success: true,
       data: [1, 2],
-      msg: "hi",
+      msg: 'hi',
     });
   });
 
-  test("fail(msg) 纯失败: {success:false, error}", () => {
-    assert.deepStrictEqual(fail("boom"), { success: false, error: "boom" });
+  test('fail(msg) 纯失败: {success:false, error}', () => {
+    assert.deepStrictEqual(fail('boom'), { success: false, error: 'boom' });
   });
 
-  test("fail(msg, extra) 展开附加字段 (errorCode 等)", () => {
-    assert.deepStrictEqual(fail("nope", { errorCode: "E1", statusCode: 400 }), {
+  test('fail(msg, extra) 展开附加字段 (errorCode 等)', () => {
+    assert.deepStrictEqual(fail('nope', { errorCode: 'E1', statusCode: 400 }), {
       success: false,
-      error: "nope",
-      errorCode: "E1",
+      error: 'nope',
+      errorCode: 'E1',
       statusCode: 400,
     });
   });

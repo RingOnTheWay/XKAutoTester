@@ -35,7 +35,9 @@ function createServiceMock(methodReturns = {}) {
 
   Object.defineProperty(mock, '__reset', {
     value: () => {
-      Object.keys(calls).forEach(k => { calls[k].length = 0; });
+      Object.keys(calls).forEach((k) => {
+        calls[k].length = 0;
+      });
     },
     enumerable: false,
     writable: false,
@@ -63,7 +65,6 @@ function createServiceContainer(serviceSpec = {}) {
   return services;
 }
 
-
 // ── child_process mock 工厂 ─────────────────────────────────
 
 /**
@@ -86,13 +87,7 @@ function createServiceContainer(serviceSpec = {}) {
  * restore();
  */
 function createSpawnMock(options = {}) {
-  const {
-    stdout = '',
-    stderr = '',
-    code = 0,
-    autoClose = true,
-    delay = 0,
-  } = options;
+  const { stdout = '', stderr = '', code = 0, autoClose = true, delay = 0 } = options;
 
   let lastInstance = null;
 
@@ -103,14 +98,20 @@ function createSpawnMock(options = {}) {
 
     const proc = {
       stdout: {
-        on: (evt, cb) => { if (evt === 'data') handlers.data.push(cb); },
+        on: (evt, cb) => {
+          if (evt === 'data') handlers.data.push(cb);
+        },
         pipe: () => {},
       },
       stderr: {
-        on: (evt, cb) => { if (evt === 'data') stderrHandlers.data.push(cb); },
+        on: (evt, cb) => {
+          if (evt === 'data') stderrHandlers.data.push(cb);
+        },
       },
       stdin: {
-        on: (evt, cb) => { if (evt === 'data') stdinHandlers.data.push(cb); },
+        on: (evt, cb) => {
+          if (evt === 'data') stdinHandlers.data.push(cb);
+        },
         write: () => {},
         end: () => {},
       },
@@ -122,12 +123,12 @@ function createSpawnMock(options = {}) {
       pid: 12345,
       // 测试辅助: 手动触发事件
       _emit: (evt, payload) => {
-        if (evt === 'data') handlers.data.forEach(cb => cb(Buffer.from(payload)));
-        else if (evt === 'close') handlers.close.forEach(cb => cb(payload));
-        else if (evt === 'error') handlers.error.forEach(cb => cb(payload));
+        if (evt === 'data') handlers.data.forEach((cb) => cb(Buffer.from(payload)));
+        else if (evt === 'close') handlers.close.forEach((cb) => cb(payload));
+        else if (evt === 'error') handlers.error.forEach((cb) => cb(payload));
       },
       _emitStderr: (payload) => {
-        stderrHandlers.data.forEach(cb => cb(Buffer.from(payload)));
+        stderrHandlers.data.forEach((cb) => cb(Buffer.from(payload)));
       },
     };
 
@@ -136,9 +137,9 @@ function createSpawnMock(options = {}) {
     // 自动触发事件
     if (autoClose) {
       const emitAll = () => {
-        if (stdout) handlers.data.forEach(cb => cb(Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout)));
-        if (stderr) stderrHandlers.data.forEach(cb => cb(Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr)));
-        handlers.close.forEach(cb => cb(code));
+        if (stdout) handlers.data.forEach((cb) => cb(Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout)));
+        if (stderr) stderrHandlers.data.forEach((cb) => cb(Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr)));
+        handlers.close.forEach((cb) => cb(code));
       };
       if (delay > 0) {
         setTimeout(emitAll, delay);
@@ -206,10 +207,27 @@ function setupChildProcessMock(mocks = {}) {
   const origLoad = Module._load;
 
   const mockCp = {
-    spawn: mocks.spawn || function () { return { on: () => {}, stdout: { on: () => {} }, stderr: { on: () => {} }, kill: () => {} }; },
-    exec: mocks.exec || function (cmd, opts, cb) { if (typeof opts === 'function') cb = opts; cb(null, '', ''); },
-    execSync: mocks.execSync || function () { return ''; },
-    fork: mocks.fork || function () { return { on: () => {}, send: () => {}, kill: () => {} }; },
+    spawn:
+      mocks.spawn ||
+      function () {
+        return { on: () => {}, stdout: { on: () => {} }, stderr: { on: () => {} }, kill: () => {} };
+      },
+    exec:
+      mocks.exec ||
+      function (cmd, opts, cb) {
+        if (typeof opts === 'function') cb = opts;
+        cb(null, '', '');
+      },
+    execSync:
+      mocks.execSync ||
+      function () {
+        return '';
+      },
+    fork:
+      mocks.fork ||
+      function () {
+        return { on: () => {}, send: () => {}, kill: () => {} };
+      },
   };
 
   Module._load = function (request, parent, isMain) {
@@ -217,7 +235,9 @@ function setupChildProcessMock(mocks = {}) {
     return origLoad.call(this, request, parent, isMain);
   };
 
-  return () => { Module._load = origLoad; };
+  return () => {
+    Module._load = origLoad;
+  };
 }
 
 module.exports = { createServiceMock, createServiceContainer, createSpawnMock, createExecMock, setupChildProcessMock };

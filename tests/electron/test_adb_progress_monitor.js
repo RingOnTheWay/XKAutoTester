@@ -6,9 +6,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const AdbProgressMonitor = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'AdbProgressMonitor.js'
-));
+const AdbProgressMonitor = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'AdbProgressMonitor.js')
+);
 
 // R24: 条件等待 helper — 固定 setTimeout 等待在 CI 慢机器上 flaky,
 // 正向"等待轮询触发"改条件驱动; 负向断言 (确认无调用) 保留短等待
@@ -59,7 +59,6 @@ function createExecuteStatMock(responses = []) {
   return { executeStat, calls };
 }
 
-
 // ─── 构造函数 ────────────────────────────────────────────────
 
 test('构造函数存储所有参数', () => {
@@ -83,8 +82,11 @@ test('构造函数存储所有参数', () => {
 test('构造函数应用默认值', () => {
   const monitor = new AdbProgressMonitor({
     remotePath: '/r',
- deviceId: null, fileStats: { size: 1, name: 'a', sizeInMB: '0' },
-    eventSender: null, i18nService: { t: () => '' }, executeStat: async () => ({}),
+    deviceId: null,
+    fileStats: { size: 1, name: 'a', sizeInMB: '0' },
+    eventSender: null,
+    i18nService: { t: () => '' },
+    executeStat: async () => ({}),
     channel: 'c',
   });
   assert.strictEqual(monitor.maxPercentage, 80);
@@ -92,14 +94,16 @@ test('构造函数应用默认值', () => {
   assert.strictEqual(monitor.pollingMessageKey, 'fileManager.uploading');
 });
 
-
 // ─── emit 模式 (download stdout 解析) ──────────────────────────
 
 test('emit 发送完整 payload 到 eventSender.send', () => {
   const { eventSender, sends } = captureSends();
-  const monitor = new AdbProgressMonitor(createMonitorOpts({
-    eventSender, channel: 'download-progress',
-  }));
+  const monitor = new AdbProgressMonitor(
+    createMonitorOpts({
+      eventSender,
+      channel: 'download-progress',
+    })
+  );
 
   monitor.emit(50, 'downloading', 'i18n:fileManager.downloading');
 
@@ -138,22 +142,22 @@ test('emit eventSender 为 null 时 noop', () => {
   monitor.emit(50, 'downloading', 'msg');
 });
 
-
 // ─── start/stop 生命周期 ─────────────────────────────────────
 
 test('start 启动 setInterval 触发 _pollStat', async () => {
-  const { executeStat, calls } = createExecuteStatMock([
-    { success: true, output: 'Size: 500' },
-  ]);
+  const { executeStat, calls } = createExecuteStatMock([{ success: true, output: 'Size: 500' }]);
   const { eventSender, sends } = captureSends();
-  const monitor = new AdbProgressMonitor(createMonitorOpts({
-    executeStat, eventSender,
-    fileStats: { size: 1000, name: 'a', sizeInMB: '0' },
-    maxPercentage: 80,
-  }));
+  const monitor = new AdbProgressMonitor(
+    createMonitorOpts({
+      executeStat,
+      eventSender,
+      fileStats: { size: 1000, name: 'a', sizeInMB: '0' },
+      maxPercentage: 80,
+    })
+  );
 
-  monitor.start(10);  // 10ms 间隔
-  await waitFor(() => calls.length >= 1);  // R24: 条件等待首轮轮询触发
+  monitor.start(10); // 10ms 间隔
+  await waitFor(() => calls.length >= 1); // R24: 条件等待首轮轮询触发
   monitor.stop();
 
   assert.ok(calls.length >= 1, 'executeStat 应被调用');
@@ -165,12 +169,15 @@ test('start 启动 setInterval 触发 _pollStat', async () => {
 
 test('start eventSender 为 null 时不启动', async () => {
   const { executeStat, calls } = createExecuteStatMock([]);
-  const monitor = new AdbProgressMonitor(createMonitorOpts({
-    executeStat, eventSender: null,
-  }));
+  const monitor = new AdbProgressMonitor(
+    createMonitorOpts({
+      executeStat,
+      eventSender: null,
+    })
+  );
 
   monitor.start(10);
-  await new Promise(resolve => setTimeout(resolve, 30));
+  await new Promise((resolve) => setTimeout(resolve, 30));
   monitor.stop();
 
   assert.strictEqual(calls.length, 0, 'executeStat 不应被调用');
@@ -184,10 +191,10 @@ test('stop 清 interval 不再触发 _pollStat', async () => {
   const monitor = new AdbProgressMonitor(createMonitorOpts({ executeStat }));
 
   monitor.start(10);
-  await waitFor(() => calls.length >= 1);  // R24: 条件等待首轮轮询触发
+  await waitFor(() => calls.length >= 1); // R24: 条件等待首轮轮询触发
   monitor.stop();
   const callCountAfterStop = calls.length;
-  await new Promise(resolve => setTimeout(resolve, 30));
+  await new Promise((resolve) => setTimeout(resolve, 30));
 
   assert.strictEqual(calls.length, callCountAfterStop, 'stop 后 executeStat 不应再被调用');
 });
@@ -214,16 +221,15 @@ test('start 后 stop 后再 start 重新启动', async () => {
   const monitor = new AdbProgressMonitor(createMonitorOpts({ executeStat }));
 
   monitor.start(10);
-  await waitFor(() => calls.length >= 1);  // R24: 第一次 start 首轮轮询触发
+  await waitFor(() => calls.length >= 1); // R24: 第一次 start 首轮轮询触发
   monitor.stop();
   const callsAfterFirst = calls.length;
   monitor.start(10);
-  await new Promise(resolve => setTimeout(resolve, 30));
+  await new Promise((resolve) => setTimeout(resolve, 30));
   monitor.stop();
 
   assert.ok(calls.length > callsAfterFirst, '第二次 start 后应继续触发');
 });
-
 
 // ─── _pollStat stat 解析 ──────────────────────────────────────
 
@@ -232,11 +238,14 @@ test('_pollStat 解析 "Size: N" 格式 + 计算 percentage', async () => {
     { success: true, output: 'File: /data/test\nSize: 750      Blocks: 2' },
   ]);
   const { eventSender, sends } = captureSends();
-  const monitor = new AdbProgressMonitor(createMonitorOpts({
-    executeStat, eventSender,
-    fileStats: { size: 1000, name: 'a', sizeInMB: '0' },
-    maxPercentage: 80,
-  }));
+  const monitor = new AdbProgressMonitor(
+    createMonitorOpts({
+      executeStat,
+      eventSender,
+      fileStats: { size: 1000, name: 'a', sizeInMB: '0' },
+      maxPercentage: 80,
+    })
+  );
 
   await monitor._pollStat();
 
@@ -246,14 +255,17 @@ test('_pollStat 解析 "Size: N" 格式 + 计算 percentage', async () => {
 
 test('_pollStat percentage 不超过 maxPercentage', async () => {
   const { executeStat } = createExecuteStatMock([
-    { success: true, output: 'Size: 2000' },  // 超过 fileSize
+    { success: true, output: 'Size: 2000' }, // 超过 fileSize
   ]);
   const { eventSender, sends } = captureSends();
-  const monitor = new AdbProgressMonitor(createMonitorOpts({
-    executeStat, eventSender,
-    fileStats: { size: 1000, name: 'a', sizeInMB: '0' },
-    maxPercentage: 80,
-  }));
+  const monitor = new AdbProgressMonitor(
+    createMonitorOpts({
+      executeStat,
+      eventSender,
+      fileStats: { size: 1000, name: 'a', sizeInMB: '0' },
+      maxPercentage: 80,
+    })
+  );
 
   await monitor._pollStat();
 
@@ -262,9 +274,7 @@ test('_pollStat percentage 不超过 maxPercentage', async () => {
 });
 
 test('_pollStat executeStat 返回 success=false → 不 emit', async () => {
-  const { executeStat } = createExecuteStatMock([
-    { success: false, output: '', error: 'no such file' },
-  ]);
+  const { executeStat } = createExecuteStatMock([{ success: false, output: '', error: 'no such file' }]);
   const { eventSender, sends } = captureSends();
   const monitor = new AdbProgressMonitor(createMonitorOpts({ executeStat, eventSender }));
 
@@ -274,9 +284,7 @@ test('_pollStat executeStat 返回 success=false → 不 emit', async () => {
 });
 
 test('_pollStat output 不含 "Size: N" → 不 emit', async () => {
-  const { executeStat } = createExecuteStatMock([
-    { success: true, output: 'some other text' },
-  ]);
+  const { executeStat } = createExecuteStatMock([{ success: true, output: 'some other text' }]);
   const { eventSender, sends } = captureSends();
   const monitor = new AdbProgressMonitor(createMonitorOpts({ executeStat, eventSender }));
 
@@ -286,7 +294,9 @@ test('_pollStat output 不含 "Size: N" → 不 emit', async () => {
 });
 
 test('_pollStat executeStat 抛异常 → 不抛错, 不 emit', async () => {
-  const executeStat = async () => { throw new Error('stat failed'); };
+  const executeStat = async () => {
+    throw new Error('stat failed');
+  };
   const { eventSender, sends } = captureSends();
   const monitor = new AdbProgressMonitor(createMonitorOpts({ executeStat, eventSender }));
 
@@ -295,9 +305,7 @@ test('_pollStat executeStat 抛异常 → 不抛错, 不 emit', async () => {
 });
 
 test('_pollStat stop 后被调用 → noop', async () => {
-  const { executeStat, calls } = createExecuteStatMock([
-    { success: true, output: 'Size: 100' },
-  ]);
+  const { executeStat, calls } = createExecuteStatMock([{ success: true, output: 'Size: 100' }]);
   const { eventSender, sends } = captureSends();
   const monitor = new AdbProgressMonitor(createMonitorOpts({ executeStat, eventSender }));
 
@@ -309,12 +317,13 @@ test('_pollStat stop 后被调用 → noop', async () => {
 });
 
 test('_pollStat deviceId=null 时 statArgs 不含 -s', async () => {
-  const { executeStat, calls } = createExecuteStatMock([
-    { success: true, output: 'Size: 100' },
-  ]);
-  const monitor = new AdbProgressMonitor(createMonitorOpts({
-    executeStat, deviceId: null,
-  }));
+  const { executeStat, calls } = createExecuteStatMock([{ success: true, output: 'Size: 100' }]);
+  const monitor = new AdbProgressMonitor(
+    createMonitorOpts({
+      executeStat,
+      deviceId: null,
+    })
+  );
 
   await monitor._pollStat();
 
@@ -322,12 +331,13 @@ test('_pollStat deviceId=null 时 statArgs 不含 -s', async () => {
 });
 
 test('_pollStat deviceId 非空时 statArgs 含 -s deviceId', async () => {
-  const { executeStat, calls } = createExecuteStatMock([
-    { success: true, output: 'Size: 100' },
-  ]);
-  const monitor = new AdbProgressMonitor(createMonitorOpts({
-    executeStat, deviceId: 'emulator-5554',
-  }));
+  const { executeStat, calls } = createExecuteStatMock([{ success: true, output: 'Size: 100' }]);
+  const monitor = new AdbProgressMonitor(
+    createMonitorOpts({
+      executeStat,
+      deviceId: 'emulator-5554',
+    })
+  );
 
   await monitor._pollStat();
 
@@ -335,15 +345,16 @@ test('_pollStat deviceId 非空时 statArgs 含 -s deviceId', async () => {
 });
 
 test('_pollStat 自定义 pollingStatus + pollingMessageKey', async () => {
-  const { executeStat } = createExecuteStatMock([
-    { success: true, output: 'Size: 500' },
-  ]);
+  const { executeStat } = createExecuteStatMock([{ success: true, output: 'Size: 500' }]);
   const { eventSender, sends } = captureSends();
-  const monitor = new AdbProgressMonitor(createMonitorOpts({
-    executeStat, eventSender,
-    pollingStatus: 'installing',
-    pollingMessageKey: 'fileManager.installing',
-  }));
+  const monitor = new AdbProgressMonitor(
+    createMonitorOpts({
+      executeStat,
+      eventSender,
+      pollingStatus: 'installing',
+      pollingMessageKey: 'fileManager.installing',
+    })
+  );
 
   await monitor._pollStat();
 

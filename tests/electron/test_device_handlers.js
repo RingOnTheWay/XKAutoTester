@@ -37,8 +37,7 @@ function makeFileTransferMock() {
 function makeAdbService(ft) {
   return {
     uploadFile: (localPath, remotePath, deviceId, sender) => ft.upload(localPath, remotePath, deviceId, sender),
-    downloadFile: (remotePath, localPath, deviceId, sender) =>
-      ft.download(remotePath, localPath, deviceId, sender),
+    downloadFile: (remotePath, localPath, deviceId, sender) => ft.download(remotePath, localPath, deviceId, sender),
   };
 }
 

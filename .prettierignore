@@ -1,0 +1,30 @@
+# Prettier 忽略清单
+# 注意: 模式一律用前导 "/" 锚定到仓库根 —— 无前导斜杠的模式会按 gitignore 语义
+# 在任意层级匹配 (例如 "src/" 会连 electron/src/ 一起忽略, 造成 format:check 假绿)。
+
+# 依赖与构建产物
+/node_modules/
+/electron/node_modules/
+/electron/out/
+/electron/dist/
+
+# 上游参考源码快照 (appium-inspector), 不纳入本项目风格
+/ref/
+
+# 本地与运行时数据 (非源码)
+/trae-backup/
+/allure-results/
+/logs/
+/config/
+/env/
+/.workbuddy/
+
+# Python 源码与字节码 (不属 JS 格式化范围)
+/src/
+__pycache__/
+*.pyc
+
+# 生成物 / 非文本
+/electron/patch-nsis.js
+*.zip
+*.exe

@@ -18,7 +18,7 @@ const pyConstantsSource = fs.readFileSync(PY_CONSTANTS_PATH, 'utf8');
 // ── 辅助: 从 schema oneOf 提取分支 ─────────────────────────────
 
 function findBranchByTitle(title) {
-  return schema.oneOf.find(b => b.title === title);
+  return schema.oneOf.find((b) => b.title === title);
 }
 
 function extractEnum(branch, propName) {
@@ -100,21 +100,30 @@ function validateFrame(frame) {
 test('契约: INSPECTOR_COMMANDS 与 schema Request.command.enum 一致', () => {
   const reqBranch = findBranchByTitle('Request');
   const schemaCommands = extractEnum(reqBranch, 'command');
-  assert.deepEqual([...INSPECTOR_COMMANDS].sort(), [...schemaCommands].sort(),
-    'JS INSPECTOR_COMMANDS 必须与 schema Request.command.enum 完全一致');
+  assert.deepEqual(
+    [...INSPECTOR_COMMANDS].sort(),
+    [...schemaCommands].sort(),
+    'JS INSPECTOR_COMMANDS 必须与 schema Request.command.enum 完全一致'
+  );
 });
 
 test('契约: NOTIFICATION_TYPES 与 schema Notification.type.enum 一致', () => {
   const notifBranch = findBranchByTitle('Notification');
   const schemaTypes = extractEnum(notifBranch, 'type');
-  assert.deepEqual([...NOTIFICATION_TYPES].sort(), [...schemaTypes].sort(),
-    'JS NOTIFICATION_TYPES 必须与 schema Notification.type.enum 完全一致');
+  assert.deepEqual(
+    [...NOTIFICATION_TYPES].sort(),
+    [...schemaTypes].sort(),
+    'JS NOTIFICATION_TYPES 必须与 schema Notification.type.enum 完全一致'
+  );
 });
 
 test('契约: FRAME_KINDS 与 schema 各分支 kind.const 一致', () => {
-  const schemaKinds = schema.oneOf.map(b => b.properties.kind.const);
-  assert.deepEqual([...FRAME_KINDS].sort(), [...schemaKinds].sort(),
-    'JS FRAME_KINDS 必须与 schema 各分支 kind.const 完全一致');
+  const schemaKinds = schema.oneOf.map((b) => b.properties.kind.const);
+  assert.deepEqual(
+    [...FRAME_KINDS].sort(),
+    [...schemaKinds].sort(),
+    'JS FRAME_KINDS 必须与 schema 各分支 kind.const 完全一致'
+  );
 });
 
 // ── 契约: Python 常量 ↔ schema enum 一致 (源码文本解析) ─────────
@@ -125,22 +134,28 @@ test('契约: Python INSPECTOR_COMMANDS 与 schema Request.command.enum 一致',
   const pythonCommands = extractPythonCommands(pyConstantsSource);
   const reqBranch = findBranchByTitle('Request');
   const schemaCommands = extractEnum(reqBranch, 'command');
-  assert.deepEqual([...pythonCommands].sort(), [...schemaCommands].sort(),
-    'Python INSPECTOR_COMMANDS 必须与 schema Request.command.enum 完全一致');
+  assert.deepEqual(
+    [...pythonCommands].sort(),
+    [...schemaCommands].sort(),
+    'Python INSPECTOR_COMMANDS 必须与 schema Request.command.enum 完全一致'
+  );
 });
 
 test('契约: Python FRAME_KINDS 与 schema 各分支 kind.const 一致', () => {
   const pyFrameKinds = extractPythonStringTuple(pyConstantsSource, 'FRAME_KINDS');
-  const schemaKinds = schema.oneOf.map(b => b.properties.kind.const);
-  assert.deepEqual([...pyFrameKinds].sort(), [...schemaKinds].sort(),
-    'Python FRAME_KINDS 必须与 schema 各分支 kind.const 完全一致');
+  const schemaKinds = schema.oneOf.map((b) => b.properties.kind.const);
+  assert.deepEqual(
+    [...pyFrameKinds].sort(),
+    [...schemaKinds].sort(),
+    'Python FRAME_KINDS 必须与 schema 各分支 kind.const 完全一致'
+  );
 });
 
 test('契约: Python NOTIFICATION_TYPES 与 schema Notification.type.enum 一致', () => {
   // Python 源码: NOTIFICATION_TYPES = ("ready", "progress")
   const match = pyConstantsSource.match(/NOTIFICATION_TYPES\s*=\s*\(([^)]+)\)/);
   assert.ok(match, 'Python NOTIFICATION_TYPES 元组定义应存在');
-  const pyTypes = match[1].match(/"([^"]+)"/g).map(s => s.replace(/"/g, ''));
+  const pyTypes = match[1].match(/"([^"]+)"/g).map((s) => s.replace(/"/g, ''));
   const notifBranch = findBranchByTitle('Notification');
   const schemaTypes = extractEnum(notifBranch, 'type');
   assert.deepEqual([...pyTypes].sort(), [...schemaTypes].sort());
@@ -149,14 +164,17 @@ test('契约: Python NOTIFICATION_TYPES 与 schema Notification.type.enum 一致
 // ── 契约: schema 结构健全 ──────────────────────────────────────
 
 test('契约: schema oneOf 含 3 分支 (Request/Response/Notification)', () => {
-  const titles = schema.oneOf.map(b => b.title);
+  const titles = schema.oneOf.map((b) => b.title);
   assert.deepEqual(titles.sort(), ['Notification', 'Request', 'Response']);
 });
 
 test('契约: 所有分支 additionalProperties: false (R10 收紧)', () => {
   for (const branch of schema.oneOf) {
-    assert.strictEqual(branch.additionalProperties, false,
-      `${branch.title} 分支必须 additionalProperties: false (R10 收紧)`);
+    assert.strictEqual(
+      branch.additionalProperties,
+      false,
+      `${branch.title} 分支必须 additionalProperties: false (R10 收紧)`
+    );
   }
 });
 
@@ -191,7 +209,7 @@ test('帧校验: Notification 含 payload 对象合法 (R10 扩展容器)', () =
     kind: 'notification',
     type: 'progress',
     stage: 'screenshot-capturing',
-    payload: { extra: 'info', count: 42 }
+    payload: { extra: 'info', count: 42 },
   };
   const result = validateFrame(frame);
   assert.strictEqual(result.valid, true, result.error || '');
@@ -221,7 +239,7 @@ test('帧校验: Response 顶层额外字段被拒', () => {
 });
 
 test('帧校验: Request 缺必填字段被拒', () => {
-  const frame = { kind: 'request', id: 1, command: 'get-screenshot' };  // 缺 params
+  const frame = { kind: 'request', id: 1, command: 'get-screenshot' }; // 缺 params
   const result = validateFrame(frame);
   assert.strictEqual(result.valid, false);
   assert.match(result.error, /params/);

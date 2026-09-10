@@ -6,9 +6,7 @@ const assert = require('node:assert');
 const path = require('path');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
-const TRANSPORT_PATH = path.join(
-  PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'JsonStdioTransport.js'
-);
+const TRANSPORT_PATH = path.join(PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'JsonStdioTransport.js');
 
 function loadTransport() {
   delete require.cache[require.resolve(TRANSPORT_PATH)];
@@ -29,8 +27,16 @@ function createControllableSpawn() {
     const errorCbs = [];
 
     const proc = {
-      stdout: { on: (evt, cb) => { if (evt === 'data') stdoutCbs.push(cb); } },
-      stderr: { on: (evt, cb) => { if (evt === 'data') stderrCbs.push(cb); } },
+      stdout: {
+        on: (evt, cb) => {
+          if (evt === 'data') stdoutCbs.push(cb);
+        },
+      },
+      stderr: {
+        on: (evt, cb) => {
+          if (evt === 'data') stderrCbs.push(cb);
+        },
+      },
       on: (evt, cb) => {
         if (evt === 'close') closeCbs.push(cb);
         else if (evt === 'error') errorCbs.push(cb);
@@ -38,15 +44,18 @@ function createControllableSpawn() {
       kill: () => {},
       stdin: {
         writable: true,
-        write: (data) => { stdinWrites.push(data); return true; },
+        write: (data) => {
+          stdinWrites.push(data);
+          return true;
+        },
       },
     };
     procRef = {
       proc,
-      emitStdout: (str) => stdoutCbs.forEach(cb => cb(Buffer.from(str, 'utf8'))),
-      emitStderr: (str) => stderrCbs.forEach(cb => cb(Buffer.from(str, 'utf8'))),
-      emitClose: (code, signal) => closeCbs.forEach(cb => cb(code, signal)),
-      emitError: (err) => errorCbs.forEach(cb => cb(err)),
+      emitStdout: (str) => stdoutCbs.forEach((cb) => cb(Buffer.from(str, 'utf8'))),
+      emitStderr: (str) => stderrCbs.forEach((cb) => cb(Buffer.from(str, 'utf8'))),
+      emitClose: (code, signal) => closeCbs.forEach((cb) => cb(code, signal)),
+      emitError: (err) => errorCbs.forEach((cb) => cb(err)),
     };
     return proc;
   };
@@ -73,14 +82,14 @@ test('request sends frame to stdin and resolves with matching response', async (
   const promise = transport.request('get-screenshot');
 
   // 等一拍让 transport spawn + 注册监听
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
 
   const procRef = spawnMock.getProc();
   // 先发 ready notification 握手
   procRef.emitStdout(JSON.stringify({ kind: 'notification', type: 'ready' }) + '\n');
 
   // 等一拍让 _waitForReady resolve + _sendRequest 执行 (写 stdin)
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
 
   // 再发 response (此时 pending request 已注册)
   procRef.emitStdout(JSON.stringify({ kind: 'response', id: 1, success: true, screenshot: 'base64data' }) + '\n');
@@ -110,15 +119,15 @@ test('progress notification is forwarded to onNotification handler', async () =>
   transport.onNotification((n) => received.push(n));
 
   const promise = transport.request('start-session', { device_name: 'dev' });
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
   const procRef = spawnMock.getProc();
   procRef.emitStdout(JSON.stringify({ kind: 'notification', type: 'ready' }) + '\n');
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
 
   // 发进度通知 (在 response 之前)
   procRef.emitStdout(JSON.stringify({ kind: 'notification', type: 'progress', stage: 'appium-starting' }) + '\n');
   procRef.emitStdout(JSON.stringify({ kind: 'notification', type: 'progress', stage: 'session-creating' }) + '\n');
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
 
   // 发 response
   procRef.emitStdout(JSON.stringify({ kind: 'response', id: 1, success: true, session_id: 's1' }) + '\n');
@@ -141,10 +150,10 @@ test('process exit rejects all pending requests and fires onExit', async () => {
   transport.onExit((code, signal) => exitEvents.push({ code, signal }));
 
   const promise = transport.request('get-screenshot');
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
   const procRef = spawnMock.getProc();
   procRef.emitStdout(JSON.stringify({ kind: 'notification', type: 'ready' }) + '\n');
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
 
   // 进程退出 (pending request 还在等 response)
   procRef.emitClose(1, null);
@@ -165,7 +174,7 @@ test('per-request timeoutMs rejects when response not received in time', async (
   const transport = new JsonStdioTransport(SPAWN_CONFIG, { spawn: spawnMock, handshakeTimeoutMs: 5000 });
 
   const promise = transport.request('get-screenshot', {}, { timeoutMs: 100 });
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
   const procRef = spawnMock.getProc();
   procRef.emitStdout(JSON.stringify({ kind: 'notification', type: 'ready' }) + '\n');
   // 不发 response,等超时
@@ -180,12 +189,12 @@ test('partial frames across chunks are reassembled correctly', async () => {
   const transport = new JsonStdioTransport(SPAWN_CONFIG, { spawn: spawnMock, handshakeTimeoutMs: 5000 });
 
   const promise = transport.request('get-screenshot');
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
   const procRef = spawnMock.getProc();
 
   // 先发 ready 握手
   procRef.emitStdout(JSON.stringify({ kind: 'notification', type: 'ready' }) + '\n');
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
 
   // 把 response 帧切成 3 段 (跨 \n 切割)
   const resp = JSON.stringify({ kind: 'response', id: 1, success: true, screenshot: 'data' }) + '\n';
@@ -209,10 +218,10 @@ test('malformed JSON line does not crash transport, subsequent frames still proc
   const transport = new JsonStdioTransport(SPAWN_CONFIG, { spawn: spawnMock, handshakeTimeoutMs: 5000 });
 
   const promise = transport.request('get-screenshot');
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
   const procRef = spawnMock.getProc();
   procRef.emitStdout(JSON.stringify({ kind: 'notification', type: 'ready' }) + '\n');
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
 
   // 故意发非法 JSON 行 + 一个 progress 通知
   procRef.emitStdout('this is not json\n');
@@ -230,10 +239,10 @@ test('dispose is idempotent and rejects pending requests', async () => {
   const transport = new JsonStdioTransport(SPAWN_CONFIG, { spawn: spawnMock, handshakeTimeoutMs: 5000 });
 
   const promise = transport.request('get-screenshot');
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
   const procRef = spawnMock.getProc();
   procRef.emitStdout(JSON.stringify({ kind: 'notification', type: 'ready' }) + '\n');
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
 
   // dispose 应 reject pending
   transport.dispose();

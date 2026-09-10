@@ -8,12 +8,8 @@ const Module = require('module');
 const os = require('os');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
-const USER_DATA_SERVICE_PATH = path.join(
-  PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'UserDataService.js'
-);
-const VERSION_SERVICE_PATH = path.join(
-  PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'VersionService.js'
-);
+const USER_DATA_SERVICE_PATH = path.join(PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'UserDataService.js');
+const VERSION_SERVICE_PATH = path.join(PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'VersionService.js');
 
 // 创建临时目录
 function mkTempDir() {
@@ -29,10 +25,18 @@ function setupMocks(tempDir, opts = {}) {
   const registryCalls = [];
 
   const mockMigrator = {
-    deleteOldPathIfNeeded: async () => { migratorCalls.push('deleteOldPathIfNeeded'); },
-    copyDefaultsToUserData: async () => { migratorCalls.push('copyDefaultsToUserData'); },
-    migrateFromOldLocation: async () => { migratorCalls.push('migrateFromOldLocation'); },
-    smartMergeConfig: async () => { migratorCalls.push('smartMergeConfig'); },
+    deleteOldPathIfNeeded: async () => {
+      migratorCalls.push('deleteOldPathIfNeeded');
+    },
+    copyDefaultsToUserData: async () => {
+      migratorCalls.push('copyDefaultsToUserData');
+    },
+    migrateFromOldLocation: async () => {
+      migratorCalls.push('migrateFromOldLocation');
+    },
+    smartMergeConfig: async () => {
+      migratorCalls.push('smartMergeConfig');
+    },
     migrateConfigToNewPath: async (oldPath, newPath) => {
       migratorCalls.push({ method: 'migrateConfigToNewPath', oldPath, newPath });
     },
@@ -40,7 +44,9 @@ function setupMocks(tempDir, opts = {}) {
       migratorCalls.push({ method: 'migrateDataToPath', newPath });
       return { success: true };
     },
-    updatePaths: (paths) => { migratorCalls.push({ method: 'updatePaths', paths }); },
+    updatePaths: (paths) => {
+      migratorCalls.push({ method: 'updatePaths', paths });
+    },
   };
 
   const mockRegistry = {
@@ -53,7 +59,9 @@ function setupMocks(tempDir, opts = {}) {
     mockMigrator.constructorOpts = opts;
     return mockMigrator;
   };
-  const RegistryClass = function () { return mockRegistry; };
+  const RegistryClass = function () {
+    return mockRegistry;
+  };
 
   const electronMock = {
     app: {
@@ -78,7 +86,9 @@ function setupMocks(tempDir, opts = {}) {
     registry: mockRegistry,
     migratorCalls,
     registryCalls,
-    restore: () => { Module._load = origLoad; },
+    restore: () => {
+      Module._load = origLoad;
+    },
   };
 }
 
@@ -104,7 +114,6 @@ function createService(tempDir, mocks) {
   const versionService = new VersionService(projectRoot);
   return new UserDataService(projectRoot, versionService);
 }
-
 
 // ─── 构造函数测试 ──────────────────────────────────────────────
 
@@ -135,7 +144,12 @@ test('构造函数向 migrator 传递完整路径选项', () => {
     assert.ok(opts.defaultConfigPath, 'defaultConfigPath 应传递');
     assert.ok(opts.versionFilePath, 'versionFilePath 应传递');
     assert.ok(opts.defaultUserDataPath, 'defaultUserDataPath 应传递');
-    assert.deepStrictEqual(opts.userFiles, ['config.json', 'page_package.json', 'test_plans.json', 'scheduled_plans.json']);
+    assert.deepStrictEqual(opts.userFiles, [
+      'config.json',
+      'page_package.json',
+      'test_plans.json',
+      'scheduled_plans.json',
+    ]);
     assert.deepStrictEqual(opts.userDirs, ['test_cases']);
     assert.ok(opts.defaultConfigs, 'defaultConfigs 应传递');
   } finally {
@@ -175,7 +189,6 @@ test('_defaultConfigs 不应包含 config.json', () => {
   }
 });
 
-
 // ─── runMigration 委托测试 ────────────────────────────────────
 
 test('runMigration 首次启动调用 migrator.copyDefaultsToUserData + migrateFromOldLocation', async () => {
@@ -205,13 +218,13 @@ test('runMigration 版本变更时调用 migrator.smartMergeConfig', async () =>
   try {
     const service = createService(tempDir, mocks);
     // 非首次启动: 写一个旧版本的 versionFile
-    fs.writeFileSync(service.versionFilePath, JSON.stringify({ dataVersion: '0.0.0', lastMigrated: '2020-01-01' }), 'utf8');
-    // 写一个有效的 projectRoot/version.json
     fs.writeFileSync(
-      path.join(service.projectRoot, 'version.json'),
-      JSON.stringify({ version: '1.2.3' }),
+      service.versionFilePath,
+      JSON.stringify({ dataVersion: '0.0.0', lastMigrated: '2020-01-01' }),
       'utf8'
     );
+    // 写一个有效的 projectRoot/version.json
+    fs.writeFileSync(path.join(service.projectRoot, 'version.json'), JSON.stringify({ version: '1.2.3' }), 'utf8');
 
     await service.runMigration();
 
@@ -230,11 +243,7 @@ test('runMigration 版本未变更时不调用 smartMergeConfig', async () => {
   try {
     const service = createService(tempDir, mocks);
     // 版本一致
-    fs.writeFileSync(
-      path.join(service.projectRoot, 'version.json'),
-      JSON.stringify({ version: '1.2.3' }),
-      'utf8'
-    );
+    fs.writeFileSync(path.join(service.projectRoot, 'version.json'), JSON.stringify({ version: '1.2.3' }), 'utf8');
     fs.writeFileSync(
       service.versionFilePath,
       JSON.stringify({ dataVersion: '1.2.3', lastMigrated: '2020-01-01' }),
@@ -250,7 +259,6 @@ test('runMigration 版本未变更时不调用 smartMergeConfig', async () => {
   }
 });
 
-
 // ─── changeDataPath 委托测试 ───────────────────────────────────
 
 test('changeDataPath 调用 migrator.migrateConfigToNewPath + updatePaths + registry.writePath', async () => {
@@ -263,11 +271,11 @@ test('changeDataPath 调用 migrator.migrateConfigToNewPath + updatePaths + regi
     await service.changeDataPath(newPath);
 
     // migrateConfigToNewPath 被调用
-    const migrateCall = mocks.migratorCalls.find(c => typeof c === 'object' && c.method === 'migrateConfigToNewPath');
+    const migrateCall = mocks.migratorCalls.find((c) => typeof c === 'object' && c.method === 'migrateConfigToNewPath');
     assert.ok(migrateCall, '应调用 migrateConfigToNewPath');
 
     // updatePaths 被调用,传递新路径
-    const updateCall = mocks.migratorCalls.find(c => typeof c === 'object' && c.method === 'updatePaths');
+    const updateCall = mocks.migratorCalls.find((c) => typeof c === 'object' && c.method === 'updatePaths');
     assert.ok(updateCall, '应调用 updatePaths');
     assert.strictEqual(updateCall.paths.userDataPath, newPath);
     assert.strictEqual(updateCall.paths.userConfigPath, path.join(newPath, 'config'));
@@ -298,7 +306,6 @@ test('changeDataPath 空路径返回错误', async () => {
   }
 });
 
-
 // ─── resetToDefaultPath 委托测试 ────────────────────────────────
 
 test('resetToDefaultPath 调用 migrator.migrateConfigToNewPath + updatePaths + registry.writePath', async () => {
@@ -316,13 +323,13 @@ test('resetToDefaultPath 调用 migrator.migrateConfigToNewPath + updatePaths + 
     await service.resetToDefaultPath();
 
     // migrateConfigToNewPath 被调用,源 = customPath, 目标 = defaultUserDataPath
-    const migrateCall = mocks.migratorCalls.find(c => typeof c === 'object' && c.method === 'migrateConfigToNewPath');
+    const migrateCall = mocks.migratorCalls.find((c) => typeof c === 'object' && c.method === 'migrateConfigToNewPath');
     assert.ok(migrateCall, '应调用 migrateConfigToNewPath');
     assert.strictEqual(migrateCall.oldPath, customPath);
     assert.strictEqual(migrateCall.newPath, service._defaultUserDataPath);
 
     // updatePaths 被调用
-    const updateCall = mocks.migratorCalls.find(c => typeof c === 'object' && c.method === 'updatePaths');
+    const updateCall = mocks.migratorCalls.find((c) => typeof c === 'object' && c.method === 'updatePaths');
     assert.ok(updateCall, '应调用 updatePaths');
     assert.strictEqual(updateCall.paths.userDataPath, service._defaultUserDataPath);
 
@@ -337,7 +344,6 @@ test('resetToDefaultPath 调用 migrator.migrateConfigToNewPath + updatePaths + 
   }
 });
 
-
 // ─── migrateDataToPath 委托测试 ────────────────────────────────
 
 test('migrateDataToPath 委托到 migrator.migrateDataToPath', async () => {
@@ -349,7 +355,7 @@ test('migrateDataToPath 委托到 migrator.migrateDataToPath', async () => {
 
     const result = await service.migrateDataToPath(targetPath);
 
-    const call = mocks.migratorCalls.find(c => typeof c === 'object' && c.method === 'migrateDataToPath');
+    const call = mocks.migratorCalls.find((c) => typeof c === 'object' && c.method === 'migrateDataToPath');
     assert.ok(call, '应委托到 migrator.migrateDataToPath');
     assert.strictEqual(call.newPath, targetPath);
     assert.strictEqual(result.success, true);
@@ -357,7 +363,6 @@ test('migrateDataToPath 委托到 migrator.migrateDataToPath', async () => {
     mocks.restore();
   }
 });
-
 
 // ─── getter 测试 ────────────────────────────────────────────────
 

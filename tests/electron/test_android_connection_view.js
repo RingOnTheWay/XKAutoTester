@@ -64,11 +64,7 @@ describe('AndroidConnectionView renderEllipsis HTML 转义 (防 XSS)', () => {
     const dropdown = v.els.ellipsisDropdown;
     assert.ok(dropdown, 'ellipsis-dropdown 元素应存在');
 
-    v.renderEllipsis(
-      container,
-      [{ displayName: '<img src=x onerror=alert(1)>', path: '/sdcard/x' }],
-      () => {}
-    );
+    v.renderEllipsis(container, [{ displayName: '<img src=x onerror=alert(1)>', path: '/sdcard/x' }], () => {});
 
     const html = dropdown.innerHTML;
     assert.ok(!html.includes('<img'), '不应渲染原始标签');
@@ -79,11 +75,7 @@ describe('AndroidConnectionView renderEllipsis HTML 转义 (防 XSS)', () => {
     const v = new ViewClass();
     const container = global.document.createElement('div');
 
-    v.renderEllipsis(
-      container,
-      [{ displayName: 'folder/子目录', path: '/sdcard/sub' }],
-      () => {}
-    );
+    v.renderEllipsis(container, [{ displayName: 'folder/子目录', path: '/sdcard/sub' }], () => {});
 
     const html = v.els.ellipsisDropdown.innerHTML;
     assert.ok(html.includes('folder/子目录'), '正常文本不被破坏');
@@ -135,7 +127,13 @@ describe('P3-7/P3-8 文件行 XSS + 属性选择器安全', () => {
       },
     ];
 
-    v.displayFileList(files, [], () => {}, () => {}, () => {});
+    v.displayFileList(
+      files,
+      [],
+      () => {},
+      () => {},
+      () => {}
+    );
 
     const html = listContainer.innerHTML;
     assert.ok(!html.includes('<img src=x onerror'), '不得直插未转义的 img onerror');

@@ -5,9 +5,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const AdbPathQuoter = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'adb', 'AdbPathQuoter.js'
-));
+const AdbPathQuoter = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'adb', 'AdbPathQuoter.js')
+);
 
 // ── 基础转义 ────────────────────────────────────────────────
 
@@ -87,7 +87,7 @@ test('路径以单引号结尾', () => {
 
 test('含双引号路径原样保留', () => {
   const result = AdbPathQuoter.quote('say "hello"');
-  assert.strictEqual(result, "'say \"hello\"'");
+  assert.strictEqual(result, '\'say "hello"\'');
 });
 
 // ── 含特殊 shell 字符 ─────────────────────────────────────
@@ -129,14 +129,14 @@ test('中文路径正确处理', () => {
 
 test('命令注入尝试被中和', () => {
   // 尝试注入 rm -rf / 命令
-  const malicious = "/sdcard/file; rm -rf /";
+  const malicious = '/sdcard/file; rm -rf /';
   const result = AdbPathQuoter.quote(malicious);
   assert.strictEqual(result, "'/sdcard/file; rm -rf /'");
   // 整个字符串被包在单引号内,分号不被解释
 });
 
 test('子命令替换尝试被中和', () => {
-  const malicious = "$(rm -rf /)";
+  const malicious = '$(rm -rf /)';
   const result = AdbPathQuoter.quote(malicious);
   assert.strictEqual(result, "'$(rm -rf /)'");
 });

@@ -9,9 +9,7 @@ const path = require('path');
 const os = require('os');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
-const MIGRATOR_PATH = path.join(
-  PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'UserDataMigrator.js'
-);
+const MIGRATOR_PATH = path.join(PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'UserDataMigrator.js');
 
 function loadMigrator() {
   delete require.cache[require.resolve(MIGRATOR_PATH)];
@@ -49,16 +47,15 @@ function createMigrator(overrides = {}) {
     defaultConfigs: {
       'page_package.json': { apps: [] },
       'test_plans.json': [],
-      'scheduled_plans.json': []
+      'scheduled_plans.json': [],
     },
-    ...overrides
+    ...overrides,
   };
 
   const UserDataMigrator = loadMigrator();
   const migrator = new UserDataMigrator(opts);
   return { migrator, tempDir, opts };
 }
-
 
 // ─── 构造 + updatePaths ───────────────────────────────────────
 
@@ -93,13 +90,12 @@ test('updatePaths 三个字段同时更新', () => {
   migrator.updatePaths({
     userDataPath: '/a',
     userConfigPath: '/b',
-    versionFilePath: '/c'
+    versionFilePath: '/c',
   });
   assert.strictEqual(migrator.userDataPath, '/a');
   assert.strictEqual(migrator.userConfigPath, '/b');
   assert.strictEqual(migrator.versionFilePath, '/c');
 });
-
 
 // ─── _getDefaultConfig (从原 test_user_data_service.js 迁移) ───
 
@@ -107,12 +103,9 @@ test('_getDefaultConfig 模板文件存在时正确读取', () => {
   const { migrator, opts } = createMigrator();
   const templateConfig = {
     APP_SETTINGS: { autoCheckUpdate: true, language: 'zh-CN' },
-    LOG_CONFIG: { level: 'INFO' }
+    LOG_CONFIG: { level: 'INFO' },
   };
-  fs.writeFileSync(
-    path.join(opts.defaultConfigPath, 'config.json'),
-    JSON.stringify(templateConfig, null, 2)
-  );
+  fs.writeFileSync(path.join(opts.defaultConfigPath, 'config.json'), JSON.stringify(templateConfig, null, 2));
 
   const config = migrator._getDefaultConfig();
   assert.strictEqual(config.APP_SETTINGS.autoCheckUpdate, true);
@@ -144,7 +137,7 @@ test('_getDefaultConfig 模板目录不存在时返回 {}', () => {
     defaultUserDataPath: path.join(tempDir, 'default'),
     userFiles: [],
     userDirs: [],
-    defaultConfigs: {}
+    defaultConfigs: {},
   };
   fs.mkdirSync(opts.userConfigPath, { recursive: true });
 
@@ -153,7 +146,6 @@ test('_getDefaultConfig 模板目录不存在时返回 {}', () => {
   const config = migrator._getDefaultConfig();
   assert.deepStrictEqual(config, {}, '模板目录不存在时应返回空对象');
 });
-
 
 // ─── _deepMerge ────────────────────────────────────────────────
 
@@ -186,7 +178,6 @@ test('_deepMerge null 值正确处理', () => {
   assert.strictEqual(result.b.c, 1);
 });
 
-
 // ─── _isUserData / _hasNonDefaultConfig ────────────────────────
 
 test('_isUserData 不同文件类型判定', () => {
@@ -203,44 +194,64 @@ test('_isUserData 不同文件类型判定', () => {
 test('_hasNonDefaultConfig 检测用户自定义配置', () => {
   const { migrator } = createMigrator();
   // 默认配置: 不算用户数据
-  assert.strictEqual(migrator._hasNonDefaultConfig({
-    APP_SETTINGS: { language: 'zh-CN', dark_mode: false, theme_color: '#4CAF50', notification: { platform: 'none' } }
-  }), false);
+  assert.strictEqual(
+    migrator._hasNonDefaultConfig({
+      APP_SETTINGS: { language: 'zh-CN', dark_mode: false, theme_color: '#4CAF50', notification: { platform: 'none' } },
+    }),
+    false
+  );
   // 修改语言: 算
-  assert.strictEqual(migrator._hasNonDefaultConfig({
-    APP_SETTINGS: { language: 'en-US' }
-  }), true);
+  assert.strictEqual(
+    migrator._hasNonDefaultConfig({
+      APP_SETTINGS: { language: 'en-US' },
+    }),
+    true
+  );
   // 暗色模式: 算
-  assert.strictEqual(migrator._hasNonDefaultConfig({
-    APP_SETTINGS: { dark_mode: true }
-  }), true);
+  assert.strictEqual(
+    migrator._hasNonDefaultConfig({
+      APP_SETTINGS: { dark_mode: true },
+    }),
+    true
+  );
   // 修改主题色: 算
-  assert.strictEqual(migrator._hasNonDefaultConfig({
-    APP_SETTINGS: { theme_color: '#FF0000' }
-  }), true);
+  assert.strictEqual(
+    migrator._hasNonDefaultConfig({
+      APP_SETTINGS: { theme_color: '#FF0000' },
+    }),
+    true
+  );
   // 启用通知: 算
-  assert.strictEqual(migrator._hasNonDefaultConfig({
-    APP_SETTINGS: { notification: { platform: 'dingtalk' } }
-  }), true);
+  assert.strictEqual(
+    migrator._hasNonDefaultConfig({
+      APP_SETTINGS: { notification: { platform: 'dingtalk' } },
+    }),
+    true
+  );
 });
 
 test('_isUserData config.json 调用 _hasNonDefaultConfig', () => {
   const { migrator } = createMigrator();
   // 含用户自定义: language=en-US -> true
-  assert.strictEqual(migrator._isUserData('config.json', {
-    APP_SETTINGS: { language: 'en-US' }
-  }), true);
+  assert.strictEqual(
+    migrator._isUserData('config.json', {
+      APP_SETTINGS: { language: 'en-US' },
+    }),
+    true
+  );
   // 完全默认配置 (所有字段匹配默认值) -> false
-  assert.strictEqual(migrator._isUserData('config.json', {
-    APP_SETTINGS: {
-      language: 'zh-CN',
-      dark_mode: false,
-      theme_color: '#4CAF50',
-      notification: { platform: 'none' }
-    }
-  }), false);
+  assert.strictEqual(
+    migrator._isUserData('config.json', {
+      APP_SETTINGS: {
+        language: 'zh-CN',
+        dark_mode: false,
+        theme_color: '#4CAF50',
+        notification: { platform: 'none' },
+      },
+    }),
+    false
+  );
 });
-
 
 // ─── copyDefaultsToUserData ───────────────────────────────────
 
@@ -276,20 +287,25 @@ test('copyDefaultsToUserData 源文件不存在时使用 _generateDefaultConfig'
   assert.deepStrictEqual(content, { apps: [] });
 });
 
-
 // ─── smartMergeConfig ─────────────────────────────────────────
 
 test('smartMergeConfig 用户配置 + 默认配置 = 合并结果', async () => {
   const { migrator, opts } = createMigrator();
   // 准备默认 config.json
-  fs.writeFileSync(path.join(opts.defaultConfigPath, 'config.json'), JSON.stringify({
-    APP_SETTINGS: { language: 'zh-CN', dark_mode: false, theme_color: '#4CAF50' },
-    LOG_CONFIG: { level: 'INFO' }
-  }));
+  fs.writeFileSync(
+    path.join(opts.defaultConfigPath, 'config.json'),
+    JSON.stringify({
+      APP_SETTINGS: { language: 'zh-CN', dark_mode: false, theme_color: '#4CAF50' },
+      LOG_CONFIG: { level: 'INFO' },
+    })
+  );
   // 用户已有 config.json (只改了 language)
-  fs.writeFileSync(path.join(opts.userConfigPath, 'config.json'), JSON.stringify({
-    APP_SETTINGS: { language: 'en-US' }
-  }));
+  fs.writeFileSync(
+    path.join(opts.userConfigPath, 'config.json'),
+    JSON.stringify({
+      APP_SETTINGS: { language: 'en-US' },
+    })
+  );
 
   await migrator.smartMergeConfig();
 
@@ -306,7 +322,6 @@ test('smartMergeConfig 用户配置不存在时 noop', async () => {
   await migrator.smartMergeConfig();
   assert.ok(!fs.existsSync(path.join(opts.userConfigPath, 'config.json')));
 });
-
 
 // ─── migrateConfigToNewPath ───────────────────────────────────
 
@@ -334,7 +349,6 @@ test('migrateConfigToNewPath 拷贝文件 + 目录到新路径', async () => {
   assert.ok(fs.existsSync(path.join(newPath, 'data-version.json')));
 });
 
-
 // ─── migrateDataToPath ───────────────────────────────────────
 
 test('migrateDataToPath 空路径返回错误', async () => {
@@ -357,7 +371,6 @@ test('migrateDataToPath 成功迁移文件', async () => {
   assert.ok(fs.existsSync(path.join(targetPath, 'data-version.json')));
 });
 
-
 // ─── deleteOldPathIfNeeded ────────────────────────────────────
 
 test('deleteOldPathIfNeeded 无 marker 文件时 noop', async () => {
@@ -374,10 +387,7 @@ test('deleteOldPathIfNeeded 有 marker 时删除旧路径', async () => {
   fs.mkdirSync(oldPath, { recursive: true });
   fs.writeFileSync(path.join(oldPath, 'some-file.txt'), 'content');
   // 创建 marker
-  fs.writeFileSync(
-    path.join(opts.userDataPath, 'old-path-to-delete.json'),
-    JSON.stringify({ oldPath })
-  );
+  fs.writeFileSync(path.join(opts.userDataPath, 'old-path-to-delete.json'), JSON.stringify({ oldPath }));
 
   await migrator.deleteOldPathIfNeeded();
 
@@ -400,7 +410,6 @@ test('deleteOldPathIfNeeded marker 指向当前路径时不删除', async () => 
   // marker 文件被删除
   assert.ok(!fs.existsSync(path.join(opts.userDataPath, 'old-path-to-delete.json')));
 });
-
 
 // ─── migrateFromOldLocation ──────────────────────────────────
 
@@ -429,10 +438,7 @@ test('migrateFromOldLocation 源文件是用户数据时复制', async () => {
 test('migrateFromOldLocation 源文件是空默认数据时不复制', async () => {
   const { migrator, opts } = createMigrator();
   // page_package.json 是空 apps, 不算用户数据
-  fs.writeFileSync(
-    path.join(opts.defaultConfigPath, 'page_package.json'),
-    JSON.stringify({ apps: [] })
-  );
+  fs.writeFileSync(path.join(opts.defaultConfigPath, 'page_package.json'), JSON.stringify({ apps: [] }));
 
   await migrator.migrateFromOldLocation();
 
@@ -446,7 +452,7 @@ test('migrateFromOldLocation test_cases 目录中 .json 文件被复制', async 
   fs.mkdirSync(srcTestCases, { recursive: true });
   fs.writeFileSync(path.join(srcTestCases, 'case1.json'), JSON.stringify({ id: 1 }));
   fs.writeFileSync(path.join(srcTestCases, 'case2.json'), JSON.stringify({ id: 2 }));
-  fs.writeFileSync(path.join(srcTestCases, 'readme.txt'), 'not json');  // 非 .json 不复制
+  fs.writeFileSync(path.join(srcTestCases, 'readme.txt'), 'not json'); // 非 .json 不复制
 
   // 目标 test_cases 目录需预先存在 (生产环境由 UserDataService._ensureUserDataDir 创建)
   const dstTestCases = path.join(opts.userConfigPath, 'test_cases');
@@ -480,7 +486,6 @@ test('migrateFromOldLocation 源文件是用户数据时覆盖目标 (首次启�
   const result = JSON.parse(fs.readFileSync(path.join(opts.userConfigPath, 'page_package.json'), 'utf8'));
   assert.strictEqual(result.apps[0].name, 'Source', '源是用户数据时覆盖目标 (首次启动场景)');
 });
-
 
 // ─── _copyDirectoryRecursive / _deleteDirectoryRecursive ───
 

@@ -5,7 +5,14 @@ const assert = require('node:assert');
 const path = require('path');
 
 const VERSION_SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'VersionService.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'VersionService.js'
 );
 const { VersionService } = require(VERSION_SERVICE_PATH);
 
@@ -102,7 +109,9 @@ test('getVersion / getFullVersion / getBuildDate / getDisplayVersion 委托', ()
   const fakeFs = makeFakeFileSystem({
     existsResult: true,
     readFileSyncResult: JSON.stringify({
-      version: '1.0.0', fullVersion: '1.0.0-rc.1', buildDate: '2026-07-28'
+      version: '1.0.0',
+      fullVersion: '1.0.0-rc.1',
+      buildDate: '2026-07-28',
     }),
   });
   const svc = new VersionService('/proj', { fileSystemFactory: () => fakeFs });

@@ -7,7 +7,15 @@ const assert = require('node:assert');
 const path = require('path');
 
 const APPLICATION_SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'application', 'applicationService.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'application',
+  'applicationService.js'
 );
 const { ApplicationService } = require(APPLICATION_SERVICE_PATH);
 
@@ -219,11 +227,26 @@ test('initializeServices 返 21 字段 shape (20 服务 + registerHandlers)', as
   const services = await app.initializeServices();
 
   const expectedKeys = [
-    'i18nService', 'schedulerService', 'scheduledPlanService', 'testPlanService',
-    'pythonTestService', 'environmentService', 'allureService', 'adbService',
-    'notificationService', 'scrcpyService', 'pagePackageService', 'bleDeviceDiscoveryService',
-    'testCaseService', 'apkParserService', 'versionService', 'userDataService',
-    'updateService', 'inspectorService', 'dataTransferService', 'environmentStartupService',
+    'i18nService',
+    'schedulerService',
+    'scheduledPlanService',
+    'testPlanService',
+    'pythonTestService',
+    'environmentService',
+    'allureService',
+    'adbService',
+    'notificationService',
+    'scrcpyService',
+    'pagePackageService',
+    'bleDeviceDiscoveryService',
+    'testCaseService',
+    'apkParserService',
+    'versionService',
+    'userDataService',
+    'updateService',
+    'inspectorService',
+    'dataTransferService',
+    'environmentStartupService',
     'registerHandlers',
   ];
   assert.deepStrictEqual(Object.keys(services).sort(), expectedKeys.sort());

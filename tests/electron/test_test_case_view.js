@@ -108,12 +108,18 @@ function setupJsdm() {
   global.window.lucide = { icons: {} };
   global.lucide = global.window.lucide;
   if (!window.HTMLElement.prototype.getBoundingClientRect) {
-    window.HTMLElement.prototype.getBoundingClientRect = () => ({ width: 100, height: 30, top: 100, bottom: 130, left: 10 });
+    window.HTMLElement.prototype.getBoundingClientRect = () => ({
+      width: 100,
+      height: 30,
+      top: 100,
+      bottom: 130,
+      left: 10,
+    });
   }
 }
 
 function teardownJsdm() {
-  Object.keys(savedGlobals).forEach(k => {
+  Object.keys(savedGlobals).forEach((k) => {
     if (savedGlobals[k] === undefined) delete global[k];
     else global[k] = savedGlobals[k];
   });
@@ -288,7 +294,9 @@ describe('TestCaseView 搜索/文件列表事件', () => {
   test('bindSearchInput 应在 input 时回传 trimmed 值', () => {
     const v = new ViewClass();
     let received = null;
-    const unbind = v.bindSearchInput((q) => { received = q; });
+    const unbind = v.bindSearchInput((q) => {
+      received = q;
+    });
     v.els.searchInput.value = '  hello  ';
     v.els.searchInput.dispatchEvent(new window.Event('input'));
     assert.strictEqual(received, 'hello');
@@ -323,7 +331,9 @@ describe('TestCaseView 搜索/文件列表事件', () => {
   test('bindFileListClick 点击非 file 项不应触发 handler', () => {
     const v = new ViewClass();
     let calls = 0;
-    const unbind = v.bindFileListClick(() => { calls++; });
+    const unbind = v.bindFileListClick(() => {
+      calls++;
+    });
     // 点击容器但不在 file 项上
     const container = document.getElementById('tc-test-files-list');
     const evt = new window.MouseEvent('click', { bubbles: true });
@@ -391,7 +401,14 @@ describe('TestCaseView 保存确认弹窗', () => {
     // jsdom window.confirm 默认返回 false → onDiscard 分支
     const v = new ViewClass();
     let discarded = false;
-    v.showSaveConfirmModal({ title: 'T', message: 'M', onSave: () => {}, onDiscard: () => { discarded = true; } });
+    v.showSaveConfirmModal({
+      title: 'T',
+      message: 'M',
+      onSave: () => {},
+      onDiscard: () => {
+        discarded = true;
+      },
+    });
     assert.strictEqual(discarded, true, 'confirm(false) → onDiscard');
   });
 });
@@ -414,8 +431,8 @@ describe('TestCaseView 步骤拖拽', () => {
     const v = new ViewClass();
     const unbind = v.bindStepDragDrop(() => {});
     const grips = document.querySelectorAll('.tc-drag-grip');
-    assert.ok(grids => grids.length > 0, '应有 grip 元素');
-    grips.forEach(g => assert.strictEqual(g.draggable, true));
+    assert.ok((grids) => grids.length > 0, '应有 grip 元素');
+    grips.forEach((g) => assert.strictEqual(g.draggable, true));
     unbind();
   });
 });
@@ -467,14 +484,20 @@ describe('TestCaseView HTML 转义（防 XSS）', () => {
     const options = container.querySelectorAll('.custom-select__option');
     assert.strictEqual(options.length, 1, '属性不应逃逸产生多余节点');
     assert.strictEqual(options[0].textContent.trim(), '<img src=x>', 'marker 名应作为纯文本保留原文');
-    assert.strictEqual(options[0].getAttribute('data-description'), '"><svg onload=alert(1)>', 'data-description 应完整保留原值');
+    assert.strictEqual(
+      options[0].getAttribute('data-description'),
+      '"><svg onload=alert(1)>',
+      'data-description 应完整保留原值'
+    );
   });
 
   test('generateCustomSelect 恶意选项值/标签/选中文本不注入原始 HTML', () => {
     const v = new ViewClass();
-    const html = v.generateCustomSelect('tc-xss-select', [
-      { value: '"><img src=x onerror=alert(1)>', label: '<script>evil()</script>', selected: true }
-    ], 'placeholder');
+    const html = v.generateCustomSelect(
+      'tc-xss-select',
+      [{ value: '"><img src=x onerror=alert(1)>', label: '<script>evil()</script>', selected: true }],
+      'placeholder'
+    );
     assert.ok(!html.includes('<script'), '不应含原始 <script 标签');
     assert.ok(!html.includes('<img'), '不应含原始 <img 标签');
     assert.ok(!html.includes('" onerror='), '属性值中的双引号应转义');
@@ -494,9 +517,11 @@ describe('TestCaseView HTML 转义（防 XSS）', () => {
 
   test('renderDeviceParams 恶意参数标签/值/占位符不注入原始 HTML', () => {
     const v = new ViewClass();
-    const html = v.renderDeviceParams([
-      { key: 'k1', type: 'text', label: '<script>l()</script>', placeholder: '"><svg onload=e()>' }
-    ], { k1: '"><img src=x onerror=e()>' }, 's1');
+    const html = v.renderDeviceParams(
+      [{ key: 'k1', type: 'text', label: '<script>l()</script>', placeholder: '"><svg onload=e()>' }],
+      { k1: '"><img src=x onerror=e()>' },
+      's1'
+    );
     assert.ok(!html.includes('<script'), '不应含原始 <script 标签');
     assert.ok(!html.includes('<svg'), '不应含原始 <svg 标签');
     assert.ok(!html.includes('<img'), '不应含原始 <img 标签');

@@ -41,14 +41,24 @@ function setupJsdm() {
   global.window.i18n = { t: (k) => k };
 
   // 桩桩定时器：记录 set 次数、返回假 id，拦截真实调度；清空时计数
-  global.setInterval = () => { timers.scheduled += 1; return 777; };
-  global.setTimeout = () => { timers.scheduled += 1; return 888; };
-  global.clearInterval = () => { timers.clearedInterval += 1; };
-  global.clearTimeout = () => { timers.clearedTimeout += 1; };
+  global.setInterval = () => {
+    timers.scheduled += 1;
+    return 777;
+  };
+  global.setTimeout = () => {
+    timers.scheduled += 1;
+    return 888;
+  };
+  global.clearInterval = () => {
+    timers.clearedInterval += 1;
+  };
+  global.clearTimeout = () => {
+    timers.clearedTimeout += 1;
+  };
 }
 
 function teardownJsdm() {
-  Object.keys(savedGlobals).forEach(k => {
+  Object.keys(savedGlobals).forEach((k) => {
     if (savedGlobals[k] === undefined) delete global[k];
     else global[k] = savedGlobals[k];
   });

@@ -26,12 +26,8 @@ from sync_version import read_version_json, update_build_date, update_version, v
 def _make_project(tmp_path, pyproject_content=None, pyproject_version=None):
     """构造最小项目结构: version.json + electron/package.json (+ 可选 pyproject.toml)"""
     (tmp_path / "electron").mkdir(parents=True)
-    (tmp_path / "version.json").write_text(
-        json.dumps({"version": "0.1.6", "fullVersion": "0.1.6"}), encoding="utf-8"
-    )
-    (tmp_path / "electron" / "package.json").write_text(
-        json.dumps({"version": "0.1.6"}), encoding="utf-8"
-    )
+    (tmp_path / "version.json").write_text(json.dumps({"version": "0.1.6", "fullVersion": "0.1.6"}), encoding="utf-8")
+    (tmp_path / "electron" / "package.json").write_text(json.dumps({"version": "0.1.6"}), encoding="utf-8")
     if pyproject_content is not None:
         (tmp_path / "pyproject.toml").write_text(pyproject_content, encoding="utf-8")
     return tmp_path
@@ -79,6 +75,7 @@ class TestVerifyVersions:
         result = verify_versions(project)
 
         assert result is True
+
 
 class TestBuildDateOnVersionUpdate:
     """R27: 更新版本号时 buildDate 自动设为当日 (设置页"构建日期"绑定 version.json.buildDate)"""

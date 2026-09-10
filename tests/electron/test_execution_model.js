@@ -86,7 +86,8 @@ function controllableRunPythonTests(model) {
       resolveRun = r;
     });
   };
-  const finish = () => resolveRun && resolveRun({ success: true, testStats: { passed: 1, failed: 0, skipped: 0, broken: 0, total: 1 } });
+  const finish = () =>
+    resolveRun && resolveRun({ success: true, testStats: { passed: 1, failed: 0, skipped: 0, broken: 0, total: 1 } });
   return { getCalls: () => calls, finish };
 }
 
@@ -178,7 +179,10 @@ test('P2-7 设备校验失败时 isRunning 复位为 false', async () => {
   model._state.selectedTestFiles = [{ name: 'demo_test.py', path: '/x/demo_test.py' }];
   model._api.testCaseGet = async () => ({ data: { platform: 'android', deviceConfig: { deviceName: '' } } });
   let runCalls = 0;
-  model._api.runPythonTests = async () => { runCalls++; return { success: true }; };
+  model._api.runPythonTests = async () => {
+    runCalls++;
+    return { success: true };
+  };
   const warnings = [];
   model.on('run-warning', (e) => warnings.push(e));
 
@@ -224,7 +228,10 @@ test('P1-3 字符串条目 (scanTestFiles 返回字符串数组) 不抛 TypeErro
     return { data: { platform: 'android', deviceConfig: { deviceName: 'DEVICE' } } };
   };
   let runCalls = 0;
-  model._api.runPythonTests = async () => { runCalls++; return { success: true }; };
+  model._api.runPythonTests = async () => {
+    runCalls++;
+    return { success: true };
+  };
 
   await model.runTests();
 
@@ -350,7 +357,10 @@ test('R27 runScheduledPlanNow 执行绑定测试计划且不调 scheduledTestCom
 
   assert.strictEqual(runTestsCalls, 2, '应逐个执行绑定的 2 个测试计划');
   assert.strictEqual(completeCalls, 0, '手动立即执行不得调 scheduledTestComplete (不改计划状态)');
-  assert.ok(outputs.some((l) => l.includes('executingTestPlan')), '应输出执行测试计划提示');
+  assert.ok(
+    outputs.some((l) => l.includes('executingTestPlan')),
+    '应输出执行测试计划提示'
+  );
 });
 
 test('R27 runScheduledPlanNow 首个 plan 手动停止 → 终止序列 (不跑后续)', async () => {

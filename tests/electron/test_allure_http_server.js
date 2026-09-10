@@ -9,7 +9,15 @@ const os = require('node:os');
 const Module = require('module');
 
 const HTTP_SERVER_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'allure', 'AllureHttpServer.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'allure',
+  'AllureHttpServer.js'
 );
 
 function mockLogger() {
@@ -18,7 +26,7 @@ function mockLogger() {
     error: async () => {},
     warning: async () => {},
     ensureLogDir: async () => {},
-    resetLogPath: () => {}
+    resetLogPath: () => {},
   };
 }
 
@@ -29,10 +37,14 @@ function mockLogger() {
 function mockModules(opts = {}) {
   const origLoad = Module._load;
   const fakeServer = {
-    listen: (port, host, cb) => { if (cb) cb(); },
+    listen: (port, host, cb) => {
+      if (cb) cb();
+    },
     on: (event, handler) => {},
-    close: (cb) => { if (cb) cb(); },
-    address: () => ({ port: 99999 })
+    close: (cb) => {
+      if (cb) cb();
+    },
+    address: () => ({ port: 99999 }),
   };
   Module._load = function (request, parent, isMain) {
     if (request === 'http') {
@@ -40,15 +52,17 @@ function mockModules(opts = {}) {
     }
     if (request === '../../utils/asyncFs') {
       return {
-        exists: async () => opts.existsReturn !== undefined ? opts.existsReturn : true,
-        readFile: async () => opts.readFileReturn || '{"theme":"default","reportLanguage":"en"}'
+        exists: async () => (opts.existsReturn !== undefined ? opts.existsReturn : true),
+        readFile: async () => opts.readFileReturn || '{"theme":"default","reportLanguage":"en"}',
       };
     }
     return origLoad.call(this, request, parent, isMain);
   };
   return {
     fakeServer,
-    restore: () => { Module._load = origLoad; }
+    restore: () => {
+      Module._load = origLoad;
+    },
   };
 }
 
@@ -56,7 +70,6 @@ function loadHttpServer() {
   delete require.cache[require.resolve(HTTP_SERVER_PATH)];
   return require(HTTP_SERVER_PATH);
 }
-
 
 // ─── _patchIndexHtml ────────────────────────────────────────────
 
@@ -82,7 +95,6 @@ test('_patchIndexHtml 无匹配字段时保持原样', () => {
   assert.ok(result.includes('prefers-color-scheme'), '应注入 matchMedia polyfill');
 });
 
-
 // ─── 状态方法 ───────────────────────────────────────────────────
 
 test('getStatus 未启动应返回 running:false', () => {
@@ -106,13 +118,12 @@ test('cleanupSync 未启动服务器不应抛错', () => {
   assert.doesNotThrow(() => server.cleanupSync());
 });
 
-
 // ─── start ──────────────────────────────────────────────────────
 
 test('start 成功应返回 {success, url, port}', async () => {
   const mock = mockModules({
     existsReturn: true,
-    readFileReturn: '{"theme":"default","reportLanguage":"en"}'
+    readFileReturn: '{"theme":"default","reportLanguage":"en"}',
   });
   try {
     const AllureHttpServer = loadHttpServer();
@@ -144,7 +155,7 @@ test('start index.html 不存在应返回 {success:false}', async () => {
 test('cleanupSync 启动后应清空状态', async () => {
   const mock = mockModules({
     existsReturn: true,
-    readFileReturn: '{"theme":"default"}'
+    readFileReturn: '{"theme":"default"}',
   });
   try {
     const AllureHttpServer = loadHttpServer();
@@ -167,14 +178,23 @@ test('P1-12 请求 ../report1evil/x.js (前缀目录) 应返回 403', async () =
   const origLoad = Module._load;
   let capturedHandler = null;
   const fakeServer = {
-    listen: (port, host, cb) => { if (cb) cb(); },
+    listen: (port, host, cb) => {
+      if (cb) cb();
+    },
     on: (event, handler) => {},
-    close: (cb) => { if (cb) cb(); },
-    address: () => ({ port: 99999 })
+    close: (cb) => {
+      if (cb) cb();
+    },
+    address: () => ({ port: 99999 }),
   };
   Module._load = function (request, parent, isMain) {
     if (request === 'http') {
-      return { createServer: (handler) => { capturedHandler = handler; return fakeServer; } };
+      return {
+        createServer: (handler) => {
+          capturedHandler = handler;
+          return fakeServer;
+        },
+      };
     }
     if (request === '../../utils/asyncFs') {
       return { exists: async () => true, readFile: async () => '{"theme":"default"}' };

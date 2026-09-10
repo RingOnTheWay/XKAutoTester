@@ -96,7 +96,9 @@ describe('testPlanHandlers harness 示例', () => {
     const { ipc } = await createHandlerTestHarness(HANDLER_PATH, {
       testPlanService: {
         // 模拟 service 抛错
-        getTestPlans: () => { throw new Error('DB connection failed'); },
+        getTestPlans: () => {
+          throw new Error('DB connection failed');
+        },
       },
       pythonTestService: {},
     });

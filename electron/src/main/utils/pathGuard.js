@@ -27,10 +27,25 @@ function isPathInside(baseDir, targetPath) {
 // 原分布于 TestCaseCodeGenerator.SYSTEM_PROTECTED_DIRS, fileHandlers sysRootRe 为其子集。
 const SYSTEM_PROTECTED_DIRS = new Set([
   // Windows
-  'windows', 'system32', 'syswow64', 'program files', 'program files (x86)',
-  'programdata', 'recovery', '$recycle.bin', 'system volume information',
+  'windows',
+  'system32',
+  'syswow64',
+  'program files',
+  'program files (x86)',
+  'programdata',
+  'recovery',
+  '$recycle.bin',
+  'system volume information',
   // POSIX
-  'etc', 'usr', 'bin', 'sbin', 'boot', 'dev', 'proc', 'sys', 'var',
+  'etc',
+  'usr',
+  'bin',
+  'sbin',
+  'boot',
+  'dev',
+  'proc',
+  'sys',
+  'var',
 ]);
 
 /**
@@ -41,7 +56,11 @@ const SYSTEM_PROTECTED_DIRS = new Set([
  */
 function isSystemProtectedPath(resolvedPath) {
   if (typeof resolvedPath !== 'string' || !resolvedPath) return false;
-  const segments = path.resolve(resolvedPath).replace(/[\\/]+$/, '').split(/[\\/]/).filter(Boolean);
+  const segments = path
+    .resolve(resolvedPath)
+    .replace(/[\\/]+$/, '')
+    .split(/[\\/]/)
+    .filter(Boolean);
   if (segments.length <= 1) return true; // 盘符根 (C:) / POSIX 根 (/)
   const rootSeg = segments[1] ? segments[1].toLowerCase() : '';
   return Boolean(rootSeg && SYSTEM_PROTECTED_DIRS.has(rootSeg));

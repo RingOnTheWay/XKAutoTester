@@ -10,9 +10,7 @@ const fs = require('fs');
 const Module = require('module');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
-const DRIVER_CHECKER_PATH = path.join(
-  PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'DriverChecker.js'
-);
+const DRIVER_CHECKER_PATH = path.join(PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'DriverChecker.js');
 
 const i18nMock = {
   t: (key, params) => key + (params ? ` ${JSON.stringify(params)}` : ''),
@@ -53,7 +51,6 @@ function createSpawnHelperMock(impl) {
   };
   return { executeCommand, calls };
 }
-
 
 // ─── getDriverInstallerPath ───────────────────────────────────
 
@@ -130,7 +127,6 @@ test('getDriverInstallerPath Win + 驱动都不存在时返回 null', () => {
   }
 });
 
-
 // ─── checkCP210xDriver ────────────────────────────────────────
 
 test('checkCP210xDriver 非 Win 平台返回 stub (warning + canInstall=false)', async () => {
@@ -184,7 +180,8 @@ test('checkCP210xDriver Win + 注册表命中 (无 delete flag/start=4) → succ
       if (cmd === 'reg.exe') {
         return {
           code: 0,
-          stdout: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\silabser\n    Start REG_DWORD 0x3\n    Type REG_DWORD 0x1',
+          stdout:
+            'HKLM\\SYSTEM\\CurrentControlSet\\Services\\silabser\n    Start REG_DWORD 0x3\n    Type REG_DWORD 0x1',
           stderr: '',
         };
       }
@@ -196,7 +193,10 @@ test('checkCP210xDriver Win + 注册表命中 (无 delete flag/start=4) → succ
 
     const result = await checker.checkCP210xDriver();
     assert.strictEqual(result.status, 'success');
-    assert.ok(spawnHelper.calls.some(c => c.cmd === 'reg.exe'), '应调用 reg.exe 查询');
+    assert.ok(
+      spawnHelper.calls.some((c) => c.cmd === 'reg.exe'),
+      '应调用 reg.exe 查询'
+    );
   } finally {
     fs.existsSync = originalExists;
     restore();
@@ -325,7 +325,6 @@ test('checkCP210xDriver Win + executeCommand 抛异常 → catch 返回 warning 
     restore();
   }
 });
-
 
 // ─── isInstallerRunning ───────────────────────────────────────
 

@@ -6,7 +6,7 @@ XKAutoTester 是一个基于 Electron + Python 的自动化测试平台，用于
 
 - **版本**: 0.1.6-dev.1
 - **技术栈**: Electron 43 + Node.js + Python 3.10+（内置 3.12）+ Vite 7.3.6 / electron-vite 5.0.0 + Appium + Pytest + Allure
-- **工程化**: ESLint 9 (flat, `--max-warnings 0`) + Prettier + Ruff + GitHub Actions CI（Electron/Python 双 job，含 npm audit + uv audit 依赖漏洞扫描）
+- **工程化**: ESLint 9 (flat, `--max-warnings 0`) + Prettier (配置在仓库根 `.prettierrc.json`，`endOfLine:auto`) + Ruff + GitHub Actions CI（Electron/Python 双 job，含 npm audit + uv audit 依赖漏洞扫描；`format:check` 与 `ruff format --check` 已入门禁）
 - **打包工具**: electron-builder (NSIS 安装程序，含 lite 版本)
 - **Python 包管理**: uv
 - **国际化**: i18next (zh-CN / en-US)
@@ -132,7 +132,7 @@ XKAutoTester/
 │   │   │   ├── ApiBridge.js             # electronAPI 桥接
 │   │   │   ├── AppState.js              # 全局状态
 │   │   │   ├── EventEmitter.js          # 事件发射器
-│   │   │   └── utils/                   # html.js + confirmModal.js（通用确认弹窗 Promise 版，P2-3 收敛）+ scheduledPlanStatus.js（定时计划状态公共映射）
+│   │   │   └── utils/                   # html.js + confirmModal.js（通用确认弹窗 Promise 版，P2-3 收敛）+ scheduledPlanStatus.js（定时计划状态公共映射）+ markdown.js（零依赖 GFM 子集 Markdown→安全 HTML 渲染器，更新弹窗 changelog 用）
 │   │   ├── tabs/                        # 5 个 Tab（MVC 单体：controller/model/view/index/tab.html；mixin 已全部合回）
 │   │   │   ├── test-execution/          # 测试执行
 │   │   │   ├── page-package/            # 页面封装

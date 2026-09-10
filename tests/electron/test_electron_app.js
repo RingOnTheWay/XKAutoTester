@@ -113,9 +113,9 @@ test('P3-3 before-quit 触发: 服务清理 + allureWindow destroy + stopPrevent
   electronApp.allureWindow = new electronMock.BrowserWindow();
 
   // 先启动防睡眠 (模拟 restorePreventSleepSetting 已开启), 使 stopPreventSleep 真正调 powerSaveBlocker.stop
-  const powerHandlers = require(path.join(
-    __dirname, '..', '..', 'electron', 'src', 'main', 'handlers', 'powerHandlers.js'
-  ));
+  const powerHandlers = require(
+    path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'handlers', 'powerHandlers.js')
+  );
   powerHandlers.startPreventSleep();
   assert.strictEqual(powerCalls.start, 1, 'startPreventSleep 已启动');
 

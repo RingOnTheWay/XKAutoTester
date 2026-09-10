@@ -7,11 +7,17 @@ const path = require('path');
 const Module = require('module');
 
 const AAPT2_INVOKER_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'apk', 'Aapt2Invoker.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'apk',
+  'Aapt2Invoker.js'
 );
-const PATH_HELPER_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'utils', 'pathHelper.js'
-);
+const PATH_HELPER_PATH = path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'utils', 'pathHelper.js');
 
 // ── mock 工厂 ──────────────────────────────────────────────
 
@@ -23,17 +29,13 @@ function setupPathHelperMock(aapt2Path) {
     }
     return origLoad.call(this, request, parent, isMain);
   };
-  return () => { Module._load = origLoad; };
+  return () => {
+    Module._load = origLoad;
+  };
 }
 
 function createSpawnMock(opts = {}) {
-  const {
-    stdoutChunks = [],
-    stderrChunks = [],
-    code = 0,
-    errorEvent = null,
-    delay = 0,
-  } = opts;
+  const { stdoutChunks = [], stderrChunks = [], code = 0, errorEvent = null, delay = 0 } = opts;
 
   const capturedCalls = [];
 
@@ -45,8 +47,16 @@ function createSpawnMock(opts = {}) {
     const errorCbs = [];
 
     const proc = {
-      stdout: { on: (evt, cb) => { if (evt === 'data') stdoutCbs.push(cb); } },
-      stderr: { on: (evt, cb) => { if (evt === 'data') stderrCbs.push(cb); } },
+      stdout: {
+        on: (evt, cb) => {
+          if (evt === 'data') stdoutCbs.push(cb);
+        },
+      },
+      stderr: {
+        on: (evt, cb) => {
+          if (evt === 'data') stderrCbs.push(cb);
+        },
+      },
       on: (evt, cb) => {
         if (evt === 'close') closeCbs.push(cb);
         else if (evt === 'error') errorCbs.push(cb);
@@ -57,12 +67,12 @@ function createSpawnMock(opts = {}) {
 
     const trigger = () => {
       if (errorEvent) {
-        errorCbs.forEach(cb => cb(errorEvent));
+        errorCbs.forEach((cb) => cb(errorEvent));
         return;
       }
-      stdoutChunks.forEach(c => stdoutCbs.forEach(cb => cb(Buffer.from(c))));
-      stderrChunks.forEach(c => stderrCbs.forEach(cb => cb(Buffer.from(c))));
-      closeCbs.forEach(cb => cb(code));
+      stdoutChunks.forEach((c) => stdoutCbs.forEach((cb) => cb(Buffer.from(c))));
+      stderrChunks.forEach((c) => stderrCbs.forEach((cb) => cb(Buffer.from(c))));
+      closeCbs.forEach((cb) => cb(code));
     };
 
     if (delay > 0) setTimeout(trigger, delay);
@@ -72,7 +82,9 @@ function createSpawnMock(opts = {}) {
   };
 
   Object.defineProperty(spawnFn, 'calls', {
-    value: capturedCalls, enumerable: false, writable: false,
+    value: capturedCalls,
+    enumerable: false,
+    writable: false,
   });
 
   return spawnFn;
@@ -157,7 +169,9 @@ test('dumpBadging ENOENT 错误返回 aapt2NotFound', async () => {
       errorEvent: Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }),
     });
     const invoker = new Aapt2Invoker({
-      projectRoot: PROJECT_ROOT, i18nService: i18nMock, spawnFn,
+      projectRoot: PROJECT_ROOT,
+      i18nService: i18nMock,
+      spawnFn,
     });
 
     const result = await invoker.dumpBadging('/fake/aapt2.exe', '/path/app.apk');
@@ -177,7 +191,9 @@ test('dumpBadging EACCES 错误返回 permissionDenied', async () => {
       errorEvent: Object.assign(new Error('spawn EACCES'), { code: 'EACCES' }),
     });
     const invoker = new Aapt2Invoker({
-      projectRoot: PROJECT_ROOT, i18nService: i18nMock, spawnFn,
+      projectRoot: PROJECT_ROOT,
+      i18nService: i18nMock,
+      spawnFn,
     });
 
     const result = await invoker.dumpBadging('/fake/aapt2.exe', '/path/app.apk');
@@ -198,7 +214,9 @@ test('dumpBadging stderr 含 ERROR: 返回 fileCorrupted', async () => {
       code: 1,
     });
     const invoker = new Aapt2Invoker({
-      projectRoot: PROJECT_ROOT, i18nService: i18nMock, spawnFn,
+      projectRoot: PROJECT_ROOT,
+      i18nService: i18nMock,
+      spawnFn,
     });
 
     const result = await invoker.dumpBadging('/fake/aapt2.exe', '/path/app.apk');
@@ -219,7 +237,9 @@ test('dumpBadging 退出码非 0 且 stderr 无 ERROR 返回 parseFailed', async
       code: 2,
     });
     const invoker = new Aapt2Invoker({
-      projectRoot: PROJECT_ROOT, i18nService: i18nMock, spawnFn,
+      projectRoot: PROJECT_ROOT,
+      i18nService: i18nMock,
+      spawnFn,
     });
 
     const result = await invoker.dumpBadging('/fake/aapt2.exe', '/path/app.apk');
@@ -246,7 +266,9 @@ test('dumpBadging 超时返回 commandTimeout', async () => {
       };
     };
     const invoker = new Aapt2Invoker({
-      projectRoot: PROJECT_ROOT, i18nService: i18nMock, spawnFn,
+      projectRoot: PROJECT_ROOT,
+      i18nService: i18nMock,
+      spawnFn,
       timeoutMs: 100,
     });
 
@@ -267,7 +289,9 @@ test('dumpBadging 默认 maxBuffer 为 10MB', async () => {
     const Aapt2Invoker = loadInvoker();
     const spawnFn = createSpawnMock({ stdoutChunks: ['ok'] });
     const invoker = new Aapt2Invoker({
-      projectRoot: PROJECT_ROOT, i18nService: i18nMock, spawnFn,
+      projectRoot: PROJECT_ROOT,
+      i18nService: i18nMock,
+      spawnFn,
     });
 
     await invoker.dumpBadging('/fake/aapt2.exe', '/path/app.apk');

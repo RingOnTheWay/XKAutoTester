@@ -9,9 +9,9 @@ const fs = require('fs');
 const fsp = require('fs').promises;
 const os = require('os');
 
-const TarExtractor = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'TarExtractor.js'
-));
+const TarExtractor = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'TarExtractor.js')
+);
 
 // ── tar buffer 构造工具 ──────────────────────────────────────
 
@@ -82,7 +82,7 @@ function buildTarEntry(name, content, typeFlag = '0') {
  * 构造 tar 文件并写入临时路径
  */
 async function writeTarFile(tarPath, entries) {
-  const buffers = entries.map(e => buildTarEntry(e.name, e.content || '', e.type || '0'));
+  const buffers = entries.map((e) => buildTarEntry(e.name, e.content || '', e.type || '0'));
   // tar 结束: 两个全零 block
   buffers.push(Buffer.alloc(BLOCK_SIZE * 2, 0));
   await fsp.writeFile(tarPath, Buffer.concat(buffers));
@@ -111,7 +111,6 @@ async function fileExists(p) {
     return false;
   }
 }
-
 
 // ─── extract 基本场景 ────────────────────────────────────────
 
@@ -180,7 +179,7 @@ test('extract 大文件 (>512 字节, 跨 block) → 完整写入', async () => 
   const tarPath = path.join(tmpDir, 'big.tar');
   const outputDir = path.join(tmpDir, 'output');
   try {
-    const bigContent = 'x'.repeat(1500);  // 跨 3 个 block
+    const bigContent = 'x'.repeat(1500); // 跨 3 个 block
     await writeTarFile(tarPath, [{ name: 'big.txt', content: bigContent }]);
     const extractor = new TarExtractor();
 
@@ -194,7 +193,6 @@ test('extract 大文件 (>512 字节, 跨 block) → 完整写入', async () => 
     await fsp.rm(tmpDir, { recursive: true, force: true });
   }
 });
-
 
 // ─── 目录场景 ─────────────────────────────────────────────
 
@@ -228,9 +226,7 @@ test('extract 嵌套目录 → 自动创建父目录', async () => {
   const tarPath = path.join(tmpDir, 'nested.tar');
   const outputDir = path.join(tmpDir, 'output');
   try {
-    await writeTarFile(tarPath, [
-      { name: 'a/b/c/file.txt', content: 'deep' },
-    ]);
+    await writeTarFile(tarPath, [{ name: 'a/b/c/file.txt', content: 'deep' }]);
     const extractor = new TarExtractor();
 
     const files = await extractor.extract(tarPath, outputDir);
@@ -242,7 +238,6 @@ test('extract 嵌套目录 → 自动创建父目录', async () => {
   }
 });
 
-
 // ─── 边界场景 ─────────────────────────────────────────────
 
 test('extract 文件名含特殊字符 → 替换为下划线', async () => {
@@ -251,9 +246,7 @@ test('extract 文件名含特殊字符 → 替换为下划线', async () => {
   const outputDir = path.join(tmpDir, 'output');
   try {
     // <>:"|?* 应被替换为 _
-    await writeTarFile(tarPath, [
-      { name: 'a<b.txt', content: 'special' },
-    ]);
+    await writeTarFile(tarPath, [{ name: 'a<b.txt', content: 'special' }]);
     const extractor = new TarExtractor();
 
     const files = await extractor.extract(tarPath, outputDir);
@@ -273,10 +266,7 @@ test('extract 不存在的 tarPath → 抛 ENOENT', async () => {
   try {
     const extractor = new TarExtractor();
 
-    await assert.rejects(
-      () => extractor.extract(path.join(tmpDir, 'nonexistent.tar'), outputDir),
-      /ENOENT/
-    );
+    await assert.rejects(() => extractor.extract(path.join(tmpDir, 'nonexistent.tar'), outputDir), /ENOENT/);
   } finally {
     await fsp.rm(tmpDir, { recursive: true, force: true });
   }
@@ -315,15 +305,11 @@ test('extract 空 tar (仅 2 个零 block) → 返回空数组', async () => {
   }
 });
 
-
 // ─── _parseTarBuffer 单元测试 ──────────────────────────────
 
 test('_parseTarBuffer 单文件 → 1 entry (非目录)', () => {
   const extractor = new TarExtractor();
-  const buffer = Buffer.concat([
-    buildTarEntry('test.txt', 'hello'),
-    Buffer.alloc(BLOCK_SIZE * 2, 0),
-  ]);
+  const buffer = Buffer.concat([buildTarEntry('test.txt', 'hello'), Buffer.alloc(BLOCK_SIZE * 2, 0)]);
 
   const entries = extractor._parseTarBuffer(buffer);
 
@@ -335,10 +321,7 @@ test('_parseTarBuffer 单文件 → 1 entry (非目录)', () => {
 
 test('_parseTarBuffer 目录 entry → isDirectory=true, data=null', () => {
   const extractor = new TarExtractor();
-  const buffer = Buffer.concat([
-    buildTarEntry('mydir/', '', '5'),
-    Buffer.alloc(BLOCK_SIZE * 2, 0),
-  ]);
+  const buffer = Buffer.concat([buildTarEntry('mydir/', '', '5'), Buffer.alloc(BLOCK_SIZE * 2, 0)]);
 
   const entries = extractor._parseTarBuffer(buffer);
 

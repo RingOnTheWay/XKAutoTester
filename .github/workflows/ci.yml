@@ -37,6 +37,12 @@ jobs:
       - name: Lint (JS) — 强制, 违规即失败
         run: npm run lint
 
+      # 格式化门禁: 配置位于仓库根 .prettierrc.json (含 endOfLine:auto, 兼容
+      # Windows checkout 的 CRLF), 覆盖 src/renderer/../tests。此前 format:check
+      # 从未进 CI, 长期漂移 (200 文件不合格) 无人察觉 → 加锁防再漂。
+      - name: Format check (Prettier) — 强制, 违规即失败
+        run: npm run format:check
+
       # R25: 依赖漏洞扫描 — 先扫描不阻断 (当前残留为 axios 链, 待 R25 遗留项 fetch 替代后收紧为强制)
       - name: npm audit (依赖漏洞扫描) — 先扫描不阻断
         continue-on-error: true
@@ -75,6 +81,11 @@ jobs:
 
       - name: Ruff check — 强制, 违规即失败
         run: uv run ruff check src tests
+
+      # 与 JS 侧 format:check 对称: ruff 只做 lint 不做格式门禁时, 同上会静默漂移
+      # (本轮修前有 3 个文件未格式化)。
+      - name: Ruff format check — 强制, 违规即失败
+        run: uv run ruff format --check src tests
 
       # R25: Python 依赖漏洞扫描 (uv audit, 0.11+ 支持) — 先扫描不阻断, 清零后收紧为强制
       - name: uv audit (依赖漏洞扫描) — 先扫描不阻断

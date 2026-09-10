@@ -66,7 +66,9 @@ describe('TestCaseModel FileBrowser 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let errEvt = null;
-    m.on('error', (e) => { errEvt = e; });
+    m.on('error', (e) => {
+      errEvt = e;
+    });
     m.fileBrowser.emit('error', { source: 'test', error: new Error('boom') });
     assert.ok(errEvt);
     assert.strictEqual(errEvt.source, 'test');
@@ -76,7 +78,9 @@ describe('TestCaseModel FileBrowser 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let called = false;
-    m.fileBrowser.selectDirectory = async () => { called = true; };
+    m.fileBrowser.selectDirectory = async () => {
+      called = true;
+    };
     await m.selectDirectory();
     assert.strictEqual(called, true);
   });
@@ -85,7 +89,9 @@ describe('TestCaseModel FileBrowser 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let calledWith = null;
-    m.fileBrowser.scanTestFiles = async (dir) => { calledWith = dir; };
+    m.fileBrowser.scanTestFiles = async (dir) => {
+      calledWith = dir;
+    };
     await m.scanTestFiles('/fake');
     assert.strictEqual(calledWith, '/fake');
   });
@@ -94,7 +100,9 @@ describe('TestCaseModel FileBrowser 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let calledWith = null;
-    m.fileBrowser.batchCheckJsonExists = async (names) => { calledWith = names; };
+    m.fileBrowser.batchCheckJsonExists = async (names) => {
+      calledWith = names;
+    };
     await m.batchCheckJsonExists(['a', 'b']);
     assert.deepStrictEqual(calledWith, ['a', 'b']);
   });
@@ -103,7 +111,9 @@ describe('TestCaseModel FileBrowser 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let calledWith = null;
-    m.fileBrowser.setSearchQuery = (q) => { calledWith = q; };
+    m.fileBrowser.setSearchQuery = (q) => {
+      calledWith = q;
+    };
     m.setSearchQuery('kw');
     assert.strictEqual(calledWith, 'kw');
   });
@@ -118,8 +128,12 @@ describe('TestCaseModel FileBrowser 集成 (R10)', () => {
     const file = { name: 'x.py' };
     let fileChangedEmitted = false;
     let dirtyChangedEmitted = false;
-    m.on('selected-file-changed', () => { fileChangedEmitted = true; });
-    m.on('dirty-changed', () => { dirtyChangedEmitted = true; });
+    m.on('selected-file-changed', () => {
+      fileChangedEmitted = true;
+    });
+    m.on('dirty-changed', () => {
+      dirtyChangedEmitted = true;
+    });
 
     m.selectFile(file);
     assert.strictEqual(m.selectedFile, file);
@@ -132,7 +146,9 @@ describe('TestCaseModel FileBrowser 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let called = false;
-    m.testCaseEditor.deselectFile = () => { called = true; };
+    m.testCaseEditor.deselectFile = () => {
+      called = true;
+    };
     m.deselectFile();
     assert.strictEqual(called, true);
   });
@@ -141,9 +157,13 @@ describe('TestCaseModel FileBrowser 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let called = false;
-    m.testCaseEditor.cancelEdit = () => { called = true; };
+    m.testCaseEditor.cancelEdit = () => {
+      called = true;
+    };
     let cancelEmitted = false;
-    m.on('cancel-edit', () => { cancelEmitted = true; });
+    m.on('cancel-edit', () => {
+      cancelEmitted = true;
+    });
     m.cancelEdit();
     assert.strictEqual(called, true);
     // cancel-edit 事件由 TestCaseEditor 发出，Model 转发；spy 替换后不会 emit
@@ -210,7 +230,9 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let errEvt = null;
-    m.on('error', (e) => { errEvt = e; });
+    m.on('error', (e) => {
+      errEvt = e;
+    });
     m.optionPanel.emit('error', { source: 'test', error: new Error('boom') });
     assert.ok(errEvt);
     assert.strictEqual(errEvt.source, 'test');
@@ -220,7 +242,9 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let called = false;
-    m.optionPanel.loadApps = async () => { called = true; };
+    m.optionPanel.loadApps = async () => {
+      called = true;
+    };
     await m.loadApps();
     assert.strictEqual(called, true);
   });
@@ -229,7 +253,9 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let called = false;
-    m.optionPanel.loadBleDevices = async () => { called = true; };
+    m.optionPanel.loadBleDevices = async () => {
+      called = true;
+    };
     await m.loadBleDevices();
     assert.strictEqual(called, true);
   });
@@ -238,7 +264,9 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let called = false;
-    m.optionPanel.loadMarkers = async () => { called = true; };
+    m.optionPanel.loadMarkers = async () => {
+      called = true;
+    };
     await m.loadMarkers();
     assert.strictEqual(called, true);
   });
@@ -247,7 +275,9 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let called = false;
-    m.optionPanel.load = async () => { called = true; };
+    m.optionPanel.load = async () => {
+      called = true;
+    };
     await m.load();
     assert.strictEqual(called, true);
   });
@@ -256,7 +286,9 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let calledWith = null;
-    m.optionPanel.selectApp = (app) => { calledWith = app; };
+    m.optionPanel.selectApp = (app) => {
+      calledWith = app;
+    };
     const app = { id: 'x' };
     m.selectApp(app);
     assert.strictEqual(calledWith, app);
@@ -266,7 +298,9 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let calledWith = null;
-    m.optionPanel.selectPlatform = (p) => { calledWith = p; };
+    m.optionPanel.selectPlatform = (p) => {
+      calledWith = p;
+    };
     m.selectPlatform('ios');
     assert.strictEqual(calledWith, 'ios');
   });
@@ -275,7 +309,9 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let calledWith = null;
-    m.optionPanel.toggleMarker = (mk) => { calledWith = mk; };
+    m.optionPanel.toggleMarker = (mk) => {
+      calledWith = mk;
+    };
     m.toggleMarker('smoke');
     assert.strictEqual(calledWith, 'smoke');
   });
@@ -284,7 +320,9 @@ describe('TestCaseModel OptionPanel 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let calledWith = null;
-    m.optionPanel.replaceSelectedMarkers = (mk) => { calledWith = mk; };
+    m.optionPanel.replaceSelectedMarkers = (mk) => {
+      calledWith = mk;
+    };
     m.replaceSelectedMarkers(['a', 'b']);
     assert.deepStrictEqual(calledWith, ['a', 'b']);
   });
@@ -364,8 +402,12 @@ describe('TestCaseModel StepEditor 集成 (R10)', () => {
     const m = new Model();
     let stepsChangedEmitted = false;
     let dirtyChangedEmitted = false;
-    m.on('steps-changed', () => { stepsChangedEmitted = true; });
-    m.on('dirty-changed', () => { dirtyChangedEmitted = true; });
+    m.on('steps-changed', () => {
+      stepsChangedEmitted = true;
+    });
+    m.on('dirty-changed', () => {
+      dirtyChangedEmitted = true;
+    });
 
     const step = m.addStep();
     assert.ok(step);
@@ -382,7 +424,9 @@ describe('TestCaseModel StepEditor 集成 (R10)', () => {
     m.clearDirty();
 
     let dirtyCount = 0;
-    m.on('dirty-changed', () => { dirtyCount++; });
+    m.on('dirty-changed', () => {
+      dirtyCount++;
+    });
 
     m.deleteStep(s.id);
     assert.deepStrictEqual(m.steps, []);
@@ -444,7 +488,9 @@ describe('TestCaseModel StepEditor 集成 (R10)', () => {
     m.clearDirty();
 
     let updatedPayload = null;
-    m.on('step-updated', (p) => { updatedPayload = p; });
+    m.on('step-updated', (p) => {
+      updatedPayload = p;
+    });
 
     m.updateStepSelect('tc-operation-select-1', 'sendText', s.id);
     assert.strictEqual(s.config.operation, 'sendText');
@@ -457,7 +503,9 @@ describe('TestCaseModel StepEditor 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let dirtyCount = 0;
-    m.on('dirty-changed', () => { dirtyCount++; });
+    m.on('dirty-changed', () => {
+      dirtyCount++;
+    });
 
     m.setSteps([{ id: 'a' }, { id: 'b' }]);
     assert.strictEqual(m.steps.length, 2);
@@ -470,7 +518,9 @@ describe('TestCaseModel StepEditor 集成 (R10)', () => {
     const m = new Model();
     m.setSteps([{ id: 'a' }]);
     let dirtyCount = 0;
-    m.on('dirty-changed', () => { dirtyCount++; });
+    m.on('dirty-changed', () => {
+      dirtyCount++;
+    });
 
     m.resetSteps();
     assert.deepStrictEqual(m.steps, []);
@@ -481,7 +531,9 @@ describe('TestCaseModel StepEditor 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let emitCount = 0;
-    m.on('steps-changed', () => { emitCount++; });
+    m.on('steps-changed', () => {
+      emitCount++;
+    });
 
     m.syncStepsFromDOM([{ id: 'a' }]);
     assert.strictEqual(m.steps.length, 1);
@@ -492,7 +544,9 @@ describe('TestCaseModel StepEditor 集成 (R10)', () => {
     const Model = await loadModel();
     const m = new Model();
     let emitted = null;
-    m.on('dragged-step-changed', (s) => { emitted = s; });
+    m.on('dragged-step-changed', (s) => {
+      emitted = s;
+    });
 
     const step = { id: 'x' };
     m.setDraggedStep(step);
@@ -505,7 +559,7 @@ describe('TestCaseModel StepEditor 集成 (R10)', () => {
     const m = new Model();
     // 通过公共行为间接验证：selectApp 后，tc-page-select 路由应能读到 app.pages 填充 pageName
     if (!global.window) global.window = {};
-    global.window.i18n = { t: (k, o = {}) => k === 'testCase.defaultStepName' ? `步骤 ${o.n || 1}` : k };
+    global.window.i18n = { t: (k, o = {}) => (k === 'testCase.defaultStepName' ? `步骤 ${o.n || 1}` : k) };
     const fakeApp = { id: 'app1', name: 'App1', pages: [{ id: 'p1', name: 'Page1', elements: [] }] };
     m.optionPanel.selectApp(fakeApp);
     const s = m.stepEditor.addStep();

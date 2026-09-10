@@ -5,7 +5,15 @@ const assert = require('node:assert');
 const path = require('path');
 
 const CRUD_SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'base', 'JsonFileCrudService.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'base',
+  'JsonFileCrudService.js'
 );
 const { JsonFileCrudService } = require(CRUD_SERVICE_PATH);
 
@@ -29,8 +37,12 @@ function makeFakeAsyncFs(opts = {}) {
       if (opts.readJsonThrow) throw opts.readJsonThrow;
       return opts.readJsonResult || {};
     },
-    writeJson: async (p, data) => { calls.writeJson.push({ p, data }); },
-    ensureDir: async (dir) => { calls.ensureDir.push(dir); },
+    writeJson: async (p, data) => {
+      calls.writeJson.push({ p, data });
+    },
+    ensureDir: async (dir) => {
+      calls.ensureDir.push(dir);
+    },
   };
 }
 
@@ -39,10 +51,14 @@ function makeFakeAsyncFs(opts = {}) {
 test('constructor 收 asyncFsFactory + idGenerator + 实例建', () => {
   const fakeFs = makeFakeAsyncFs();
   const idGen = () => 'fixed-id';
-  const svc = new JsonFileCrudService('/tmp/x.json', { a: 1 }, {
-    asyncFsFactory: () => fakeFs,
-    idGenerator: idGen,
-  });
+  const svc = new JsonFileCrudService(
+    '/tmp/x.json',
+    { a: 1 },
+    {
+      asyncFsFactory: () => fakeFs,
+      idGenerator: idGen,
+    }
+  );
 
   assert.strictEqual(svc.filePath, '/tmp/x.json');
   assert.deepStrictEqual(svc.defaultData, { a: 1 });
@@ -69,7 +85,7 @@ test('getData 文件不存在返 defaultData deep clone', async () => {
   const data = await svc.getData();
 
   assert.deepStrictEqual(data, { items: [1, 2] });
-  assert.notStrictEqual(data, def);  // deep clone, 非同引用
+  assert.notStrictEqual(data, def); // deep clone, 非同引用
   assert.notStrictEqual(data.items, def.items);
 });
 
@@ -80,11 +96,17 @@ test('getData readJson 抛错返 defaultData + console.error', async () => {
   });
   const originalErr = console.error;
   let errLogged = false;
-  console.error = () => { errLogged = true; };
+  console.error = () => {
+    errLogged = true;
+  };
   try {
-    const svc = new JsonFileCrudService('/tmp/x.json', { fallback: true }, {
-      asyncFsFactory: () => fakeFs,
-    });
+    const svc = new JsonFileCrudService(
+      '/tmp/x.json',
+      { fallback: true },
+      {
+        asyncFsFactory: () => fakeFs,
+      }
+    );
     const data = await svc.getData();
     assert.deepStrictEqual(data, { fallback: true });
     assert.strictEqual(errLogged, true);
@@ -97,7 +119,10 @@ test('saveData 目录不存在调 ensureDir + writeJson', async () => {
   // exists 第一次返 false (目录不存在), 第二次返 true (由 writeJson 内部不调, 此处不模拟)
   let existsCount = 0;
   const fakeFs = {
-    exists: async () => { existsCount++; return false; },  // 始终返 false
+    exists: async () => {
+      existsCount++;
+      return false;
+    }, // 始终返 false
     readJson: async () => ({}),
     writeJson: async () => {},
     ensureDir: async () => {},
@@ -116,10 +141,14 @@ test('saveData 目录不存在调 ensureDir + writeJson', async () => {
 
 test('_generateId 调注入的 idGenerator', () => {
   const fakeFs = makeFakeAsyncFs();
-  const svc = new JsonFileCrudService('/tmp/x.json', {}, {
-    asyncFsFactory: () => fakeFs,
-    idGenerator: () => 'generated-id-001',
-  });
+  const svc = new JsonFileCrudService(
+    '/tmp/x.json',
+    {},
+    {
+      asyncFsFactory: () => fakeFs,
+      idGenerator: () => 'generated-id-001',
+    }
+  );
 
   assert.strictEqual(svc._generateId(), 'generated-id-001');
 });

@@ -8,9 +8,7 @@ const path = require('path');
 const Module = require('module');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
-const REGISTRY_PATH = path.join(
-  PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'WindowsRegistryBridge.js'
-);
+const REGISTRY_PATH = path.join(PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'WindowsRegistryBridge.js');
 
 /**
  * mock child_process.spawnSync
@@ -31,7 +29,9 @@ function mockSpawnSync() {
   };
   return {
     calls,
-    restore: () => { Module._load = origLoad; }
+    restore: () => {
+      Module._load = origLoad;
+    },
   };
 }
 
@@ -49,7 +49,9 @@ function mockSpawnSyncThrow(errorMsg) {
     }
     return origLoad.call(this, request, parent, isMain);
   };
-  return () => { Module._load = origLoad; };
+  return () => {
+    Module._load = origLoad;
+  };
 }
 
 /**
@@ -59,7 +61,7 @@ function mockSpawnSyncFailure() {
   const fakeSpawnSync = () => ({
     status: 1,
     stdout: '',
-    stderr: 'reg add failed'
+    stderr: 'reg add failed',
   });
   const origLoad = Module._load;
   Module._load = function (request, parent, isMain) {
@@ -68,7 +70,9 @@ function mockSpawnSyncFailure() {
     }
     return origLoad.call(this, request, parent, isMain);
   };
-  return () => { Module._load = origLoad; };
+  return () => {
+    Module._load = origLoad;
+  };
 }
 
 /**
@@ -90,7 +94,6 @@ function loadBridge() {
   delete require.cache[require.resolve(REGISTRY_PATH)];
   return require(REGISTRY_PATH);
 }
-
 
 // ─── 构造函数 ───────────────────────────────────────────────────
 
@@ -116,7 +119,6 @@ test('自定义 registry key', () => {
   }
 });
 
-
 // ─── writePath (Windows) ──────────────────────────────────────
 
 test('writePath 在 Windows 平台调用 spawnSync 执行 reg add', () => {
@@ -131,11 +133,15 @@ test('writePath 在 Windows 平台调用 spawnSync 执行 reg add', () => {
     assert.strictEqual(spawnMock.calls[0].cmd, 'reg');
     // R7: args 数组参数, 不经 shell 解析, 根除命令注入
     assert.deepStrictEqual(spawnMock.calls[0].args, [
-      'add', 'HKCU\\Software\\XKAutoTester',
-      '/v', 'UserDataPath',
-      '/t', 'REG_SZ',
-      '/d', 'C:\\Users\\Test\\XKAutoTester',
-      '/f'
+      'add',
+      'HKCU\\Software\\XKAutoTester',
+      '/v',
+      'UserDataPath',
+      '/t',
+      'REG_SZ',
+      '/d',
+      'C:\\Users\\Test\\XKAutoTester',
+      '/f',
     ]);
     assert.strictEqual(spawnMock.calls[0].opts.windowsHide, true);
   } finally {
@@ -165,7 +171,6 @@ test('writePath 路径含双引号/cmd 元字符时原样传递 (spawnSync 无�
     restorePlatform();
   }
 });
-
 
 // ─── writePath (非 Windows) ────────────────────────────────────
 
@@ -198,7 +203,6 @@ test('writePath 在 darwin 平台 noop', () => {
     restorePlatform();
   }
 });
-
 
 // ─── spawnSync 失败容错 ─────────────────────────────────────────
 

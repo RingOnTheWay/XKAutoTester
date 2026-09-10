@@ -21,7 +21,13 @@ function read(p) {
 // 待校验链: [通道常量名, preload expose 方法名, handler 引用, 渲染层 bind key]
 const CHAINS = [
   // 更新取消: 曾只漏 preload 层
-  ['CANCEL_UPDATE_DOWNLOAD', 'cancelUpdateDownload', 'CANCEL_UPDATE_DOWNLOAD', 'cancelUpdateDownload', settingsModelPath],
+  [
+    'CANCEL_UPDATE_DOWNLOAD',
+    'cancelUpdateDownload',
+    'CANCEL_UPDATE_DOWNLOAD',
+    'cancelUpdateDownload',
+    settingsModelPath,
+  ],
   // 历史教训链: android 文件操作曾漏渲染层 bind
   ['DELETE_REMOTE_FILE', 'deleteRemoteFile', 'DELETE_REMOTE_FILE', 'deleteRemoteFile', androidModelPath],
   ['RENAME_REMOTE_FILE', 'renameRemoteFile', 'RENAME_REMOTE_FILE', 'renameRemoteFile', androidModelPath],
@@ -35,21 +41,26 @@ test('IPC 四层链一致: constants / preload expose / main handler / renderer 
   for (const [constKey, exposeName, handlerKey, bindKey, modelPath] of CHAINS) {
     const modelSrc = read(modelPath);
     // 1) constants 定义通道
-    assert.ok(
-      new RegExp(`${constKey}\\s*:\\s*'[^']+'`).test(constantsSrc),
-      `constants 缺 ${constKey}`
-    );
+    assert.ok(new RegExp(`${constKey}\\s*:\\s*'[^']+'`).test(constantsSrc), `constants 缺 ${constKey}`);
     // 2) preload 用该通道 expose (invokeWithCheck(IPC_CHANNELS.X))
     assert.ok(
-      new RegExp(`${exposeName}\\s*:\\s*\\(?[^)]*\\)?\\s*=>\\s*invokeWithCheck\\(IPC_CHANNELS\\.${handlerKey}`).test(preloadSrc),
+      new RegExp(`${exposeName}\\s*:\\s*\\(?[^)]*\\)?\\s*=>\\s*invokeWithCheck\\(IPC_CHANNELS\\.${handlerKey}`).test(
+        preloadSrc
+      ),
       `preload 缺 ${exposeName} (通道 ${handlerKey})`
     );
     // 3) main handler 注册该通道
     assert.ok(
       new RegExp(`IPC_CHANNELS\\.${handlerKey}`).test(handlersSrc) ||
-        fs.readdirSync(path.join(ROOT, 'electron', 'src', 'main', 'handlers')).some(
-          (f) => f.endsWith('.js') && new RegExp(`IPC_CHANNELS\\.${handlerKey}`).test(read(path.join(ROOT, 'electron', 'src', 'main', 'handlers', f)))
-        ),
+        fs
+          .readdirSync(path.join(ROOT, 'electron', 'src', 'main', 'handlers'))
+          .some(
+            (f) =>
+              f.endsWith('.js') &&
+              new RegExp(`IPC_CHANNELS\\.${handlerKey}`).test(
+                read(path.join(ROOT, 'electron', 'src', 'main', 'handlers', f))
+              )
+          ),
       `handlers 缺通道 ${handlerKey}`
     );
     // 4) 渲染层 ApiBridge.bind specs 含 key

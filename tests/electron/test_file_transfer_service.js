@@ -6,9 +6,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const FileTransferService = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'adb', 'FileTransferService.js'
-));
+const FileTransferService = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'adb', 'FileTransferService.js')
+);
 
 // ── mock 工厂 ──────────────────────────────────────────────
 
@@ -18,12 +18,7 @@ const FileTransferService = require(path.join(
  * @returns {{proc: object, spawnFn: function}}
  */
 function createMockSpawn(opts = {}) {
-  const {
-    stdoutChunks = [],
-    stderrChunks = [],
-    code = 0,
-    delay = 0,
-  } = opts;
+  const { stdoutChunks = [], stderrChunks = [], code = 0, delay = 0 } = opts;
 
   const capturedCalls = [];
 
@@ -35,8 +30,17 @@ function createMockSpawn(opts = {}) {
     const errorCbs = [];
 
     const proc = {
-      stdout: { on: (evt, cb) => { if (evt === 'data') stdoutCbs.push(cb); }, pipe: () => {} },
-      stderr: { on: (evt, cb) => { if (evt === 'data') stderrCbs.push(cb); } },
+      stdout: {
+        on: (evt, cb) => {
+          if (evt === 'data') stdoutCbs.push(cb);
+        },
+        pipe: () => {},
+      },
+      stderr: {
+        on: (evt, cb) => {
+          if (evt === 'data') stderrCbs.push(cb);
+        },
+      },
       on: (evt, cb) => {
         if (evt === 'close') closeCbs.push(cb);
         else if (evt === 'error') errorCbs.push(cb);
@@ -46,9 +50,9 @@ function createMockSpawn(opts = {}) {
     };
 
     const emitAll = () => {
-      stdoutChunks.forEach(chunk => stdoutCbs.forEach(cb => cb(Buffer.from(chunk))));
-      stderrChunks.forEach(chunk => stderrCbs.forEach(cb => cb(Buffer.from(chunk))));
-      closeCbs.forEach(cb => cb(code));
+      stdoutChunks.forEach((chunk) => stdoutCbs.forEach((cb) => cb(Buffer.from(chunk))));
+      stderrChunks.forEach((chunk) => stderrCbs.forEach((cb) => cb(Buffer.from(chunk))));
+      closeCbs.forEach((cb) => cb(code));
     };
 
     if (delay > 0) setTimeout(emitAll, delay);
@@ -136,8 +140,8 @@ test('upload 成功路径: stat → push → monitor emit success', async () => 
   // monitor 创建 1 个, emit 0% preparing + 100% success
   assert.strictEqual(monitorFactory.instances.length, 1);
   const events = monitorFactory.instances[0].monitor.events;
-  assert.ok(events.some(e => e.percentage === 0 && e.status === 'preparing'));
-  assert.ok(events.some(e => e.percentage === 100 && e.status === 'success'));
+  assert.ok(events.some((e) => e.percentage === 0 && e.status === 'preparing'));
+  assert.ok(events.some((e) => e.percentage === 100 && e.status === 'success'));
 });
 
 test('upload 无 deviceId 时 push args 不含 -s', async () => {
@@ -185,7 +189,7 @@ test('upload push 失败返回 success=false + monitor emit error', async () => 
   assert.strictEqual(result.success, false);
   assert.ok(result.error);
   const events = monitorFactory.instances[0].monitor.events;
-  assert.ok(events.some(e => e.percentage === 100 && e.status === 'error'));
+  assert.ok(events.some((e) => e.percentage === 100 && e.status === 'error'));
 });
 
 test('upload statSync 抛错返回 success=false', async () => {
@@ -198,7 +202,11 @@ test('upload statSync 抛错返回 success=false', async () => {
     i18nService: i18nMock,
     tarExtractor: { extract: async () => {} },
     spawnFn,
-    fs: { statSync: () => { throw new Error('ENOENT'); } },
+    fs: {
+      statSync: () => {
+        throw new Error('ENOENT');
+      },
+    },
     progressMonitorFactory: monitorFactory,
     admZipFactory: () => ({ addFile: () => {}, writeZip: () => {} }),
     asyncFs: {},
@@ -302,16 +310,22 @@ test('download 目录 (isDir=true): tar exec-out + processTarAndCreateZip', asyn
     },
   };
   Object.defineProperty(tarExtractor, 'calls', {
-    value: extractCalls, enumerable: false, writable: false,
+    value: extractCalls,
+    enumerable: false,
+    writable: false,
   });
 
   let zipFiles = [];
   const admZipInstance = {
-    addFile: (p, content) => { zipFiles.push(p); },
+    addFile: (p, content) => {
+      zipFiles.push(p);
+    },
     writeZip: (target) => {},
   };
   Object.defineProperty(admZipInstance, 'files', {
-    value: zipFiles, enumerable: false, writable: false,
+    value: zipFiles,
+    enumerable: false,
+    writable: false,
   });
   const admZipFactory = () => admZipInstance;
 
@@ -332,7 +346,10 @@ test('download 目录 (isDir=true): tar exec-out + processTarAndCreateZip', asyn
     i18nService: i18nMock,
     tarExtractor,
     spawnFn,
-    fs: { statSync: () => ({ size: 100 }), createWriteStream: () => ({ on: () => {}, write: () => {}, end: () => {} }) },
+    fs: {
+      statSync: () => ({ size: 100 }),
+      createWriteStream: () => ({ on: () => {}, write: () => {}, end: () => {} }),
+    },
     progressMonitorFactory: monitorFactory,
     admZipFactory,
     asyncFs: asyncFsMock,
@@ -347,7 +364,7 @@ test('download 目录 (isDir=true): tar exec-out + processTarAndCreateZip', asyn
   assert.strictEqual(tarExtractor.calls.length, 1);
   // monitor emit 100% success
   const events = monitorFactory.instances[0].monitor.events;
-  assert.ok(events.some(e => e.percentage === 100 && e.status === 'success'));
+  assert.ok(events.some((e) => e.percentage === 100 && e.status === 'success'));
 });
 
 // ── _processTarAndCreateZip 测试 ───────────────────────────
@@ -356,11 +373,16 @@ test('_processTarAndCreateZip 调用 tarExtractor.extract + admZip.writeZip', as
   let extractCalled = false;
   let writeZipCalled = false;
   const tarExtractor = {
-    extract: async () => { extractCalled = true; return []; },
+    extract: async () => {
+      extractCalled = true;
+      return [];
+    },
   };
   const admZipInstance = {
     addFile: () => {},
-    writeZip: () => { writeZipCalled = true; },
+    writeZip: () => {
+      writeZipCalled = true;
+    },
   };
 
   const svc = new FileTransferService({
@@ -402,10 +424,12 @@ test('download 目录 spawn error: monitor emit error 恰一次 + success=false'
     const proc = {
       stdout: { on: () => {}, pipe: () => {} },
       stderr: { on: () => {} },
-      on: (evt, cb) => { if (evt === 'error') errorCbs.push(cb); },
+      on: (evt, cb) => {
+        if (evt === 'error') errorCbs.push(cb);
+      },
       pid: 3,
     };
-    proc.fireError = () => errorCbs.forEach(cb => cb(new Error('ENOENT: adb not found')));
+    proc.fireError = () => errorCbs.forEach((cb) => cb(new Error('ENOENT: adb not found')));
     tarProc = proc;
     return proc;
   };
@@ -426,7 +450,10 @@ test('download 目录 spawn error: monitor emit error 恰一次 + success=false'
     i18nService: i18nMock,
     tarExtractor: { extract: async () => [] },
     spawnFn,
-    fs: { statSync: () => ({ size: 100 }), createWriteStream: () => ({ on: () => {}, write: () => {}, end: () => {} }) },
+    fs: {
+      statSync: () => ({ size: 100 }),
+      createWriteStream: () => ({ on: () => {}, write: () => {}, end: () => {} }),
+    },
     progressMonitorFactory: monitorFactory,
     admZipFactory: () => ({ addFile: () => {}, writeZip: () => {} }),
     asyncFs: asyncFsMock,
@@ -434,15 +461,15 @@ test('download 目录 spawn error: monitor emit error 恰一次 + success=false'
 
   const promise = svc.download('/sdcard/dir', '/local/dir', 'dev1', null);
   // 等待 isDir 判断 + getDirSize 的 await 完成、tar spawn 已调用后触发 error
-  await new Promise(r => setImmediate(r));
-  await new Promise(r => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
   assert.ok(tarProc, 'tar spawn 应已被调用');
   tarProc.fireError();
 
   const result = await promise;
   assert.strictEqual(result.success, false);
   assert.ok(result.error);
-  const errorEvents = monitorFactory.instances[0].monitor.events.filter(e => e.status === 'error');
+  const errorEvents = monitorFactory.instances[0].monitor.events.filter((e) => e.status === 'error');
   assert.strictEqual(errorEvents.length, 1, 'spawn error 应只 emit 一次');
 });
 
@@ -459,7 +486,9 @@ function createNeverSettlingSpawn() {
       stdout: { on: () => {}, pipe: () => {} },
       stderr: { on: () => {} },
       on: () => {},
-      kill: () => { kills.push(1); },
+      kill: () => {
+        kills.push(1);
+      },
       pid: 1,
     };
     return proc;
@@ -480,22 +509,25 @@ test('P1-4 upload 超时: 永不 close 时 kill 子进程 + stop monitor + resol
     fs: { statSync: () => ({ size: 1024 }) },
     progressMonitorFactory: monitorFactory,
     admZipFactory: () => ({ addFile: () => {}, writeZip: () => {} }),
-    transferTimeoutMs: 50,  // P1-4: 注入短超时
+    transferTimeoutMs: 50, // P1-4: 注入短超时
   });
 
   const result = await svc.upload('/local/a.txt', '/sdcard/a.txt', 'dev1', null);
 
   assert.strictEqual(result.success, false, '超时应 resolve 失败');
   assert.ok(spawnFn.kills.length >= 1, '子进程应被 kill');
-  assert.strictEqual(monitorFactory.instances[0].monitor.events.filter(e => e.status === 'error').length, 1,
-    '超时 emit 一次 error');
+  assert.strictEqual(
+    monitorFactory.instances[0].monitor.events.filter((e) => e.status === 'error').length,
+    1,
+    '超时 emit 一次 error'
+  );
 });
 
 test('P1-4 download 单文件超时: 永不 close 时 kill + resolve 失败', async () => {
   const { spawnFn } = createNeverSettlingSpawn();
   const monitorFactory = createMockMonitorFactory();
   const svc = new FileTransferService({
-    commandExecutor: { execute: async () => ({ success: true, output: '-rw-r--r-- 1 root root 100 f.txt' }) },  // 非目录
+    commandExecutor: { execute: async () => ({ success: true, output: '-rw-r--r-- 1 root root 100 f.txt' }) }, // 非目录
     remoteStatService: { getFileSize: async () => 100, getDirSize: async () => 0 },
     i18nService: i18nMock,
     tarExtractor: { extract: async () => [] },
@@ -520,18 +552,23 @@ test('P1-4 download 目录超时: tar 永不 close 时 kill + 清临时文件 + 
     ensureDir: async () => {},
     exists: async () => true,
     unlink: async () => {},
-    rm: async (dir, opts) => { removed.push({ dir, opts }); },
+    rm: async (dir, opts) => {
+      removed.push({ dir, opts });
+    },
     readdir: async () => [],
     stat: async () => ({ isDirectory: () => false }),
     readFile: async () => Buffer.alloc(0),
   };
   const svc = new FileTransferService({
-    commandExecutor: { execute: async () => ({ success: true, output: 'drwx' }) },  // 目录
+    commandExecutor: { execute: async () => ({ success: true, output: 'drwx' }) }, // 目录
     remoteStatService: { getFileSize: async () => 0, getDirSize: async () => 0 },
     i18nService: i18nMock,
     tarExtractor: { extract: async () => [] },
     spawnFn,
-    fs: { statSync: () => ({ size: 100 }), createWriteStream: () => ({ on: () => {}, write: () => {}, end: () => {} }) },
+    fs: {
+      statSync: () => ({ size: 100 }),
+      createWriteStream: () => ({ on: () => {}, write: () => {}, end: () => {} }),
+    },
     progressMonitorFactory: monitorFactory,
     admZipFactory: () => ({ addFile: () => {}, writeZip: () => {} }),
     asyncFs: asyncFsMock,
@@ -554,8 +591,12 @@ test('R24 P2-1 download 单文件: 超时 resolve 后 close 不再 emit 成功 (
     const proc = {
       stdout: { on: () => {}, pipe: () => {} },
       stderr: { on: () => {} },
-      on: (evt, cb) => { if (evt === 'close') closeCbs.push(cb); },
-      kill: () => { kills.push(1); },
+      on: (evt, cb) => {
+        if (evt === 'close') closeCbs.push(cb);
+      },
+      kill: () => {
+        kills.push(1);
+      },
       pid: 1,
     };
     return proc;
@@ -568,7 +609,7 @@ test('R24 P2-1 download 单文件: 超时 resolve 后 close 不再 emit 成功 (
 
   const monitorFactory = createMockMonitorFactory();
   const svc = new FileTransferService({
-    commandExecutor: { execute: async () => ({ success: true, output: '-rw-r--r-- 1 root root 100 f.txt' }) },  // 非目录
+    commandExecutor: { execute: async () => ({ success: true, output: '-rw-r--r-- 1 root root 100 f.txt' }) }, // 非目录
     remoteStatService: { getFileSize: async () => 100, getDirSize: async () => 0 },
     i18nService: i18nMock,
     tarExtractor: { extract: async () => [] },

@@ -144,11 +144,7 @@ def _extract_listening_pids(netstat_output: str, port: int) -> list[str]:
         state = parts[3]
         pid = parts[4]
         # R24 P2-5: 中文 Windows netstat 状态列本地化为"正在侦听", 双匹配防端口清理静默失效
-        if (
-            local_addr.endswith(port_suffix)
-            and state in ("LISTENING", "正在侦听")
-            and pid.isdigit()
-        ):
+        if local_addr.endswith(port_suffix) and state in ("LISTENING", "正在侦听") and pid.isdigit():
             logger.info(f"找到占用端口{port}的进程ID: {pid}")
             pids.append(pid)
     return pids

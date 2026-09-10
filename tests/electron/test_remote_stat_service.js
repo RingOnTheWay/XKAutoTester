@@ -7,12 +7,12 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const RemoteStatService = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'adb', 'RemoteStatService.js'
-));
-const AdbPathQuoter = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'adb', 'AdbPathQuoter.js'
-));
+const RemoteStatService = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'adb', 'RemoteStatService.js')
+);
+const AdbPathQuoter = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'adb', 'AdbPathQuoter.js')
+);
 
 // ── mock commandExecutor 工厂 ─────────────────────────────
 
@@ -57,7 +57,12 @@ test('getFileSize 含 deviceId 时 args 含 -s deviceId', async () => {
   await svc.getFileSize('/sdcard/file.txt', 'device123');
 
   assert.strictEqual(exec.calls.length, 1);
-  assert.deepStrictEqual(exec.calls[0].args, ['-s', 'device123', 'shell', `stat -c %s ${AdbPathQuoter.quote('/sdcard/file.txt')}`]);
+  assert.deepStrictEqual(exec.calls[0].args, [
+    '-s',
+    'device123',
+    'shell',
+    `stat -c %s ${AdbPathQuoter.quote('/sdcard/file.txt')}`,
+  ]);
 });
 
 test('getFileSize 无 deviceId 时 args 不含 -s', async () => {
@@ -191,9 +196,10 @@ test('getDirSize 所有 du 失败回退 ls -laR', async () => {
     // ls -laR 输出
     return {
       success: true,
-      output: '-rw-r--r-- 1 root root 100 Jan 1 00:00 file1.txt\n' +
-              '-rw-r--r-- 1 root root 200 Jan 1 00:00 file2.txt\n' +
-              'drwxr-xr-x 2 root root 4096 Jan 1 00:00 subdir\n',
+      output:
+        '-rw-r--r-- 1 root root 100 Jan 1 00:00 file1.txt\n' +
+        '-rw-r--r-- 1 root root 200 Jan 1 00:00 file2.txt\n' +
+        'drwxr-xr-x 2 root root 4096 Jan 1 00:00 subdir\n',
       error: '',
     };
   });
@@ -201,7 +207,7 @@ test('getDirSize 所有 du 失败回退 ls -laR', async () => {
 
   const size = await svc.getDirSize('/sdcard/dir', null);
 
-  assert.strictEqual(size, 100 + 200);  // 文件大小求和 (目录条目不算)
+  assert.strictEqual(size, 100 + 200); // 文件大小求和 (目录条目不算)
   assert.strictEqual(exec.calls.length, 4);
   assert.ok(exec.calls[3].args[1].includes('ls -laR'));
 });
@@ -221,9 +227,10 @@ test('getDirSize ls -laR 只匹配文件行 (typeFlag=-),跳过目录行', async
     if (callCount <= 3) return { success: true, output: '', error: '' };
     return {
       success: true,
-      output: '-rw-r--r-- 1 root root 100 file1\n' +
-              'drwxr-xr-x 2 root root 4096 subdir\n' +
-              '-rw-r--r-- 1 root root 200 file2\n',
+      output:
+        '-rw-r--r-- 1 root root 100 file1\n' +
+        'drwxr-xr-x 2 root root 4096 subdir\n' +
+        '-rw-r--r-- 1 root root 200 file2\n',
       error: '',
     };
   });
@@ -231,7 +238,7 @@ test('getDirSize ls -laR 只匹配文件行 (typeFlag=-),跳过目录行', async
 
   const size = await svc.getDirSize('/sdcard/dir', null);
 
-  assert.strictEqual(size, 300);  // 100 + 200,不含目录 4096
+  assert.strictEqual(size, 300); // 100 + 200,不含目录 4096
 });
 
 test('getDirSize 所有方法失败返回 0', async () => {
@@ -241,7 +248,7 @@ test('getDirSize 所有方法失败返回 0', async () => {
   const size = await svc.getDirSize('/nonexistent', null);
 
   assert.strictEqual(size, 0);
-  assert.strictEqual(exec.calls.length, 4);  // 3 个 du + 1 个 ls
+  assert.strictEqual(exec.calls.length, 4); // 3 个 du + 1 个 ls
 });
 
 test('getDirSize 路径用 AdbPathQuoter 转义', async () => {

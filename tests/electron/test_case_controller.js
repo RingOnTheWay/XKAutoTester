@@ -9,9 +9,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
 
-const CONTROLLER_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'renderer', 'tabs', 'test-case', 'controller.js'
-);
+const CONTROLLER_PATH = path.join(__dirname, '..', '..', 'electron', 'renderer', 'tabs', 'test-case', 'controller.js');
 
 let TestCaseController;
 
@@ -93,7 +91,11 @@ test('P2-8 bindFileListEvents 重复调用只 push 一次 unbind', async () => {
   controller.bindFileListEvents();
 
   assert.strictEqual(controller.unbinds.size, 1, '文件列表 unbind 只应 push 一次');
-  assert.strictEqual(view.calls.bindFileListClick, 1, 'bindFileListClick 只应调用一次 (view 层 __tcClickBound 同样防重)');
+  assert.strictEqual(
+    view.calls.bindFileListClick,
+    1,
+    'bindFileListClick 只应调用一次 (view 层 __tcClickBound 同样防重)'
+  );
 });
 
 // ── P3-12: handleSave 保存中防重入 ─────────────────────────
@@ -117,7 +119,9 @@ test('P3-12 handleSave 并发调用只执行一次 saveCase', async () => {
       collectFormData: () => ({}),
       saveCase: async () => {
         saveCalls++;
-        return new Promise((r) => { resolveSave = r; });
+        return new Promise((r) => {
+          resolveSave = r;
+        });
       },
     },
     view

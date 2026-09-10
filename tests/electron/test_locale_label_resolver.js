@@ -5,9 +5,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const LocaleLabelResolver = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'apk', 'LocaleLabelResolver.js'
-));
+const LocaleLabelResolver = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'apk', 'LocaleLabelResolver.js')
+);
 
 function createI18nMock(language) {
   return { getLanguage: () => language };

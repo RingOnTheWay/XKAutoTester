@@ -54,10 +54,7 @@ class Logger {
       const timestamp = new Date().toISOString();
       const raw = `[${timestamp}] [${this.serviceName}] [${level}] ${message}`;
       // P3-5: 超长截断 (防高频 stdout 巨行撑爆 WriteStream 内部缓冲)
-      const entry =
-        raw.length > MAX_LOG_ENTRY_LENGTH
-          ? `${raw.slice(0, MAX_LOG_ENTRY_LENGTH)}...[truncated]`
-          : raw;
+      const entry = raw.length > MAX_LOG_ENTRY_LENGTH ? `${raw.slice(0, MAX_LOG_ENTRY_LENGTH)}...[truncated]` : raw;
       const stream = this._getStream();
       // P3-5: write 返回 false = 背压 (Node 内部缓冲超过 highWaterMark)。
       // 高频 stdout 场景继续写只会让缓冲无界增长 → 内存泄漏; 日志流是尽力而为,

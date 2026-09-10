@@ -16,14 +16,16 @@ global.__dialogMock = {
   showMessageBox: async (win, options) => {
     global.__dialogMock.lastOptions = options;
     return { response: 0 };
-  }
+  },
 };
 
 const electronMock = {
   dialog: global.__dialogMock,
   // 扩展: BrowserWindow mock (handler 测试需要)
   BrowserWindow: class {
-    constructor() { this.webContents = { send: () => {} }; }
+    constructor() {
+      this.webContents = { send: () => {} };
+    }
   },
   // 扩展: app mock
   app: {
@@ -49,7 +51,7 @@ const electronMock = {
 };
 
 const origLoad = Module._load;
-Module._load = function(request, parent, isMain) {
+Module._load = function (request, parent, isMain) {
   if (request === 'electron') return electronMock;
   return origLoad.call(this, request, parent, isMain);
 };

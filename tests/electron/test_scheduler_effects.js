@@ -22,11 +22,24 @@ test('globalTimerProvider 委托全局 timer 且透传参数', () => {
     setImmediate: global.setImmediate,
   };
   const seen = {};
-  global.setTimeout = (fn, ms) => { seen.setTimeout = { fn, ms }; return 101; };
-  global.setInterval = (fn, ms) => { seen.setInterval = { fn, ms }; return 202; };
-  global.clearTimeout = (h) => { seen.clearTimeout = h; };
-  global.clearInterval = (h) => { seen.clearInterval = h; };
-  global.setImmediate = (fn) => { seen.setImmediate = { fn }; return 303; };
+  global.setTimeout = (fn, ms) => {
+    seen.setTimeout = { fn, ms };
+    return 101;
+  };
+  global.setInterval = (fn, ms) => {
+    seen.setInterval = { fn, ms };
+    return 202;
+  };
+  global.clearTimeout = (h) => {
+    seen.clearTimeout = h;
+  };
+  global.clearInterval = (h) => {
+    seen.clearInterval = h;
+  };
+  global.setImmediate = (fn) => {
+    seen.setImmediate = { fn };
+    return 303;
+  };
   try {
     const fn = () => {};
     assert.strictEqual(globalTimerProvider.setTimeout(fn, 500), 101);
@@ -45,7 +58,10 @@ test('globalTimerProvider 委托全局 timer 且透传参数', () => {
 });
 
 test('defaultWatcherFactory 路径不存在/异常返回 null', () => {
-  assert.strictEqual(defaultWatcherFactory('/nonexistent/plans.json', () => {}), null);
+  assert.strictEqual(
+    defaultWatcherFactory('/nonexistent/plans.json', () => {}),
+    null
+  );
 });
 
 test('defaultWatcherFactory 路径存在返回 fs.watch 句柄且回调透传', async () => {
@@ -53,7 +69,9 @@ test('defaultWatcherFactory 路径存在返回 fs.watch 句柄且回调透传', 
   const plansPath = path.join(dir, 'plans.json');
   await fs.promises.writeFile(plansPath, '[]');
   let fired = null;
-  const watcher = defaultWatcherFactory(plansPath, (eventType) => { fired = eventType; });
+  const watcher = defaultWatcherFactory(plansPath, (eventType) => {
+    fired = eventType;
+  });
   assert.ok(watcher, '应返回 watcher');
   assert.strictEqual(typeof watcher.close, 'function');
   // 触发文件变更 → 回调收到事件
@@ -67,7 +85,13 @@ test('defaultWatcherFactory 路径存在返回 fs.watch 句柄且回调透传', 
 
 test('defaultNotifierFactory window 存在时 send 委托 webContents', () => {
   let sent = null;
-  const window = { webContents: { send: (ch, payload) => { sent = { ch, payload }; } } };
+  const window = {
+    webContents: {
+      send: (ch, payload) => {
+        sent = { ch, payload };
+      },
+    },
+  };
   const notifier = defaultNotifierFactory(window);
   notifier.send('CHANNEL', { a: 1 });
   assert.deepStrictEqual(sent, { ch: 'CHANNEL', payload: { a: 1 } });

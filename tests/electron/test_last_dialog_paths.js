@@ -7,7 +7,17 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const MODULE_PATH = path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'handlers', 'base', 'lastDialogPaths.js');
+const MODULE_PATH = path.join(
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'handlers',
+  'base',
+  'lastDialogPaths.js'
+);
 
 function loadStore() {
   delete require.cache[require.resolve(MODULE_PATH)];

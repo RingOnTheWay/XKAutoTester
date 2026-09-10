@@ -7,9 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const I18N_SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'I18nService.js'
-);
+const I18N_SERVICE_PATH = path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'I18nService.js');
 const { I18nService } = require(I18N_SERVICE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
@@ -174,18 +172,12 @@ test('默认 factory 读真 fs (集成, 临时 locales 目录 + config.json)', a
     const localesDir = path.join(tmpDir, 'electron', 'locales');
     const zhCNDir = path.join(localesDir, 'zh-CN');
     fs.mkdirSync(zhCNDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(zhCNDir, 'translation.json'),
-      JSON.stringify({ greeting: '你好' })
-    );
+    fs.writeFileSync(path.join(zhCNDir, 'translation.json'), JSON.stringify({ greeting: '你好' }));
 
     // 临时 config/config.json
     const configDir = path.join(tmpDir, 'config');
     fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(configDir, 'config.json'),
-      JSON.stringify({ APP_SETTINGS: { language: 'zh-CN' } })
-    );
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ APP_SETTINGS: { language: 'zh-CN' } }));
 
     // monkey-patch __dirname 的 path.join 计算 (通过临时 locales 路径)
     // 用 I18nService 默认 factory + 真实 fs 读临时目录
@@ -220,10 +212,7 @@ test('打包模式 (isPackaged=true) init 读 projectRoot/locales (resources 提
 
     const configDir = path.join(tmpDir, 'config');
     fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(configDir, 'config.json'),
-      JSON.stringify({ APP_SETTINGS: { language: 'zh-CN' } })
-    );
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ APP_SETTINGS: { language: 'zh-CN' } }));
 
     const svc = new I18nService();
     await svc.init(tmpDir, true, configDir);

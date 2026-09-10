@@ -10,17 +10,7 @@ const {
   IDLE_CHECK_INTERVAL,
   LONG_TERM_REFRESH_INTERVAL,
   calculateMediumCheckInterval,
-} = require(path.join(
-  __dirname,
-  '..',
-  '..',
-  'electron',
-  'src',
-  'main',
-  'services',
-  'scheduler',
-  'strategies.js'
-));
+} = require(path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'scheduler', 'strategies.js'));
 
 test('SCHEDULE_STRATEGY 3 阈值: PRECISE=1h, MEDIUM=24h, LONG_TERM=Infinity', () => {
   assert.strictEqual(SCHEDULE_STRATEGY.PRECISE.threshold, 60 * 60 * 1000);

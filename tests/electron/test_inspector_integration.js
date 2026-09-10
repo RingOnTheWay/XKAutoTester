@@ -10,13 +10,13 @@ const path = require('path');
 const Module = require('module');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
-const INSPECTOR_SERVICE_PATH = path.join(
-  PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'InspectorService.js'
-);
+const INSPECTOR_SERVICE_PATH = path.join(PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'InspectorService.js');
 
 function loadInspectorService(spawnSimulator) {
   delete require.cache[require.resolve(INSPECTOR_SERVICE_PATH)];
-  delete require.cache[require.resolve(path.join(PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'JsonStdioTransport.js'))];
+  delete require.cache[
+    require.resolve(path.join(PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'JsonStdioTransport.js'))
+  ];
 
   const origLoad = Module._load;
 
@@ -26,8 +26,12 @@ function loadInspectorService(spawnSimulator) {
       return { spawn: spawnSimulator };
     }
     // 拦截 pathHelper (相对路径,InspectorService 用 ../utils/pathHelper)
-    if (request === '../utils/pathHelper' || request === './pathHelper' ||
-        request.endsWith('/utils/pathHelper') || request.endsWith('\\utils\\pathHelper')) {
+    if (
+      request === '../utils/pathHelper' ||
+      request === './pathHelper' ||
+      request.endsWith('/utils/pathHelper') ||
+      request.endsWith('\\utils\\pathHelper')
+    ) {
       return {
         getPythonConfig: () => ({
           pythonPath: 'python',
@@ -66,8 +70,16 @@ function createPythonProtoSimulator(commandHandlers = {}) {
     const stdinWrites = [];
 
     const proc = {
-      stdout: { on: (evt, cb) => { if (evt === 'data') stdoutCbs.push(cb); } },
-      stderr: { on: (evt, cb) => { if (evt === 'data') stderrCbs.push(cb); } },
+      stdout: {
+        on: (evt, cb) => {
+          if (evt === 'data') stdoutCbs.push(cb);
+        },
+      },
+      stderr: {
+        on: (evt, cb) => {
+          if (evt === 'data') stderrCbs.push(cb);
+        },
+      },
       on: (evt, cb) => {
         if (evt === 'close') closeCbs.push(cb);
         else if (evt === 'error') errorCbs.push(cb);
@@ -87,18 +99,18 @@ function createPythonProtoSimulator(commandHandlers = {}) {
                 // 发 progress 通知 (如果有)
                 if (result.notifications) {
                   for (const n of result.notifications) {
-                    stdoutCbs.forEach(cb => cb(Buffer.from(JSON.stringify(
-                      { kind: 'notification', type: 'progress', stage: n }
-                    ) + '\n')));
+                    stdoutCbs.forEach((cb) =>
+                      cb(Buffer.from(JSON.stringify({ kind: 'notification', type: 'progress', stage: n }) + '\n'))
+                    );
                   }
                 }
                 // 发 response
                 const response = { kind: 'response', id: frame.id, ...result.response };
-                stdoutCbs.forEach(cb => cb(Buffer.from(JSON.stringify(response) + '\n')));
+                stdoutCbs.forEach((cb) => cb(Buffer.from(JSON.stringify(response) + '\n')));
                 // stop-session 后发 close
                 if (frame.command === 'stop-session') {
                   setImmediate(() => {
-                    closeCbs.forEach(cb => cb(0, null));
+                    closeCbs.forEach((cb) => cb(0, null));
                   });
                 }
               });
@@ -111,10 +123,9 @@ function createPythonProtoSimulator(commandHandlers = {}) {
 
     procRef = {
       proc,
-      emitReady: () => stdoutCbs.forEach(cb => cb(Buffer.from(JSON.stringify(
-        { kind: 'notification', type: 'ready' }
-      ) + '\n'))),
-      emitClose: (code, signal) => closeCbs.forEach(cb => cb(code, signal)),
+      emitReady: () =>
+        stdoutCbs.forEach((cb) => cb(Buffer.from(JSON.stringify({ kind: 'notification', type: 'ready' }) + '\n'))),
+      emitClose: (code, signal) => closeCbs.forEach((cb) => cb(code, signal)),
       stdinWrites,
     };
 
@@ -217,7 +228,7 @@ test('find-locators round-trip', async () => {
 test('refresh round-trip', async () => {
   const simulator = createPythonProtoSimulator({
     'start-session': () => ({ response: { success: true, session_id: 's1' } }),
-    'refresh': () => ({
+    refresh: () => ({
       response: { success: true, screenshot: 'data:image/png;base64,refreshed', source: '<hierarchy/>', elements: {} },
     }),
   });
@@ -260,7 +271,7 @@ test('full 6-command sequence round-trip', async () => {
     'get-screenshot': () => ({ response: { success: true, screenshot: 'shot1' } }),
     'get-source': () => ({ response: { success: true, source: '<xml/>', elements: {} } }),
     'find-locators': () => ({ response: { success: true, locators: [{ type: 'id', value: 'v' }] } }),
-    'refresh': () => ({ response: { success: true, screenshot: 'shot2', source: '<xml2/>', elements: {} } }),
+    refresh: () => ({ response: { success: true, screenshot: 'shot2', source: '<xml2/>', elements: {} } }),
     'stop-session': () => ({ response: { success: true } }),
   });
   const InspectorService = loadInspectorService(simulator);
@@ -323,7 +334,9 @@ test('concurrent stopSession calls are serialized (single stop-session request)'
 // ===== 测试 10: startSession 等待进行中的 stopSession 完成 =====
 test('startSession waits for in-flight stopSession before creating new session', async () => {
   let resolveStop;
-  const stopGate = new Promise(r => { resolveStop = r; });
+  const stopGate = new Promise((r) => {
+    resolveStop = r;
+  });
   let stopRequests = 0;
   let startRequests = 0;
   const simulator = createPythonProtoSimulator({
@@ -358,4 +371,3 @@ test('startSession waits for in-flight stopSession before creating new session',
   assert.strictEqual(startRes.success, true);
   assert.strictEqual(startRequests, 2, 'stop 完成后应成功创建新 session');
 });
-

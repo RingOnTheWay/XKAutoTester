@@ -35,8 +35,12 @@ function setupJsdm() {
   modalCloseCalls = 0;
   global.window.__XKAT_MODALS__ = {
     confirm: {
-      open: () => { modalOpenCalls++; },
-      close: () => { modalCloseCalls++; },
+      open: () => {
+        modalOpenCalls++;
+      },
+      close: () => {
+        modalCloseCalls++;
+      },
     },
   };
   global.window.i18n = { t: (k) => k };

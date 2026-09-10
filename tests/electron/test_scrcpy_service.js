@@ -7,9 +7,7 @@ const assert = require('node:assert');
 const path = require('path');
 const { EventEmitter } = require('node:events');
 
-const SCRCPY_SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'ScrcpyService.js'
-);
+const SCRCPY_SERVICE_PATH = path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'ScrcpyService.js');
 const { ScrcpyService, buildScrcpyArgs, SCRCPY_CRASH_WINDOW_MS } = require(SCRCPY_SERVICE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
@@ -57,17 +55,21 @@ function makeFakeNotifier() {
 test('buildScrcpyArgs 全参数 — 验证 args 顺序 + bitRate M 单位处理', () => {
   const args = buildScrcpyArgs({
     max_size: '1920',
-    video_bit_rate: '8',  // 数字字符串, 应加 M
+    video_bit_rate: '8', // 数字字符串, 应加 M
     max_fps: '60',
     video_codec: 'h264',
     always_on_top: true,
   });
 
   assert.deepStrictEqual(args, [
-    '--max-size', '1920',
-    '--video-bit-rate', '8M',
-    '--max-fps', '60',
-    '--video-codec', 'h264',
+    '--max-size',
+    '1920',
+    '--video-bit-rate',
+    '8M',
+    '--max-fps',
+    '60',
+    '--video-codec',
+    'h264',
     '--always-on-top',
   ]);
 });
@@ -106,14 +108,18 @@ test('P1-2 buildScrcpyArgs 合法参数保留', () => {
     max_size: '1920',
     video_bit_rate: '8M',
     max_fps: '60',
-    video_codec: 'H265',  // 大写归一化为小写枚举
+    video_codec: 'H265', // 大写归一化为小写枚举
     always_on_top: true,
   });
   assert.deepStrictEqual(args, [
-    '--max-size', '1920',
-    '--video-bit-rate', '8M',
-    '--max-fps', '60',
-    '--video-codec', 'h265',
+    '--max-size',
+    '1920',
+    '--video-bit-rate',
+    '8M',
+    '--max-fps',
+    '60',
+    '--video-codec',
+    'h265',
     '--always-on-top',
   ]);
 });
@@ -221,12 +227,8 @@ test('P1-2 startScrcpy win32 直接 spawn scrcpyPath (不再经 cmd.exe)', async
 
     assert.strictEqual(result.success, true);
     assert.strictEqual(spawner.calls.length, 1);
-    assert.strictEqual(spawner.calls[0].cmd, '/proj/env/scrcpy/scrcpy.exe');  // 不再是 cmd.exe
-    assert.deepStrictEqual(spawner.calls[0].args, [
-      '-s', 'dev:5555',
-      '--max-size', '1920',
-      '--max-fps', '60',
-    ]);
+    assert.strictEqual(spawner.calls[0].cmd, '/proj/env/scrcpy/scrcpy.exe'); // 不再是 cmd.exe
+    assert.deepStrictEqual(spawner.calls[0].args, ['-s', 'dev:5555', '--max-size', '1920', '--max-fps', '60']);
     assert.strictEqual(spawner.calls[0].opts.windowsHide, true);
   } finally {
     Object.defineProperty(process, 'platform', originalPlatform);
@@ -249,11 +251,8 @@ test('startScrcpy 非 win32 调 spawner.spawn(scrcpyPath, args)', async () => {
 
     assert.strictEqual(result.success, true);
     assert.strictEqual(spawner.calls[0].cmd, '/usr/bin/scrcpy');
-    assert.deepStrictEqual(spawner.calls[0].args, [
-      '-s', 'dev:5555',
-      '--video-codec', 'h264',
-    ]);
-    assert.strictEqual(spawner.calls[0].opts.windowsHide, true);  // P1-2: 统一传, 非 win32 平台被 Node 忽略
+    assert.deepStrictEqual(spawner.calls[0].args, ['-s', 'dev:5555', '--video-codec', 'h264']);
+    assert.strictEqual(spawner.calls[0].opts.windowsHide, true); // P1-2: 统一传, 非 win32 平台被 Node 忽略
   } finally {
     Object.defineProperty(process, 'platform', originalPlatform);
   }
@@ -265,7 +264,9 @@ test('startScrcpy spawn 抛错 catch 返 {success:false, error}', async () => {
 
   try {
     const spawner = {
-      spawn: () => { throw new Error('spawn EACCES'); },
+      spawn: () => {
+        throw new Error('spawn EACCES');
+      },
     };
     const svc = new ScrcpyService('/proj', makeFakeI18n(), {
       processSpawnerFactory: () => spawner,
@@ -290,8 +291,16 @@ test('startScrcpy 成功返 {success:true} (不返 process) + child.stdout.resum
     let stdoutResumed = false;
     let stderrResumed = false;
     const fakeChild = new EventEmitter();
-    fakeChild.stdout = { resume: () => { stdoutResumed = true; } };
-    fakeChild.stderr = { resume: () => { stderrResumed = true; } };
+    fakeChild.stdout = {
+      resume: () => {
+        stdoutResumed = true;
+      },
+    };
+    fakeChild.stderr = {
+      resume: () => {
+        stderrResumed = true;
+      },
+    };
     const spawner = { spawn: () => fakeChild };
     const svc = new ScrcpyService('/proj', makeFakeI18n(), {
       processSpawnerFactory: () => spawner,
@@ -476,7 +485,7 @@ test('M1: stopScrcpy 无 child 时安全 no-op', () => {
     loggerFactory: () => makeFakeLogger(),
   });
   assert.strictEqual(svc._child, null);
-  svc.stopScrcpy();  // 不抛错
+  svc.stopScrcpy(); // 不抛错
   assert.strictEqual(svc._child, null);
 });
 
@@ -507,7 +516,9 @@ test('M1: stopScrcpy kill child + 置 null', async () => {
   try {
     let killCalled = 0;
     const fakeChild = new EventEmitter();
-    fakeChild.kill = () => { killCalled++; };
+    fakeChild.kill = () => {
+      killCalled++;
+    };
     fakeChild.stdout = { resume: () => {} };
     fakeChild.stderr = { resume: () => {} };
     const spawner = { spawn: () => fakeChild };
@@ -533,7 +544,9 @@ test('M1: startScrcpy 先停旧进程 (多次调用不累积)', async () => {
     let killCalled = 0;
     const makeChild = () => {
       const c = new EventEmitter();
-      c.kill = () => { killCalled++; };
+      c.kill = () => {
+        killCalled++;
+      };
       c.stdout = { resume: () => {} };
       c.stderr = { resume: () => {} };
       return c;
@@ -558,7 +571,9 @@ test('M1: child close 后 _child 置 null (stopScrcpy 不重复 kill)', async ()
   try {
     let killCalled = 0;
     const fakeChild = new EventEmitter();
-    fakeChild.kill = () => { killCalled++; };
+    fakeChild.kill = () => {
+      killCalled++;
+    };
     fakeChild.stdout = { resume: () => {} };
     fakeChild.stderr = { resume: () => {} };
     const spawner = { spawn: () => fakeChild };
@@ -568,7 +583,7 @@ test('M1: child close 后 _child 置 null (stopScrcpy 不重复 kill)', async ()
       loggerFactory: () => makeFakeLogger(),
     });
     await svc.startScrcpy('dev:5555', {});
-    fakeChild.emit('close', 0, null);  // 正常退出
+    fakeChild.emit('close', 0, null); // 正常退出
     assert.strictEqual(svc._child, null, 'close 后 _child 置 null');
     svc.stopScrcpy();
     assert.strictEqual(killCalled, 0, 'close 后 stopScrcpy 不再 kill');

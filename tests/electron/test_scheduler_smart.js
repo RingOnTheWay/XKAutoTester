@@ -6,15 +6,23 @@ const assert = require('node:assert');
 const path = require('path');
 
 const SMART_SCHEDULER_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'scheduler', 'smartScheduler.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'scheduler',
+  'smartScheduler.js'
 );
 const { SmartScheduler } = require(SMART_SCHEDULER_PATH);
-const { ScheduledPlanQueue } = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'scheduler', 'planQueue.js'
-));
-const { SCHEDULE_STRATEGY, SAFETY_THRESHOLD, IDLE_CHECK_INTERVAL } = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'scheduler', 'strategies.js'
-));
+const { ScheduledPlanQueue } = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'scheduler', 'planQueue.js')
+);
+const { SCHEDULE_STRATEGY, SAFETY_THRESHOLD, IDLE_CHECK_INTERVAL } = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'scheduler', 'strategies.js')
+);
 
 // ── Fakes ──────────────────────────────────────────────
 
@@ -107,14 +115,18 @@ function makeScheduler({ plans = [], now = 0, queueFactory, watcherFactory, noti
   const { watchers, fakeWatcherFactory } = makeFakeWatcher();
   const { sent, fakeNotifierFactory } = makeFakeNotifier();
   const fakeLogger = logger || makeFakeLogger();
-  const sched = new SmartScheduler(planSvc, { t: () => 'i18n' }, {
-    queueFactory,
-    timerProvider: t,
-    watcherFactory: watcherFactory || fakeWatcherFactory,
-    notifierFactory: notifierFactory || fakeNotifierFactory,
-    nowProvider: () => now,
-    logger: fakeLogger,
-  });
+  const sched = new SmartScheduler(
+    planSvc,
+    { t: () => 'i18n' },
+    {
+      queueFactory,
+      timerProvider: t,
+      watcherFactory: watcherFactory || fakeWatcherFactory,
+      notifierFactory: notifierFactory || fakeNotifierFactory,
+      nowProvider: () => now,
+      logger: fakeLogger,
+    }
+  );
   return { sched, planSvc, timer: t, watchers, sent, logger: fakeLogger };
 }
 
@@ -200,11 +212,14 @@ test('executePlan 成功: dequeue + service.update status=running + notifier.sen
   // 直接调 _executePlan 避开 timer
   await sched._executePlan(plan);
 
-  assert.deepStrictEqual(planSvc.updates.find((u) => u.status === 'running'), {
-    id: 'p1',
-    status: 'running',
-    lastRun: new Date(NOW).toISOString(),
-  });
+  assert.deepStrictEqual(
+    planSvc.updates.find((u) => u.status === 'running'),
+    {
+      id: 'p1',
+      status: 'running',
+      lastRun: new Date(NOW).toISOString(),
+    }
+  );
   assert.strictEqual(sent.length, 1);
   assert.strictEqual(sent[0].channel, 'scheduled-test-start');
   assert.strictEqual(sent[0].payload.planId, 'p1');
@@ -221,13 +236,17 @@ test('executePlan 异常: catch 写 failed + 串行链吞异常记录日志 (P1-
   const { watchers, fakeWatcherFactory } = makeFakeWatcher();
   const { sent, fakeNotifierFactory } = makeFakeNotifier();
   const fakeLogger = makeFakeLogger();
-  const sched = new SmartScheduler(failingPlanSvc, { t: () => 'i18n' }, {
-    timerProvider: fakeTimer,
-    watcherFactory: fakeWatcherFactory,
-    notifierFactory: fakeNotifierFactory,
-    nowProvider: () => NOW,
-    logger: fakeLogger,
-  });
+  const sched = new SmartScheduler(
+    failingPlanSvc,
+    { t: () => 'i18n' },
+    {
+      timerProvider: fakeTimer,
+      watcherFactory: fakeWatcherFactory,
+      notifierFactory: fakeNotifierFactory,
+      nowProvider: () => NOW,
+      logger: fakeLogger,
+    }
+  );
 
   await sched.initialize();
   // P1-4 串行链: catch 吞异常并记录日志, 链不中断 (不再 rejects 传播)
@@ -316,7 +335,6 @@ test('destroy 清 timer + close watcher', async () => {
   assert.strictEqual(timer.intervals.length, 0);
   assert.strictEqual(watcherClosed, true);
 });
-
 
 // ── P1-4 运行时回归: 串行执行链 + generation 令牌 ─────────────────────────
 
@@ -439,7 +457,10 @@ test('P1-5 运行期 addPlan 脏计划 → 标记过期 + 队列清空, 无 NaN 
   assert.deepStrictEqual(planSvc.updates[0], { id: 'bad2', status: 'expired' });
   assert.strictEqual(sched.state.mode, 'idle');
   // 无 0ms timeout (原 NaN → setTimeout(NaN)≈0ms 自旋)
-  assert.ok(timer.timeouts.every((t) => t.ms > 0), '不得有 0ms 定时器');
+  assert.ok(
+    timer.timeouts.every((t) => t.ms > 0),
+    '不得有 0ms 定时器'
+  );
 });
 
 test('P1-5 _finalCountdown 脏计划直接放弃 (不创建 0ms 定时器)', async () => {
@@ -458,7 +479,13 @@ test('P1-5 _finalCountdown 脏计划直接放弃 (不创建 0ms 定时器)', asy
 // ── R24 P2-2: 执行看门狗周期化 ─────────────────────────────
 
 test('R24 P2-2 看门狗触发且渲染进程存活: 告警 + 重新武装 (不再永久脱离监控)', async () => {
-  const runningPlan = { id: 'p1', name: 'plan-1', scheduledTime: new Date(1000).toISOString(), status: 'running', testPlans: [] };
+  const runningPlan = {
+    id: 'p1',
+    name: 'plan-1',
+    scheduledTime: new Date(1000).toISOString(),
+    status: 'running',
+    testPlans: [],
+  };
   const { sched, timer, planSvc, logger } = makeScheduler({ plans: [runningPlan], now: 1000 });
   // 模拟渲染进程存活 (合法长用例场景)
   sched.mainWindow = { webContents: { isDestroyed: () => false } };
@@ -471,7 +498,10 @@ test('R24 P2-2 看门狗触发且渲染进程存活: 告警 + 重新武装 (不�
 
   // 渲染存活 → 不标记 failed, 且重新武装 (新 timer, 非原 id)
   assert.strictEqual(runningPlan.status, 'running', '渲染存活不得标记 failed');
-  assert.ok(timer.timeouts.some((t) => t.id !== timerId), '看门狗被重新武装 (新 timer)');
+  assert.ok(
+    timer.timeouts.some((t) => t.id !== timerId),
+    '看门狗被重新武装 (新 timer)'
+  );
   assert.strictEqual(planSvc.updates.length, 0, '不得写 failed');
 
   // 第二轮触发依旧存活 → 继续重新武装 (周期化)
@@ -481,7 +511,13 @@ test('R24 P2-2 看门狗触发且渲染进程存活: 告警 + 重新武装 (不�
 });
 
 test('R24 P2-2 看门狗触发且渲染进程不可用: 标记 failed 且不重新武装', async () => {
-  const runningPlan = { id: 'p2', name: 'plan-2', scheduledTime: new Date(1000).toISOString(), status: 'running', testPlans: [] };
+  const runningPlan = {
+    id: 'p2',
+    name: 'plan-2',
+    scheduledTime: new Date(1000).toISOString(),
+    status: 'running',
+    testPlans: [],
+  };
   const { sched, timer, planSvc } = makeScheduler({ plans: [runningPlan], now: 1000 });
   // 渲染进程不可用 (mainWindow 已销毁)
   sched.mainWindow = { webContents: { isDestroyed: () => true } };

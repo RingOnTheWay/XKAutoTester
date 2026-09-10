@@ -492,7 +492,6 @@ export class PagePackageView {
     }
   }
 
-
   // ─── Form Data Collection ──────────────────────────────────────
 
   collectAppFormData() {

@@ -7,9 +7,9 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const { TestPlanService } = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'TestPlanService.js'
-));
+const { TestPlanService } = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'TestPlanService.js')
+);
 
 function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'xkat-tp-conc-'));
@@ -29,20 +29,25 @@ test('P0 并发回归: 20 个并发 saveTestPlan (不同 name) 全部持久化',
 
     const N = 20;
     const results = await Promise.all(
-      Array.from({ length: N }, (_, i) => svc.saveTestPlan({
-        name: `Plan${i}`,
-        testFiles: [],
-        markers: [],
-      }))
+      Array.from({ length: N }, (_, i) =>
+        svc.saveTestPlan({
+          name: `Plan${i}`,
+          testFiles: [],
+          markers: [],
+        })
+      )
     );
 
-    assert.ok(results.every(r => r.success === true), '所有 saveTestPlan 应成功');
+    assert.ok(
+      results.every((r) => r.success === true),
+      '所有 saveTestPlan 应成功'
+    );
 
     const fileContent = fs.readFileSync(path.join(tmpDir, 'test_plans.json'), 'utf8');
     const persisted = JSON.parse(fileContent);
     assert.strictEqual(persisted.length, N, `应持久化 ${N} 个 plan (withLock 防丢更新)`);
 
-    const names = new Set(persisted.map(p => p.name));
+    const names = new Set(persisted.map((p) => p.name));
     assert.strictEqual(names.size, N, 'plan 名称应无重复');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -63,14 +68,15 @@ test('P0 并发回归: 10 个并发 recordRun 到同一 plan 全部追加 (无�
     await svc.saveTestPlan({ name: 'TargetPlan', testFiles: [], markers: [] });
 
     const N = 10;
-    const results = await Promise.all(
-      Array.from({ length: N }, () => svc.recordRun('TargetPlan'))
+    const results = await Promise.all(Array.from({ length: N }, () => svc.recordRun('TargetPlan')));
+
+    assert.ok(
+      results.every((r) => r.success === true),
+      '所有 recordRun 应成功'
     );
 
-    assert.ok(results.every(r => r.success === true), '所有 recordRun 应成功');
-
     const plans = await svc.getTestPlans();
-    const plan = plans.find(p => p.name === 'TargetPlan');
+    const plan = plans.find((p) => p.name === 'TargetPlan');
     assert.strictEqual(plan.runs.length, N, `应追加 ${N} 条 run (withLock 防丢更新)`);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -93,11 +99,9 @@ test('P0 并发回归: 10 个并发 deleteTestPlan 互不干扰', async () => {
     }
 
     const allPlans = await svc.getTestPlans();
-    const results = await Promise.all(
-      allPlans.map(p => svc.deleteTestPlan(p.id))
-    );
+    const results = await Promise.all(allPlans.map((p) => svc.deleteTestPlan(p.id)));
 
-    assert.ok(results.every(r => r.success === true));
+    assert.ok(results.every((r) => r.success === true));
     const remaining = await svc.getTestPlans();
     assert.strictEqual(remaining.length, 0, '并发删除后应剩 0 个 plan');
   } finally {
@@ -118,23 +122,24 @@ test('P0 并发回归: 并发 saveTestPlan 同名覆盖不产生重复 (withLock
     // 5 个并发都用同一 name → 最终只 1 个 (每次覆盖)
     const N = 5;
     const results = await Promise.all(
-      Array.from({ length: N }, (_, i) => svc.saveTestPlan({
-        name: 'SameName',
-        testFiles: [`file${i}.py`],
-        markers: [],
-      }))
+      Array.from({ length: N }, (_, i) =>
+        svc.saveTestPlan({
+          name: 'SameName',
+          testFiles: [`file${i}.py`],
+          markers: [],
+        })
+      )
     );
 
-    assert.ok(results.every(r => r.success === true));
+    assert.ok(results.every((r) => r.success === true));
 
     const plans = await svc.getTestPlans();
-    const sameNamePlans = plans.filter(p => p.name === 'SameName');
+    const sameNamePlans = plans.filter((p) => p.name === 'SameName');
     assert.strictEqual(sameNamePlans.length, 1, '同名 plan 应只 1 个 (withLock 串行覆盖)');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
-
 
 // ── P0-2 安全回归: 字段白名单 + 报告路径校验 ─────────────────────────
 
@@ -160,7 +165,7 @@ test('P0-2 saveTestPlan 白名单: 剥离 runs/report_path 等运行期字段', 
     assert.strictEqual(result.success, true, result.error);
 
     const plans = await svc.getTestPlans();
-    const plan = plans.find(p => p.name === 'VictimPlan');
+    const plan = plans.find((p) => p.name === 'VictimPlan');
     assert.ok(plan, 'plan 应存在');
     assert.strictEqual(plan.description, 'desc');
     assert.strictEqual(plan.loopCount, 3);
@@ -186,7 +191,7 @@ test('P0-2 updateTestPlan 保留服务端运行期字段 (runs/last_run 不丢�
     // 用户编辑计划 (渲染进程不传 runs) — 历史记录必须保留
     await svc.updateTestPlan({ id: 'plan-id-1', name: 'P2', testFiles: ['b.py'] });
     const plans = await svc.getTestPlans();
-    const plan = plans.find(p => p.name === 'P2');
+    const plan = plans.find((p) => p.name === 'P2');
     assert.ok(plan.runs && plan.runs.length === 1, 'runs 应保留');
     assert.ok(plan.last_run, 'last_run 应保留');
     assert.deepStrictEqual(plan.testFiles, ['b.py']);
@@ -236,9 +241,9 @@ test('P0-2 deleteReportRun 拒绝报告目录外的 report_path', async () => {
 });
 
 test('P0-2 PLAN_EDITABLE_FIELDS 白名单: 不含运行期字段', () => {
-  const { sanitizePlanData, PLAN_EDITABLE_FIELDS } = require(path.join(
-    __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'TestPlanService.js'
-  ));
+  const { sanitizePlanData, PLAN_EDITABLE_FIELDS } = require(
+    path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'TestPlanService.js')
+  );
   assert.ok(PLAN_EDITABLE_FIELDS.includes('name'));
   assert.ok(!PLAN_EDITABLE_FIELDS.includes('runs'));
   assert.ok(!PLAN_EDITABLE_FIELDS.includes('last_run'));

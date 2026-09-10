@@ -11,9 +11,15 @@ async function loadModule() {
 
 test('P2-2 状态映射: completed/running/cancelled/expired', async () => {
   const get = await loadModule();
-  assert.deepStrictEqual(get({ status: 'completed' }), { class: 'completed', text: 'i18n:scheduledPlan.statusCompleted' });
+  assert.deepStrictEqual(get({ status: 'completed' }), {
+    class: 'completed',
+    text: 'i18n:scheduledPlan.statusCompleted',
+  });
   assert.deepStrictEqual(get({ status: 'running' }), { class: 'running', text: 'i18n:scheduledPlan.statusRunning' });
-  assert.deepStrictEqual(get({ status: 'cancelled' }), { class: 'cancelled', text: 'i18n:scheduledPlan.statusCancelled' });
+  assert.deepStrictEqual(get({ status: 'cancelled' }), {
+    class: 'cancelled',
+    text: 'i18n:scheduledPlan.statusCancelled',
+  });
   assert.deepStrictEqual(get({ status: 'expired' }), { class: 'expired', text: 'i18n:scheduledPlan.statusExpired' });
 });
 

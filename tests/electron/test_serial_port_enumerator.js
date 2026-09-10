@@ -12,7 +12,12 @@ const Module = require('module');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 const SERIAL_PORT_ENUMERATOR_PATH = path.join(
-  PROJECT_ROOT, 'electron', 'src', 'main', 'services', 'SerialPortEnumerator.js'
+  PROJECT_ROOT,
+  'electron',
+  'src',
+  'main',
+  'services',
+  'SerialPortEnumerator.js'
 );
 
 const i18nMock = {
@@ -33,7 +38,9 @@ function mockPathHelper(pythonConfig) {
     if (request === '../utils/pathHelper' || request === './pathHelper') return pathHelperMock;
     return origLoad.call(this, request, parent, isMain);
   };
-  return () => { Module._load = origLoad; };
+  return () => {
+    Module._load = origLoad;
+  };
 }
 
 function loadSerialPortEnumerator() {
@@ -52,7 +59,6 @@ function createSpawnHelperMock(impl) {
   };
   return { executeCommand, calls };
 }
-
 
 // ─── getSerialPorts ───────────────────────────────────────────
 
@@ -83,8 +89,24 @@ test('getSerialPorts executeCommand 返回 code=0 + 有效 JSON → success + da
   try {
     const SerialPortEnumerator = loadSerialPortEnumerator();
     const portsData = [
-      { deviceId: 'COM3', name: 'USB Serial Port', manufacturer: 'Silicon Labs', serial_number: '0001', hwid: 'USB VID:PID=10C4:EA60', vid: 4292, pid: 60000 },
-      { deviceId: 'COM5', name: 'Arduino', manufacturer: 'Arduino', serial_number: '', hwid: 'USB VID:PID=2341:0043', vid: 9025, pid: 67 },
+      {
+        deviceId: 'COM3',
+        name: 'USB Serial Port',
+        manufacturer: 'Silicon Labs',
+        serial_number: '0001',
+        hwid: 'USB VID:PID=10C4:EA60',
+        vid: 4292,
+        pid: 60000,
+      },
+      {
+        deviceId: 'COM5',
+        name: 'Arduino',
+        manufacturer: 'Arduino',
+        serial_number: '',
+        hwid: 'USB VID:PID=2341:0043',
+        vid: 9025,
+        pid: 67,
+      },
     ];
     const spawnHelper = createSpawnHelperMock(async () => ({
       code: 0,

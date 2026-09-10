@@ -236,9 +236,7 @@ class DeviceConnectionService:
             # P2-13: 精确匹配首列 (原 `device_address in stdout` 子串匹配会命中
             # IP:55555 等含目标前缀的行, 误判连接/授权状态)
             device_found = any(
-                ln.strip().split()[0] == device_address
-                for ln in devices_result.stdout.split("\n")
-                if ln.strip()
+                ln.strip().split()[0] == device_address for ln in devices_result.stdout.split("\n") if ln.strip()
             )
             if device_found:
                 if "unauthorized" in devices_result.stdout or auth_failed:

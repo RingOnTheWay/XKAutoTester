@@ -87,7 +87,7 @@ function setupJsdm() {
 }
 
 function teardownJsdm() {
-  Object.keys(savedGlobals).forEach(k => {
+  Object.keys(savedGlobals).forEach((k) => {
     if (savedGlobals[k] === undefined) delete global[k];
     else global[k] = savedGlobals[k];
   });

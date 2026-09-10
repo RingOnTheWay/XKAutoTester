@@ -6,10 +6,15 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'DataTransferService.js'
-);
-const { DataTransferService, buildManifest, buildProgress, isValidManifest, isSafeRelativePath, isAbsolutePath } = require(SERVICE_PATH);
+const SERVICE_PATH = path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'DataTransferService.js');
+const {
+  DataTransferService,
+  buildManifest,
+  buildProgress,
+  isValidManifest,
+  isSafeRelativePath,
+  isAbsolutePath,
+} = require(SERVICE_PATH);
 
 // ── Fakes ──────────────────────────────────────────────
 
@@ -17,9 +22,9 @@ function makeFakeFileSystem(opts = {}) {
   const calls = { exists: [], readdir: [], mkdir: [], writeFile: [] };
   const normalizePath = (p) => path.normalize(p);
   const dirs = {};
-  for (const k in (opts.dirs || {})) dirs[normalizePath(k)] = opts.dirs[k];
+  for (const k in opts.dirs || {}) dirs[normalizePath(k)] = opts.dirs[k];
   const files = {};
-  for (const k in (opts.files || {})) files[normalizePath(k)] = opts.files[k];
+  for (const k in opts.files || {}) files[normalizePath(k)] = opts.files[k];
   return {
     calls,
     exists: async (p) => {
@@ -32,7 +37,9 @@ function makeFakeFileSystem(opts = {}) {
       const nd = normalizePath(d);
       return dirs[nd] || [];
     },
-    mkdir: async (d) => { calls.mkdir.push(d); },
+    mkdir: async (d) => {
+      calls.mkdir.push(d);
+    },
     writeFile: async (p, content) => {
       calls.writeFile.push({ path: p, content });
       files[normalizePath(p)] = content;
@@ -47,9 +54,15 @@ function makeFakeZip(opts = {}) {
     createCalls,
     openCalls,
     create: () => ({
-      addFile: (name, content) => { createCalls.addFile.push({ name, content }); },
-      addLocalFile: (fullPath, dirInZip) => { createCalls.addLocalFile.push({ fullPath, dirInZip }); },
-      writeZip: (out) => { createCalls.writeZip.push(out); },
+      addFile: (name, content) => {
+        createCalls.addFile.push({ name, content });
+      },
+      addLocalFile: (fullPath, dirInZip) => {
+        createCalls.addLocalFile.push({ fullPath, dirInZip });
+      },
+      writeZip: (out) => {
+        createCalls.writeZip.push(out);
+      },
     }),
     open: (zipPath) => ({
       getEntries: () => {
@@ -170,7 +183,7 @@ test('constructor 收 3 factory + _initialized=false', () => {
 
 test('懒初始化: 首次 exportConfig 触发 _ensureInitialized', async () => {
   const { svc, fileSystem } = makeFakeApp({
-    fileSystem: { dirs: { '/fake/config': [] } }
+    fileSystem: { dirs: { '/fake/config': [] } },
   });
   assert.strictEqual(svc._initialized, false);
   // config 路径存在但空目录 → 返 empty 错误, 但 _ensureInitialized 已触发
@@ -182,7 +195,7 @@ test('懒初始化: 首次 exportConfig 触发 _ensureInitialized', async () => 
 
 test('懒初始化幂等: 重复调用仅初始化一次', async () => {
   const { svc, fileSystem } = makeFakeApp({
-    fileSystem: { dirs: { '/fake/config': [] } }
+    fileSystem: { dirs: { '/fake/config': [] } },
   });
   await svc.exportConfig('/out1.zip');
   const fs1 = svc._fs;
@@ -201,7 +214,7 @@ test('exportConfig config 路径不存在 → notFound 错误', async () => {
 
 test('exportConfig 空目录 → empty 错误', async () => {
   const { svc } = makeFakeApp({
-    fileSystem: { dirs: { '/fake/config': [] } }
+    fileSystem: { dirs: { '/fake/config': [] } },
   });
   const result = await svc.exportConfig('/out.zip');
   assert.strictEqual(result.success, false);
@@ -212,10 +225,12 @@ test('exportConfig 正常打包: 调 zip.create + addFile + addLocalFile + write
   const configDir = '/fake/config';
   const { svc, zip, mainWindow } = makeFakeApp({
     fileSystem: {
-      dirs: { [configDir]: [
-        { name: 'config.json', isDirectory: () => false },
-        { name: 'sub', isDirectory: () => true },
-      ] },
+      dirs: {
+        [configDir]: [
+          { name: 'config.json', isDirectory: () => false },
+          { name: 'sub', isDirectory: () => true },
+        ],
+      },
       files: {
         [path.join(configDir, 'config.json')]: '{"k":"v"}',
       },
@@ -357,7 +372,7 @@ test('importConfig zip-slip: ../ 条目名拒绝且不落盘', async () => {
   assert.strictEqual(result.success, false);
   assert.ok(result.error.includes('unsafe path'), '返 unsafe path 错误');
   assert.strictEqual(fileSystem.calls.writeFile.length, 0, '未落盘任何文件');
-  const errorEvents = mainWindow.sent.filter(s => s.data.phase === 'error');
+  const errorEvents = mainWindow.sent.filter((s) => s.data.phase === 'error');
   assert.ok(errorEvents.length > 0, '发了 error phase 进度');
   assert.ok(errorEvents[0].data.message.includes('Unsafe path'), '进度消息含 unsafe path');
 });
@@ -394,7 +409,7 @@ test('mainWindow 双路径: setMainWindow 优先于 mainWindowProvider', async (
   });
 
   svc.setMainWindow(setWindow);
-  await svc.exportConfig('/out.zip');  // 触发 empty 错误, 但已发送 reading 进度
+  await svc.exportConfig('/out.zip'); // 触发 empty 错误, 但已发送 reading 进度
 
   assert.ok(setWindow.sent.length > 0, 'setMainWindow 收到进度 (优先)');
   assert.strictEqual(providerWindow.sent.length, 0, 'providerWindow 未收到 (fallback 跳过)');
@@ -427,7 +442,9 @@ test('mainWindow 双路径: 两者均 null 时静默 (不抛错)', async () => {
 
 test('_exportPath catch 错误 → 发 error phase 进度 + 返 {success:false}', async () => {
   const failingFs = {
-    exists: async () => { throw new Error('disk failure'); },
+    exists: async () => {
+      throw new Error('disk failure');
+    },
     readdir: async () => [],
     mkdir: async () => {},
     writeFile: async () => {},
@@ -449,7 +466,7 @@ test('_exportPath catch 错误 → 发 error phase 进度 + 返 {success:false}'
   assert.strictEqual(result.success, false);
   assert.strictEqual(result.error, 'disk failure');
   // 验证 error phase 进度已发送
-  const errorEvents = mainWindow.sent.filter(s => s.data.phase === 'error');
+  const errorEvents = mainWindow.sent.filter((s) => s.data.phase === 'error');
   assert.ok(errorEvents.length > 0, '发了 error phase 进度');
   assert.strictEqual(errorEvents[0].data.message, 'disk failure');
 });

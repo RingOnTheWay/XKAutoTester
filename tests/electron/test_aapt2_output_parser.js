@@ -6,9 +6,9 @@ const assert = require('node:assert');
 const path = require('path');
 const fs = require('fs');
 
-const Aapt2OutputParser = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'apk', 'Aapt2OutputParser.js'
-));
+const Aapt2OutputParser = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'apk', 'Aapt2OutputParser.js')
+);
 
 const FIXTURES_DIR = path.join(__dirname, 'fixtures');
 
@@ -44,10 +44,7 @@ test('parse launchable-activity 行提取 activityName', () => {
 
 test('parse application 行提取默认 applicationLabel, application-label 行写入 localeLabels.default', () => {
   const parser = new Aapt2OutputParser();
-  const output = [
-    "application: label='MyApp' icon='res/ic.png'",
-    "application-label: 'MyApp'",
-  ].join('\n');
+  const output = ["application: label='MyApp' icon='res/ic.png'", "application-label: 'MyApp'"].join('\n');
 
   const result = parser.parse(output);
 

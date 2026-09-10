@@ -8,7 +8,15 @@ const path = require('path');
 const Module = require('module');
 
 const CLI_INVOKER_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'allure', 'AllureCliInvoker.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'allure',
+  'AllureCliInvoker.js'
 );
 
 function mockLogger() {
@@ -17,7 +25,7 @@ function mockLogger() {
     error: async () => {},
     warn: async () => {}, // R27: 对齐真实 Logger 方法名 (原 warning 不存在)
     ensureLogDir: async () => {},
-    resetLogPath: () => {}
+    resetLogPath: () => {},
   };
 }
 
@@ -37,21 +45,35 @@ function mockModules(opts = {}) {
   function makeFakeChild(cmd, args) {
     // 'where node' 调用: 用 whereStdout/whereCode
     const isWhere = cmd === 'where' && args && args[0] === 'node';
-    const stdout = isWhere ? (opts.whereStdout || '') : (opts.spawnStdout || '');
-    const stderr = isWhere ? '' : (opts.spawnStderr || '');
-    const code = isWhere ? (opts.whereCode !== undefined ? opts.whereCode : 0) : (opts.spawnCode !== undefined ? opts.spawnCode : 0);
+    const stdout = isWhere ? opts.whereStdout || '' : opts.spawnStdout || '';
+    const stderr = isWhere ? '' : opts.spawnStderr || '';
+    const code = isWhere
+      ? opts.whereCode !== undefined
+        ? opts.whereCode
+        : 0
+      : opts.spawnCode !== undefined
+        ? opts.spawnCode
+        : 0;
     const error = isWhere ? null : opts.spawnError;
     return {
-      stdout: { on: (event, cb) => { if (stdout) setTimeout(() => cb(stdout), 0); } },
-      stderr: { on: (event, cb) => { if (stderr) setTimeout(() => cb(stderr), 0); } },
+      stdout: {
+        on: (event, cb) => {
+          if (stdout) setTimeout(() => cb(stdout), 0);
+        },
+      },
+      stderr: {
+        on: (event, cb) => {
+          if (stderr) setTimeout(() => cb(stderr), 0);
+        },
+      },
       on: (event, cb) => {
-        if (event === 'close' && error) return;  // spawn error 时不触发 close
+        if (event === 'close' && error) return; // spawn error 时不触发 close
         if (event === 'close') {
           setTimeout(() => cb(code), 0);
         } else if (event === 'error' && error) {
           setTimeout(() => cb(new Error(error)), 0);
         }
-      }
+      },
     };
   }
 
@@ -61,21 +83,23 @@ function mockModules(opts = {}) {
         spawn: (cmd, args, spOpts) => {
           spawnCalls.push({ cmd, args, spOpts });
           return makeFakeChild(cmd, args);
-        }
+        },
       };
     }
     if (request === 'fs') {
       const realFs = origLoad.call(this, request, parent, isMain);
       return {
         ...realFs,
-        existsSync: () => opts.existsReturn !== undefined ? opts.existsReturn : false
+        existsSync: () => (opts.existsReturn !== undefined ? opts.existsReturn : false),
       };
     }
     return origLoad.call(this, request, parent, isMain);
   };
   return {
     spawnCalls,
-    restore: () => { Module._load = origLoad; }
+    restore: () => {
+      Module._load = origLoad;
+    },
   };
 }
 
@@ -84,13 +108,12 @@ function loadCliInvoker() {
   return require(CLI_INVOKER_PATH);
 }
 
-
 // ─── _findSystemNode ────────────────────────────────────────────
 
 test('_findSystemNode 异步应返回 where node 的首个 .exe 路径', async () => {
   const mock = mockModules({
     whereStdout: 'C:\\Program Files\\nodejs\\node.exe\nC:\\other\\node.exe',
-    whereCode: 0
+    whereCode: 0,
   });
   try {
     const AllureCliInvoker = loadCliInvoker();
@@ -109,7 +132,7 @@ test('_findSystemNode 异步应返回 where node 的首个 .exe 路径', async (
 test('_findSystemNode where 失败 (非零退出码) 应返回 null', async () => {
   const mock = mockModules({
     whereStdout: '',
-    whereCode: 1  // where 未找到 node 时退出码 1
+    whereCode: 1, // where 未找到 node 时退出码 1
   });
   try {
     const AllureCliInvoker = loadCliInvoker();
@@ -123,8 +146,8 @@ test('_findSystemNode where 失败 (非零退出码) 应返回 null', async () =
 
 test('_findSystemNode where 输出无 .exe 应返回 null', async () => {
   const mock = mockModules({
-    whereStdout: 'C:\\some\\path\\without-exe\n',  // 不以 .exe 结尾
-    whereCode: 0
+    whereStdout: 'C:\\some\\path\\without-exe\n', // 不以 .exe 结尾
+    whereCode: 0,
   });
   try {
     const AllureCliInvoker = loadCliInvoker();
@@ -135,7 +158,6 @@ test('_findSystemNode where 输出无 .exe 应返回 null', async () => {
     mock.restore();
   }
 });
-
 
 // ─── _getAllureCliPath ──────────────────────────────────────────
 
@@ -163,7 +185,6 @@ test('_getAllureCliPath existsSync=false 应返回 null', () => {
   }
 });
 
-
 // ─── generate ───────────────────────────────────────────────────
 
 test('generate 成功应返回 {code:0, stdout, stderr}', async () => {
@@ -173,7 +194,7 @@ test('generate 成功应返回 {code:0, stdout, stderr}', async () => {
     existsReturn: true,
     spawnCode: 0,
     spawnStdout: 'report generated',
-    spawnStderr: ''
+    spawnStderr: '',
   });
   try {
     const AllureCliInvoker = loadCliInvoker();
@@ -198,7 +219,7 @@ test('generate spawn error 应返回 {code:-1}', async () => {
     whereCode: 0,
     existsReturn: true,
     spawnCode: -1,
-    spawnError: 'spawn failed'
+    spawnError: 'spawn failed',
   });
   try {
     const AllureCliInvoker = loadCliInvoker();
@@ -214,7 +235,7 @@ test('generate spawn error 应返回 {code:-1}', async () => {
 test('generate 无 allure cli 应回退 npx', async () => {
   const mock = mockModules({
     existsReturn: false,
-    spawnCode: 0
+    spawnCode: 0,
   });
   try {
     const AllureCliInvoker = loadCliInvoker();
@@ -233,10 +254,10 @@ test('generate 无 allure cli 应回退 npx', async () => {
 test('generate where 无 node.exe 应回退 process.execPath (Electron as Node)', async () => {
   const mock = mockModules({
     whereStdout: '',
-    whereCode: 1,  // where 未找到 node
+    whereCode: 1, // where 未找到 node
     existsReturn: true,
     spawnCode: 0,
-    spawnStdout: 'report generated'
+    spawnStdout: 'report generated',
   });
   try {
     const AllureCliInvoker = loadCliInvoker();

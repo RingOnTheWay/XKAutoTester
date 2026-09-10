@@ -30,11 +30,11 @@ function createTempDir() {
  */
 function createMockDeps(userDataPath) {
   return {
-    mainWindow: { id: 1 },  // 模拟 BrowserWindow
+    mainWindow: { id: 1 }, // 模拟 BrowserWindow
     i18nService: {
-      t: (key, opts) => key + (opts ? JSON.stringify(opts) : '')
+      t: (key, opts) => key + (opts ? JSON.stringify(opts) : ''),
     },
-    userDataPath
+    userDataPath,
   };
 }
 
@@ -48,10 +48,7 @@ describe('FileBasedDialogMonitor 构造', () => {
 
   test('应计算 _dialogTriggerFile 路径', () => {
     const monitor = new FileBasedDialogMonitor(createMockDeps('/fake/userdata'));
-    assert.strictEqual(
-      monitor._dialogTriggerFile,
-      path.join('/fake/userdata', 'logs', 'unauthorized_dialog.json')
-    );
+    assert.strictEqual(monitor._dialogTriggerFile, path.join('/fake/userdata', 'logs', 'unauthorized_dialog.json'));
   });
 
   test('watcher 和 interval 初始化为 null', () => {
@@ -89,10 +86,13 @@ describe('FileBasedDialogMonitor.start', () => {
   test('启动时文件已存在应触发 dialog', async () => {
     const dialogFile = path.join(tempDir, 'logs', 'unauthorized_dialog.json');
     fs.mkdirSync(path.dirname(dialogFile), { recursive: true });
-    fs.writeFileSync(dialogFile, JSON.stringify({
-      device_name: 'device123',
-      message: 'unauthorized'
-    }));
+    fs.writeFileSync(
+      dialogFile,
+      JSON.stringify({
+        device_name: 'device123',
+        message: 'unauthorized',
+      })
+    );
 
     const monitor = new FileBasedDialogMonitor(createMockDeps(tempDir));
     monitor.start();
@@ -113,7 +113,7 @@ describe('FileBasedDialogMonitor.start', () => {
     global.__dialogMock.lastOptions = null;
     monitor.start();
     // R24: 负向断言无法条件等待, 保留 150ms (覆盖 watcher 100ms 处理延迟后确认未触发)
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
     assert.strictEqual(global.__dialogMock.lastOptions, null);
     monitor.stop();
   });

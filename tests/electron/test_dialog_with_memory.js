@@ -82,10 +82,15 @@ describe('dialogWithMemory (记忆→弹窗→记忆模板)', () => {
   test('dialogProps 函数形式 → 每次调用求值 (支持 i18n 动态 title)', async () => {
     const ipc = new IpcFake();
     let counter = 0;
-    registerOpenDialogWithMemory(ipc, CHANNEL, () => null, () => {
-      counter++;
-      return { title: `t-${counter}`, properties: ['openFile'] };
-    });
+    registerOpenDialogWithMemory(
+      ipc,
+      CHANNEL,
+      () => null,
+      () => {
+        counter++;
+        return { title: `t-${counter}`, properties: ['openFile'] };
+      }
+    );
     mockDialog({ canceled: true, filePaths: [] });
 
     await ipc.invoke(CHANNEL);

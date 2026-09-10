@@ -243,7 +243,9 @@ export class AndroidConnectionView {
     // 恢复选中状态
     if (modalSelectedDeviceId) {
       // P3-8: CSS.escape 防设备 ID 含引号时 querySelector 抛异常
-      const selectedEl = deviceList.querySelector(`.device-item[data-device-id="${CSS.escape(modalSelectedDeviceId)}"]`);
+      const selectedEl = deviceList.querySelector(
+        `.device-item[data-device-id="${CSS.escape(modalSelectedDeviceId)}"]`
+      );
       if (selectedEl) {
         selectedEl.classList.add('selected');
         const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();

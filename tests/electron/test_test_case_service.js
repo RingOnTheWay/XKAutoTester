@@ -7,7 +7,14 @@ const assert = require('node:assert');
 const path = require('path');
 
 const TEST_CASE_SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'TestCaseService.js'
+  __dirname,
+  '..',
+  '..',
+  'electron',
+  'src',
+  'main',
+  'services',
+  'TestCaseService.js'
 );
 const { TestCaseService } = require(TEST_CASE_SERVICE_PATH);
 
@@ -26,15 +33,17 @@ function makeFakeFileSystem(opts = {}) {
   // 用 path.normalize 统一路径键, 避免 Windows 正反斜杠不匹配
   const normalizePath = (p) => path.normalize(p);
   const files = {};
-  for (const k in (opts.files || {})) files[normalizePath(k)] = opts.files[k];
+  for (const k in opts.files || {}) files[normalizePath(k)] = opts.files[k];
   const dirs = {};
-  for (const k in (opts.dirs || {})) dirs[normalizePath(k)] = opts.dirs[k];
+  for (const k in opts.dirs || {}) dirs[normalizePath(k)] = opts.dirs[k];
   return {
     calls,
-    ensureDir: async (dir) => { calls.ensureDir.push(dir); },
+    ensureDir: async (dir) => {
+      calls.ensureDir.push(dir);
+    },
     readdir: async (dir) => {
       const nd = normalizePath(dir);
-      calls.readdir.push(dir);  // 存原始路径供断言
+      calls.readdir.push(dir); // 存原始路径供断言
       return dirs[nd] || [];
     },
     readFile: async (p) => {
@@ -50,7 +59,7 @@ function makeFakeFileSystem(opts = {}) {
     writeFile: async (p, content) => {
       const np = normalizePath(p);
       calls.writeFile.push({ path: p, content });
-      files[np] = content;  // 写后可读
+      files[np] = content; // 写后可读
     },
     // P2: writeJson 原子写 fake (存 data + 字符串化供 readFile 读回)
     writeJson: async (p, data) => {
@@ -69,7 +78,7 @@ function makeFakeFileSystem(opts = {}) {
     },
     unlink: async (p) => {
       const np = normalizePath(p);
-      calls.unlink.push(p);  // 存原始路径供断言
+      calls.unlink.push(p); // 存原始路径供断言
       delete files[np];
     },
   };
@@ -83,7 +92,7 @@ function makeFakeCodeGenerator(result = null, error = null) {
       calls.generatePythonFile.push({ caseData, outputDir });
       if (error) throw error;
       return result || { success: true, path: '/fake/output/test.py' };
-    }
+    },
   };
 }
 
@@ -91,17 +100,21 @@ function makeFakeApp(opts = {}) {
   const fileSystem = makeFakeFileSystem(opts.fileSystem || {});
   const codeGenerator = makeFakeCodeGenerator(opts.codeGeneratorResult || null, opts.codeGeneratorError || null);
   const idGeneratorCalls = { generate: 0 };
-  const idGenerator = opts.idGenerator || (() => {
-    idGeneratorCalls.generate++;
-    return 'tc_fixed_001';
-  });
+  const idGenerator =
+    opts.idGenerator ||
+    (() => {
+      idGeneratorCalls.generate++;
+      return 'tc_fixed_001';
+    });
   const fileNameSanitizerCalls = { sanitize: [] };
-  const fileNameSanitizer = opts.fileNameSanitizer || ((raw) => {
-    fileNameSanitizerCalls.sanitize.push(raw);
-    let name = raw || 'test_case';
-    name = name.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
-    return name.startsWith('test_') ? name : `test_${name}`;
-  });
+  const fileNameSanitizer =
+    opts.fileNameSanitizer ||
+    ((raw) => {
+      fileNameSanitizerCalls.sanitize.push(raw);
+      let name = raw || 'test_case';
+      name = name.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
+      return name.startsWith('test_') ? name : `test_${name}`;
+    });
 
   const svc = new TestCaseService('/fake/config', '/fake/root', {
     fileSystemFactory: () => fileSystem,
@@ -167,17 +180,17 @@ test('listTestCases 调 fileSystem.readdir + 返字段映射 + hasPyFile 探测'
     steps: [{}, {}],
     created: '2026-01-01T00:00:00Z',
     updated: '2026-01-02T00:00:00Z',
-    pyFilePath: '/fake/output/test_demo.py'
+    pyFilePath: '/fake/output/test_demo.py',
   };
 
   const { svc, fileSystem } = makeFakeApp({
     fileSystem: {
       files: {
         [jsonPath]: JSON.stringify(testCase),
-        '/fake/output/test_demo.py': '# python code'
+        '/fake/output/test_demo.py': '# python code',
       },
-      dirs: { [testCasesDir]: ['test_demo.json'] }
-    }
+      dirs: { [testCasesDir]: ['test_demo.json'] },
+    },
   });
 
   const result = await svc.listTestCases();
@@ -213,11 +226,13 @@ test('P1-3 getTestCase 穿越文件名被清洗为 test_cases 内路径 (不读�
   const result = await svc.getTestCase(evilName);
 
   assert.strictEqual(result.success, false);
-  assert.strictEqual(result.error, '测试用例不存在');  // test_cases/config.json 不存在
+  assert.strictEqual(result.error, '测试用例不存在'); // test_cases/config.json 不存在
   // 读的必须是 test_cases 目录内 (basename 后), 而非原穿越路径
   const readPath = fileSystem.calls.readFile[fileSystem.calls.readFile.length - 1];
-  assert.ok(path.normalize(readPath).startsWith(path.normalize(svc.testCasesDir)),
-    `readFile 应在 testCasesDir 内, 实际: ${readPath}`);
+  assert.ok(
+    path.normalize(readPath).startsWith(path.normalize(svc.testCasesDir)),
+    `readFile 应在 testCasesDir 内, 实际: ${readPath}`
+  );
   assert.ok(!readPath.includes('config.json') || path.basename(readPath) === 'config.json');
 });
 
@@ -243,24 +258,27 @@ test('P1-3 deleteTestCase 目录外 pyFilePath 拒绝删除', async () => {
     fileSystem: {
       files: {
         [path.join('/fake/config/test_cases', 'test_demo.json')]: JSON.stringify({
-          id: 'tc_1', fileName: 'test_demo'
-        })
-      }
-    }
+          id: 'tc_1',
+          fileName: 'test_demo',
+        }),
+      },
+    },
   });
   const victimPath = path.join('/fake', 'victim.json');
 
   const result = await svc.deleteTestCase({
     fileName: 'test_demo',
-    pyFilePath: victimPath
+    pyFilePath: victimPath,
   });
 
   assert.strictEqual(result.success, false);
   assert.strictEqual(result.error, 'invalid_py_path');
   // 受害路径从未被 unlink
   assert.ok(!fileSystem.calls.unlink.includes(victimPath), '目录外文件不得被删除');
-  assert.ok(fileSystem.calls.unlink.includes(path.join('/fake/config/test_cases', 'test_demo.json')),
-    'json 本身仍被删 (删除动作继续)');
+  assert.ok(
+    fileSystem.calls.unlink.includes(path.join('/fake/config/test_cases', 'test_demo.json')),
+    'json 本身仍被删 (删除动作继续)'
+  );
 });
 
 test('P1-3 deleteTestCase 穿越 fileName 被收拢到 test_cases 内 (无法越界)', async () => {
@@ -324,7 +342,7 @@ test('saveTestCase pyOutputDir 存在时内化条件生成 (调 codeGenerator.ge
   const result = await svc.saveTestCase({
     name: 'Test',
     fileName: 'demo',
-    pyOutputDir: '/fake/output'
+    pyOutputDir: '/fake/output',
   });
 
   assert.strictEqual(result.success, true);
@@ -373,10 +391,10 @@ test('deleteTestCase 字符串参数 + 删 json + 删 py', async () => {
     fileSystem: {
       files: {
         [jsonPath]: JSON.stringify(testCase),
-        [pyPath]: '# python'
+        [pyPath]: '# python',
       },
-      dirs: {}
-    }
+      dirs: {},
+    },
   });
 
   const result = await svc.deleteTestCase('test_demo');
@@ -395,8 +413,8 @@ test('deleteTestCase 对象参数 {fileName, pyFilePath}', async () => {
   const { svc, fileSystem } = makeFakeApp({
     fileSystem: {
       files: { [jsonPath]: JSON.stringify({ id: 'tc_2', fileName: 'test_obj' }) },
-      dirs: {}
-    }
+      dirs: {},
+    },
   });
 
   const result = await svc.deleteTestCase({ fileName: 'test_obj', pyFilePath: pyPath });
@@ -413,8 +431,8 @@ test('checkJsonExists + batchCheckJsonExists', async () => {
   const { svc } = makeFakeApp({
     fileSystem: {
       files: { [existentPath]: '{}' },
-      dirs: {}
-    }
+      dirs: {},
+    },
   });
 
   const exists1 = await svc.checkJsonExists('test_exist');
@@ -439,7 +457,12 @@ test('cleanupOrphanedFiles 清理孤立 json + 探测 orphaned py', async () => 
 
   // 孤立 json (对应 .py 丢失)
   const orphanJsonPath = path.join(testCasesDir, 'test_orphan.json');
-  const orphanCase = { id: 'tc_2', fileName: 'test_orphan', pyOutputDir: outputDir, pyFilePath: '/fake/output/test_orphan.py' };
+  const orphanCase = {
+    id: 'tc_2',
+    fileName: 'test_orphan',
+    pyOutputDir: outputDir,
+    pyFilePath: '/fake/output/test_orphan.py',
+  };
 
   // 孤立 .py (无对应 json)
   const orphanedPyPath = path.join(outputDir, 'test_nojson.py');
@@ -450,19 +473,22 @@ test('cleanupOrphanedFiles 清理孤立 json + 探测 orphaned py', async () => 
         [validJsonPath]: JSON.stringify(validCase),
         [validPyPath]: '# valid py',
         [orphanJsonPath]: JSON.stringify(orphanCase),
-        [orphanedPyPath]: '# orphan py'
+        [orphanedPyPath]: '# orphan py',
       },
       dirs: {
         [testCasesDir]: ['test_valid.json', 'test_orphan.json'],
-        [outputDir]: ['test_valid.py', 'test_nojson.py']
-      }
-    }
+        [outputDir]: ['test_valid.py', 'test_nojson.py'],
+      },
+    },
   });
 
   const results = await svc.cleanupOrphanedFiles();
 
   assert.ok(results.cleanedJson.includes('test_orphan.json'), '清理孤立 json (对应 .py 丢失)');
-  assert.ok(results.orphanedPy.some(o => o.fileName === 'test_nojson'), '探测到 orphaned py');
+  assert.ok(
+    results.orphanedPy.some((o) => o.fileName === 'test_nojson'),
+    '探测到 orphaned py'
+  );
 });
 
 // ── R27: deleteTestCase 兼容 scan 条目的 .py 后缀名 (删文件失败修复) ──
@@ -474,9 +500,9 @@ test('R27 deleteTestCase 传 .py 后缀名 (scanTestFiles 条目) 正常删除',
     fileSystem: {
       files: {
         [jsonPath]: JSON.stringify({ id: 'tc_1', fileName: 'test_demo', pyOutputDir: '/fake/config/out' }),
-        [pyPath]: 'print(1)'
-      }
-    }
+        [pyPath]: 'print(1)',
+      },
+    },
   });
 
   // 模拟删除入口直接透传 scan 的 name ('test_demo.py') — 原 _sanitize 白名单不含点 → invalid_file_name
@@ -499,7 +525,7 @@ test('R27 deleteTestCase .py 路径穿越仍被 basename 收拢', async () => {
 test('R27b deleteTestCase json 缺失 + 目录外同名 .py 可删除', async () => {
   const externalPy = path.join('/fake/user-browse/tests', 'test_demo.py');
   const { svc, fileSystem } = makeFakeApp({
-    fileSystem: { files: { [externalPy]: 'print(1)' } }
+    fileSystem: { files: { [externalPy]: 'print(1)' } },
   });
 
   // json 不存在 + 对象显式 pyFilePath 目录外 → 基名匹配放行
@@ -512,7 +538,7 @@ test('R27b deleteTestCase json 缺失 + 目录外同名 .py 可删除', async ()
 test('R27b deleteTestCase json 缺失 + 目录外异名 py 拒绝 (文件身份钉死)', async () => {
   const externalPy = path.join('/fake/user-browse/tests', 'other_case.py');
   const { svc, fileSystem } = makeFakeApp({
-    fileSystem: { files: { [externalPy]: 'print(1)' } }
+    fileSystem: { files: { [externalPy]: 'print(1)' } },
   });
 
   const result = await svc.deleteTestCase({ fileName: 'test_demo.py', pyFilePath: externalPy });
@@ -526,7 +552,7 @@ test('R27b deleteTestCase 字符串 fileName + 目录外 json 文件仍拒 (非 
   // 渲染层被攻破时传 fileName=config + pyFilePath=config.json 不能删任意 config.json
   const victimJson = path.join('/fake', 'config.json');
   const { svc, fileSystem } = makeFakeApp({
-    fileSystem: { files: { [victimJson]: '{}' } }
+    fileSystem: { files: { [victimJson]: '{}' } },
   });
 
   const result = await svc.deleteTestCase(path.join('..', 'config.json'));

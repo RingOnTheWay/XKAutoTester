@@ -3,10 +3,10 @@
 
 class IpcFake {
   constructor() {
-    this.handlers = new Map();      // channel → handler (ipcMain.handle)
-    this.onHandlers = new Map();    // channel → handler[] (ipcMain.on)
-    this.invokeLog = [];             // invoke 调用日志
-    this.sendLog = [];               // send 调用日志
+    this.handlers = new Map(); // channel → handler (ipcMain.handle)
+    this.onHandlers = new Map(); // channel → handler[] (ipcMain.on)
+    this.invokeLog = []; // invoke 调用日志
+    this.sendLog = []; // send 调用日志
   }
 
   // 模拟 ipcMain.handle(channel, handler)
@@ -46,18 +46,18 @@ class IpcFake {
     this.sendLog.push({ channel, args, time: Date.now() });
     const handlers = this.onHandlers.get(channel);
     if (handlers) {
-      handlers.forEach(h => h(this._createEvent(), ...args));
+      handlers.forEach((h) => h(this._createEvent(), ...args));
     }
   }
 
   // 查询 invoke 调用
   getCalls(channel) {
-    return this.invokeLog.filter(c => c.channel === channel);
+    return this.invokeLog.filter((c) => c.channel === channel);
   }
 
   // 查询 send 调用
   getSends(channel) {
-    return this.sendLog.filter(c => c.channel === channel);
+    return this.sendLog.filter((c) => c.channel === channel);
   }
 
   // 触发 on-handler (用于测试 ipcMain.on 注册的 handler)
@@ -65,7 +65,7 @@ class IpcFake {
     const handlers = this.onHandlers.get(channel);
     if (handlers) {
       const event = this._createEvent();
-      handlers.forEach(h => h(event, ...args));
+      handlers.forEach((h) => h(event, ...args));
     }
   }
 

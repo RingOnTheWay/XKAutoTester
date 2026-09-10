@@ -5,9 +5,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const AdbCommandExecutor = require(path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'adb', 'AdbCommandExecutor.js'
-));
+const AdbCommandExecutor = require(
+  path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'adb', 'AdbCommandExecutor.js')
+);
 
 // ── 测试工具 ───────────────────────────────────────────────
 
@@ -17,14 +17,7 @@ const AdbCommandExecutor = require(path.join(
  * @returns {Function} spawn mock,带 .calls 记录
  */
 function createSpawnFn(opts = {}) {
-  const {
-    stdout = '',
-    stderr = '',
-    code = 0,
-    autoClose = true,
-    delay = 0,
-    errorEvent = null,
-  } = opts;
+  const { stdout = '', stderr = '', code = 0, autoClose = true, delay = 0, errorEvent = null } = opts;
 
   const calls = [];
 
@@ -36,8 +29,16 @@ function createSpawnFn(opts = {}) {
     const errorHandlers = [];
 
     const proc = {
-      stdout: { on: (evt, cb) => { if (evt === 'data') dataHandlers.push(cb); } },
-      stderr: { on: (evt, cb) => { if (evt === 'data') stderrDataHandlers.push(cb); } },
+      stdout: {
+        on: (evt, cb) => {
+          if (evt === 'data') dataHandlers.push(cb);
+        },
+      },
+      stderr: {
+        on: (evt, cb) => {
+          if (evt === 'data') stderrDataHandlers.push(cb);
+        },
+      },
       on: (evt, cb) => {
         if (evt === 'close') closeHandlers.push(cb);
         else if (evt === 'error') errorHandlers.push(cb);
@@ -49,11 +50,11 @@ function createSpawnFn(opts = {}) {
     if (autoClose) {
       const emit = () => {
         if (errorEvent) {
-          errorHandlers.forEach(cb => cb(errorEvent));
+          errorHandlers.forEach((cb) => cb(errorEvent));
         } else {
-          if (stdout) dataHandlers.forEach(cb => cb(Buffer.from(stdout)));
-          if (stderr) stderrDataHandlers.forEach(cb => cb(Buffer.from(stderr)));
-          closeHandlers.forEach(cb => cb(code));
+          if (stdout) dataHandlers.forEach((cb) => cb(Buffer.from(stdout)));
+          if (stderr) stderrDataHandlers.forEach((cb) => cb(Buffer.from(stderr)));
+          closeHandlers.forEach((cb) => cb(code));
         }
       };
       if (delay > 0) setTimeout(emit, delay);
@@ -102,12 +103,18 @@ test('stdout 含多段数据正确拼接', async () => {
     calls.push({ cmd, args, options });
     const dataHandlers = [];
     const proc = {
-      stdout: { on: (evt, cb) => { if (evt === 'data') dataHandlers.push(cb); } },
+      stdout: {
+        on: (evt, cb) => {
+          if (evt === 'data') dataHandlers.push(cb);
+        },
+      },
       stderr: { on: () => {} },
-      on: (evt, cb) => { if (evt === 'close') proc._closeCb = cb; },
+      on: (evt, cb) => {
+        if (evt === 'close') proc._closeCb = cb;
+      },
       kill: () => {},
       _emitData: (chunks) => {
-        chunks.forEach(c => dataHandlers.forEach(cb => cb(Buffer.from(c))));
+        chunks.forEach((c) => dataHandlers.forEach((cb) => cb(Buffer.from(c))));
         proc._closeCb(0);
       },
     };
@@ -169,7 +176,9 @@ test('超时 kill 进程并返回 timeout 错误', async () => {
       stdout: { on: () => {} },
       stderr: { on: () => {} },
       on: () => {},
-      kill: () => { killCalled = true; },
+      kill: () => {
+        killCalled = true;
+      },
       _killCalled: () => killCalled,
     };
     return proc;
@@ -216,7 +225,9 @@ test('默认 timeoutMs=5000', async () => {
     const proc = {
       stdout: { on: () => {} },
       stderr: { on: () => {} },
-      on: (evt, cb) => { if (evt === 'close') setImmediate(() => cb(0)); },
+      on: (evt, cb) => {
+        if (evt === 'close') setImmediate(() => cb(0));
+      },
       kill: () => {},
     };
     return proc;
@@ -287,7 +298,9 @@ test('未传 spawnFn 时默认使用 child_process.spawn', async () => {
 // ── 异常路径 ────────────────────────────────────────────
 
 test('execute 抛异常时返回 success=false', async () => {
-  const spawnFn = function () { throw new Error('spawn throw'); };
+  const spawnFn = function () {
+    throw new Error('spawn throw');
+  };
   const exec = new AdbCommandExecutor({ projectRoot: PROJECT_ROOT, i18nService: i18nMock, spawnFn });
 
   const result = await exec.execute(['devices']);

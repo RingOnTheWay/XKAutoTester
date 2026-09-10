@@ -61,8 +61,8 @@ describe('findElementById', () => {
   const targetApp = {
     pages: [
       { elements: [{ id: 'e1', locator: 'id', value: 'btn1' }] },
-      { elements: [{ id: 'e2', locator: 'xpath', value: '//x' }] }
-    ]
+      { elements: [{ id: 'e2', locator: 'xpath', value: '//x' }] },
+    ],
   };
   test('找到元素返回元素对象', () => {
     const el = gen.findElementById('e2', targetApp);
@@ -79,9 +79,7 @@ describe('findElementById', () => {
 describe('findElementByIdFromPackage', () => {
   const gen = new TestCaseCodeGenerator('/fake', '/fake');
   const pkg = {
-    apps: [
-      { pages: [{ elements: [{ id: 'p1e1', locator: 'id', value: 'pkgBtn' }] }] }
-    ]
+    apps: [{ pages: [{ elements: [{ id: 'p1e1', locator: 'id', value: 'pkgBtn' }] }] }],
   };
   test('找到元素', () => {
     assert.strictEqual(gen.findElementByIdFromPackage('p1e1', pkg)?.value, 'pkgBtn');
@@ -130,7 +128,9 @@ describe('generateWaitTimeConfig', () => {
   });
   test('使用自定义值', () => {
     const tpl = 'APP_LOAD_WAIT_TIME = 10\nELEMENT_WAIT_TIMEOUT = 30\nSTEP_INTERVAL = 2\nAPP_CLOSE_WAIT_TIME = 2\n';
-    const out = gen.generateWaitTimeConfig(tpl, { waitTimeConfig: { appLoadWaitTime: 20, elementWaitTimeout: 60, stepInterval: 5, appCloseWaitTime: 10 } });
+    const out = gen.generateWaitTimeConfig(tpl, {
+      waitTimeConfig: { appLoadWaitTime: 20, elementWaitTimeout: 60, stepInterval: 5, appCloseWaitTime: 10 },
+    });
     assert.match(out, /APP_LOAD_WAIT_TIME = 20/);
     assert.match(out, /ELEMENT_WAIT_TIMEOUT = 60/);
     assert.match(out, /STEP_INTERVAL = 5/);
@@ -149,7 +149,7 @@ describe('generateBleConfig', () => {
     const tpl = '{{BLE_CONFIG}}\n{{BLE_CONFIG_INIT}}\n{{BLE_IMPORT}}';
     const out = gen.generateBleConfig(tpl, {
       steps: [{ type: 'ble' }],
-      bleDevice: { uuids: 'UUID-S', bleName: 'DevX', port: 'COM3' }
+      bleDevice: { uuids: 'UUID-S', bleName: 'DevX', port: 'COM3' },
     });
     assert.match(out, /BLE_UUIDS = "UUID-S"/);
     assert.match(out, /BLE_NAME = "DevX"/);
@@ -199,7 +199,7 @@ describe('generateAllureAttachCode', () => {
 
 describe('generateInputValueCode', () => {
   const gen = new TestCaseCodeGenerator('/fake', '/fake');
-  test('null operationValue 返回 \'\'', () => {
+  test("null operationValue 返回 ''", () => {
     assert.strictEqual(gen.generateInputValueCode(null), "''");
   });
   test('custom 类型: 单引号包裹 + 转义反斜杠和单引号', () => {
@@ -222,7 +222,7 @@ describe('generateInputValueCode', () => {
     const out = gen.generateInputValueCode({ inputType: 'faker', fakerConfig: { provider: 'email' } });
     assert.strictEqual(out, 'self.fake.email()');
   });
-  test('未知 inputType 返回 \'\'', () => {
+  test("未知 inputType 返回 ''", () => {
     assert.strictEqual(gen.generateInputValueCode({ inputType: 'unknown' }), "''");
   });
 });
@@ -235,8 +235,10 @@ describe('generateBleStepCode', () => {
   });
   test('send_random_data 调用 temperature_bioland_gen(min_value, max_value, precision)', () => {
     const out = gen.generateBleStepCode({
-      config: { deviceConfig: { methodName: 'send_random_data', params: { min_value: 36.0, max_value: 37.5, precision: 1 } } },
-      name: 'BLE随机'
+      config: {
+        deviceConfig: { methodName: 'send_random_data', params: { min_value: 36.0, max_value: 37.5, precision: 1 } },
+      },
+      name: 'BLE随机',
     });
     assert.match(out, /temperature_bioland_gen\(/);
     assert.match(out, /min_value=36/);
@@ -247,14 +249,14 @@ describe('generateBleStepCode', () => {
   test('send_custom_data 调用 temperature_bioland_gen(temperature=)', () => {
     const out = gen.generateBleStepCode({
       config: { deviceConfig: { methodName: 'send_custom_data', params: { temperature: 36.5 } } },
-      name: 'BLE定制'
+      name: 'BLE定制',
     });
     assert.match(out, /temperature=36\.5/);
   });
   test('其他 methodName 直接使用 hexData', () => {
     const out = gen.generateBleStepCode({
       config: { deviceConfig: { methodName: 'send_hex', params: { hexData: 'ABCD' } } },
-      name: 'BLE原始'
+      name: 'BLE原始',
     });
     assert.match(out, /hex_data = "ABCD"/);
   });
@@ -265,7 +267,7 @@ describe('generateSystemStepCode', () => {
   test('back 单次按下 KEYCODE_BACK', () => {
     const out = gen.generateSystemStepCode({
       config: { systemConfig: { operationType: 'navigation', navKey: 'back', clickCount: 1 } },
-      name: '返回'
+      name: '返回',
     });
     assert.match(out, /self\.driver\.press_keycode\(KEYCODE_BACK\)/);
     assert.ok(!out.includes('for _ in range'));
@@ -273,7 +275,7 @@ describe('generateSystemStepCode', () => {
   test('home 多次按下 KEYCODE_HOME', () => {
     const out = gen.generateSystemStepCode({
       config: { systemConfig: { operationType: 'navigation', navKey: 'home', clickCount: 3 } },
-      name: '主页'
+      name: '主页',
     });
     assert.match(out, /KEYCODE_HOME/);
     assert.match(out, /for _ in range\(3\)/);
@@ -281,7 +283,7 @@ describe('generateSystemStepCode', () => {
   test('未知 navKey 回退到 back', () => {
     const out = gen.generateSystemStepCode({
       config: { systemConfig: { operationType: 'navigation', navKey: 'unknown', clickCount: 1 } },
-      name: 'X'
+      name: 'X',
     });
     assert.match(out, /KEYCODE_BACK/);
   });
@@ -291,7 +293,7 @@ describe('generateSetupMethodContent', () => {
   const gen = new TestCaseCodeGenerator('/fake', '/fake');
   test('有 BLE 随机步骤返回注释', () => {
     const out = gen.generateSetupMethodContent({
-      steps: [{ type: 'ble', config: { deviceConfig: { methodName: 'send_random_data' } } }]
+      steps: [{ type: 'ble', config: { deviceConfig: { methodName: 'send_random_data' } } }],
     });
     assert.match(out, /蓝牙随机数据会在步骤中动态生成/);
   });
@@ -305,7 +307,7 @@ describe('generateAdditionalImports', () => {
   const gen = new TestCaseCodeGenerator('/fake', '/fake');
   test('有 BLE 随机步骤返回 import 语句', () => {
     const out = gen.generateAdditionalImports({
-      steps: [{ type: 'ble', config: { deviceConfig: { methodName: 'send_custom_data' } } }]
+      steps: [{ type: 'ble', config: { deviceConfig: { methodName: 'send_custom_data' } } }],
     });
     assert.match(out, /from main\.device\.bioland\.E127B import temperature_bioland_gen/);
   });
@@ -319,32 +321,61 @@ describe('generateAdditionalImports', () => {
 describe('generateStepCode', () => {
   const gen = new TestCaseCodeGenerator('/fake', '/fake');
   test('element 类型调度到 generateElementStepCode', () => {
-    const out = gen.generateStepCode({
-      type: 'element',
-      name: '点',
-      config: { operation: 'click', locator: 'id', locatorValue: 'btn', operationValue: { clickCount: 1 } }
-    }, 0, {}, [], { apps: [] });
+    const out = gen.generateStepCode(
+      {
+        type: 'element',
+        name: '点',
+        config: { operation: 'click', locator: 'id', locatorValue: 'btn', operationValue: { clickCount: 1 } },
+      },
+      0,
+      {},
+      [],
+      { apps: [] }
+    );
     assert.match(out, /1\. 点/);
     assert.match(out, /with allure\.step\("点"\):/);
     assert.match(out, /element\.click\(\)/);
   });
   test('ble 类型调度到 generateBleStepCode', () => {
-    const out = gen.generateStepCode({
-      type: 'ble', name: 'BLE', config: { deviceConfig: { methodName: 'send_random_data', params: {} } }
-    }, 0, {}, [], { apps: [] });
+    const out = gen.generateStepCode(
+      {
+        type: 'ble',
+        name: 'BLE',
+        config: { deviceConfig: { methodName: 'send_random_data', params: {} } },
+      },
+      0,
+      {},
+      [],
+      { apps: [] }
+    );
     assert.match(out, /temperature_bioland_gen/);
   });
   test('system 类型调度到 generateSystemStepCode', () => {
-    const out = gen.generateStepCode({
-      type: 'system', name: 'SYS', config: { systemConfig: { operationType: 'navigation', navKey: 'back', clickCount: 1 } }
-    }, 0, {}, [], { apps: [] });
+    const out = gen.generateStepCode(
+      {
+        type: 'system',
+        name: 'SYS',
+        config: { systemConfig: { operationType: 'navigation', navKey: 'back', clickCount: 1 } },
+      },
+      0,
+      {},
+      [],
+      { apps: [] }
+    );
     assert.match(out, /KEYCODE_BACK/);
   });
   test('page 类型调度到 generatePageStepCode', () => {
-    const out = gen.generateStepCode({
-      type: 'page', name: 'PG',
-      config: { operationType: 'compare', compareConfig: { locator: 'id', locatorValue: 'v', targetValue: 'x' } }
-    }, 0, {}, [], { apps: [] });
+    const out = gen.generateStepCode(
+      {
+        type: 'page',
+        name: 'PG',
+        config: { operationType: 'compare', compareConfig: { locator: 'id', locatorValue: 'v', targetValue: 'x' } },
+      },
+      0,
+      {},
+      [],
+      { apps: [] }
+    );
     assert.match(out, /expected_value/);
   });
   test('未知类型输出 pass', () => {
@@ -359,26 +390,38 @@ describe('generateElementStepCode', () => {
     assert.match(gen.generateElementStepCode({ config: null }, {}, null), /pass  # 无配置/);
   });
   test('multiSelect 调度到 generateMultiElementStepCode', () => {
-    const out = gen.generateElementStepCode({
-      config: { multiSelect: true, selectedElements: [{ elementId: 'e1' }] }
-    }, { pages: [{ elements: [{ id: 'e1', locator: 'id', value: 'v' }] }] }, { apps: [] });
+    const out = gen.generateElementStepCode(
+      {
+        config: { multiSelect: true, selectedElements: [{ elementId: 'e1' }] },
+      },
+      { pages: [{ elements: [{ id: 'e1', locator: 'id', value: 'v' }] }] },
+      { apps: [] }
+    );
     assert.match(out, /multi_elements = \[/);
   });
   test('click 操作生成 element.click()', () => {
-    const out = gen.generateElementStepCode({
-      config: { operation: 'click', locator: 'id', locatorValue: 'btn', operationValue: { clickCount: 2 } },
-      name: '点2次'
-    }, {}, { apps: [] });
+    const out = gen.generateElementStepCode(
+      {
+        config: { operation: 'click', locator: 'id', locatorValue: 'btn', operationValue: { clickCount: 2 } },
+        name: '点2次',
+      },
+      {},
+      { apps: [] }
+    );
     assert.match(out, /element\.click\(\)/);
     // clickCount=2 -> 两行 element.click()
     const matches = out.match(/element\.click\(\)/g);
     assert.strictEqual(matches.length, 2);
   });
   test('click locator 类型走 driver.tap 路径', () => {
-    const out = gen.generateElementStepCode({
-      config: { operation: 'click', locator: 'click', locatorValue: '100,200', operationValue: { clickCount: 1 } },
-      name: '坐标点击'
-    }, {}, { apps: [] });
+    const out = gen.generateElementStepCode(
+      {
+        config: { operation: 'click', locator: 'click', locatorValue: '100,200', operationValue: { clickCount: 1 } },
+        name: '坐标点击',
+      },
+      {},
+      { apps: [] }
+    );
     assert.match(out, /self\.driver\.tap\(\[\(100, 200\)\]\)/);
   });
 });
@@ -386,22 +429,30 @@ describe('generateElementStepCode', () => {
 describe('generateMultiElementStepCode', () => {
   const gen = new TestCaseCodeGenerator('/fake', '/fake');
   test('从 pagePackageData 查找元素信息', () => {
-    const out = gen.generateMultiElementStepCode({
-      config: {
-        selectedElements: [{ elementId: 'e1', operation: 'click', operationValue: { clickCount: 1 } }],
-        multiClickCount: 1
-      }
-    }, {}, { apps: [{ pages: [{ elements: [{ id: 'e1', locator: 'id', value: 'btn1' }] }] }] });
+    const out = gen.generateMultiElementStepCode(
+      {
+        config: {
+          selectedElements: [{ elementId: 'e1', operation: 'click', operationValue: { clickCount: 1 } }],
+          multiClickCount: 1,
+        },
+      },
+      {},
+      { apps: [{ pages: [{ elements: [{ id: 'e1', locator: 'id', value: 'btn1' }] }] }] }
+    );
     assert.match(out, /'locator_value': 'btn1'/);
     assert.match(out, /random\.sample\(multi_elements, selected_count\)/);
   });
   test('pagePackageData 未找到时回退到 targetApp', () => {
-    const out = gen.generateMultiElementStepCode({
-      config: {
-        selectedElements: [{ elementId: 'e2', operation: 'click', operationValue: { clickCount: 1 } }],
-        multiClickCount: 1
-      }
-    }, { pages: [{ elements: [{ id: 'e2', locator: 'xpath', value: '//x' }] }] }, { apps: [] });
+    const out = gen.generateMultiElementStepCode(
+      {
+        config: {
+          selectedElements: [{ elementId: 'e2', operation: 'click', operationValue: { clickCount: 1 } }],
+          multiClickCount: 1,
+        },
+      },
+      { pages: [{ elements: [{ id: 'e2', locator: 'xpath', value: '//x' }] }] },
+      { apps: [] }
+    );
     assert.match(out, /'locator_value': '\/\/x'/);
     assert.match(out, /'locator_type': 'XPATH'/);
   });
@@ -413,46 +464,72 @@ describe('generatePageStepCode', () => {
     assert.match(gen.generatePageStepCode({ config: null }, [], null), /pass  # 无配置/);
   });
   test('search + text 类型生成 XPATH 查找', () => {
-    const out = gen.generatePageStepCode({
-      config: { operationType: 'search', searchConfig: { searchType: 'text', textValue: '登录', matchType: 'contains' } }
-    }, [], { apps: [] });
+    const out = gen.generatePageStepCode(
+      {
+        config: {
+          operationType: 'search',
+          searchConfig: { searchType: 'text', textValue: '登录', matchType: 'contains' },
+        },
+      },
+      [],
+      { apps: [] }
+    );
     assert.match(out, /AppiumBy\.XPATH/);
     assert.match(out, /contains\(@text, "登录"\)/);
     assert.match(out, /while waited_time < ELEMENT_WAIT_TIMEOUT/);
   });
   test('search + element 类型生成定位器查找', () => {
-    const out = gen.generatePageStepCode({
-      config: { operationType: 'search', searchConfig: { searchType: 'element', locator: 'id', locatorValue: 'btn' } }
-    }, [], { apps: [] });
+    const out = gen.generatePageStepCode(
+      {
+        config: {
+          operationType: 'search',
+          searchConfig: { searchType: 'element', locator: 'id', locatorValue: 'btn' },
+        },
+      },
+      [],
+      { apps: [] }
+    );
     assert.match(out, /AppiumBy\.ID/);
     assert.match(out, /'btn'/);
   });
   test('compare 有 tolerance 走数值对比路径', () => {
-    const out = gen.generatePageStepCode({
-      config: {
-        operationType: 'compare',
-        compareConfig: { locator: 'id', locatorValue: 'valEl', targetValue: '36.5', tolerance: 0.5 }
-      }
-    }, [], { apps: [] });
+    const out = gen.generatePageStepCode(
+      {
+        config: {
+          operationType: 'compare',
+          compareConfig: { locator: 'id', locatorValue: 'valEl', targetValue: '36.5', tolerance: 0.5 },
+        },
+      },
+      [],
+      { apps: [] }
+    );
     assert.match(out, /displayed_num = float\(displayed_value\)/);
     assert.match(out, /if diff <= 0\.5:/);
   });
   test('compare 无 tolerance 走字符串对比路径', () => {
-    const out = gen.generatePageStepCode({
-      config: {
-        operationType: 'compare',
-        compareConfig: { locator: 'id', locatorValue: 'valEl', targetValue: 'abc' }
-      }
-    }, [], { apps: [] });
+    const out = gen.generatePageStepCode(
+      {
+        config: {
+          operationType: 'compare',
+          compareConfig: { locator: 'id', locatorValue: 'valEl', targetValue: 'abc' },
+        },
+      },
+      [],
+      { apps: [] }
+    );
     assert.match(out, /if displayed_value == expected_value:/);
   });
   test('compare + targetValueType=ble 使用 self.test_ble_value', () => {
-    const out = gen.generatePageStepCode({
-      config: {
-        operationType: 'compare',
-        compareConfig: { locator: 'id', locatorValue: 'el', targetValueType: 'ble', bleStepId: 's1', tolerance: 0.2 }
-      }
-    }, [{ id: 's1', name: 'BLE步骤' }], { apps: [] });
+    const out = gen.generatePageStepCode(
+      {
+        config: {
+          operationType: 'compare',
+          compareConfig: { locator: 'id', locatorValue: 'el', targetValueType: 'ble', bleStepId: 's1', tolerance: 0.2 },
+        },
+      },
+      [{ id: 's1', name: 'BLE步骤' }],
+      { apps: [] }
+    );
     assert.match(out, /expected_value = str\(self\.test_ble_value\)/);
     assert.match(out, /使用步骤"BLE步骤"生成的随机值/);
   });
@@ -462,15 +539,23 @@ describe('generateTestMethods', () => {
   const gen = new TestCaseCodeGenerator('/fake', '/fake');
   test('生成方法定义 + 装饰器 + 步骤代码', () => {
     const tpl = '{{TEST_METHODS}}\n{{SETUP_METHOD_CONTENT}}\n{{ADDITIONAL_IMPORTS}}';
-    const out = gen.generateTestMethods(tpl, {
-      fileName: 'test_login',
-      name: '登录测试',
-      description: '测试登录流程',
-      allureConfig: { story: 'S', markers: ['smoke'] },
-      steps: [
-        { type: 'system', name: '返回', config: { systemConfig: { operationType: 'navigation', navKey: 'back', clickCount: 1 } } }
-      ]
-    }, { apps: [] });
+    const out = gen.generateTestMethods(
+      tpl,
+      {
+        fileName: 'test_login',
+        name: '登录测试',
+        description: '测试登录流程',
+        allureConfig: { story: 'S', markers: ['smoke'] },
+        steps: [
+          {
+            type: 'system',
+            name: '返回',
+            config: { systemConfig: { operationType: 'navigation', navKey: 'back', clickCount: 1 } },
+          },
+        ],
+      },
+      { apps: [] }
+    );
     assert.match(out, /def test_login\(self\):/);
     assert.match(out, /@allure\.story\("S"\)/);
     assert.match(out, /@allure\.title\("登录测试"\)/);
@@ -513,8 +598,12 @@ describe('generatePythonFile 端到端', () => {
       allureConfig: { epic: 'E', feature: 'F' },
       waitTimeConfig: { appLoadWaitTime: 15, elementWaitTimeout: 30, stepInterval: 2, appCloseWaitTime: 2 },
       steps: [
-        { type: 'system', name: '返回', config: { systemConfig: { operationType: 'navigation', navKey: 'back', clickCount: 1 } } }
-      ]
+        {
+          type: 'system',
+          name: '返回',
+          config: { systemConfig: { operationType: 'navigation', navKey: 'back', clickCount: 1 } },
+        },
+      ],
     };
     const result = await gen.generatePythonFile(caseData, outputDir);
     assert.strictEqual(result.success, true);
@@ -602,7 +691,6 @@ describe('generatePythonFile 端到端', () => {
   });
 });
 
-
 // ─── P0-1 代码注入回归测试 ─────────────────────────────────
 describe('P0-1 转义函数族', () => {
   test('escapePyStringLiteral 转义双引号/反斜杠/换行', () => {
@@ -677,8 +765,18 @@ describe('generatePythonFile P0-1 注入防护 端到端', () => {
       name: payload,
       description: 'desc """' + payload,
       steps: [
-        { id: 's1', type: 'system', name: payload, config: { systemConfig: { operationType: 'navigation', navKey: 'back' } } },
-        { id: 's2', type: 'element', name: payload + '"suffix', config: { operation: 'click', locator: 'id', locatorValue: 'btn' } }
+        {
+          id: 's1',
+          type: 'system',
+          name: payload,
+          config: { systemConfig: { operationType: 'navigation', navKey: 'back' } },
+        },
+        {
+          id: 's2',
+          type: 'element',
+          name: payload + '"suffix',
+          config: { operation: 'click', locator: 'id', locatorValue: 'btn' },
+        },
       ],
       targetApp: { name: payload, packageName: payload },
       allureConfig: { story: payload, epic: payload, feature: payload, markers: ['smoke' + payload] },
@@ -730,7 +828,6 @@ describe('generatePythonFile P0-1 注入防护 端到端', () => {
     assert.match(pyContent, /def test_a_b_c\(self\):/);
   });
 });
-
 
 // ── R24 P2-3: toPyLiteral Python 字面量 (JSON 布尔/null → Python 关键字) ──
 
@@ -787,7 +884,13 @@ describe('R24 P2-3 toPyLiteral', () => {
                 {
                   elementId: 'e1',
                   operation: 'sendText',
-                  operationValue: { inputType: 'faker', fakerConfig: { provider: 'person.name' }, checked: true, enabled: false, note: null },
+                  operationValue: {
+                    inputType: 'faker',
+                    fakerConfig: { provider: 'person.name' },
+                    checked: true,
+                    enabled: false,
+                    note: null,
+                  },
                 },
               ],
             },

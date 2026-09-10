@@ -5,9 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 
-const ALLURE_SERVICE_PATH = path.join(
-  __dirname, '..', '..', 'electron', 'src', 'main', 'services', 'AllureService.js'
-);
+const ALLURE_SERVICE_PATH = path.join(__dirname, '..', '..', 'electron', 'src', 'main', 'services', 'AllureService.js');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 const USER_DATA_PATH = path.join(__dirname, '..', '..', 'trae-backup');
@@ -20,23 +18,50 @@ function makeLoggerMock() {
   const calls = { error: [], warning: [], warn: [], info: [], ensureLogDir: 0, resetLogPath: 0 };
   return {
     calls,
-    async ensureLogDir() { calls.ensureLogDir++; },
-    resetLogPath() { calls.resetLogPath++; },
-    async error(msg) { calls.error.push(msg); },
-    async warning(msg) { calls.warning.push(msg); },
-    async warn(msg) { calls.warn.push(msg); }, // R27: 对齐真实 Logger
-    async info(msg) { calls.info.push(msg); },
+    async ensureLogDir() {
+      calls.ensureLogDir++;
+    },
+    resetLogPath() {
+      calls.resetLogPath++;
+    },
+    async error(msg) {
+      calls.error.push(msg);
+    },
+    async warning(msg) {
+      calls.warning.push(msg);
+    },
+    async warn(msg) {
+      calls.warn.push(msg);
+    }, // R27: 对齐真实 Logger
+    async info(msg) {
+      calls.info.push(msg);
+    },
   };
 }
 
-function makeHttpServerMock({ startResult = { success: true, url: 'http://localhost:8080', port: 8080 }, stopResult = { success: true }, statusResult = { running: false, port: null } } = {}) {
+function makeHttpServerMock({
+  startResult = { success: true, url: 'http://localhost:8080', port: 8080 },
+  stopResult = { success: true },
+  statusResult = { running: false, port: null },
+} = {}) {
   const calls = { start: [], stop: 0, cleanupSync: 0, getStatus: 0 };
   return {
     calls,
-    async start(reportDir, options) { calls.start.push({ reportDir, options }); return startResult; },
-    async stop() { calls.stop++; return stopResult; },
-    cleanupSync() { calls.cleanupSync++; },
-    getStatus() { calls.getStatus++; return statusResult; },
+    async start(reportDir, options) {
+      calls.start.push({ reportDir, options });
+      return startResult;
+    },
+    async stop() {
+      calls.stop++;
+      return stopResult;
+    },
+    cleanupSync() {
+      calls.cleanupSync++;
+    },
+    getStatus() {
+      calls.getStatus++;
+      return statusResult;
+    },
   };
 }
 
@@ -51,16 +76,35 @@ function makeCliInvokerMock({ generateResult = { code: 0, stdout: '', stderr: ''
   };
 }
 
-function makeAsyncFsMock({ existsResult = true, readdirResult = [], statResult = { isDirectory: () => true, mtimeMs: 0 } } = {}) {
+function makeAsyncFsMock({
+  existsResult = true,
+  readdirResult = [],
+  statResult = { isDirectory: () => true, mtimeMs: 0 },
+} = {}) {
   const calls = { exists: [], readdir: [], stat: [], rm: [], mkdir: [], unlink: [] };
   return {
     calls,
-    async exists(p) { calls.exists.push(p); return existsResult; },
-    async readdir(p) { calls.readdir.push(p); return readdirResult; },
-    async stat(p) { calls.stat.push(p); return statResult; },
-    async rm(p, opts) { calls.rm.push({ path: p, opts }); },
-    async mkdir(p, opts) { calls.mkdir.push({ path: p, opts }); },
-    async unlink(p) { calls.unlink.push(p); },
+    async exists(p) {
+      calls.exists.push(p);
+      return existsResult;
+    },
+    async readdir(p) {
+      calls.readdir.push(p);
+      return readdirResult;
+    },
+    async stat(p) {
+      calls.stat.push(p);
+      return statResult;
+    },
+    async rm(p, opts) {
+      calls.rm.push({ path: p, opts });
+    },
+    async mkdir(p, opts) {
+      calls.mkdir.push({ path: p, opts });
+    },
+    async unlink(p) {
+      calls.unlink.push(p);
+    },
   };
 }
 
@@ -125,7 +169,9 @@ test('getAllureServerStatus 委托 httpServer.getStatus', async () => {
 
 test('getAllureServerStatus httpServer 抛错 返 running:false + error', async () => {
   const { svc, httpServer } = buildService();
-  httpServer.getStatus = () => { throw new Error('server broken'); };
+  httpServer.getStatus = () => {
+    throw new Error('server broken');
+  };
 
   const r = await svc.getAllureServerStatus();
 
@@ -167,7 +213,9 @@ test('stopAllureServer 委托 httpServer.stop + 调 logger.ensureLogDir/resetLog
 
 test('stopAllureServer httpServer.stop 抛错 catch 返 {success:false, error}', async () => {
   const { svc, httpServer } = buildService();
-  httpServer.stop = async () => { throw new Error('stop failed'); };
+  httpServer.stop = async () => {
+    throw new Error('stop failed');
+  };
 
   const r = await svc.stopAllureServer();
 
@@ -209,7 +257,9 @@ test('checkReportExists 目录存在 + timestamp 子目录含 index.html 返 {ex
 
 test('checkReportExists 抛错 catch 返 {exists:false}', async () => {
   const { svc, asyncFs } = buildService();
-  asyncFs.exists = async () => { throw new Error('fs broken'); };
+  asyncFs.exists = async () => {
+    throw new Error('fs broken');
+  };
 
   const r = await svc.checkReportExists('plan1');
 
@@ -277,8 +327,8 @@ test('openReportByPath httpServer.start 返 {success:false} 透传', async () =>
 test('R25 P2-3: openReportByPath 越界路径拒绝 (防 HTTP 托管任意目录)', async () => {
   const { svc, httpServer } = buildService();
   const outsidePaths = [
-    path.join(USER_DATA_PATH, 'config.json'),   // 报告根之外 (userDataPath 下)
-    path.join(REPORTS_ROOT, '..', '..'),          // 相对回溯
+    path.join(USER_DATA_PATH, 'config.json'), // 报告根之外 (userDataPath 下)
+    path.join(REPORTS_ROOT, '..', '..'), // 相对回溯
     path.join(__dirname, 'test_allure_service.js'), // 任意文件
   ];
   for (const p of outsidePaths) {
