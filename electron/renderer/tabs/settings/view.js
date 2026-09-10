@@ -508,7 +508,9 @@ export class SettingsView {
       const banner = secure
         ? `<div class="update-hash-verified">${window.i18n.t('settings.updateHashVerified')}</div>`
         : `<div class="update-insecure-warning">${window.i18n.t('settings.insecureReleaseWarning')}</div>`;
-      this.els.updateChangelog.innerHTML = banner + SettingsModel.renderMarkdown(changelog);
+      // Markdown 正文单独包一层 .md-body: 让样式作用域与首尾留白规则不被横幅干扰
+      this.els.updateChangelog.innerHTML =
+        banner + `<div class="md-body">${SettingsModel.renderMarkdown(changelog)}</div>`;
     }
 
     // 重置进度
@@ -830,5 +832,28 @@ export class SettingsView {
     const changeHandler = (e) => handler(e.target.checked);
     el.addEventListener('change', changeHandler);
     return () => el.removeEventListener('change', changeHandler);
+  }
+
+  /**
+   * 容器内 a[data-external] 点击事件委托。
+   * 适用于内容会被整体重渲染的容器 (如更新弹窗 changelog) —— 监听挂在容器上,
+   * 不必随 innerHTML 重建而重绑。非白名单链接在渲染层就不产出锚点 (见
+   * core/utils/markdown.js), 因此这里只需处理白名单锚点。
+   * @param {string} containerId - 容器 DOM id
+   * @param {(url: string) => void} onExternal - 点击回调, 参数为 href
+   * @returns {Function} unbind 函数
+   */
+  bindExternalLinkDelegation(containerId, onExternal) {
+    const el = document.getElementById(containerId);
+    if (!el) return () => {};
+    const clickHandler = (event) => {
+      const anchor = event.target?.closest?.('a[data-external]');
+      if (!anchor || !el.contains(anchor)) return;
+      event.preventDefault();
+      const url = anchor.getAttribute('href') || '';
+      if (url) onExternal(url);
+    };
+    el.addEventListener('click', clickHandler);
+    return () => el.removeEventListener('click', clickHandler);
   }
 }

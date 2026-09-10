@@ -1,6 +1,7 @@
 import { EventEmitter } from '../../core/EventEmitter.js';
 import { ApiBridge } from '../../core/ApiBridge.js';
 import { AppState } from '../../core/AppState.js';
+import { renderMarkdown as renderMarkdownHtml } from '../../core/utils/markdown.js';
 
 /** 更新下载结果状态 (权威词汇 #1: main 产出 state, renderer 只读不猜原取消/正则) */
 const UPDATE_DOWNLOAD_RESULT_STATE = Object.freeze({
@@ -532,16 +533,17 @@ export class SettingsModel extends EventEmitter {
     return '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
   }
 
+  /**
+   * 渲染 Release body 的 Markdown (GFM 子集) 为安全 HTML。
+   *
+   * 实现位于 core/utils/markdown.js: 零依赖、先转义后变换、链接白名单
+   * (https + github.com, 与主进程 urlGuard 同源)。此处保留静态入口以兼容
+   * 既有调用方 (view.showUpdateModal), 避免调用点散落新路径。
+   * @param {string} text - 原始 markdown 文本
+   * @returns {string} 可直接 innerHTML 的 HTML
+   */
   static renderMarkdown(text) {
-    if (!text) return '';
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>')
-      .replace(/\n/g, '<br>');
+    return renderMarkdownHtml(text);
   }
 
   static formatDownloadSpeed(bytesPerSecond) {

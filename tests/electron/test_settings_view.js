@@ -98,12 +98,18 @@ function setupJsdm() {
   global.window.electronAPI = {}; // 避免 ApiBridge.api 报错
   // getBoundingClientRect 默认返回全 0
   if (!window.HTMLElement.prototype.getBoundingClientRect) {
-    window.HTMLElement.prototype.getBoundingClientRect = () => ({ width: 100, height: 30, top: 100, bottom: 130, left: 10 });
+    window.HTMLElement.prototype.getBoundingClientRect = () => ({
+      width: 100,
+      height: 30,
+      top: 100,
+      bottom: 130,
+      left: 10,
+    });
   }
 }
 
 function teardownJsdm() {
-  Object.keys(savedGlobals).forEach(k => {
+  Object.keys(savedGlobals).forEach((k) => {
     if (savedGlobals[k] === undefined) delete global[k];
     else global[k] = savedGlobals[k];
   });
@@ -249,7 +255,9 @@ describe('SettingsView 事件绑定 helper', () => {
   test('bindClickById 应在 click 时触发 handler，元素 disabled 时跳过', async () => {
     const v = new ViewClass();
     let calls = 0;
-    const unbind = v.bindClickById('test-click-btn', () => { calls++; });
+    const unbind = v.bindClickById('test-click-btn', () => {
+      calls++;
+    });
     document.getElementById('test-click-btn').click();
     assert.strictEqual(calls, 1);
     // disabled 时不应触发
@@ -273,7 +281,9 @@ describe('SettingsView 事件绑定 helper', () => {
   test('bindToggleById 应在 change 时回传 checked', () => {
     const v = new ViewClass();
     let lastChecked = null;
-    const unbind = v.bindToggleById('test-toggle', (checked) => { lastChecked = checked; });
+    const unbind = v.bindToggleById('test-toggle', (checked) => {
+      lastChecked = checked;
+    });
     const el = document.getElementById('test-toggle');
     el.checked = true;
     el.dispatchEvent(new window.Event('change'));
@@ -290,7 +300,9 @@ describe('SettingsView 事件绑定 helper', () => {
   test('bindThemeColorOptionsClick 应读取 data-color 并回传', () => {
     const v = new ViewClass();
     let received = null;
-    const unbind = v.bindThemeColorOptionsClick((color) => { received = color; });
+    const unbind = v.bindThemeColorOptionsClick((color) => {
+      received = color;
+    });
     const opt = v.els.themeColorOptions.querySelector('[data-color="#4CAF50"]');
     opt.click();
     assert.strictEqual(received, '#4CAF50');
@@ -302,7 +314,9 @@ describe('SettingsView 事件绑定 helper', () => {
   test('bindThemeColorHexChange 应仅在合法 hex 时触发', () => {
     const v = new ViewClass();
     let received = null;
-    const unbind = v.bindThemeColorHexChange((color) => { received = color; });
+    const unbind = v.bindThemeColorHexChange((color) => {
+      received = color;
+    });
     const input = v.els.themeColorHex;
     input.value = 'invalid';
     input.dispatchEvent(new window.Event('change'));
@@ -316,7 +330,9 @@ describe('SettingsView 事件绑定 helper', () => {
   test('bindLanguageOptionsClick 应回传 lang 并更新 selected 显示', () => {
     const v = new ViewClass();
     let receivedLang = null;
-    const unbind = v.bindLanguageOptionsClick((lang) => { receivedLang = lang; });
+    const unbind = v.bindLanguageOptionsClick((lang) => {
+      receivedLang = lang;
+    });
     const opt = v.els.customLanguageOptions.querySelector('[data-value="en-US"]');
     opt.click();
     assert.strictEqual(receivedLang, 'en-US');
@@ -329,7 +345,9 @@ describe('SettingsView 事件绑定 helper', () => {
   test('bindNotificationOptionsClick 应回传 platform 并更新 selected 显示', () => {
     const v = new ViewClass();
     let received = null;
-    const unbind = v.bindNotificationOptionsClick((p) => { received = p; });
+    const unbind = v.bindNotificationOptionsClick((p) => {
+      received = p;
+    });
     const opt = v.els.customNotificationPlatformOptions.querySelector('[data-value="dingtalk"]');
     opt.click();
     assert.strictEqual(received, 'dingtalk');
@@ -341,13 +359,18 @@ describe('SettingsView 事件绑定 helper', () => {
     const v = new ViewClass();
     let tokenCalls = 0;
     let secretCalls = 0;
-    const u1 = v.bindAccessTokenChange(() => { tokenCalls++; });
-    const u2 = v.bindSecretChange(() => { secretCalls++; });
+    const u1 = v.bindAccessTokenChange(() => {
+      tokenCalls++;
+    });
+    const u2 = v.bindSecretChange(() => {
+      secretCalls++;
+    });
     v.els.notificationAccessToken.dispatchEvent(new window.Event('change'));
     v.els.notificationSecret.dispatchEvent(new window.Event('change'));
     assert.strictEqual(tokenCalls, 1);
     assert.strictEqual(secretCalls, 1);
-    u1(); u2();
+    u1();
+    u2();
   });
 
   test('getAccessToken / getSecret 应返回输入值', () => {
@@ -368,12 +391,23 @@ describe('SettingsView 全局 click 事件委托', () => {
 
   test('bindGlobalClickForDropdowns 应分发到对应 handler', () => {
     const v = new ViewClass();
-    let langToggles = 0, notifToggles = 0, themeToggles = 0, outsideClicks = 0;
+    let langToggles = 0,
+      notifToggles = 0,
+      themeToggles = 0,
+      outsideClicks = 0;
     const unbind = v.bindGlobalClickForDropdowns({
-      onLanguageToggle: () => { langToggles++; },
-      onNotificationToggle: () => { notifToggles++; },
-      onThemeToggle: () => { themeToggles++; },
-      onOutsideClick: () => { outsideClicks++; },
+      onLanguageToggle: () => {
+        langToggles++;
+      },
+      onNotificationToggle: () => {
+        notifToggles++;
+      },
+      onThemeToggle: () => {
+        themeToggles++;
+      },
+      onOutsideClick: () => {
+        outsideClicks++;
+      },
     });
     // 点击 language selected
     v.els.customLanguageSelected.click();
@@ -483,5 +517,110 @@ describe('SettingsView 渲染方法', () => {
     assert.ok(span, '还原后子 span 存在');
     assert.strictEqual(span.getAttribute('data-i18n'), 'settings.exportConfig', 'data-i18n key 保留');
     assert.strictEqual(span.textContent, '导出配置', '文本还原');
+  });
+});
+
+describe('SettingsView 更新弹窗 — Markdown changelog 渲染与链接委托', () => {
+  before(async () => {
+    setupJsdm();
+    await loadSettingsView();
+  });
+  after(teardownJsdm);
+
+  test('showUpdateModal 应把 release body 渲染为 Markdown HTML (不再是纯文本)', () => {
+    const v = new ViewClass();
+    v.showUpdateModal({
+      version: 'v0.1.7',
+      changelog:
+        "## What's Changed\n\n- **feat**: add `scrcpy` by [#1](https://github.com/RingOnTheWay/XKAutoTester/pull/1)",
+      secure: true,
+    });
+    const el = document.getElementById('update-changelog');
+    assert.ok(el.querySelector('.md-body h2'), '标题应渲染为 h2');
+    assert.ok(el.querySelector('.md-body ul li strong'), '列表 + 粗体应渲染');
+    assert.ok(el.querySelector('.md-body code.md-code'), '行内码应渲染');
+    assert.ok(el.querySelector('.md-body a[data-external]'), '白名单链接应成为锚点');
+    assert.ok(!el.textContent.includes('##'), '不应残留 markdown 标记');
+  });
+
+  test('changelog 被 .md-body 包裹 (样式作用域隔离于 hash 横幅)', () => {
+    const v = new ViewClass();
+    v.showUpdateModal({ version: 'v0.1.7', changelog: 'text', secure: true });
+    const el = document.getElementById('update-changelog');
+    const banner = el.querySelector('.update-hash-verified');
+    const body = el.querySelector('.md-body');
+    assert.ok(banner, '安全横幅仍在');
+    assert.ok(body, '.md-body 容器存在');
+    assert.strictEqual(banner.nextElementSibling, body, '横幅之后紧跟正文容器');
+  });
+
+  test('releaseNotes 回退字段同样走 Markdown 渲染', () => {
+    const v = new ViewClass();
+    v.showUpdateModal({
+      version: 'v0.1.7',
+      releaseNotes: '- a\n- b',
+      secure: false,
+    });
+    const el = document.getElementById('update-changelog');
+    assert.ok(el.querySelector('.md-body ul'));
+    assert.ok(el.querySelector('.update-insecure-warning'));
+  });
+
+  test('bindExternalLinkDelegation: 点击白名单锚点 → 回调 href 且阻止默认导航', () => {
+    const v = new ViewClass();
+    const container = document.getElementById('update-changelog');
+    container.innerHTML =
+      '<div class="md-body"><a class="md-link" href="https://github.com/a/b" data-external="1">x</a></div>';
+    const seen = [];
+    const unbind = v.bindExternalLinkDelegation('update-changelog', (url) => seen.push(url));
+    const anchor = container.querySelector('a');
+    const ev = new window.Event('click', { bubbles: true, cancelable: true });
+    anchor.dispatchEvent(ev);
+    assert.deepStrictEqual(seen, ['https://github.com/a/b']);
+    assert.strictEqual(ev.defaultPrevented, true, '必须阻止 Electron 窗口内导航');
+    unbind();
+  });
+
+  test('bindExternalLinkDelegation: 点击子元素也能命中锚点 (委托穿透)', () => {
+    const v = new ViewClass();
+    const container = document.getElementById('update-changelog');
+    container.innerHTML =
+      '<div class="md-body"><a class="md-link" href="https://github.com/c/d" data-external="1"><strong>y</strong></a></div>';
+    const seen = [];
+    const unbind = v.bindExternalLinkDelegation('update-changelog', (url) => seen.push(url));
+    container.querySelector('strong').dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    assert.deepStrictEqual(seen, ['https://github.com/c/d']);
+    unbind();
+  });
+
+  test('bindExternalLinkDelegation: 非 data-external 锚点不触发回调', () => {
+    const v = new ViewClass();
+    const container = document.getElementById('update-changelog');
+    container.innerHTML = '<a href="https://github.com/x/y">plain</a>';
+    const seen = [];
+    const unbind = v.bindExternalLinkDelegation('update-changelog', (url) => seen.push(url));
+    const ev = new window.Event('click', { bubbles: true, cancelable: true });
+    container.querySelector('a').dispatchEvent(ev);
+    assert.deepStrictEqual(seen, []);
+    assert.strictEqual(ev.defaultPrevented, false);
+    unbind();
+  });
+
+  test('bindExternalLinkDelegation: 容器不存在时返回空解绑函数 (不抛错)', () => {
+    const v = new ViewClass();
+    const unbind = v.bindExternalLinkDelegation('not-exist-container', () => {});
+    assert.strictEqual(typeof unbind, 'function');
+    assert.doesNotThrow(() => unbind());
+  });
+
+  test('bindExternalLinkDelegation: 解绑后不再响应点击', () => {
+    const v = new ViewClass();
+    const container = document.getElementById('update-changelog');
+    container.innerHTML = '<a class="md-link" href="https://github.com/e/f" data-external="1">z</a>';
+    const seen = [];
+    const unbind = v.bindExternalLinkDelegation('update-changelog', (url) => seen.push(url));
+    unbind();
+    container.querySelector('a').dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    assert.deepStrictEqual(seen, []);
   });
 });

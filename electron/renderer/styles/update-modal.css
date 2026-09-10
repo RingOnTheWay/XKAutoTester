@@ -137,28 +137,198 @@ body:not(.dark-theme) .update-changelog {
     border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-.update-changelog h4 {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 8px 0 4px 0;
-    color: var(--text-primary);
-}
+/* ── changelog Markdown 正文 ────────────────────────────────────
+   内容由 core/utils/markdown.js 渲染 (GFM 子集), view 侧统一包进
+   .md-body, 样式在此作用域内收敛, 不污染弹窗其它区域。          */
 
-.update-changelog h4:first-child {
+.update-changelog .md-body > *:first-child {
     margin-top: 0;
 }
 
-.update-changelog ul {
-    margin: 4px 0;
+.update-changelog .md-body > *:last-child {
+    margin-bottom: 0;
+}
+
+.update-changelog p {
+    margin: 8px 0;
+}
+
+.update-changelog h1,
+.update-changelog h2,
+.update-changelog h3,
+.update-changelog h4,
+.update-changelog h5,
+.update-changelog h6 {
+    font-weight: 600;
+    line-height: 1.35;
+    margin: 14px 0 6px 0;
+    color: var(--text-primary);
+}
+
+.update-changelog h1 {
+    font-size: 17px;
+}
+
+.update-changelog h2 {
+    font-size: 15.5px;
+}
+
+.update-changelog h3 {
+    font-size: 14.5px;
+}
+
+.update-changelog h4 {
+    font-size: 13.5px;
+}
+
+.update-changelog h5,
+.update-changelog h6 {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.update-changelog ul,
+.update-changelog ol {
+    margin: 6px 0;
     padding-left: 20px;
 }
 
 .update-changelog li {
-    margin: 2px 0;
+    margin: 3px 0;
+}
+
+.update-changelog li > ul,
+.update-changelog li > ol {
+    margin: 3px 0;
+}
+
+.update-changelog li > p {
+    margin: 4px 0;
+}
+
+.update-changelog li input[type='checkbox'] {
+    width: 12px;
+    height: 12px;
+    margin: 0 4px 0 0;
+    vertical-align: -1px;
+    accent-color: var(--primary);
+    opacity: 0.8;
+}
+
+.update-changelog blockquote {
+    margin: 8px 0;
+    padding: 2px 0 2px 12px;
+    border-left: 3px solid rgba(var(--primary-rgb, 33, 150, 243), 0.5);
+    color: var(--text-secondary);
+}
+
+.update-changelog blockquote > *:first-child {
+    margin-top: 0;
+}
+
+.update-changelog blockquote > *:last-child {
+    margin-bottom: 0;
+}
+
+.update-changelog hr {
+    margin: 12px 0;
+    border: none;
+    border-top: 1px solid rgba(128, 128, 128, 0.25);
 }
 
 .update-changelog strong {
     font-weight: 600;
+}
+
+.update-changelog del {
+    opacity: 0.65;
+}
+
+.update-changelog code {
+    font-family: var(--font-family-mono);
+    font-size: 12px;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+body.dark-theme .update-changelog code {
+    background: rgba(255, 255, 255, 0.09);
+}
+
+body:not(.dark-theme) .update-changelog code {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.update-changelog pre.md-pre {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.update-changelog pre.md-pre code {
+    display: block;
+    padding: 0;
+    background: none;
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre;
+}
+
+body.dark-theme .update-changelog pre.md-pre {
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body:not(.dark-theme) .update-changelog pre.md-pre {
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.update-changelog table.md-table {
+    width: 100%;
+    margin: 8px 0;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+
+.update-changelog table.md-table th,
+.update-changelog table.md-table td {
+    padding: 5px 8px;
+    border: 1px solid rgba(128, 128, 128, 0.22);
+}
+
+.update-changelog table.md-table th {
+    font-weight: 600;
+}
+
+body.dark-theme .update-changelog table.md-table th {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+body:not(.dark-theme) .update-changelog table.md-table th {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+/* 可点击外链: 仅 https + github.com 会产出锚点 (见 markdown.js) */
+.update-changelog a.md-link {
+    color: var(--primary);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(var(--primary-rgb, 33, 150, 243), 0.35);
+    cursor: pointer;
+    word-break: break-all;
+}
+
+.update-changelog a.md-link:hover {
+    border-bottom-color: var(--primary);
+}
+
+/* 非白名单 URL: 降级为不可点文本, 仍保留信息 */
+.update-changelog .md-url {
+    color: var(--text-secondary);
+    opacity: 0.75;
+    word-break: break-all;
 }
 
 /* R10 安全闭环: hash 校验状态横幅 */

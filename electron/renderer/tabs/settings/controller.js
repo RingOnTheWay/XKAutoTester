@@ -413,6 +413,15 @@ export class SettingsController {
       this.#model.openExternal('https://github.com/RingOnTheWay/XKAutoTester');
     });
 
+    // 更新弹窗 - changelog 内 Markdown 链接 (a[data-external])
+    // changelog 每次 showUpdateModal 整体重渲染, 故用容器级事件委托;
+    // 只可能拿到白名单 https://github.com/* (渲染层已过滤), 仍走 URL 校验的主进程出口。
+    this.#unbinds.push(
+      this.#view.bindExternalLinkDelegation('update-changelog', (url) => {
+        this.#model.openExternal(url);
+      })
+    );
+
     // 全局点击：处理下拉框开关 + 关闭（捕获阶段，确保在 app.js 的冒泡阶段 handler 之前执行）
     this.#unbinds.push(
       this.#view.bindGlobalClickForDropdowns({
