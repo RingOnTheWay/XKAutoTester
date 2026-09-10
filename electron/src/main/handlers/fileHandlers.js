@@ -1,5 +1,5 @@
 const { registerHandler, makeI18nFallback, fail } = require('./base/handlerUtils');
-const { dialog, shell } = require('electron');
+const { shell } = require('electron');
 const fs = require('fs');
 const fsp = require('fs').promises;
 const path = require('path');
@@ -7,6 +7,7 @@ const { IPC_CHANNELS } = require('../../shared/constants');
 const { isAllowedExternalUrl } = require('../utils/urlGuard');
 const { isSystemProtectedPath } = require('../utils/pathGuard');
 const lastDialogPaths = require('./base/lastDialogPaths');
+const { registerOpenDialogWithMemory } = require('./base/dialogWithMemory');
 
 function isNonEmptyString(v) {
   return typeof v === 'string' && v.trim().length > 0;
@@ -25,69 +26,44 @@ function register(ipcMain, services) {
   const testCasesDir =
     electronApp && electronApp.userConfigPath ? path.resolve(electronApp.userConfigPath, 'test_cases') : null;
 
+  // 4 个标准 open 选择器: 记忆 → 弹窗 → 记忆 (模板收敛 base/dialogWithMemory)
+  const selectDir = () => electronApp.mainWindow;
+  registerOpenDialogWithMemory(ipcMain, IPC_CHANNELS.SELECT_DIRECTORY, selectDir, {
+    properties: ['openDirectory'],
+  });
+  registerOpenDialogWithMemory(ipcMain, IPC_CHANNELS.SELECT_FILE, selectDir, {
+    properties: ['openFile'],
+    filters: [
+      { name: 'Python Files', extensions: ['py'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  });
+  registerOpenDialogWithMemory(
+    ipcMain,
+    IPC_CHANNELS.SELECT_FILES,
+    selectDir,
+    // title/buttonLabel 依 i18n 动态求值 (i18nService 初始化期可能晚于注册)
+    () => {
+      const title = i18nService ? i18nService.t('fileManager.upload') : 'Upload';
+      return {
+        title,
+        buttonLabel: title,
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'All Files', extensions: ['*'] }],
+      };
+    }
+  );
+  registerOpenDialogWithMemory(ipcMain, IPC_CHANNELS.SELECT_APK_FILE, selectDir, {
+    properties: ['openFile'],
+    filters: [{ name: 'Android Package', extensions: ['apk'] }],
+  });
+
   // 校验 dir 是否位于测试用例目录或其子目录下
   function isWithinTestCasesDir(dir) {
     if (!testCasesDir) return false;
     const resolved = path.resolve(dir);
     return resolved === testCasesDir || resolved.startsWith(testCasesDir + path.sep);
   }
-
-  registerHandler(ipcMain, IPC_CHANNELS.SELECT_DIRECTORY, async () => {
-    const defaultPath = await lastDialogPaths.getDefaultPath(IPC_CHANNELS.SELECT_DIRECTORY);
-    const result = await dialog.showOpenDialog(electronApp.mainWindow, {
-      properties: ['openDirectory'],
-      ...(defaultPath ? { defaultPath } : {}),
-    });
-    if (!result.canceled && result.filePaths && result.filePaths[0]) {
-      await lastDialogPaths.rememberPath(IPC_CHANNELS.SELECT_DIRECTORY, result.filePaths[0]);
-    }
-    return result;
-  });
-
-  registerHandler(ipcMain, IPC_CHANNELS.SELECT_FILE, async () => {
-    const defaultPath = await lastDialogPaths.getDefaultPath(IPC_CHANNELS.SELECT_FILE);
-    const result = await dialog.showOpenDialog(electronApp.mainWindow, {
-      properties: ['openFile'],
-      filters: [
-        { name: 'Python Files', extensions: ['py'] },
-        { name: 'All Files', extensions: ['*'] },
-      ],
-      ...(defaultPath ? { defaultPath } : {}),
-    });
-    if (!result.canceled && result.filePaths && result.filePaths[0]) {
-      await lastDialogPaths.rememberPath(IPC_CHANNELS.SELECT_FILE, result.filePaths[0]);
-    }
-    return result;
-  });
-
-  registerHandler(ipcMain, IPC_CHANNELS.SELECT_FILES, async () => {
-    const title = i18nService ? i18nService.t('fileManager.upload') : 'Upload';
-    const defaultPath = await lastDialogPaths.getDefaultPath(IPC_CHANNELS.SELECT_FILES);
-    const result = await dialog.showOpenDialog(electronApp.mainWindow, {
-      title,
-      buttonLabel: title,
-      properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'All Files', extensions: ['*'] }],
-      ...(defaultPath ? { defaultPath } : {}),
-    });
-    if (!result.canceled && result.filePaths && result.filePaths[0]) {
-      await lastDialogPaths.rememberPath(IPC_CHANNELS.SELECT_FILES, result.filePaths[0]);
-    }
-    return result;
-  });
-
-  registerHandler(ipcMain, IPC_CHANNELS.SELECT_APK_FILE, async () => {
-    const defaultPath = await lastDialogPaths.getDefaultPath(IPC_CHANNELS.SELECT_APK_FILE);
-    const result = await dialog.showOpenDialog(electronApp.mainWindow, {
-      properties: ['openFile'],
-      filters: [{ name: 'Android Package', extensions: ['apk'] }],
-      ...(defaultPath ? { defaultPath } : {}),
-    });
-    if (!result.canceled && result.filePaths && result.filePaths[0]) {
-      await lastDialogPaths.rememberPath(IPC_CHANNELS.SELECT_APK_FILE, result.filePaths[0]);
-    }
-    return result;
-  });
 
   registerHandler(ipcMain, IPC_CHANNELS.CHECK_PATH_EXISTS, (pathToCheck) => {
     if (!isNonEmptyString(pathToCheck)) {

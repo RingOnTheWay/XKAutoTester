@@ -1,6 +1,7 @@
 import { Toast } from '../../components/toast.js';
 // R24 P1-6: 统一 core Promise 版 confirm (原 view 回调版已删)
 import { showConfirmModal } from '../../core/utils/confirmModal.js';
+import { createBindings } from '../../core/utils/bindings.js';
 
 /**
  * PagePackageController - 页面封装 Tab 控制器
@@ -9,8 +10,9 @@ import { showConfirmModal } from '../../core/utils/confirmModal.js';
 export class PagePackageController {
   #model;
   #view;
-  #unbinds = [];
-  #unbindModel = [];
+  // 统一生命周期词汇 createBindings (原双数组 forEach 样板)
+  #unbinds = createBindings();
+  #unbindModel = createBindings();
   #destroyed = false;
   #initialized = false;
 
@@ -35,10 +37,8 @@ export class PagePackageController {
 
   destroy() {
     this.#destroyed = true;
-    this.#unbinds.forEach((fn) => fn());
-    this.#unbinds = [];
-    this.#unbindModel.forEach((fn) => fn());
-    this.#unbindModel = [];
+    this.#unbinds.run();
+    this.#unbindModel.run();
     this.#model.destroy();
   }
 

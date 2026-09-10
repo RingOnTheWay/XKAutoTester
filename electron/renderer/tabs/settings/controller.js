@@ -3,6 +3,7 @@ import { AppState } from '../../core/AppState.js';
 import { Toast } from '../../components/toast.js';
 // R24 P1-6: 统一 core Promise 版 confirm (原 view 回调版已删)
 import { showConfirmModal } from '../../core/utils/confirmModal.js';
+import { createBindings } from '../../core/utils/bindings.js';
 import { UPDATE_DOWNLOAD_RESULT_STATE } from './model.js';
 
 /**
@@ -13,8 +14,9 @@ import { UPDATE_DOWNLOAD_RESULT_STATE } from './model.js';
 export class SettingsController {
   #model;
   #view;
-  #unbinds = [];
-  #unbindModel = [];
+  // 统一生命周期词汇 createBindings (原 #unbinds/#unbindModel 双数组样板)
+  #unbinds = createBindings();
+  #unbindModel = createBindings();
   #destroyed = false;
 
   /**
@@ -45,10 +47,8 @@ export class SettingsController {
 
   destroy() {
     this.#destroyed = true;
-    this.#unbinds.forEach((fn) => fn());
-    this.#unbinds = [];
-    this.#unbindModel.forEach((fn) => fn());
-    this.#unbindModel = [];
+    this.#unbinds.run();
+    this.#unbindModel.run();
     this.#model.destroy();
   }
 

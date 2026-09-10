@@ -4,6 +4,7 @@ const path = require('path');
 const { getTimestamp } = require('../utils/pathHelper');
 const { IPC_CHANNELS } = require('../../shared/constants');
 const lastDialogPaths = require('./base/lastDialogPaths');
+const { registerOpenDialogWithMemory } = require('./base/dialogWithMemory');
 
 function register(ipcMain, services) {
   const { electronApp, dataTransferService } = services;
@@ -35,22 +36,14 @@ function register(ipcMain, services) {
     return result;
   });
 
-  registerHandler(ipcMain, IPC_CHANNELS.SELECT_IMPORT_PATH, async () => {
-    const defaultPath = await lastDialogPaths.getDefaultPath(IPC_CHANNELS.SELECT_IMPORT_PATH);
-    const result = await dialog.showOpenDialog(electronApp.mainWindow, {
-      title: '导入配置',
-      properties: ['openFile'],
-      filters: [
-        { name: 'ZIP Archive', extensions: ['zip'] },
-        { name: 'All Files', extensions: ['*'] },
-      ],
-      ...(defaultPath ? { defaultPath } : {}),
-    });
-
-    if (!result.canceled && result.filePaths && result.filePaths[0]) {
-      await lastDialogPaths.rememberPath(IPC_CHANNELS.SELECT_IMPORT_PATH, result.filePaths[0]);
-    }
-    return result;
+  // 标准 open 选择器: 记忆 → 弹窗 → 记忆 (模板收敛 base/dialogWithMemory)
+  registerOpenDialogWithMemory(ipcMain, IPC_CHANNELS.SELECT_IMPORT_PATH, () => electronApp.mainWindow, {
+    title: '导入配置',
+    properties: ['openFile'],
+    filters: [
+      { name: 'ZIP Archive', extensions: ['zip'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
   });
 
   registerHandler(ipcMain, IPC_CHANNELS.EXPORT_CONFIG, async (outputPath) => {

@@ -48,8 +48,8 @@ test('P2-8 bindStepCardEvents 拖拽 unbind 进 stepCardUnbinds 而非 unbinds',
   const view = makeFakeView();
   const controller = new Controller({}, view);
 
-  assert.strictEqual(controller.unbinds.length, 0, '初始 unbinds 为空');
-  assert.strictEqual(controller.stepCardUnbinds.length, 0, '初始 stepCardUnbinds 为空');
+  assert.strictEqual(controller.unbinds.size, 0, '初始 unbinds 为空');
+  assert.strictEqual(controller.stepCardUnbinds.size, 0, '初始 stepCardUnbinds 为空');
 
   // 模拟 3 次 renderSteps → bindStepCardEvents
   controller.bindStepCardEvents();
@@ -57,11 +57,11 @@ test('P2-8 bindStepCardEvents 拖拽 unbind 进 stepCardUnbinds 而非 unbinds',
   controller.bindStepCardEvents();
 
   assert.strictEqual(
-    controller.unbinds.length,
+    controller.unbinds.size,
     0,
     '拖拽 unbind 不应再进入 unbinds (旧行为每次 render 都 push, 无界增长)'
   );
-  assert.strictEqual(controller.stepCardUnbinds.length, 3, '每次 render 的拖拽 unbind 进入 stepCardUnbinds');
+  assert.strictEqual(controller.stepCardUnbinds.size, 3, '每次 render 的拖拽 unbind 进入 stepCardUnbinds');
   assert.strictEqual(view.calls.bindStepDragDrop, 3, 'bindStepDragDrop 被调用 3 次');
 });
 
@@ -72,14 +72,14 @@ test('P2-8 unbindStepCardEvents 清理后 stepCardUnbinds 归零 (旧卡片闭�
 
   controller.bindStepCardEvents();
   controller.bindStepCardEvents();
-  assert.strictEqual(controller.stepCardUnbinds.length, 2);
+  assert.strictEqual(controller.stepCardUnbinds.size, 2);
 
   // renderSteps 重渲染前会调用 unbindStepCardEvents
   controller.unbindStepCardEvents();
-  assert.strictEqual(controller.stepCardUnbinds.length, 0, '上一轮 unbind 全部执行并清空');
+  assert.strictEqual(controller.stepCardUnbinds.size, 0, '上一轮 unbind 全部执行并清空');
 
   controller.bindStepCardEvents();
-  assert.strictEqual(controller.stepCardUnbinds.length, 1, '新一轮只保留当前一轮的 unbind');
+  assert.strictEqual(controller.stepCardUnbinds.size, 1, '新一轮只保留当前一轮的 unbind');
 });
 
 test('P2-8 bindFileListEvents 重复调用只 push 一次 unbind', async () => {
@@ -92,7 +92,7 @@ test('P2-8 bindFileListEvents 重复调用只 push 一次 unbind', async () => {
   controller.bindFileListEvents();
   controller.bindFileListEvents();
 
-  assert.strictEqual(controller.unbinds.length, 1, '文件列表 unbind 只应 push 一次');
+  assert.strictEqual(controller.unbinds.size, 1, '文件列表 unbind 只应 push 一次');
   assert.strictEqual(view.calls.bindFileListClick, 1, 'bindFileListClick 只应调用一次 (view 层 __tcClickBound 同样防重)');
 });
 

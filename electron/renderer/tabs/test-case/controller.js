@@ -1,6 +1,7 @@
 import { Action } from '../../core/Action.js';
 import { Toast } from '../../components/toast.js';
 import { showConfirmModal } from '../../core/utils/confirmModal.js';
+import { createBindings } from '../../core/utils/bindings.js';
 
 /**
  * TestCaseController - 测试用例 Tab 控制器
@@ -14,10 +15,11 @@ import { showConfirmModal } from '../../core/utils/confirmModal.js';
 export class TestCaseController {
   #model;
   #view;
-  #unbinds = [];
-  #stepCardUnbinds = []; // 步骤卡片专用事件清理
+  // 统一生命周期词汇 createBindings (原三数组各自 forEach 样板)
+  #unbinds = createBindings();
+  #stepCardUnbinds = createBindings(); // 步骤卡片专用事件清理
   #draggedStepCard = null; // 拖拽中的步骤卡片 DOM
-  #unbindModel = [];
+  #unbindModel = createBindings();
   #searchDebounceTimer = null;
   #searchLoadingTimer = null;
   #isSearchLoading = false;
@@ -51,12 +53,9 @@ export class TestCaseController {
   destroy() {
     this.#destroyed = true;
     clearTimeout(this.#searchDebounceTimer);
-    this.#unbinds.forEach((fn) => fn());
-    this.#unbinds = [];
-    this.#stepCardUnbinds.forEach((fn) => fn());
-    this.#stepCardUnbinds = [];
-    this.#unbindModel.forEach((fn) => fn());
-    this.#unbindModel = [];
+    this.#unbinds.run();
+    this.#stepCardUnbinds.run();
+    this.#unbindModel.run();
     this.#model.destroy();
   }
 
@@ -73,9 +72,6 @@ export class TestCaseController {
   }
   get stepCardUnbinds() {
     return this.#stepCardUnbinds;
-  }
-  set stepCardUnbinds(v) {
-    this.#stepCardUnbinds = v;
   }
   get unbindModel() {
     return this.#unbindModel;
@@ -328,8 +324,7 @@ export class TestCaseController {
   // ─── 步骤卡片事件绑定 ────────────────────────────────────
 
   unbindStepCardEvents() {
-    this.stepCardUnbinds.forEach((fn) => fn());
-    this.stepCardUnbinds = [];
+    this.stepCardUnbinds.run();
   }
 
   // ─── 文件列表事件绑定 ────────────────────────────────────

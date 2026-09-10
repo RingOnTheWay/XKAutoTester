@@ -1,6 +1,7 @@
 import { Action } from '../../core/Action.js';
 import { Toast } from '../../components/toast.js';
 import { showConfirmModal } from '../../core/utils/confirmModal.js';
+import { createBindings } from '../../core/utils/bindings.js';
 
 /**
  * TestExecutionController - 测试执行 Tab 控制器
@@ -13,7 +14,8 @@ import { showConfirmModal } from '../../core/utils/confirmModal.js';
 export class TestExecutionController {
   #model;
   #view;
-  #cleanups = [];
+  // 统一生命周期词汇 createBindings (原 #cleanups 数组, 词汇与其它 tab 对齐)
+  #cleanups = createBindings();
 
   constructor(model, view) {
     this.#model = model;
@@ -38,8 +40,7 @@ export class TestExecutionController {
   }
 
   destroy() {
-    this.#cleanups.forEach((fn) => fn());
-    this.#cleanups = [];
+    this.#cleanups.run();
     this.#model.destroy();
   }
 

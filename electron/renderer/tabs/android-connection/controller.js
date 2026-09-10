@@ -1,6 +1,7 @@
 import { Action } from '../../core/Action.js';
 import { Toast } from '../../components/toast.js';
 import { showConfirmModal } from '../../core/utils/confirmModal.js';
+import { createBindings } from '../../core/utils/bindings.js';
 
 /**
  * AndroidConnectionController - 安卓连接 Tab 控制器
@@ -9,7 +10,8 @@ import { showConfirmModal } from '../../core/utils/confirmModal.js';
 export class AndroidConnectionController {
   #model;
   #view;
-  #cleanups = [];
+  // 统一生命周期词汇 createBindings (原 #cleanups 数组, 词汇与其它 tab 对齐)
+  #cleanups = createBindings();
   #initialized = false;
 
   constructor(model, view) {
@@ -32,8 +34,7 @@ export class AndroidConnectionController {
   }
 
   destroy() {
-    this.#cleanups.forEach((fn) => fn());
-    this.#cleanups = [];
+    this.#cleanups.run();
     this.#model.stopDeviceRefresh();
     this.#model.destroy();
   }
