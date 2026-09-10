@@ -146,10 +146,11 @@ class Cli:
             return 1
 
     def _write_electron_markers(self, result: dict) -> None:
-        """私有: 写 stdout 标记行供 Electron 父进程解析 (allure 路径 + 测试计划运行)。
+        """私有: 写 stdout 标记行供 Electron 父进程解析 (allure 路径 + 测试计划运行 + 用例统计)。
 
         副作用收敛至此, PytestRunner 保持纯函数 (输入参数 → 输出 dict, 无 stdout 副作用)。
         单源化: Electron 是 test_plans.json 唯一写者, 避免双端并发写丢失更新。
+        单源化: 用例统计由 Python 结构化产出 (XKAT_TEST_STATS), Electron 不再正则嗅探摘要行。
         """
         allure_dir = result.get("allure_results_dir")
         if allure_dir:
@@ -168,6 +169,9 @@ class Cli:
                 ),
                 flush=True,
             )
+        test_stats = result.get("test_stats")
+        if test_stats and test_stats.get("total", 0) > 0:
+            print(f"XKAT_TEST_STATS:{json.dumps(test_stats, ensure_ascii=False)}", flush=True)
 
     def _run_inspector(self) -> int:
         """私有: Inspector 模式编排 (原 InspectorRunner) + 6 命令注册 (用常量)。"""

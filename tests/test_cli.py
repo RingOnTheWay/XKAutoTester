@@ -141,6 +141,36 @@ class TestCliRunTestsMode:
         assert code == 1
 
 
+class TestCliElectronMarkers:
+    """_write_electron_markers stdout 标记行测试 (XKAT_TEST_STATS 结构化单源)。"""
+
+    def test_test_stats_marker_written_when_total_positive(self, capsys) -> None:
+        """test_stats.total>0 → 输出 XKAT_TEST_STATS JSON 标记行。"""
+        import json as _json
+
+        cli, _, _, _ = _make_cli()
+        result = {"test_stats": {"passed": 5, "failed": 2, "skipped": 3, "broken": 1, "total": 11}}
+        cli._write_electron_markers(result)
+        out = capsys.readouterr().out
+        assert "XKAT_TEST_STATS:" in out
+        payload = out.split("XKAT_TEST_STATS:", 1)[1].strip().splitlines()[0]
+        assert _json.loads(payload) == {"passed": 5, "failed": 2, "skipped": 3, "broken": 1, "total": 11}
+
+    def test_test_stats_marker_skipped_when_total_zero(self, capsys) -> None:
+        """test_stats.total=0 → 不写标记行 (Electron 走正则 fallback)。"""
+        cli, _, _, _ = _make_cli()
+        cli._write_electron_markers({"test_stats": {"passed": 0, "failed": 0, "skipped": 0, "broken": 0, "total": 0}})
+        out = capsys.readouterr().out
+        assert "XKAT_TEST_STATS" not in out
+
+    def test_test_stats_marker_skipped_when_missing(self, capsys) -> None:
+        """result 无 test_stats → 不写标记行。"""
+        cli, _, _, _ = _make_cli()
+        cli._write_electron_markers({"exit_code": 0})
+        out = capsys.readouterr().out
+        assert "XKAT_TEST_STATS" not in out
+
+
 class TestCliInspectorMode:
     """--inspector 模式测试。"""
 

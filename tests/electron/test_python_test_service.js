@@ -462,6 +462,29 @@ describe('PythonTestService._parseTestStats', () => {
   });
 });
 
+describe('PythonTestService.findTestStatsMarker (XKAT_TEST_STATS 结构化单源)', () => {
+  test('应从 XKAT_TEST_STATS 标记行解析 JSON 统计', () => {
+    const stats = PythonTestService.findTestStatsMarker(
+      'output line\nXKAT_TEST_STATS:{"passed": 5, "failed": 2, "skipped": 3, "broken": 1, "total": 11}\nmore'
+    );
+    assert.deepStrictEqual(stats, { passed: 5, failed: 2, skipped: 3, broken: 1, total: 11 });
+  });
+
+  test('无标记行应返回 null (由调用方 fallback 正则)', () => {
+    assert.strictEqual(PythonTestService.findTestStatsMarker('5 passed, 2 failed in 10.5s'), null);
+    assert.strictEqual(PythonTestService.findTestStatsMarker(''), null);
+  });
+
+  test('标记行 JSON 损坏应返回 null (fallback 而非抛错)', () => {
+    assert.strictEqual(PythonTestService.findTestStatsMarker('XKAT_TEST_STATS:{broken json'), null);
+  });
+
+  test('缺失字段补 0 (健壮性)', () => {
+    const stats = PythonTestService.findTestStatsMarker('XKAT_TEST_STATS:{"passed": 3, "total": 3}');
+    assert.deepStrictEqual(stats, { passed: 3, failed: 0, skipped: 0, broken: 0, total: 3 });
+  });
+});
+
 describe('PythonTestService._findAllureResultsDir', () => {
   test('应从 XKAT_ALLURE_RESULTS_DIR 标记解析', () => {
     const spawn = createMockSpawn();

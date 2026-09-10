@@ -14,6 +14,7 @@ import { escapeHtml as escapeHtmlUtil } from '../../core/utils/html.js';
 import { getScheduledPlanStatus } from '../../core/utils/scheduledPlanStatus.js';
 import DeviceSelectionModal from '../../components/device-selection-modal.js';
 import DateTimePicker from '../../components/datetime-picker.js';
+import { inferTestTypeFromFileName } from './model.js';
 
 export class TestExecutionView {
   constructor() {
@@ -924,14 +925,11 @@ export class TestExecutionView {
     const { modalTestFileList } = this.els;
     if (!modalTestFileList) return [];
     const checked = modalTestFileList.querySelectorAll('input[type="checkbox"]:checked');
+    // 类型判定领域规则收敛到 model.inferTestTypeFromFileName (原 view 内字符串嗅探)
     return Array.from(checked).map((cb) => {
       const filePath = cb.value;
       const fileName = filePath.split(/[\\/]/).pop();
-      let type = 'unit';
-      if (fileName.includes('appium')) type = 'appium';
-      else if (fileName.includes('playwright')) type = 'playwright';
-      else if (fileName.includes('check_app_status')) type = 'status';
-      return { name: fileName, path: filePath, type };
+      return { name: fileName, path: filePath, type: inferTestTypeFromFileName(fileName) };
     });
   }
 

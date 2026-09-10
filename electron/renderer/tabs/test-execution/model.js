@@ -4,6 +4,31 @@ import { AppState } from '../../core/AppState.js';
 import { getScheduledPlanStatus } from '../../core/utils/scheduledPlanStatus.js';
 
 /**
+ * 从文件条目 (字符串 | {name|path}) 提取用例名: 剥 .py 后缀 + 取 basename
+ * (收敛 model 内三处重复: checkAndroidDeviceRequired / checkDeviceConfig / checkBlePortConfig)
+ * @param {string|{name?:string, path?:string}} file
+ * @returns {string}
+ */
+export function toCaseFileName(file) {
+  let name = typeof file === 'string' ? file : (file && (file.name || file.path)) || '';
+  if (name.endsWith('.py')) name = name.slice(0, -3);
+  if (name.includes('/') || name.includes('\\')) name = name.split(/[\\/]/).pop();
+  return name;
+}
+
+/**
+ * 从文件名推断测试类型 (领域规则单点, 原散在 view.getModalSelectedTestFiles 字符串嗅探)
+ * @param {string} fileName
+ * @returns {'appium'|'playwright'|'status'|'unit'}
+ */
+export function inferTestTypeFromFileName(fileName) {
+  if (fileName.includes('appium')) return 'appium';
+  if (fileName.includes('playwright')) return 'playwright';
+  if (fileName.includes('check_app_status')) return 'status';
+  return 'unit';
+}
+
+/**
  * TestExecutionModel - 测试执行 Tab 的 Model 层
  * 管理测试计划、定时计划、测试执行、报告等状态与业务逻辑
  *
@@ -680,9 +705,7 @@ export class TestExecutionModel extends EventEmitter {
 
     for (const testFile of testPlan.testFiles) {
       try {
-        let fileName = testFile.name || testFile.path;
-        if (fileName.endsWith('.py')) fileName = fileName.slice(0, -3);
-        if (fileName.includes('/') || fileName.includes('\\')) fileName = fileName.split(/[\\/]/).pop();
+        const fileName = toCaseFileName(testFile);
 
         // wrapper 已处理 IPC 失败,此处直接判断 data 字段
         const result = await this._api.testCaseGet(fileName);
@@ -817,14 +840,10 @@ export class TestExecutionModel extends EventEmitter {
     const unconfiguredFiles = [];
 
     for (const file of this._state.selectedTestFiles) {
-      // R27 P1-3: 条目可为纯字符串 (scanTestFiles 返回字符串数组) — 原 file.name||file.path
-      // 对字符串条目得 undefined → endsWith TypeError 逃逸 (try 外) → runTests 的
-      // isRunning 置位后 finally 不执行 → 运行状态永久卡死。名称处理一并移入 try。
-      let fileName = typeof file === 'string' ? file : (file && (file.name || file.path)) || '';
-
+      // R27 P1-3: 条目可为纯字符串 (scanTestFiles 返回字符串数组) — 名称归一收敛到
+      // toCaseFileName (剥 .py + basename + string 条目容错), TypeError 逃逸问题随之消解
       try {
-        if (fileName.endsWith('.py')) fileName = fileName.slice(0, -3);
-        if (fileName.includes('/') || fileName.includes('\\')) fileName = fileName.split(/[\\/]/).pop();
+        const fileName = toCaseFileName(file);
         // wrapper 已处理 IPC 失败,此处直接判断 data 字段
         const result = await this._api.testCaseGet(fileName);
         if (result && result.data) {
@@ -867,14 +886,9 @@ export class TestExecutionModel extends EventEmitter {
     const unconfiguredFiles = [];
 
     for (const file of this._state.selectedTestFiles) {
-      // R27 P1-3: 条目可为纯字符串 (scanTestFiles 返回字符串数组) — 原 file.name||file.path
-      // 对字符串条目得 undefined → endsWith TypeError 逃逸 (try 外) → runTests 的
-      // isRunning 置位后 finally 不执行 → 运行状态永久卡死。名称处理一并移入 try。
-      let fileName = typeof file === 'string' ? file : (file && (file.name || file.path)) || '';
-
+      // 同 checkDeviceConfig: 名称归一收敛 toCaseFileName (string 条目容错)
       try {
-        if (fileName.endsWith('.py')) fileName = fileName.slice(0, -3);
-        if (fileName.includes('/') || fileName.includes('\\')) fileName = fileName.split(/[\\/]/).pop();
+        const fileName = toCaseFileName(file);
         // wrapper 已处理 IPC 失败,此处直接判断 data 字段
         const result = await this._api.testCaseGet(fileName);
         if (result && result.data) {

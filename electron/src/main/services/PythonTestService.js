@@ -74,6 +74,29 @@ function findTestPlanRunMarker(output) {
 }
 
 /**
+ * 从输出提取 XKAT_TEST_STATS 结构化标记 (单源化: Python 侧已解析统计并写入标记行,
+ * Electron 直接消费, 不再正则嗅探 pytest 摘要行)
+ * @param {string} output
+ * @returns {{passed:number, failed:number, skipped:number, broken:number, total:number}|null}
+ */
+function findTestStatsMarker(output) {
+  const m = output.match(/XKAT_TEST_STATS:(.+)/);
+  if (!m) return null;
+  try {
+    const parsed = JSON.parse(m[1].trim());
+    return {
+      passed: Number(parsed.passed) || 0,
+      failed: Number(parsed.failed) || 0,
+      skipped: Number(parsed.skipped) || 0,
+      broken: Number(parsed.broken) || 0,
+      total: Number(parsed.total) || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 构建 PYTHONPATH env (从 buildPythonPathEnv 提取, 纯函数, srcPath 作参数)
  * @param {{isSystem:boolean, sitePackagesPath?:string}} pythonCmd
  * @param {string} srcPath
@@ -550,7 +573,10 @@ class PythonTestService {
    * @returns {Promise<Object>}
    */
   async _buildRunResult(code, buffers, testPlanName) {
-    const testStats = this._parseTestStats(buffers.output + '\n' + buffers.errorOutput);
+    // 统计单源: 优先消费 Python 结构化标记行 (XKAT_TEST_STATS);
+    // 正则嗅探摘要行仅作 fallback (旧版 Python 后端 / 标记行缺失)
+    const combined = buffers.output + '\n' + buffers.errorOutput;
+    const testStats = findTestStatsMarker(combined) || parseTestStats(combined);
     // 单源化: 先记录运行 (追加 run, report_path=null), 再走 Allure pipeline (生成报告后补写 report_path)
     await this._recordTestPlanRun(buffers.output, testPlanName);
     const { allureReportPath, sideEffectFailures } = await this._runAllurePipeline(buffers.output, testPlanName);
@@ -649,9 +675,10 @@ class PythonTestService {
 }
 
 // Object.assign 保 default export (零测试改 + factories.js 零改)
-// 附加 3 模块级纯函数为静态属性 (可 PythonTestService.parseTestStats 访问)
+// 附加 4 模块级纯函数为静态属性 (可 PythonTestService.parseTestStats 访问)
 module.exports = Object.assign(PythonTestService, {
   parseTestStats,
+  findTestStatsMarker,
   findAllureResultsDirMarker,
   findTestPlanRunMarker,
   buildPythonPathEnv,

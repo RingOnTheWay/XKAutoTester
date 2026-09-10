@@ -61,11 +61,13 @@ before(setupJsdom);
 after(teardownJsdom);
 
 let TestExecutionModel;
+let modelPureFns;
 
 async function loadModel() {
   if (!TestExecutionModel) {
     const mod = await import('../../electron/renderer/tabs/test-execution/model.js');
     TestExecutionModel = mod.TestExecutionModel;
+    modelPureFns = mod;
   }
   return TestExecutionModel;
 }
@@ -87,6 +89,36 @@ function controllableRunPythonTests(model) {
   const finish = () => resolveRun && resolveRun({ success: true, testStats: { passed: 1, failed: 0, skipped: 0, broken: 0, total: 1 } });
   return { getCalls: () => calls, finish };
 }
+
+// ── 名称归一 + 类型推断纯函数 (三处重复收敛) ──────────────────
+
+test('toCaseFileName: 字符串条目剥 .py + basename', async () => {
+  await loadModel();
+  assert.strictEqual(modelPureFns.toCaseFileName('tests/login_test.py'), 'login_test');
+  assert.strictEqual(modelPureFns.toCaseFileName('tests\\login_test.py'), 'login_test');
+  assert.strictEqual(modelPureFns.toCaseFileName('login_test'), 'login_test');
+});
+
+test('toCaseFileName: 对象条目取 name||path', async () => {
+  await loadModel();
+  assert.strictEqual(modelPureFns.toCaseFileName({ name: 'a.py', path: 'x/a.py' }), 'a');
+  assert.strictEqual(modelPureFns.toCaseFileName({ path: 'x/b.py' }), 'b');
+});
+
+test('toCaseFileName: 空值容错返回空串 (不抛 TypeError)', async () => {
+  await loadModel();
+  assert.strictEqual(modelPureFns.toCaseFileName(undefined), '');
+  assert.strictEqual(modelPureFns.toCaseFileName(null), '');
+  assert.strictEqual(modelPureFns.toCaseFileName({}), '');
+});
+
+test('inferTestTypeFromFileName: 文件名→类型四分支', async () => {
+  await loadModel();
+  assert.strictEqual(modelPureFns.inferTestTypeFromFileName('test_appium_login'), 'appium');
+  assert.strictEqual(modelPureFns.inferTestTypeFromFileName('demo_playwright_flow'), 'playwright');
+  assert.strictEqual(modelPureFns.inferTestTypeFromFileName('check_app_status'), 'status');
+  assert.strictEqual(modelPureFns.inferTestTypeFromFileName('some_unit_test'), 'unit');
+});
 
 test('P2-7 isRunning 期间再次 runTests 被守卫拦截, 不二次启动 pytest', async () => {
   const Model = await loadModel();
