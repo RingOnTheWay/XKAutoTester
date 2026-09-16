@@ -11,7 +11,8 @@ const ROOT = path.join(__dirname, '..', '..');
 const constantsPath = path.join(ROOT, 'electron', 'src', 'shared', 'constants.js');
 const preloadPath = path.join(ROOT, 'electron', 'src', 'preload', 'index.js');
 const updateHandlersPath = path.join(ROOT, 'electron', 'src', 'main', 'handlers', 'updateHandlers.js');
-const settingsModelPath = path.join(ROOT, 'electron', 'renderer', 'tabs', 'settings', 'model.js');
+// R26 候选②: settings model 拆分后, 更新链路 bind specs 位于 models/UpdateModel.js
+const settingsUpdateModelPath = path.join(ROOT, 'electron', 'renderer', 'tabs', 'settings', 'models', 'UpdateModel.js');
 const androidModelPath = path.join(ROOT, 'electron', 'renderer', 'tabs', 'android-connection', 'model.js');
 
 function read(p) {
@@ -20,13 +21,13 @@ function read(p) {
 
 // 待校验链: [通道常量名, preload expose 方法名, handler 引用, 渲染层 bind key]
 const CHAINS = [
-  // 更新取消: 曾只漏 preload 层
+  // 更新取消: 曾只漏 preload 层 (R26 候选② 拆分后 bind specs 在 models/UpdateModel.js)
   [
     'CANCEL_UPDATE_DOWNLOAD',
     'cancelUpdateDownload',
     'CANCEL_UPDATE_DOWNLOAD',
     'cancelUpdateDownload',
-    settingsModelPath,
+    settingsUpdateModelPath,
   ],
   // 历史教训链: android 文件操作曾漏渲染层 bind
   ['DELETE_REMOTE_FILE', 'deleteRemoteFile', 'DELETE_REMOTE_FILE', 'deleteRemoteFile', androidModelPath],

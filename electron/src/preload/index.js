@@ -221,6 +221,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 版本信息
   getVersionInfo: () => invokeWithCheck(IPC_CHANNELS.GET_VERSION_INFO),
+  // R26 候选⑥: 补漏暴露 — handler 已注册 (versionHandlers) 但 preload 缺,
+  // renderer 无法调用 (契约测试 test_ipc_full_contract 锁定)
+  getDisplayVersion: () => invokeWithCheck(IPC_CHANNELS.GET_DISPLAY_VERSION),
 
   // 更新检查
   checkForUpdate: () => invokeWithCheck(IPC_CHANNELS.CHECK_FOR_UPDATE),

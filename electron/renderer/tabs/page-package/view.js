@@ -626,4 +626,15 @@ export class PagePackageView {
     const modal = new DeviceSelectionModal();
     return await modal.show(options);
   }
+
+  /**
+   * Inspector 弹窗打开时返回其容器 (toast 挂载点), 否则返回 null
+   * MVC: DOM 查询归 view (R26 候选④, 原 controller #getActiveInspectorContainer 直查 document)
+   * @returns {HTMLElement|null}
+   */
+  getActiveInspectorContainer() {
+    const overlay = document.getElementById('inspector-modal-overlay');
+    if (!overlay || overlay.classList.contains('hidden')) return null;
+    return overlay.querySelector('.modal-container') || overlay;
+  }
 }

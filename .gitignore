@@ -99,6 +99,9 @@ refactor-rfcs
 /dev-records
 .workbuddy/
 
+# --- 参考代码副本（本地资料，不进仓库；2026-09-10 移除悬空 gitlink） ---
+/ref/
+
 # --- 发布脚本运行时产物 ---
 /scripts/xkat-*.json
 /scripts/xkat-*.txt

@@ -14,7 +14,9 @@ import { escapeHtml as escapeHtmlUtil } from '../../core/utils/html.js';
 import { getScheduledPlanStatus } from '../../core/utils/scheduledPlanStatus.js';
 import DeviceSelectionModal from '../../components/device-selection-modal.js';
 import DateTimePicker from '../../components/datetime-picker.js';
-import { inferTestTypeFromFileName } from './model.js';
+// R26 候选④: 类型判定领域规则从 model 引 —— 纯函数迁 core/utils/testFile.js,
+// view 不再反向 import model (MVC 方向: model → controller → view)
+import { inferTestTypeFromFileName } from '../../core/utils/testFile.js';
 
 export class TestExecutionView {
   constructor() {
@@ -426,16 +428,8 @@ export class TestExecutionView {
     viewReportBtn.disabled = !hasPlan;
   }
 
-  updateProgress(status, percentage) {
-    const { progressStatus, progressBar } = this.els;
-    if (progressStatus) progressStatus.textContent = status;
-    const percentageEl = document.getElementById('progress-percentage');
-    if (percentageEl) percentageEl.textContent = percentage + '%';
-    if (progressBar) {
-      const fill = progressBar.querySelector('.progress-fill');
-      if (fill) fill.style.width = percentage + '%';
-    }
-  }
+  // R26 候选④: updateProgress 已删 — 唯一调用方是幽灵订阅 'progress-changed'
+  // (model 从未发射), 进度显示实际由 updateLoopProgress 驱动。
 
   updateLoopProgress(current, total) {
     const { progressStatus } = this.els;

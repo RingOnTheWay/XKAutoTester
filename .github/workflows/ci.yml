@@ -54,7 +54,13 @@ jobs:
           npx --yes npm-check-updates electron 2>/dev/null || npm outdated electron 2>/dev/null || echo "skip"
 
   test-python:
-    name: Python tests + Ruff
+    # R26 候选⑧: 版本矩阵 — pyproject 声明 requires-python>=3.10,
+    # 单 3.12 测试无法守护 3.10/3.11 用户 (如 f-string/类型注解语法回退破坏)
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    name: Python tests + Ruff (${{ matrix.python-version }})
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -62,7 +68,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install uv
         run: pip install uv
@@ -71,13 +77,27 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/uv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          key: uv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
 
       - name: Sync dependencies
         run: uv sync --frozen --group dev --group test
 
       - name: Run Python tests (config/pytest.ini)
         run: uv run pytest -c config/pytest.ini --maxfail=5
+
+      # R26 候选⑧: 覆盖率上报 (pytest-cov 已在 test group 装而未跑)。
+      # 只上报不设门禁阈值 — 当前无覆盖率基线, 待稳定后收紧 --cov-fail-under。
+      - name: Coverage (仅 3.12 主版本上报)
+        if: matrix.python-version == '3.12'
+        run: uv run pytest -c config/pytest.ini --cov=src --cov-report=term --cov-report=xml:coverage.xml
+
+      - name: Upload coverage artifact
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          if-no-files-found: ignore
 
       - name: Ruff check — 强制, 违规即失败
         run: uv run ruff check src tests
@@ -89,6 +109,7 @@ jobs:
 
       # R25: Python 依赖漏洞扫描 (uv audit, 0.11+ 支持) — 先扫描不阻断, 清零后收紧为强制
       - name: uv audit (依赖漏洞扫描) — 先扫描不阻断
+        if: matrix.python-version == '3.12'
         continue-on-error: true
         run: uv audit
 
@@ -96,6 +117,58 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results
+          name: allure-results-py${{ matrix.python-version }}
           path: allure-results
+          if-no-files-found: ignore
+
+  # R26 候选⑧: lite 打包冒烟 — 产物存在性 + 版本一致性断言。
+  # 不真安装 (windows-latest 无显示器无法实机验证), 只保证 build 不断 +
+  # NSIS 产物产出 + 版本号与 version.json 一致 (打包配置漂移测试期红)。
+  build-smoke:
+    name: Lite build smoke
+    runs-on: windows-latest
+    timeout-minutes: 40
+    needs: [test-electron]
+    defaults:
+      run:
+        working-directory: electron
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build lite (NSIS)
+        run: npm run build-lite-win
+
+      - name: Assert artifacts (产物存在性 + 版本一致)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = "dist"
+          if (-not (Test-Path $dist)) { throw "dist/ 不存在 — 构建失败" }
+          $installer = Get-ChildItem "$dist/*.exe" | Where-Object { $_.Name -notmatch "unpacked" } | Select-Object -First 1
+          if (-not $installer) { throw "dist/ 下无 NSIS 安装器 exe" }
+          Write-Host "Installer: $($installer.Name)"
+          $versionJson = Get-Content "../version.json" | ConvertFrom-Json
+          $expected = $versionJson.version
+          if ($installer.Name -notmatch [regex]::Escape($expected)) {
+            throw "安装器文件名 $($installer.Name) 不含 version.json 版本 $expected — 版本漂移"
+          }
+          $unpacked = "dist/win-unpacked/XKAutoTester.exe"
+          if (-not (Test-Path $unpacked)) { throw "win-unpacked/XKAutoTester.exe 不存在" }
+          Write-Host "Smoke OK: installer + unpacked exe 均产出, 版本 $expected 一致"
+
+      - name: Upload installer artifact (失败排查用)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lite-installer-debug
+          path: electron/dist/*.exe
           if-no-files-found: ignore

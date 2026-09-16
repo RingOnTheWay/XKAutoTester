@@ -1,563 +1,279 @@
-import { EventEmitter } from '../../core/EventEmitter.js';
-import { ApiBridge } from '../../core/ApiBridge.js';
-import { AppState } from '../../core/AppState.js';
-import { renderMarkdown as renderMarkdownHtml } from '../../core/utils/markdown.js';
+import { BaseModel } from '../../core/BaseModel.js';
+import { hexToRgb, darkenColor, lightenColor, rgbToHex } from '../../core/utils/color.js';
+import { formatDownloadSpeed } from '../../core/utils/format.js';
+import { ConfigModel } from './models/ConfigModel.js';
+import { ThemeModel } from './models/ThemeModel.js';
+import { UpdateModel } from './models/UpdateModel.js';
 
-/** 更新下载结果状态 (权威词汇 #1: main 产出 state, renderer 只读不猜原取消/正则) */
-const UPDATE_DOWNLOAD_RESULT_STATE = Object.freeze({
-  COMPLETED: 'completed',
-  CANCELLED: 'cancelled',
-  NO_ACTIVE: 'no_active',
-});
-
-export { UPDATE_DOWNLOAD_RESULT_STATE };
+export { UPDATE_DOWNLOAD_RESULT_STATE } from './models/UpdateModel.js';
 
 /**
- * SettingsModel - 设置 Tab 的 Model 层
- * 管理配置加载/保存、主题、语言、通知、版本、更新等状态
+ * SettingsModel - 设置 Tab Model 门面 (R26 候选② 拆分后的组合根)
+ *
+ * 原单文件混 8 类关注, 现拆三个子模型 (各自 extends BaseModel):
+ * - ConfigModel  配置读写/通知/数据路径/导入导出/清理/防睡眠
+ * - ThemeModel   暗色模式/主题色/语言
+ * - UpdateModel  版本/更新检查/下载/取消/安装
+ *
+ * 门面职责:
+ * 1. 事件转发: 子模型事件原样上抛, controller/view 订阅词汇不变 (零调用方改动)
+ * 2. config→theme 路由: config-changed 时把 APP_SETTINGS 派生进 ThemeModel
+ *    (子模型互不引用, 路由逻辑只活在这一处)
+ * 3. 方法/状态委托: 保持原 SettingsModel 公开面
+ *
+ * 迁移注: 颜色数学在 core/utils/color.js, 速度格式化在 core/utils/format.js,
+ * markdown 渲染在 core/utils/markdown.js —— view 直接引工具, 静态入口仅为兼容保留。
  */
-export class SettingsModel extends EventEmitter {
-  #api = ApiBridge.bind({
-    getConfig: 'getConfig',
-    saveConfig: 'saveConfig',
-    getDataPath: 'getDataPath',
-    changeDataPath: 'changeDataPath',
-    resetDataPath: 'resetDataPath',
-    relaunchApp: 'relaunchApp',
-    selectDirectory: 'selectDirectory',
-    selectExportPath: 'selectExportPath',
-    selectImportPath: 'selectImportPath',
-    exportConfig: 'exportConfig',
-    exportLogs: 'exportLogs',
-    importConfig: 'importConfig',
-    getVersionInfo: 'getVersionInfo',
-    openExternal: 'openExternal',
-    checkForUpdate: 'checkForUpdate',
-    checkForUpdateRaw: 'checkForUpdateRaw',
-    downloadUpdate: 'downloadUpdate',
-    cancelUpdateDownload: 'cancelUpdateDownload', // R27: UI 取消进行中下载
-    installUpdate: 'installUpdate',
-    clearAllureReports: 'clearAllureReports',
-    clearAllLogs: 'clearAllLogs',
-    setPreventSleep: 'setPreventSleep',
-  });
+export class SettingsModel extends BaseModel {
+  #configModel = new ConfigModel();
+  #themeModel = new ThemeModel();
+  #updateModel = new UpdateModel();
 
-  // 取消旗 (作用域于当前下载): 取消时同步置位, 供 downloadUpdate catch 判定是否静默。
-  // 取消/下载是两个独立 IPC, 下载错误可能先于取消 IPC 落地 → 仅靠 main 无法保证唯一权威,
-  // 需渲染层同步信号协调 (等价旧 #cancelWindowUntil 防护, 但非时间窗、作用域明确)。
-  #cancelling = false;
+  // 状态 key → 子模型路由表 (保持原 get(key) 公开面)
+  #themeKeys = new Set(['darkMode', 'themeColor', 'language']);
+  #updateKeys = new Set(['versionInfo', 'updateData', 'updatePendingFilePath', 'removeUpdateProgressListener']);
 
-  #state = {
-    config: null,
-    darkMode: false,
-    themeColor: '#4CAF50',
-    language: 'zh-CN',
-    notification: {
-      platform: 'none',
-      dingtalk: { access_token: '', secret: '' },
-    },
-    versionInfo: null,
-    dataPath: null,
-    updateData: null,
-    updatePendingFilePath: null,
-    removeUpdateProgressListener: null,
-    autoCheckUpdate: true,
-    preventSleep: false,
-    allowInsecureSSL: false,
-  };
+  constructor() {
+    super();
+    // config → theme 路由 (先于转发注册: 保证 controller 收到 config-changed 前
+    // theme 状态已同步, 与原 loadConfig 内联派生顺序一致)
+    this.#configModel.on('config-changed', (config) => {
+      this.#themeModel.applyFromConfig(config?.APP_SETTINGS || {});
+    });
+    // 子模型 → 门面 事件转发 (显式列出, 可 grep; 'error' 带原 source 上抛)
+    const forward = [
+      [this.#configModel, ['config-changed', 'data-path-changed', 'data-path-info-changed', 'error']],
+      [this.#themeModel, ['dark-mode-changed', 'theme-color-changed', 'language-changed', 'error']],
+      [
+        this.#updateModel,
+        [
+          'version-info-changed',
+          'update-available',
+          'update-not-available',
+          'download-progress',
+          'update-downloaded',
+          'update-download-cancelled',
+          'error',
+        ],
+      ],
+    ];
+    for (const [sub, events] of forward) {
+      for (const event of events) {
+        sub.on(event, (...args) => this.emit(event, ...args));
+      }
+    }
+  }
 
-  // ── State Getters ──────────────────────────────────────────────
+  // ── 子模型访问 (供渐进迁移与测试) ──────────────────────────────
+
+  get configModel() {
+    return this.#configModel;
+  }
+
+  get themeModel() {
+    return this.#themeModel;
+  }
+
+  get updateModel() {
+    return this.#updateModel;
+  }
+
+  // ── State Getters (委托) ────────────────────────────────────────
 
   get config() {
-    return this.#state.config;
+    return this.#configModel.config;
   }
   get darkMode() {
-    return this.#state.darkMode;
+    return this.#themeModel.darkMode;
   }
   get themeColor() {
-    return this.#state.themeColor;
+    return this.#themeModel.themeColor;
   }
   get language() {
-    return this.#state.language;
+    return this.#themeModel.language;
   }
   get notification() {
-    return this.#state.notification;
+    return this.#configModel.notification;
   }
   get versionInfo() {
-    return this.#state.versionInfo;
+    return this.#updateModel.versionInfo;
   }
   get dataPath() {
-    return this.#state.dataPath;
+    return this.#configModel.dataPath;
   }
   get updateData() {
-    return this.#state.updateData;
+    return this.#updateModel.updateData;
   }
   get updatePendingFilePath() {
-    return this.#state.updatePendingFilePath;
+    return this.#updateModel.updatePendingFilePath;
   }
   get autoCheckUpdate() {
-    return this.#state.autoCheckUpdate;
+    return this.#configModel.autoCheckUpdate;
   }
   get preventSleep() {
-    return this.#state.preventSleep;
+    return this.#configModel.preventSleep;
   }
   get allowInsecureSSL() {
-    return this.#state.allowInsecureSSL;
+    return this.#configModel.allowInsecureSSL;
   }
 
+  /**
+   * 按状态 key 路由到对应子模型 (保持原 get(key) 公开面)
+   */
   get(key) {
-    return this.#state[key];
-  }
-
-  // ── Private State Helper ───────────────────────────────────────
-
-  #set(key, value, event) {
-    const old = this.#state[key];
-    if (old === value) return;
-    this.#state[key] = value;
-    this.emit(event || `${key}-changed`, value, old);
+    if (this.#themeKeys.has(key)) return this.#themeModel.get(key);
+    if (this.#updateKeys.has(key)) return this.#updateModel.get(key);
+    return this.#configModel.get(key);
   }
 
   // ── Initialization ─────────────────────────────────────────────
 
   async load() {
-    await Promise.all([this.loadConfig(), this.loadVersionInfo(), this.loadDataPath()]);
+    await Promise.all([
+      this.#configModel.loadConfig(),
+      this.#configModel.loadDataPath(),
+      this.#updateModel.loadVersionInfo(),
+    ]);
   }
 
   async loadConfig() {
-    try {
-      const config = await this.#api.getConfig();
-      this.#state.config = config;
-      const settings = config?.APP_SETTINGS || {};
-      this.#set('darkMode', !!settings.dark_mode, 'dark-mode-changed');
-      this.#set('themeColor', settings.theme_color || '#4CAF50', 'theme-color-changed');
-      this.#set('language', settings.language || 'zh-CN', 'language-changed');
-      this.#set(
-        'notification',
-        settings.notification || {
-          platform: 'none',
-          dingtalk: { access_token: '', secret: '' },
-        }
-      );
-      this.#set('autoCheckUpdate', settings.autoCheckUpdate !== false);
-      this.#set('preventSleep', !!settings.preventSleep);
-      this.#set('allowInsecureSSL', !!settings.allowInsecureSSL);
-      this.emit('config-changed', config);
-    } catch (error) {
-      this.emit('error', { source: 'loadConfig', error });
-    }
+    return this.#configModel.loadConfig();
   }
 
   async loadVersionInfo() {
-    try {
-      const versionInfo = await this.#api.getVersionInfo();
-      this.#set('versionInfo', versionInfo, 'version-info-changed');
-    } catch (error) {
-      this.emit('error', { source: 'loadVersionInfo', error });
-    }
+    return this.#updateModel.loadVersionInfo();
   }
 
   async loadDataPath() {
-    try {
-      const result = await this.#api.getDataPath();
-      // API 返回 { currentPath, defaultPath }，提取 currentPath 作为显示路径
-      const path = typeof result === 'string' ? result : result?.currentPath || '';
-      this.#set('dataPath', path, 'data-path-changed');
-      this.#set('dataPathInfo', result, 'data-path-info-changed');
-    } catch (error) {
-      this.emit('error', { source: 'loadDataPath', error });
-    }
+    return this.#configModel.loadDataPath();
   }
 
-  // ── Config Save ────────────────────────────────────────────────
+  // ── Config / Notification / Data Path / Import-Export / Clear ──
 
   async saveConfig(settings) {
-    try {
-      const config = this.#state.config || {};
-      config.APP_SETTINGS = { ...config.APP_SETTINGS, ...settings };
-      // wrapper 已处理 IPC 失败,错误由外层 catch 接
-      const result = await this.#api.saveConfig(config);
-      this.#state.config = config;
-      this.emit('config-changed', config);
-      // 同步到 AppState 供其他 Tab 读取
-      AppState.instance.set('config', config);
-      return result;
-    } catch (error) {
-      this.emit('error', { source: 'saveConfig', error });
-      return { success: false, error: error.message };
-    }
+    return this.#configModel.saveConfig(settings);
   }
 
   async saveNotificationConfig() {
-    return this.saveConfig({ notification: this.#state.notification });
+    return this.#configModel.saveNotificationConfig();
+  }
+
+  async changeDataPath(newPath) {
+    return this.#configModel.changeDataPath(newPath);
+  }
+
+  async resetDataPath() {
+    return this.#configModel.resetDataPath();
+  }
+
+  async selectExportPath(type = 'config') {
+    return this.#configModel.selectExportPath(type);
+  }
+
+  async selectImportPath() {
+    return this.#configModel.selectImportPath();
+  }
+
+  async exportConfig(outputPath) {
+    return this.#configModel.exportConfig(outputPath);
+  }
+
+  async exportLogs(outputPath) {
+    return this.#configModel.exportLogs(outputPath);
+  }
+
+  async importConfig(zipPath) {
+    return this.#configModel.importConfig(zipPath);
+  }
+
+  async clearAllureReports() {
+    return this.#configModel.clearAllureReports();
+  }
+
+  async clearAllLogs() {
+    return this.#configModel.clearAllLogs();
+  }
+
+  async setPreventSleep(enable) {
+    return this.#configModel.setPreventSleep(enable);
+  }
+
+  async relaunchApp() {
+    return this.#configModel.relaunchApp();
+  }
+
+  async selectDirectory() {
+    return this.#configModel.selectDirectory();
+  }
+
+  async openExternal(url) {
+    return this.#configModel.openExternal(url);
   }
 
   // ── Theme ──────────────────────────────────────────────────────
 
   applyDarkMode(isDark) {
-    this.#set('darkMode', isDark, 'dark-mode-changed');
+    return this.#themeModel.applyDarkMode(isDark);
   }
 
   applyThemeColor(color) {
-    this.#set('themeColor', color, 'theme-color-changed');
+    return this.#themeModel.applyThemeColor(color);
   }
-
-  // ── Language ───────────────────────────────────────────────────
 
   changeLanguage(lang) {
-    this.#set('language', lang, 'language-changed');
-    AppState.instance.set('locale', lang);
-  }
-
-  // ── Data Path ──────────────────────────────────────────────────
-
-  async changeDataPath(newPath) {
-    try {
-      // wrapper 已处理 IPC 失败,错误由外层 catch 接
-      const result = await this.#api.changeDataPath(newPath);
-      await this.#api.relaunchApp();
-      return result;
-    } catch (error) {
-      this.emit('error', { source: 'changeDataPath', error });
-      return { success: false, error: error.message };
-    }
-  }
-
-  async resetDataPath() {
-    try {
-      // wrapper 已处理 IPC 失败,错误由外层 catch 接
-      const result = await this.#api.resetDataPath();
-      await this.#api.relaunchApp();
-      return result;
-    } catch (error) {
-      this.emit('error', { source: 'resetDataPath', error });
-      return { success: false, error: error.message };
-    }
-  }
-
-  // ── Export / Import ────────────────────────────────────────────
-
-  async selectExportPath(type = 'config') {
-    try {
-      return await this.#api.selectExportPath({
-        type,
-        title: window.i18n.t('settings.selectExportPath'),
-      });
-    } catch (error) {
-      this.emit('error', { source: 'selectExportPath', error });
-      return null;
-    }
-  }
-
-  async selectImportPath() {
-    try {
-      return await this.#api.selectImportPath();
-    } catch (error) {
-      this.emit('error', { source: 'selectImportPath', error });
-      return null;
-    }
-  }
-
-  async exportConfig(outputPath) {
-    try {
-      const result = await this.#api.exportConfig(outputPath);
-      if (result && result.success === false) {
-        // ADR-0011 错误通知单一归口: IPC 失败形态归入 emit 路径, controller 不查 success 弹错
-        this.emit('error', { source: 'exportConfig', error: new Error(result.error || 'Export failed') });
-        return { success: false, error: result.error };
-      }
-      return result;
-    } catch (error) {
-      this.emit('error', { source: 'exportConfig', error });
-      return { success: false, error: error.message };
-    }
-  }
-
-  async exportLogs(outputPath) {
-    try {
-      const result = await this.#api.exportLogs(outputPath);
-      if (result && result.success === false) {
-        this.emit('error', { source: 'exportLogs', error: new Error(result.error || 'Export logs failed') });
-        return { success: false, error: result.error };
-      }
-      return result;
-    } catch (error) {
-      this.emit('error', { source: 'exportLogs', error });
-      return { success: false, error: error.message };
-    }
-  }
-
-  async importConfig(zipPath) {
-    try {
-      const result = await this.#api.importConfig(zipPath);
-      if (result && result.success === false) {
-        // ADR-0011: IPC 失败形态归入 emit 路径 (原由 controller 查 success 弹错, 双 toast 风险)
-        this.emit('error', { source: 'importConfig', error: new Error(result.error || 'Import failed') });
-        return { success: false, error: result.error };
-      }
-      await this.loadConfig();
-      return result;
-    } catch (error) {
-      this.emit('error', { source: 'importConfig', error });
-      return { success: false, error: error.message };
-    }
+    return this.#themeModel.changeLanguage(lang);
   }
 
   // ── Update ─────────────────────────────────────────────────────
 
   async checkForUpdate() {
-    try {
-      const result = await this.#api.checkForUpdateRaw();
-      if (result && result.success === false) {
-        const err = new Error(result.error || 'Unknown IPC error');
-        err.code = result.errorCode;
-        err.statusCode = result.statusCode;
-        throw err;
-      }
-      const data = result?.data || {};
-      if (data.hasUpdate) {
-        this.#set(
-          'updateData',
-          {
-            // R27: 显示保留 'v' 前缀 (latestVersionDisplay 带 v, 与 tag 一致);
-            // latestVersion 仍可访问用于 semver 比较 (无 v)
-            version: data.latestVersionDisplay || data.latestVersion,
-            releaseNotes: data.releaseNotes,
-            releaseName: data.releaseName,
-            downloadUrl: data.downloadUrl,
-            fileName: data.fileName,
-            fileSize: data.fileSize,
-            htmlUrl: data.htmlUrl,
-            sha256: data.sha256, // R10: 透出 hash 供 UI 显示
-            secure: data.secure !== false && !!data.sha256, // R10: 无 hash 标记不可安装
-          },
-          'update-available'
-        );
-      } else {
-        this.emit('update-not-available', data);
-      }
-      return data;
-    } catch (error) {
-      this.emit('error', {
-        source: 'checkUpdate',
-        error,
-        code: error.code,
-        statusCode: error.statusCode,
-      });
-      return { success: false, error: error.message };
-    }
+    return this.#updateModel.checkForUpdate();
   }
 
   async downloadUpdate() {
-    try {
-      this.#cancelling = false; // 新下载复位取消旗
-      // 注册下载进度监听
-      // R27 P3-7: 仅当为函数才调用 — 旧 preload 兼容可能存非函数真值 → 原调抛 TypeError
-      if (typeof this.#state.removeUpdateProgressListener === 'function') {
-        this.#state.removeUpdateProgressListener();
-      }
-      const removeListener = ApiBridge.api.onUpdateDownloadProgress((progress) => {
-        this.emit('download-progress', progress);
-      });
-      this.#state.removeUpdateProgressListener = removeListener;
-
-      const updateData = this.#state.updateData;
-      if (!updateData) {
-        this.emit('error', {
-          source: 'downloadUpdate',
-          message: 'noUpdateData',
-        });
-        return;
-      }
-
-      const downloadUrl = updateData.downloadUrl || updateData.url;
-      const fileName = updateData.fileName || updateData.version || 'update';
-      const result = await this.#api.downloadUpdate(downloadUrl, fileName);
-
-      if (removeListener) removeListener();
-      this.#state.removeUpdateProgressListener = null;
-
-      if (result && result.filePath) {
-        this.#set('updatePendingFilePath', result.filePath, 'update-downloaded');
-      }
-      // 取消下载 (state=cancelled) → 状态复位, UI 已由取消按钮关闭
-      else if (result && result.state === UPDATE_DOWNLOAD_RESULT_STATE.CANCELLED) {
-        this.emit('update-download-cancelled');
-      }
-      return result;
-    } catch (error) {
-      // 权威词汇 + 渲染层取消旗: 用户已取消 (取消旗置位, 下载错误可能已先落地) → 静默不报错;
-      // 否则为真实失败 → 报错弹红 toast
-      if (!this.#cancelling) {
-        if (this.#state.removeUpdateProgressListener) {
-          this.#state.removeUpdateProgressListener();
-          this.#state.removeUpdateProgressListener = null;
-        }
-        this.emit('error', { source: 'downloadUpdate', error });
-      }
-      return { success: false, error: error.message };
-    }
+    return this.#updateModel.downloadUpdate();
   }
 
-  /**
-   * 取消进行中的更新下载 (abort 主进程下载 + 清临时文件)
-   * 权威词汇: main 依 abort 产出 state='cancelled'; 渲染层同步置取消旗, 供 downloadUpdate catch 静默
-   */
   async cancelDownload() {
-    this.#cancelling = true; // 同步置位 (先于 IPC), 保证下载错误落到 catch 时已可识别为取消
-    try {
-      return await this.#api.cancelUpdateDownload();
-    } catch (error) {
-      // 取消失败静默 (取消为尽力而为, IPC 异常不打扰用户)
-      return { success: false, error: error.message };
-    }
+    return this.#updateModel.cancelDownload();
   }
 
   async installUpdate(filePath) {
-    try {
-      const path = filePath || this.#state.updatePendingFilePath;
-      if (!path) {
-        this.emit('error', {
-          source: 'installUpdate',
-          message: 'noUpdateFile',
-        });
-        return;
-      }
-      const result = await this.#api.installUpdate(path);
-      return result;
-    } catch (error) {
-      this.emit('error', { source: 'installUpdate', error });
-      return { success: false, error: error.message };
-    }
+    return this.#updateModel.installUpdate(filePath);
   }
 
-  // ── Clear Operations ───────────────────────────────────────────
-
-  async clearAllureReports() {
-    try {
-      return await this.#api.clearAllureReports();
-    } catch (error) {
-      this.emit('error', { source: 'clearAllureReports', error });
-      return { success: false, error: error.message };
-    }
-  }
-
-  async clearAllLogs() {
-    try {
-      return await this.#api.clearAllLogs();
-    } catch (error) {
-      this.emit('error', { source: 'clearAllLogs', error });
-      return { success: false, error: error.message };
-    }
-  }
-
-  // ── Prevent Sleep ──────────────────────────────────────────────
-
-  async setPreventSleep(enable) {
-    try {
-      // wrapper 已处理 IPC 失败,错误由外层 catch 接
-      const result = await this.#api.setPreventSleep(enable);
-      this.#set('preventSleep', enable);
-      return result;
-    } catch (error) {
-      this.emit('error', { source: 'setPreventSleep', error });
-      return { success: false, error: error.message };
-    }
-  }
-
-  // ── Relaunch App ────────────────────────────────────────────────
-
-  async relaunchApp() {
-    try {
-      await this.#api.relaunchApp();
-    } catch (error) {
-      this.emit('error', { source: 'relaunchApp', error });
-    }
-  }
-
-  // ── Select Directory ───────────────────────────────────────────
-
-  async selectDirectory() {
-    try {
-      const result = await this.#api.selectDirectory();
-      return result;
-    } catch (error) {
-      this.emit('error', { source: 'selectDirectory', error });
-      return null;
-    }
-  }
-
-  // ── Open External URL ──────────────────────────────────────────
-
-  async openExternal(url) {
-    try {
-      return await this.#api.openExternal(url);
-    } catch (error) {
-      this.emit('error', { source: 'openExternal', error });
-      return { success: false, error: error.message };
-    }
-  }
-
-  // ── Static Utilities ───────────────────────────────────────────
+  // ── Static Utilities (兼容入口: 实现已迁 core/utils) ────────────
 
   static hexToRgb(hex) {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result
-      ? {
-          r: parseInt(result[1], 16),
-          g: parseInt(result[2], 16),
-          b: parseInt(result[3], 16),
-        }
-      : null;
+    return hexToRgb(hex);
   }
 
   static darkenColor(hex, amount = 0.2) {
-    const rgb = SettingsModel.hexToRgb(hex);
-    if (!rgb) return hex;
-    const r = Math.max(0, Math.round(rgb.r * (1 - amount)));
-    const g = Math.max(0, Math.round(rgb.g * (1 - amount)));
-    const b = Math.max(0, Math.round(rgb.b * (1 - amount)));
-    return SettingsModel.rgbToHex(r, g, b);
+    return darkenColor(hex, amount);
   }
 
   static lightenColor(hex, amount = 0.2) {
-    const rgb = SettingsModel.hexToRgb(hex);
-    if (!rgb) return hex;
-    const r = Math.min(255, Math.round(rgb.r + (255 - rgb.r) * amount));
-    const g = Math.min(255, Math.round(rgb.g + (255 - rgb.g) * amount));
-    const b = Math.min(255, Math.round(rgb.b + (255 - rgb.b) * amount));
-    return SettingsModel.rgbToHex(r, g, b);
+    return lightenColor(hex, amount);
   }
 
   static rgbToHex(r, g, b) {
-    return '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
+    return rgbToHex(r, g, b);
   }
 
-  /**
-   * 渲染 Release body 的 Markdown (GFM 子集) 为安全 HTML。
-   *
-   * 实现位于 core/utils/markdown.js: 零依赖、先转义后变换、链接白名单
-   * (https + github.com, 与主进程 urlGuard 同源)。此处保留静态入口以兼容
-   * 既有调用方 (view.showUpdateModal), 避免调用点散落新路径。
-   * @param {string} text - 原始 markdown 文本
-   * @returns {string} 可直接 innerHTML 的 HTML
-   */
   static renderMarkdown(text) {
-    return renderMarkdownHtml(text);
+    return UpdateModel.renderMarkdown(text);
   }
 
   static formatDownloadSpeed(bytesPerSecond) {
-    if (!bytesPerSecond || bytesPerSecond <= 0) return '';
-    if (bytesPerSecond < 1024) return `${bytesPerSecond.toFixed(0)} B/s`;
-    if (bytesPerSecond < 1024 * 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
-    return `${(bytesPerSecond / (1024 * 1024)).toFixed(2)} MB/s`;
+    return formatDownloadSpeed(bytesPerSecond);
   }
 
+  // ── Lifecycle ──────────────────────────────────────────────────
+
   destroy() {
-    if (this.#state.removeUpdateProgressListener) {
-      this.#state.removeUpdateProgressListener();
-      this.#state.removeUpdateProgressListener = null;
-    }
-    this.removeAllListeners();
+    this.#configModel.destroy();
+    this.#themeModel.destroy();
+    this.#updateModel.destroy();
+    super.destroy();
   }
 }

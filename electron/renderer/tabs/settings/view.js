@@ -9,7 +9,11 @@
  * 通过 Object.assign 绑定到原型，现全部内联到类体方法。
  */
 
-import { SettingsModel } from './model.js';
+// R26 候选④: view 不再 import model —— 颜色数学/速度格式化/markdown 渲染
+// 均为显示工具, 直接引 core/utils (原经 SettingsModel 静态方法转手)
+import { hexToRgb, darkenColor, lightenColor } from '../../core/utils/color.js';
+import { formatDownloadSpeed } from '../../core/utils/format.js';
+import { renderMarkdown } from '../../core/utils/markdown.js';
 
 export class SettingsView {
   #scrollPreventHandler = null;
@@ -130,15 +134,15 @@ export class SettingsView {
   // ─── Theme Color ───────────────────────────────────────────────
 
   applyThemeColor(color) {
-    const rgb = SettingsModel.hexToRgb(color);
+    const rgb = hexToRgb(color);
     if (!rgb) return;
 
     // 同时设置 --primary 和 --primary-color，兼容 CSS 中的两种变量名
     document.documentElement.style.setProperty('--primary', color);
     document.documentElement.style.setProperty('--primary-color', color);
     document.documentElement.style.setProperty('--primary-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`);
-    document.documentElement.style.setProperty('--primary-dark', SettingsModel.darkenColor(color, 0.2));
-    document.documentElement.style.setProperty('--primary-light', SettingsModel.lightenColor(color, 0.2));
+    document.documentElement.style.setProperty('--primary-dark', darkenColor(color, 0.2));
+    document.documentElement.style.setProperty('--primary-light', lightenColor(color, 0.2));
 
     // 更新预览
     if (this.els.themeColorPreview) {
@@ -509,8 +513,7 @@ export class SettingsView {
         ? `<div class="update-hash-verified">${window.i18n.t('settings.updateHashVerified')}</div>`
         : `<div class="update-insecure-warning">${window.i18n.t('settings.insecureReleaseWarning')}</div>`;
       // Markdown 正文单独包一层 .md-body: 让样式作用域与首尾留白规则不被横幅干扰
-      this.els.updateChangelog.innerHTML =
-        banner + `<div class="md-body">${SettingsModel.renderMarkdown(changelog)}</div>`;
+      this.els.updateChangelog.innerHTML = banner + `<div class="md-body">${renderMarkdown(changelog)}</div>`;
     }
 
     // 重置进度
@@ -565,9 +568,7 @@ export class SettingsView {
       const speedDone = percent >= 100;
       this.els.updateProgressSpeed.style.display = speedDone ? 'none' : '';
       if (!speedDone) {
-        this.els.updateProgressSpeed.textContent = SettingsModel.formatDownloadSpeed(
-          progress.speed ?? progress.bytesPerSecond
-        );
+        this.els.updateProgressSpeed.textContent = formatDownloadSpeed(progress.speed ?? progress.bytesPerSecond);
       }
     }
   }
@@ -832,6 +833,27 @@ export class SettingsView {
     const changeHandler = (e) => handler(e.target.checked);
     el.addEventListener('change', changeHandler);
     return () => el.removeEventListener('change', changeHandler);
+  }
+
+  /**
+   * 切换通知密钥输入框的显隐: password ↔ text, 同步切换按钮图标 (visibility/visibility_off)
+   * MVC: DOM 显隐操作归 view (R26 候选④, 原 controller #toggleSecretVisibility 直改 document)
+   * @param {string} inputId - input 元素 id
+   * @param {string} buttonId - 触发切换的按钮元素 id
+   */
+  toggleSecretVisibility(inputId, buttonId) {
+    const input = document.getElementById(inputId);
+    const button = document.getElementById(buttonId);
+    if (!input || !button) return;
+    const isHidden = input.type === 'password';
+    input.type = isHidden ? 'text' : 'password';
+    const nextIcon = isHidden ? 'visibility_off' : 'visibility';
+    const iconSpan = button.querySelector('.svg-icon');
+    if (iconSpan) {
+      iconSpan.setAttribute('data-icon', nextIcon);
+      const html = window.__XKAT_APP__?.getIconHtml?.(nextIcon);
+      if (html) iconSpan.innerHTML = html;
+    }
   }
 
   /**

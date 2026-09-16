@@ -113,18 +113,15 @@ export class PagePackageController {
       view.resetAllSelects();
     });
 
-    this.#onModel(model, 'reset-page-select', () => {
-      view.resetPageSelect();
-    });
-
-    this.#onModel(model, 'reset-element-select', () => {
-      view.resetElementSelect();
-    });
+    // R26 候选④: 删除幽灵订阅 'reset-page-select' / 'reset-element-select' —
+    // model 从未发射 (级联复位实际由 selected-app-changed / selected-page-changed
+    // 处理器内的 view.resetPageSelect()/resetElementSelect() 直接调用完成)
 
     this.#onModel(model, 'save-success', ({ type }) => {
       // Inspector 打开时 (从设备识别添加元素), toast 挂在 inspector 弹窗容器内,
       // 否则挂主窗口 (#app, 会被 inspector 遮罩 z-index 2000 盖住, 显示在主程序窗口)
-      const inspectorContainer = this.#getActiveInspectorContainer();
+      // MVC: DOM 查询归 view.getActiveInspectorContainer (R26 候选④)
+      const inspectorContainer = view.getActiveInspectorContainer();
       Toast.success(
         window.i18n.t('pagePackage.saveSuccess'),
         inspectorContainer ? { container: inspectorContainer } : {}
@@ -581,16 +578,6 @@ export class PagePackageController {
    */
   async #requestDeviceForInspector() {
     return await this.#view.showDeviceSelection({ mode: 'inspector' });
-  }
-
-  /**
-   * Inspector 弹窗打开时返回其容器 (toast 挂载点), 否则返回 null
-   * @returns {HTMLElement|null}
-   */
-  #getActiveInspectorContainer() {
-    const overlay = document.getElementById('inspector-modal-overlay');
-    if (!overlay || overlay.classList.contains('hidden')) return null;
-    return overlay.querySelector('.modal-container') || overlay;
   }
 
   // ─── Tab Lifecycle Hooks ───────────────────────────────────────

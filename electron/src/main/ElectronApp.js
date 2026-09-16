@@ -2,7 +2,16 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const pathHelper = require('./utils/pathHelper');
 const { IPC_CHANNELS } = require('../shared/constants');
+const { SecurityPolicy } = require('./security/SecurityPolicy');
+const { LifecycleCleanup } = require('./lifecycle/LifecycleCleanup');
 
+/**
+ * ElectronApp - 应用组合根 (R26 候选⑤: 窗口 chrome + 服务接线)
+ *
+ * 安全策略在 security/SecurityPolicy (CSP/webRequest/window.open 单点),
+ * 退出清理链在 lifecycle/LifecycleCleanup (声明式 before-quit/will-quit 注册表)。
+ * 本类只保留: 窗口创建/生命周期编排、服务注入、IPC 注册入口。
+ */
 class ElectronApp {
   constructor() {
     this.mainWindow = null;
@@ -16,7 +25,13 @@ class ElectronApp {
     this.userConfigPath = null;
     this.userDataPath = null;
     this.services = {};
+
+    this.#security = new SecurityPolicy();
+    this.#cleanup = new LifecycleCleanup();
   }
+
+  #security;
+  #cleanup;
 
   setServices(services) {
     this.services = services;
@@ -92,21 +107,8 @@ class ElectronApp {
 
     this.mainWindow.setMenu(null);
 
-    // 主窗口 CSP: 给默认 session 注入 Content-Security-Policy 响应头, 收紧 XSS 面
-    // 注意: allure 窗口使用独立 partition, 其 onHeadersReceived 删除 CSP (见 createAllureWindow),
-    //      两者互不干扰。经 chromium.webRequest.onHeadersReceived 注入, 对 file:// 与 http(s) 均生效。
-    const mainDevServerUrl = process.env.ELECTRON_VITE_DEV_SERVER_URL;
-    // 开发模式 (electron-vite dev) 下 Vite HMR 注入内联脚本, script-src 需放行 'unsafe-inline'
-    // 并放行 dev server 与 HMR websocket
-    const mainConnects = mainDevServerUrl ? `'self' ${mainDevServerUrl} ws: ws://localhost:*` : "'self'";
-    const mainScriptSrc = mainDevServerUrl ? "'self' 'unsafe-inline'" : "'self'";
-    const mainCsp = `default-src 'self'; script-src ${mainScriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${mainConnects}`;
-    const mainSession = this.mainWindow.webContents.session;
-    mainSession.webRequest.onHeadersReceived((details, callback) => {
-      const responseHeaders = { ...details.responseHeaders };
-      responseHeaders['content-security-policy'] = [mainCsp];
-      callback({ responseHeaders });
-    });
+    // 主窗口 CSP 注入 (安全策略单点, R26 候选⑤)
+    this.#security.attachMainWindowCsp(this.mainWindow.webContents.session);
 
     // 开发模式 (electron-vite dev): loadURL (dev server + HMR)
     // 生产/旧开发模式: loadFile (源码 renderer/ 或打包后 renderer/)
@@ -195,27 +197,8 @@ class ElectronApp {
       autoHideMenuBar: true,
     });
 
-    const ses = this.allureWindow.webContents.session;
-
-    ses.webRequest.onBeforeRequest(
-      {
-        urls: ['*://*.google-analytics.com/*', '*://*.googletagmanager.com/*'],
-      },
-      (details, callback) => {
-        callback({ cancel: true });
-      }
-    );
-
-    ses.webRequest.onHeadersReceived((details, callback) => {
-      const responseHeaders = { ...details.responseHeaders };
-      // 删除注入 ACAO:* — 同源场景下无需, * 允许任意网站读取响应, 有数据泄露风险
-      // 仅保留 CSP 删除 (allure 内置 CSP 在 Electron 环境下可能阻断其自身内联脚本, 属已知兼容问题)
-      delete responseHeaders['content-security-policy'];
-      delete responseHeaders['content-security-policy-report-only'];
-      delete responseHeaders['x-content-security-policy'];
-      delete responseHeaders['x-webkit-csp'];
-      callback({ responseHeaders });
-    });
+    // allure 窗口策略 (GA 拦截 + CSP 删除, 独立 partition, R26 候选⑤ 单点)
+    this.#security.attachAllureWindowPolicy(this.allureWindow.webContents.session);
 
     this.allureWindow.webContents.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
@@ -322,78 +305,20 @@ class ElectronApp {
     });
 
     app.on('web-contents-created', (event, contents) => {
-      // 统一窗口打开策略 (替代已移除的 new-window 事件):
-      // 每个 webContents 挂 setWindowOpenHandler, 覆盖 splash/main/allure 全部窗口。
-      // mainWindow 在 createWindow 里另有更严的 setWindowOpenHandler(deny) 会覆盖本处 (后设优先)。
-      const { shell } = require('electron');
-      const { isAllowedExternalUrl } = require('./utils/urlGuard');
-      contents.setWindowOpenHandler(({ url }) => {
-        const { allowed, reason } = isAllowedExternalUrl(url);
-        if (!allowed) {
-          console.error(`[window-open] 拒绝打开 URL: ${url} (${reason})`);
-          return { action: 'deny' };
-        }
-        shell.openExternal(url);
-        return { action: 'deny' };
-      });
+      // 统一 window.open 策略 (安全策略单点, R26 候选⑤)
+      this.#security.attachWindowOpenHandler(contents);
     });
 
-    app.on('before-quit', () => {
-      // P3-3: 单一 before-quit — 原 L282 (allureWindow destroy) 与 L348 (服务清理)
-      // 两个监听器合并为一处, 避免重复注册/执行顺序依赖
-      // 持有子进程/会话的 service 必须在退出前同步释放, 避免孤儿进程
-      // 对称: schedulerService.destroy() + allureService.cleanupSync() (will-quit)
-      // catch 块加 console.error 可观测性: 静默吞异常致资源泄漏不可排查
-      try {
-        if (this.allureWindow && !this.allureWindow.isDestroyed()) {
-          this.allureWindow.destroy();
-          this.allureWindow = null;
-        }
-      } catch (e) {
-        console.error('[before-quit] allureWindow.destroy failed:', e);
-      }
-      try {
-        this.services.schedulerService && this.services.schedulerService.destroy();
-      } catch (e) {
-        console.error('[before-quit] schedulerService.destroy failed:', e);
-      }
-      try {
-        this.services.scrcpyService && this.services.scrcpyService.stopScrcpy();
-      } catch (e) {
-        console.error('[before-quit] scrcpyService.stopScrcpy failed:', e);
-      }
-      try {
-        this.services.pythonTestService && this.services.pythonTestService.stop();
-      } catch (e) {
-        console.error('[before-quit] pythonTestService.stop failed:', e);
-      }
-      try {
-        this.services.inspectorService && this.services.inspectorService.dispose();
-      } catch (e) {
-        console.error('[before-quit] inspectorService.dispose failed:', e);
-      }
-      // P3-3: 退出链补 stopPreventSleep — 释放 powerSaveBlocker (restorePreventSleepSetting
-      // 启动时可能已 start, 若不停止, 防睡眠锁残留到下次会话)
-      try {
-        const { stopPreventSleep } = require('./handlers/powerHandlers');
-        stopPreventSleep();
-      } catch (e) {
-        console.error('[before-quit] stopPreventSleep failed:', e);
-      }
+    // 退出清理链 (声明式注册表, P3-3 语义: 单一 before-quit, 单步失败不阻断)
+    this.#cleanup.registerStandardChain({
+      getAllureWindow: () => this.allureWindow,
+      clearAllureWindow: () => {
+        this.allureWindow = null;
+      },
+      services: this.services,
     });
-
-    app.on('will-quit', () => {
-      if (this.services.allureService) {
-        this.services.allureService.cleanupSync();
-      }
-      // R24 P3-2: 退出前关闭持久日志流 (Logger.close), 防止尾日志丢失
-      try {
-        this.services.allureService?.logger?.close?.();
-        this.services.pythonTestService?.logger?.close?.();
-      } catch (e) {
-        console.error('[will-quit] logger.close failed:', e);
-      }
-    });
+    app.on('before-quit', () => this.#cleanup.runBeforeQuit());
+    app.on('will-quit', () => this.#cleanup.runWillQuit());
   }
 
   async restorePreventSleepSetting() {

@@ -289,10 +289,9 @@ export class TestExecutionController {
       }
     });
 
-    // 进度变更
-    this.onModel(model, 'progress-changed', ({ status, percentage }) => {
-      view.updateProgress(status, percentage);
-    });
+    // R26 候选④: 删除幽灵订阅 'progress-changed' — model 从未发射该事件
+    // (MVC 重构起词汇漂移, 处理器静默失联; 进度显示实际由 loop-progress-changed
+    // 与 isRunning-changed 驱动), view.updateProgress 死方法一并移除。
 
     // 循环进度变更
     this.onModel(model, 'loop-progress-changed', ({ current, total }) => {
@@ -300,7 +299,10 @@ export class TestExecutionController {
     });
 
     // 测试运行完成
-    this.onModel(model, 'test-run-complete', () => {
+    // R26 候选④: 词汇对齐 — model 发射的是 'run-complete' (自 MVC 重构起订阅名
+    // 漂移为 'test-run-complete' 导致本处理器从未触发, 按钮复位仅靠
+    // isRunning-changed 兜底; 契约测试 test_mvc_events_contract 锁定回归)
+    this.onModel(model, 'run-complete', () => {
       view.updateRunButtonState(!!model.currentTestPlan, false);
       view.updatePlanButtons(!!model.currentTestPlan, false);
       view.updateViewReportButton(true);

@@ -1,56 +1,29 @@
 import { ApiBridge } from '../../core/ApiBridge.js';
 import { AppState } from '../../core/AppState.js';
+import { BaseController } from '../../core/BaseController.js';
 import { Toast } from '../../components/toast.js';
 // R24 P1-6: 统一 core Promise 版 confirm (原 view 回调版已删)
 import { showConfirmModal } from '../../core/utils/confirmModal.js';
-import { createBindings } from '../../core/utils/bindings.js';
 import { UPDATE_DOWNLOAD_RESULT_STATE } from './model.js';
 
 /**
  * SettingsController - 设置 Tab 控制器
  * 职责：绑定 Model 事件到 View 渲染，绑定 DOM 事件到 Model 方法
  * 不直接操作 DOM（通过 View），不直接调用 API（通过 Model）
+ *
+ * R26 候选②: 接 core/BaseController —— 生命周期 (init 模板/双解绑容器/destroy)
+ * 上收基类, 本类只覆写 bindModelEvents / bindDomEvents / onReady 钩子。
  */
-export class SettingsController {
-  #model;
-  #view;
-  // 统一生命周期词汇 createBindings (原 #unbinds/#unbindModel 双数组样板)
-  #unbinds = createBindings();
-  #unbindModel = createBindings();
-  #destroyed = false;
-
+export class SettingsController extends BaseController {
   /**
    * @param {import('./model.js').SettingsModel} model
    * @param {import('./view.js').SettingsView} view
    */
   constructor(model, view) {
-    this.#model = model;
-    this.#view = view;
+    super(model, view);
   }
 
-  // ─── 生命周期 ────────────────────────────────────────────
-
-  async init() {
-    this.#bindModelEvents();
-    this.#bindDomEvents();
-    await this.#model.load();
-    // 初始化时翻译所有 data-i18n 元素
-    const app = window.__XKAT_APP__;
-    if (app?.updateUIText) app.updateUIText();
-    // 启动时自动检查更新 (如启用)
-    if (this.#model.autoCheckUpdate !== false) {
-      setTimeout(() => {
-        this.#model.checkForUpdate();
-      }, 2000);
-    }
-  }
-
-  destroy() {
-    this.#destroyed = true;
-    this.#unbinds.run();
-    this.#unbindModel.run();
-    this.#model.destroy();
-  }
+  // ─── 生命周期钩子 ────────────────────────────────────────
 
   /**
    * Tab 被激活时调用
@@ -58,29 +31,27 @@ export class SettingsController {
    */
   onTabActivated() {
     // 关闭可能残留的 dropdown-open 状态 + 所有 show 状态的下拉
-    this.#view.closeAllDropdowns();
+    this.view.closeAllDropdowns();
   }
 
   // ─── Model 事件 → View 渲染 ──────────────────────────────
 
-  #bindModelEvents() {
-    const model = this.#model;
-
-    this.#on(model, 'config-changed', (config) => {
-      this.#view.renderConfig(config);
+  bindModelEvents() {
+    this.onModel('config-changed', (config) => {
+      this.view.renderConfig(config);
     });
 
-    this.#on(model, 'dark-mode-changed', (isDark) => {
-      this.#view.applyDarkMode(isDark);
+    this.onModel('dark-mode-changed', (isDark) => {
+      this.view.applyDarkMode(isDark);
     });
 
-    this.#on(model, 'theme-color-changed', (color) => {
-      this.#view.applyThemeColor(color);
+    this.onModel('theme-color-changed', (color) => {
+      this.view.applyThemeColor(color);
     });
 
-    this.#on(model, 'language-changed', (language) => {
-      this.#view.updateLanguageSelector(language);
-      // 通知 script.js 切换语言（会刷新所有 UI 文本）
+    this.onModel('language-changed', (language) => {
+      this.view.updateLanguageSelector(language);
+      // 通知引导层切换语言（会刷新所有 UI 文本）
       const app = window.__XKAT_APP__;
       if (app?.changeLanguage) {
         app.changeLanguage(language);
@@ -90,31 +61,31 @@ export class SettingsController {
       AppState.instance.set('locale', language);
     });
 
-    this.#on(model, 'version-info-changed', (versionInfo) => {
-      this.#view.renderVersionInfo(versionInfo);
+    this.onModel('version-info-changed', (versionInfo) => {
+      this.view.renderVersionInfo(versionInfo);
     });
 
-    this.#on(model, 'data-path-changed', (path) => {
-      this.#view.renderDataPath(path);
+    this.onModel('data-path-changed', (path) => {
+      this.view.renderDataPath(path);
     });
 
-    this.#on(model, 'update-available', (updateData) => {
-      this.#view.showUpdateModal(updateData);
+    this.onModel('update-available', (updateData) => {
+      this.view.showUpdateModal(updateData);
     });
 
-    this.#on(model, 'update-not-available', () => {
+    this.onModel('update-not-available', () => {
       Toast?.success(window.i18n.t('settings.alreadyLatest'));
     });
 
-    this.#on(model, 'download-progress', (progress) => {
-      this.#view.updateDownloadProgress(progress);
+    this.onModel('download-progress', (progress) => {
+      this.view.updateDownloadProgress(progress);
     });
 
-    this.#on(model, 'update-downloaded', () => {
-      this.#view.updateDownloadButton('downloaded');
+    this.onModel('update-downloaded', () => {
+      this.view.updateDownloadButton('downloaded');
     });
 
-    this.#on(model, 'error', (err) => {
+    this.onModel('error', (err) => {
       const source = err.source || '';
       const failedKey = `settings.${source}Failed`;
       const translated = source ? window.i18n.t(failedKey) : '';
@@ -140,50 +111,50 @@ export class SettingsController {
 
   // ─── DOM 事件绑定 ────────────────────────────────────────
 
-  #bindDomEvents() {
+  bindDomEvents() {
     // 暗色模式切换
     this.#bindToggle('dark-mode-toggle', (checked) => {
-      this.#model.applyDarkMode(checked);
-      this.#model.saveConfig({ dark_mode: checked });
+      this.model.applyDarkMode(checked);
+      this.model.saveConfig({ dark_mode: checked });
     });
 
     // 主题色选项 - 点击选项选择颜色
-    this.#unbinds.push(
-      this.#view.bindThemeColorOptionsClick((color) => {
-        this.#model.applyThemeColor(color);
-        this.#model.saveConfig({ theme_color: color });
+    this.bindElement(
+      this.view.bindThemeColorOptionsClick((color) => {
+        this.model.applyThemeColor(color);
+        this.model.saveConfig({ theme_color: color });
       })
     );
 
     // 主题色 HEX 输入
-    this.#unbinds.push(
-      this.#view.bindThemeColorHexChange((color) => {
-        this.#model.applyThemeColor(color);
-        this.#model.saveConfig({ theme_color: color });
+    this.bindElement(
+      this.view.bindThemeColorHexChange((color) => {
+        this.model.applyThemeColor(color);
+        this.model.saveConfig({ theme_color: color });
       })
     );
 
     // 默认测试目录 - 浏览
     this.#bindClick('browse-default-directory', async () => {
-      const result = await this.#model.selectDirectory();
+      const result = await this.model.selectDirectory();
       if (result && !result.canceled && result.filePaths.length > 0) {
         const path = result.filePaths[0];
         // MVC: input value 通过 view.setDefaultTestDirectory
-        this.#view.setDefaultTestDirectory(path);
-        this.#model.saveConfig({ default_download_directory: path });
+        this.view.setDefaultTestDirectory(path);
+        this.model.saveConfig({ default_download_directory: path });
       }
     });
 
     // 默认测试目录 - 清除
     this.#bindClick('clear-default-directory', () => {
       // MVC: input value 通过 view.setDefaultTestDirectory
-      this.#view.setDefaultTestDirectory('');
-      this.#model.saveConfig({ default_download_directory: '' });
+      this.view.setDefaultTestDirectory('');
+      this.model.saveConfig({ default_download_directory: '' });
     });
 
     // 配置存储路径 - 浏览
     this.#bindClick('browse-config-storage', async () => {
-      const result = await this.#model.selectDirectory();
+      const result = await this.model.selectDirectory();
       if (result && !result.canceled && result.filePaths.length > 0) {
         const newPath = result.filePaths[0];
         // 禁止选择程序安装目录 (及子目录) 作配置存放路径, 防止更新时配置丢失
@@ -199,7 +170,7 @@ export class SettingsController {
           window.i18n.t('settings.changeConfigPathMessage')
         );
         if (ok) {
-          await this.#model.changeDataPath(newPath);
+          await this.model.changeDataPath(newPath);
         }
       }
     });
@@ -211,89 +182,89 @@ export class SettingsController {
         window.i18n.t('settings.resetConfigPathMessage')
       );
       if (ok) {
-        await this.#model.resetDataPath();
+        await this.model.resetDataPath();
       }
     });
 
     // 语言选择 - 选项点击
-    this.#unbinds.push(
-      this.#view.bindLanguageOptionsClick((lang) => {
-        this.#model.changeLanguage(lang);
-        this.#model.saveConfig({ language: lang });
+    this.bindElement(
+      this.view.bindLanguageOptionsClick((lang) => {
+        this.model.changeLanguage(lang);
+        this.model.saveConfig({ language: lang });
       })
     );
 
     // 语言下拉框：将 options 移到 body
-    this.#view.moveLanguageOptionsToBody();
+    this.view.moveLanguageOptionsToBody();
 
     // 通知平台选择 - 选项点击
-    this.#unbinds.push(
-      this.#view.bindNotificationOptionsClick((platform) => {
-        const notification = { ...this.#model.notification, platform };
-        this.#model.get('notification').platform = platform;
-        this.#view.updateNotificationConfig(notification);
-        this.#model.saveNotificationConfig();
+    this.bindElement(
+      this.view.bindNotificationOptionsClick((platform) => {
+        const notification = { ...this.model.notification, platform };
+        this.model.get('notification').platform = platform;
+        this.view.updateNotificationConfig(notification);
+        this.model.saveNotificationConfig();
       })
     );
 
     // 通知平台下拉框：将 options 移到 body
-    this.#view.moveNotificationOptionsToBody();
+    this.view.moveNotificationOptionsToBody();
 
     // 钉钉 access_token
-    this.#unbinds.push(
-      this.#view.bindAccessTokenChange(() => {
-        this.#model.get('notification').dingtalk = this.#model.get('notification').dingtalk || {};
-        this.#model.get('notification').dingtalk.access_token = this.#view.getAccessToken();
-        this.#model.saveNotificationConfig();
+    this.bindElement(
+      this.view.bindAccessTokenChange(() => {
+        this.model.get('notification').dingtalk = this.model.get('notification').dingtalk || {};
+        this.model.get('notification').dingtalk.access_token = this.view.getAccessToken();
+        this.model.saveNotificationConfig();
       })
     );
 
     // 钉钉 secret
-    this.#unbinds.push(
-      this.#view.bindSecretChange(() => {
-        this.#model.get('notification').dingtalk = this.#model.get('notification').dingtalk || {};
-        this.#model.get('notification').dingtalk.secret = this.#view.getSecret();
-        this.#model.saveNotificationConfig();
+    this.bindElement(
+      this.view.bindSecretChange(() => {
+        this.model.get('notification').dingtalk = this.model.get('notification').dingtalk || {};
+        this.model.get('notification').dingtalk.secret = this.view.getSecret();
+        this.model.saveNotificationConfig();
       })
     );
 
     // 导出配置
     this.#bindClick('export-config-btn', async () => {
-      const result = await this.#model.selectExportPath();
+      const result = await this.model.selectExportPath();
       if (result && !result.canceled && result.filePath) {
-        this.#view.setButtonLoading('export-config-btn', true);
+        this.view.setButtonLoading('export-config-btn', true);
         try {
           // ADR-0011: 失败由 model emit('error') 单点 toast, 此处只弹成功
-          const res = await this.#model.exportConfig(result.filePath);
+          const res = await this.model.exportConfig(result.filePath);
           if (res && res.success) {
             Toast?.success(window.i18n.t('settings.exportConfigSuccess'));
           }
         } finally {
-          this.#view.setButtonLoading('export-config-btn', false);
+          this.view.setButtonLoading('export-config-btn', false);
         }
       }
     });
 
     // 导出日志
     this.#bindClick('export-logs-btn', async () => {
-      const result = await this.#model.selectExportPath('logs');
+      const result = await this.model.selectExportPath('logs');
       if (result && !result.canceled && result.filePath) {
-        this.#view.setButtonLoading('export-logs-btn', true);
+        this.view.setButtonLoading('export-logs-btn', true);
         try {
           // ADR-0011: 失败由 model emit('error') 单点 toast, 此处只弹成功
-          const res = await this.#model.exportLogs(result.filePath);
+          const res = await this.model.exportLogs(result.filePath);
           if (res && res.success) {
             Toast?.success(window.i18n.t('settings.exportLogsSuccess'));
           }
         } finally {
-          this.#view.setButtonLoading('export-logs-btn', false);
+          this.view.setButtonLoading('export-logs-btn', false);
         }
       }
     });
 
     // 导入配置
     this.#bindClick('import-config-btn', async () => {
-      const result = await this.#model.selectImportPath();
+      const result = await this.model.selectImportPath();
       if (result && !result.canceled && result.filePaths?.length > 0) {
         const ok = await showConfirmModal(
           window.i18n.t('settings.importConfig'),
@@ -301,7 +272,7 @@ export class SettingsController {
         );
         if (!ok) return;
         // ADR-0011: 失败由 model emit('error') 单点 toast, 此处只弹成功 (原 else 分支查 success 弹错有双 toast 风险)
-        const importResult = await this.#model.importConfig(result.filePaths[0]);
+        const importResult = await this.model.importConfig(result.filePaths[0]);
         if (importResult?.success) {
           Toast?.success(window.i18n.t('settings.importConfigSuccess'));
         }
@@ -312,7 +283,7 @@ export class SettingsController {
             window.i18n.t('settings.restartMessage')
           );
           if (okRestart) {
-            await this.#model.relaunchApp();
+            await this.model.relaunchApp();
           }
         }
       }
@@ -326,7 +297,7 @@ export class SettingsController {
       );
       if (!ok) return;
       // wrapper 已处理 IPC 失败,错误由 model 层 catch emit
-      await this.#model.clearAllureReports();
+      await this.model.clearAllureReports();
       Toast?.success(window.i18n.t('settings.clearAllureReportsSuccess'));
     });
 
@@ -338,18 +309,18 @@ export class SettingsController {
       );
       if (!ok) return;
       // wrapper 已处理 IPC 失败,错误由 model 层 catch emit
-      await this.#model.clearAllLogs();
+      await this.model.clearAllLogs();
       Toast?.success(window.i18n.t('settings.clearAllLogsSuccess'));
     });
 
     // 自动检查更新
     this.#bindToggle('auto-check-update-toggle', (checked) => {
-      this.#model.saveConfig({ autoCheckUpdate: checked });
+      this.model.saveConfig({ autoCheckUpdate: checked });
     });
 
     // 允许不安全 SSL 连接 (解决代理/加速导致的证书校验失败)
     this.#bindToggle('allow-insecure-ssl-toggle', async (checked) => {
-      await this.#model.saveConfig({ allowInsecureSSL: checked });
+      await this.model.saveConfig({ allowInsecureSSL: checked });
       if (checked) {
         Toast?.warning(window.i18n.t('settings.allowInsecureSSLWarning'));
       }
@@ -358,36 +329,37 @@ export class SettingsController {
     // 防止睡眠
     this.#bindToggle('prevent-sleep-toggle', async (checked) => {
       // wrapper 已处理 IPC 失败,错误由 model 层 catch emit
-      await this.#model.setPreventSleep(checked);
-      this.#model.saveConfig({ preventSleep: checked });
+      await this.model.setPreventSleep(checked);
+      this.model.saveConfig({ preventSleep: checked });
     });
 
     // 通知 access_token / secret 显隐切换 (默认 password 隐藏)
+    // MVC: DOM 显隐操作归 view (R26 候选④, 原 controller 直改 document)
     this.#bindClick('notification-access-token-visibility-toggle', () => {
-      this.#toggleSecretVisibility('notification-access-token', 'notification-access-token-visibility-toggle');
+      this.view.toggleSecretVisibility('notification-access-token', 'notification-access-token-visibility-toggle');
     });
     this.#bindClick('notification-secret-visibility-toggle', () => {
-      this.#toggleSecretVisibility('notification-secret', 'notification-secret-visibility-toggle');
+      this.view.toggleSecretVisibility('notification-secret', 'notification-secret-visibility-toggle');
     });
 
     // 检查更新
     this.#bindClick('check-update-btn', async () => {
-      this.#view.setButtonLoading('check-update-btn', true);
+      this.view.setButtonLoading('check-update-btn', true);
       try {
-        await this.#model.checkForUpdate();
+        await this.model.checkForUpdate();
       } finally {
-        this.#view.setButtonLoading('check-update-btn', false);
+        this.view.setButtonLoading('check-update-btn', false);
       }
     });
 
     // 更新弹窗 - 下载/安装按钮
     this.#bindClick('update-download-btn', async () => {
-      const pendingFile = this.#model.updatePendingFilePath;
+      const pendingFile = this.model.updatePendingFilePath;
       if (pendingFile) {
-        await this.#model.installUpdate(pendingFile);
+        await this.model.installUpdate(pendingFile);
       } else {
-        this.#view.updateDownloadButton('downloading');
-        await this.#model.downloadUpdate();
+        this.view.updateDownloadButton('downloading');
+        await this.model.downloadUpdate();
       }
     });
 
@@ -396,48 +368,48 @@ export class SettingsController {
     // 如下载已完成/就绪态点取消=推迟安装) 静默关窗
     const handleUpdateCancel = async () => {
       try {
-        const result = await this.#model.cancelDownload();
+        const result = await this.model.cancelDownload();
         if (result && result.success && result.state === UPDATE_DOWNLOAD_RESULT_STATE.CANCELLED) {
           Toast.success(window.i18n.t('settings.downloadCancelled'));
         }
       } catch (e) {
         /* 取消失败不阻塞关窗 */
       }
-      this.#view.hideUpdateModal();
+      this.view.hideUpdateModal();
     };
     this.#bindClick('update-modal-close-btn', handleUpdateCancel);
     this.#bindClick('update-cancel-btn', handleUpdateCancel);
 
     // GitHub 链接
     this.#bindClick('github-repo-link', () => {
-      this.#model.openExternal('https://github.com/RingOnTheWay/XKAutoTester');
+      this.model.openExternal('https://github.com/RingOnTheWay/XKAutoTester');
     });
 
     // 更新弹窗 - changelog 内 Markdown 链接 (a[data-external])
     // changelog 每次 showUpdateModal 整体重渲染, 故用容器级事件委托;
     // 只可能拿到白名单 https://github.com/* (渲染层已过滤), 仍走 URL 校验的主进程出口。
-    this.#unbinds.push(
-      this.#view.bindExternalLinkDelegation('update-changelog', (url) => {
-        this.#model.openExternal(url);
+    this.bindElement(
+      this.view.bindExternalLinkDelegation('update-changelog', (url) => {
+        this.model.openExternal(url);
       })
     );
 
-    // 全局点击：处理下拉框开关 + 关闭（捕获阶段，确保在 app.js 的冒泡阶段 handler 之前执行）
-    this.#unbinds.push(
-      this.#view.bindGlobalClickForDropdowns({
+    // 全局点击：处理下拉框开关 + 关闭（捕获阶段，确保在引导层的冒泡阶段 handler 之前执行）
+    this.bindElement(
+      this.view.bindGlobalClickForDropdowns({
         onLanguageToggle: () => {
-          this.#view.toggleLanguageDropdown();
+          this.view.toggleLanguageDropdown();
         },
         onNotificationToggle: () => {
-          this.#view.toggleNotificationDropdown();
+          this.view.toggleNotificationDropdown();
         },
         onThemeToggle: () => {
-          this.#view.toggleThemeColorOptions();
+          this.view.toggleThemeColorOptions();
         },
         onOutsideClick: () => {
-          this.#view.hideAllCustomSelectOptions();
-          this.#view.hideThemeColorOptions();
-          this.#view.enablePageScroll();
+          this.view.hideAllCustomSelectOptions();
+          this.view.hideThemeColorOptions();
+          this.view.enablePageScroll();
         },
       })
     );
@@ -451,6 +423,21 @@ export class SettingsController {
     this.#bindProgressListeners();
   }
 
+  // ─── 绑定完成后的异步收尾 ────────────────────────────────
+
+  async onReady() {
+    await this.model.load();
+    // 初始化时翻译所有 data-i18n 元素
+    const app = window.__XKAT_APP__;
+    if (app?.updateUIText) app.updateUIText();
+    // 启动时自动检查更新 (如启用)
+    if (this.model.autoCheckUpdate !== false) {
+      setTimeout(() => {
+        this.model.checkForUpdate();
+      }, 2000);
+    }
+  }
+
   // ─── 进度监听 ────────────────────────────────────────────
 
   #bindProgressListeners() {
@@ -460,7 +447,7 @@ export class SettingsController {
           Toast?.info(`${window.i18n.t('settings.exporting')} ${data.percent}%`);
         }
       });
-      this.#unbinds.push(() => {
+      this.bindElement(() => {
         if (removeExport) removeExport();
       });
     }
@@ -471,7 +458,7 @@ export class SettingsController {
           Toast?.info(`${window.i18n.t('settings.importing')} ${data.percent}%`);
         }
       });
-      this.#unbinds.push(() => {
+      this.bindElement(() => {
         if (removeImport) removeImport();
       });
     }
@@ -479,17 +466,12 @@ export class SettingsController {
 
   // ─── 工具方法 ────────────────────────────────────────────
 
-  #on(model, event, handler) {
-    const unsub = model.on(event, handler);
-    this.#unbindModel.push(unsub);
-  }
-
   #bindClick(elementId, handler) {
-    this.#unbinds.push(this.#view.bindClickById(elementId, handler));
+    this.bindElement(this.view.bindClickById(elementId, handler));
   }
 
   #bindToggle(elementId, handler) {
-    this.#unbinds.push(this.#view.bindToggleById(elementId, handler));
+    this.bindElement(this.view.bindToggleById(elementId, handler));
   }
 
   /**
@@ -513,26 +495,6 @@ export class SettingsController {
       return a === b || a.startsWith(b + '\\');
     } catch (e) {
       return false;
-    }
-  }
-
-  /**
-   * 切换通知密钥输入框的显隐: password ↔ text, 同步切换按钮图标 (visibility/visibility_off)
-   * @param {string} inputId - input 元素 id
-   * @param {string} buttonId - 触发切换的按钮元素 id
-   */
-  #toggleSecretVisibility(inputId, buttonId) {
-    const input = document.getElementById(inputId);
-    const button = document.getElementById(buttonId);
-    if (!input || !button) return;
-    const isHidden = input.type === 'password';
-    input.type = isHidden ? 'text' : 'password';
-    const nextIcon = isHidden ? 'visibility_off' : 'visibility';
-    const iconSpan = button.querySelector('.svg-icon');
-    if (iconSpan) {
-      iconSpan.setAttribute('data-icon', nextIcon);
-      const html = window.__XKAT_APP__?.getIconHtml?.(nextIcon);
-      if (html) iconSpan.innerHTML = html;
     }
   }
 }

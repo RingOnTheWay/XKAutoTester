@@ -17,8 +17,9 @@ dependencies = [
     # 已验证可兼容 Pillow 10.x。本项目代码不直接调用 Pillow, 仅通过 ddddocr 间接使用。
     "Pillow==10.4.0",
     "Appium-Python-Client==5.2.4",
-    "playwright==1.55.0",
-    "pytest-playwright==0.7.1",
+    # R26 候选⑧: 删除 playwright==1.55.0 + pytest-playwright==0.7.1 —
+    # src/ 生成器/测试用例全链路零引用 (死依赖, 拖慢 uv sync 且拉浏览器二进制)。
+    # 日后需要 web 自动化时 uv add 即可。
     "pyserial==3.5",
 ]
 
