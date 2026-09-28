@@ -27,6 +27,24 @@
 
 **位置**：`electron/renderer/components/toast.js` → `ToastManager`。
 
+## 执行编排 (Execution Orchestration)
+
+**定义**：测试执行 Tab 中执行流程的归属 — ExecutionModel 是编排者，`runTests`/`stopTests`/`runScheduledPlanNow` 全程内聚其中。
+
+- **单向注入**：DevicePrecheck（设备前置检查）与输出缓冲作为能力构造注入 ExecutionModel；子模型间不反向引用、不成环
+- **参数传入**：计划数据（`currentTestPlan`/`scheduledPlanInfo`）由外部取好后作参数传入，ExecutionModel 不持有计划状态
+- **门面纯委托**：TestExecutionModel 门面只做转发/组装/事件上抛，不承载编排
+
+**演化**：原 TestExecutionModel 1600 行单类混 7 子域（R10 mixin 内联未分组），2026-09-16 架构审查后拆 5 子模型 — 见 [ADR-0012](docs/adr/ADR-0012-test-execution-model-split.md)。
+
+**位置**：`electron/renderer/tabs/test-execution/models/`（ExecutionModel/ScheduledPlanModel/TestPlanModel/DevicePrecheckModel/ReportModel）+ `model.js` 门面。
+
+## 设备前置检查 (Device Precheck)
+
+**定义**：测试执行前的设备侧校验闭环 — 安卓用例设备信息检查、蓝牙用例端口检查、设备选择/替换确认、设备 ID 编辑。产出 `{valid, message}` 或经事件请求 UI 决策。
+
+**位置**：`electron/renderer/tabs/test-execution/models/DevicePrecheckModel.js`。
+
 ## Quick 参考
 
-- 测试执行 / 定时计划 / 页面封装 / Inspector 等其它词条按需补充。
+- 页面封装 / Inspector 等词条按需补充。

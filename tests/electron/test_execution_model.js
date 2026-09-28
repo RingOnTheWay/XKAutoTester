@@ -124,7 +124,7 @@ test('inferTestTypeFromFileName: 文件名→类型四分支', async () => {
 test('P2-7 isRunning 期间再次 runTests 被守卫拦截, 不二次启动 pytest', async () => {
   const Model = await loadModel();
   const model = createModel();
-  model._state.currentTestPlan = { name: 'P1', loopCount: 1 };
+  model.selectTestPlan({ name: 'P1', loopCount: 1 });
   const { getCalls, finish } = controllableRunPythonTests(model);
   const warnings = [];
   model.on('run-warning', (e) => warnings.push(e));
@@ -152,7 +152,7 @@ test('P2-7 isRunning 期间再次 runTests 被守卫拦截, 不二次启动 pyte
 test('P2-7 首次 runPythonTests 被调用时 isRunning 已为 true (窗口已堵死)', async () => {
   const Model = await loadModel();
   const model = createModel();
-  model._state.currentTestPlan = { name: 'P1', loopCount: 1 };
+  model.selectTestPlan({ name: 'P1', loopCount: 1 });
   let isRunningWhenRunCalled = null;
   let resolveRun = null;
   model._api.runPythonTests = async () => {
@@ -174,9 +174,9 @@ test('P2-7 首次 runPythonTests 被调用时 isRunning 已为 true (窗口已�
 test('P2-7 设备校验失败时 isRunning 复位为 false', async () => {
   const Model = await loadModel();
   const model = createModel();
-  model._state.currentTestPlan = { name: 'P1', loopCount: 1 };
+  model.selectTestPlan({ name: 'P1', loopCount: 1 });
   // 选中测试文件后 checkAndroidDeviceConfig 走 testCaseGet: android 平台但 deviceName 为空 → valid:false
-  model._state.selectedTestFiles = [{ name: 'demo_test.py', path: '/x/demo_test.py' }];
+  model.setSelectedTestFiles([{ name: 'demo_test.py', path: '/x/demo_test.py' }]);
   model._api.testCaseGet = async () => ({ data: { platform: 'android', deviceConfig: { deviceName: '' } } });
   let runCalls = 0;
   model._api.runPythonTests = async () => {
@@ -196,9 +196,9 @@ test('P2-7 设备校验失败时 isRunning 复位为 false', async () => {
 test('P2-7 蓝牙端口校验失败时 isRunning 复位为 false', async () => {
   const Model = await loadModel();
   const model = createModel();
-  model._state.currentTestPlan = { name: 'P1', loopCount: 1 };
+  model.selectTestPlan({ name: 'P1', loopCount: 1 });
   // android 设备配置通过, 但用例含 ble 步骤且未填端口 → ble 校验失败
-  model._state.selectedTestFiles = [{ name: 'ble_test.py', path: '/x/ble_test.py' }];
+  model.setSelectedTestFiles([{ name: 'ble_test.py', path: '/x/ble_test.py' }]);
   model._api.testCaseGet = async () => ({
     data: {
       platform: 'android',
@@ -219,9 +219,9 @@ test('P2-7 蓝牙端口校验失败时 isRunning 复位为 false', async () => {
 test('P1-3 字符串条目 (scanTestFiles 返回字符串数组) 不抛 TypeError 不卡死', async () => {
   const Model = await loadModel();
   const model = createModel();
-  model._state.currentTestPlan = { name: 'P1', loopCount: 1 };
+  model.selectTestPlan({ name: 'P1', loopCount: 1 });
   // 纯字符串条目: 原 file.name||file.path 得 undefined → endsWith TypeError 逃逸 → isRunning 卡死
-  model._state.selectedTestFiles = ['tests/demo_test.py'];
+  model.setSelectedTestFiles(['tests/demo_test.py']);
   const requestedNames = [];
   model._api.testCaseGet = async (name) => {
     requestedNames.push(name);
@@ -243,11 +243,11 @@ test('P1-3 字符串条目 (scanTestFiles 返回字符串数组) 不抛 TypeErro
 // ── R27: 手动中途停止 (stoppedEarly) 不发聚合通知 (钉钉等平台) ──
 
 function prepareRun(model, loopCount, { keepRunning = true } = {}) {
-  model._state.currentTestPlan = { name: 'P1', loopCount };
-  model._state.selectedTestFiles = [{ path: 'tests/demo_test.py', name: 'demo_test.py' }];
+  model.selectTestPlan({ name: 'P1', loopCount });
+  model.setSelectedTestFiles([{ path: 'tests/demo_test.py', name: 'demo_test.py' }]);
   const notifyCalls = [];
   // 覆盖实例 sendTestNotification 为 spy (不触真实 IPC)
-  model.sendTestNotification = async (info) => {
+  model.executionModel.sendTestNotification = async (info) => {
     notifyCalls.push(info);
   };
   let resolveRun = null;
@@ -274,7 +274,7 @@ test('R27 手动停止 (stoppedEarly) → 不发聚合通知', async () => {
   await new Promise((r) => setTimeout(r, 0));
   finish();
   await new Promise((r) => setTimeout(r, 0));
-  model._state.isRunning = false;
+  model.executionModel.silentSet('isRunning', false);
   finish();
   await new Promise((r) => setTimeout(r, 0));
   finish(); // 第三轮不会启动 (循环已 break)
@@ -302,12 +302,12 @@ test('R27 正常跑完 → 发送聚合通知 (基线)', async () => {
 test('R27 stopped 结果 → 输出手动暂停提示, 不报循环失败, 无聚合/通知', async () => {
   const Model = await loadModel();
   const model = createModel();
-  model._state.currentTestPlan = { name: 'P1', loopCount: 1 };
-  model._state.selectedTestFiles = [{ path: 'tests/demo_test.py', name: 'demo_test.py' }];
+  model.selectTestPlan({ name: 'P1', loopCount: 1 });
+  model.setSelectedTestFiles([{ path: 'tests/demo_test.py', name: 'demo_test.py' }]);
   const outputs = [];
   const notifyCalls = [];
-  model.appendOutput = (text) => outputs.push(String(text));
-  model.sendTestNotification = async (info) => {
+  model.executionModel.appendOutput = (text) => outputs.push(String(text));
+  model.executionModel.sendTestNotification = async (info) => {
     notifyCalls.push(info);
   };
   let runCalls = 0;
