@@ -43,6 +43,16 @@ export class BaseController {
     return this.#destroyed;
   }
 
+  /** DOM/全局解绑容器 (测试可断言 size; 登记走 bindElement) */
+  get unbinds() {
+    return this.#unbinds;
+  }
+
+  /** model 事件订阅解绑容器 (测试可断言 size; 订阅走 onModel) */
+  get unbindModel() {
+    return this.#unbindModel;
+  }
+
   /**
    * 初始化模板方法。子类不要覆写 init, 覆写三个钩子。
    */

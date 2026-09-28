@@ -43,6 +43,12 @@ jobs:
       - name: Format check (Prettier) — 强制, 违规即失败
         run: npm run format:check
 
+      # R28 候选④: i18n 死键门禁 — 扫描 renderer/主进程/Python/splash 引用面 +
+      # 动态键白名单 (DYNAMIC_PATTERNS), 新增未引用翻译键即失败 (非零退出)。
+      # 观察一轮 (2026-09-18 清零后) 于 2026-09-28 转强制。
+      - name: i18n 死键门禁 — 强制, 新增未引用翻译键即失败
+        run: node ../scripts/i18n-unused-keys.js
+
       # R25: 依赖漏洞扫描 — 先扫描不阻断 (当前残留为 axios 链, 待 R25 遗留项 fetch 替代后收紧为强制)
       - name: npm audit (依赖漏洞扫描) — 先扫描不阻断
         continue-on-error: true

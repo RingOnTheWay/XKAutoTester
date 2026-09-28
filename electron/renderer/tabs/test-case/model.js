@@ -1,4 +1,4 @@
-import { EventEmitter } from '../../core/EventEmitter.js';
+import { BaseModel } from '../../core/BaseModel.js';
 import { ApiBridge } from '../../core/ApiBridge.js';
 import { FileBrowser } from './modules/FileBrowser.js';
 import { OptionPanel } from './modules/OptionPanel.js';
@@ -16,9 +16,10 @@ import { TestCaseEditor } from './modules/TestCaseEditor.js';
  * - 模块 4 TestCaseEditor: isEditing/hasUnsavedChanges/loadedDeviceConfig/loadedBleDevice +
  *   selectFile/deselectFile/showEditor/cancelEdit/resetEditor/markDirty +
  *   saveCase/deleteCase/loadCaseData/collectFormData/destroy (编排前 3 模块 + API)
- * Model 仅持有 4 个深模块实例 + 委托方法 + 转发事件，#state 已清空。
+ * Model 仅持有 4 个深模块实例 + 委托方法 + 转发事件 (R28 接 BaseModel: 状态全在子模块,
+ * 门面状态容器为空; destroy 统一走基类 removeAllListeners)。
  */
-export class TestCaseModel extends EventEmitter {
+export class TestCaseModel extends BaseModel {
   #api = ApiBridge.bind({
     selectDirectory: 'selectDirectory',
     scanTestFiles: 'scanTestFiles',
@@ -199,7 +200,7 @@ export class TestCaseModel extends EventEmitter {
 
   /**
    * 通用状态获取（供 Controller 使用）
-   * 优先查 FileBrowser → OptionPanel → StepEditor → TestCaseEditor → Model #state
+   * 优先查 FileBrowser → OptionPanel → StepEditor → TestCaseEditor → 基类状态容器
    * @param {string} key - 状态键名
    * @returns {*} 状态值
    */
@@ -212,15 +213,7 @@ export class TestCaseModel extends EventEmitter {
     if (seVal !== undefined) return seVal;
     const tceVal = this.#testCaseEditor.get(key);
     if (tceVal !== undefined) return tceVal;
-    return this.#state[key];
-  }
-
-  /**
-   * 内部状态对象访问器（兼容旧 mixin，#state 已清空）
-   * @returns {Object} 内部状态对象 (空)
-   */
-  get _state() {
-    return this.#state;
+    return super.get(key);
   }
 
   // ── FileBrowser 委托方法 ──────────────────────────────────────
@@ -430,5 +423,7 @@ export class TestCaseModel extends EventEmitter {
     }
     this.#forwardUnsubs = [];
     this.#testCaseEditor.destroy();
+    // R28: 基类收尾 (removeAllListeners)
+    super.destroy();
   }
 }

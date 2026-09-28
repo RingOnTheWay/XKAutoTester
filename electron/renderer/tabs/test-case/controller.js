@@ -2,79 +2,51 @@ import { Action } from '../../core/Action.js';
 import { Toast } from '../../components/toast.js';
 import { showConfirmModal } from '../../core/utils/confirmModal.js';
 import { createBindings } from '../../core/utils/bindings.js';
+import { BaseController } from '../../core/BaseController.js';
 
 /**
  * TestCaseController - 测试用例 Tab 控制器
  * 职责：绑定 Model 事件到 View 渲染，绑定 DOM 事件到 Model 方法
  * 不直接操作 DOM（通过 View），不直接调用 API（通过 Model）
  *
+ * R28 接 core/BaseController —— 生命周期 (init 模板/双解绑容器/destroy) 上收基类,
+ * 本类覆写 bindModelEvents / bindDomEvents / onReady 钩子 + 保留步骤卡片专用容器。
+ *
  * R10: 原 6 个 controller mixin (ModelEvents/DomBinding/Handler/Confirm/OptionBinding/StepRender)
- *      已内联到本类，移除 Object.assign prototype 注入。方法体保持不变，this.model/this.view
- *      经 getter 暴露，this.unbinds/this.stepCardUnbinds/this.unbindModel 同理。
+ *      已内联到本类，移除 Object.assign prototype 注入。
  */
-export class TestCaseController {
-  #model;
-  #view;
-  // 统一生命周期词汇 createBindings (原三数组各自 forEach 样板)
-  #unbinds = createBindings();
+export class TestCaseController extends BaseController {
   #stepCardUnbinds = createBindings(); // 步骤卡片专用事件清理
   #draggedStepCard = null; // 拖拽中的步骤卡片 DOM
-  #unbindModel = createBindings();
   #searchDebounceTimer = null;
   #searchLoadingTimer = null;
   #isSearchLoading = false;
-  #destroyed = false;
   #fileListBound = false; // P2-8: 文件列表容器级一次绑定标志 (bindFileListClick 已有 __tcClickBound, 此处防 controller 层重复 push unbind)
   #isSaving = false; // P3-12: 保存中防重入标志
 
-  /**
-   * @param {import('./model.js').TestCaseModel} model
-   * @param {import('./view.js').TestCaseView} view
-   */
-  constructor(model, view) {
-    this.#model = model;
-    this.#view = view;
-  }
+  // ─── 生命周期钩子 ────────────────────────────────────────
 
-  // ─── 生命周期 ────────────────────────────────────────────
-
-  async init() {
-    this.bindModelEvents();
-    this.bindDomEvents();
-    await this.#model.load();
+  /** 绑定完成后的异步收尾: 首屏加载 */
+  async onReady() {
+    await this.model.load();
   }
 
   // 切换到本 tab 时重新加载应用列表，确保新增/删除的应用立即可见
   async onTabActivated() {
-    if (this.#destroyed) return;
-    await this.#model.loadApps();
+    if (this.destroyed) return;
+    await this.model.loadApps();
   }
 
   destroy() {
-    this.#destroyed = true;
     clearTimeout(this.#searchDebounceTimer);
-    this.#unbinds.run();
     this.#stepCardUnbinds.run();
-    this.#unbindModel.run();
-    this.#model.destroy();
+    super.destroy();
   }
 
   // ─── 访问器（暴露私有字段给内联方法） ────────────────────
 
-  get model() {
-    return this.#model;
-  }
-  get view() {
-    return this.#view;
-  }
-  get unbinds() {
-    return this.#unbinds;
-  }
   get stepCardUnbinds() {
     return this.#stepCardUnbinds;
-  }
-  get unbindModel() {
-    return this.#unbindModel;
   }
   get isSearchLoading() {
     return this.#isSearchLoading;
@@ -112,11 +84,11 @@ export class TestCaseController {
   bindModelEvents() {
     const model = this.model;
 
-    this.on(model, 'directory-changed', (path) => {
+    this.onModel('directory-changed', (path) => {
       this.view.renderSelectedDirectory(path);
     });
 
-    this.on(model, 'files-changed', () => {
+    this.onModel('files-changed', () => {
       // 搜索loading期间跳过列表渲染，等待loading动画结束后再渲染
       if (this.isSearchLoading) {
         const hasDirectory = !!model.get('selectedDirectory');
@@ -133,7 +105,7 @@ export class TestCaseController {
       this.bindFileListEvents();
     });
 
-    this.on(model, 'selected-file-changed', (file) => {
+    this.onModel('selected-file-changed', (file) => {
       if (file) {
         this.view.showEditor();
       } else {
@@ -141,17 +113,17 @@ export class TestCaseController {
       }
     });
 
-    this.on(model, 'editing-changed', (isEditing) => {
+    this.onModel('editing-changed', (isEditing) => {
       this.view.setEditingState(isEditing);
     });
 
-    this.on(model, 'cancel-edit', () => {
+    this.onModel('cancel-edit', () => {
       this.view.hideEditor();
       this.view.resetForm();
       this.view.selectFileItem(null);
     });
 
-    this.on(model, 'show-editor', ({ file, isNew, jsonMissing, fileName }) => {
+    this.onModel('show-editor', ({ file, isNew, jsonMissing, fileName }) => {
       this.view.showEditorUI({ file, isNew, jsonMissing, fileName });
       // 初始化编辑器组件（apps, markers, platform select 等）
       this.view.initEditor();
@@ -163,11 +135,11 @@ export class TestCaseController {
       this.bindMarkersOptionClicks();
     });
 
-    this.on(model, 'dirty-changed', (isDirty) => {
+    this.onModel('dirty-changed', (isDirty) => {
       this.view.setDirtyState(isDirty);
     });
 
-    this.on(model, 'steps-changed', (steps) => {
+    this.onModel('steps-changed', (steps) => {
       this.view.renderSteps(steps);
       // 根据步骤是否为空显示/隐藏空状态
       if (steps && steps.length > 0) {
@@ -182,7 +154,7 @@ export class TestCaseController {
       this.bindStepCardEvents();
     });
 
-    this.on(model, 'app-changed', (app) => {
+    this.onModel('app-changed', (app) => {
       this.view.renderSelectedApp(app);
       // 选中应用后启用步骤区域
       if (app) {
@@ -199,17 +171,17 @@ export class TestCaseController {
       }
     });
 
-    this.on(model, 'platform-changed', (platform) => {
+    this.onModel('platform-changed', (platform) => {
       this.view.renderSelectedPlatform(platform);
     });
 
-    this.on(model, 'markers-changed', (markers) => {
+    this.onModel('markers-changed', (markers) => {
       this.view.renderSelectedMarkers(markers);
       this.syncMarkerOptionsState(markers);
       this.bindMarkerBadgeRemove();
     });
 
-    this.on(model, 'apps-changed', (apps) => {
+    this.onModel('apps-changed', (apps) => {
       this.view.renderAppOptions(apps, this.model.get('selectedApp'));
       this.bindAppOptionClicks();
       // 同步选中的应用引用并重渲染步骤卡片: page-package 中新增/删除元素后,
@@ -224,16 +196,16 @@ export class TestCaseController {
       }
     });
 
-    this.on(model, 'ble-devices-changed', (devices) => {
+    this.onModel('ble-devices-changed', (devices) => {
       this.view.renderBleDevices(devices);
     });
 
-    this.on(model, 'markers-list-changed', (markers) => {
+    this.onModel('markers-list-changed', (markers) => {
       this.view.renderMarkersOptions(markers, this.model.get('selectedMarkers'));
       this.bindMarkersOptionClicks();
     });
 
-    this.on(model, 'case-loaded', (data) => {
+    this.onModel('case-loaded', (data) => {
       this.view.populateForm(data);
       // 确保步骤卡片 custom-select 已初始化
       this.view.initStepSelectsSafe();
@@ -241,7 +213,7 @@ export class TestCaseController {
       this.bindStepCardEvents();
     });
 
-    this.on(model, 'step-updated', ({ stepId, selectId, value, index }) => {
+    this.onModel('step-updated', ({ stepId, selectId, value, index }) => {
       // 需要级联渲染的 selectId：页面/元素/操作/输入类型/比较目标值类型/页面操作类型/搜索类型/BLE方法
       const cascadeSelects = [
         'tc-page-select',
@@ -277,29 +249,21 @@ export class TestCaseController {
       }
     });
 
-    this.on(model, 'case-saved', (result) => {
+    this.onModel('case-saved', (result) => {
       this.view.hideEditor();
       Toast.success(window.i18n.t('testCase.saveSuccess'));
     });
 
-    this.on(model, 'case-deleted', () => {
+    this.onModel('case-deleted', () => {
       this.view.hideEditor();
       Toast.success(window.i18n.t('testCase.deleteSuccess'));
     });
 
-    this.on(model, 'error', (err) => {
+    this.onModel('error', (err) => {
       const msgKey = err.message || err.source || String(err);
       const translated = window.i18n.t(`testCase.${msgKey}`) || window.i18n.t(msgKey) || msgKey;
       Toast.error(translated);
     });
-  }
-
-  /**
-   * 注册 Model 事件监听，自动收集取消函数
-   */
-  on(model, event, handler) {
-    const unsub = model.on(event, handler);
-    this.unbindModel.push(unsub);
   }
 
   // ─── DOM 事件绑定 ────────────────────────────────────────
